@@ -6,7 +6,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @codex-forge/protocol build",
     "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
+    "prebuild": "pnpm --filter @codex-forge/protocol build",
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "prepare:package-resources": "node build/prepare-package-resources.cjs",
     "package:mac": "node build/package-mac.cjs",
