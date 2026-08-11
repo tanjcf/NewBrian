@@ -5,8 +5,8 @@ import process from "node:process";
 const root = path.resolve(import.meta.dirname, "..");
 const [platform, script, ...extra] = process.argv.slice(2);
 
-if (!new Set(["macos", "macos-arm64", "macos-x64", "windows"]).has(platform) || !script) {
-  console.error("Usage: node scripts/run-platform.mjs <macos-arm64|macos-x64|windows> <pnpm-script> [args...]");
+if (!new Set(["macos", "macos-arm64", "macos-x64", "ubuntu-arm64", "ubuntu-x64", "windows"]).has(platform) || !script) {
+  console.error("Usage: node scripts/run-platform.mjs <macos-arm64|macos-x64|ubuntu-arm64|ubuntu-x64|windows> <pnpm-script> [args...]");
   process.exit(1);
 }
 

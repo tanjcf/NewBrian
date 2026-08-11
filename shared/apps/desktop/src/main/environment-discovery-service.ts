@@ -121,7 +121,9 @@ export class EnvironmentDiscoveryService {
 
   detectCommandPath(command: string) {
     if (!command.trim()) return "";
-    const executable = this.dependencies.platform === "win32" ? "cmd.exe" : "/bin/zsh";
+    const executable = this.dependencies.platform === "win32"
+      ? "cmd.exe"
+      : this.dependencies.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
     const args = this.dependencies.platform === "win32"
       ? ["/d", "/s", "/c", `where ${command}`]
       : ["-lc", `command -v ${this.quoteShellArgument(command)}`];

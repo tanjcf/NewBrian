@@ -65,7 +65,7 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
   },
   environment: {
     defaultOpenTarget: "visual-studio",
-    terminalShell: process.platform === "win32" ? "powershell.exe" : "/bin/zsh",
+    terminalShell: process.platform === "win32" ? "powershell.exe" : process.platform === "darwin" ? "/bin/zsh" : "/bin/bash",
     extraEnv: {},
     autoBootstrapConda: true
   },

@@ -11,7 +11,9 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
         "Submit only the PowerShell command body to shell.exec. Never wrap it in powershell -Command or pwsh -Command because the host starts exactly one PowerShell process.",
         "Never use Bash `&&` / `||`, cmd-only `2>nul`, `echo.`, or `del`. Use PowerShell `;` chaining when shell.exec is necessary."
       ]
-    : ["The shell is zsh. Use POSIX-compatible commands."];
+    : platform === "darwin"
+      ? ["The shell is zsh. Use POSIX-compatible commands."]
+      : ["The shell is Bash. Use POSIX-compatible commands."];
   const artifactContract = requestsOutputArtifact(latestUserRequest)
       ? [
         "The user requested a real output artifact. You must create it inside the attached workspace before claiming completion.",

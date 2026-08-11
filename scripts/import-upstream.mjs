@@ -13,6 +13,7 @@ const rootFiles = new Set([
   "tsconfig.base.json", "codecn.config.json", "codecn.features.json",
   "codecn.workspaces.json"
 ]);
+const sourceRootSharedFiles = new Set(["codecn.bootstrap.json"]);
 const allowedTopDirectories = {
   macos: new Set(["apps", "packages"]),
   windows: new Set(["apps", "packages", "docs", "references", "scripts", "skills"])
@@ -91,6 +92,17 @@ for (const relative of [...paths].sort()) {
       await copyFile(windows, targets[2], relative);
       windowsCount += 1;
     }
+  }
+}
+
+for (const relative of sourceRootSharedFiles) {
+  const absolute = path.join(source, relative);
+  try {
+    if (!(await stat(absolute)).isFile()) continue;
+    await copyFile({ absolute }, targets[0], relative);
+    sharedCount += 1;
+  } catch {
+    // Optional repository-root resources may not exist in older upstream snapshots.
   }
 }
 

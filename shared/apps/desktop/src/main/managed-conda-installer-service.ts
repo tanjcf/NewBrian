@@ -162,7 +162,9 @@ export class ManagedCondaInstallerService {
     const installerPath = join(installerDirectory, spec.fileName);
     await this.dependencies.ensureDirectory(installerDirectory);
     if (!(await this.dependencies.pathExists(installerPath))) {
-      const executable = this.dependencies.platform === "win32" ? "powershell.exe" : "/bin/zsh";
+      const executable = this.dependencies.platform === "win32"
+        ? "powershell.exe"
+        : this.dependencies.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
       const args = this.dependencies.platform === "win32"
         ? ["-NoLogo", "-NoProfile", "-Command", `Invoke-WebRequest -Uri ${this.dependencies.quoteShellArgument(spec.downloadUrl)} -OutFile ${this.dependencies.quoteShellArgument(installerPath)}`]
         : ["-lc", `curl -L ${this.dependencies.quoteShellArgument(spec.downloadUrl)} -o ${this.dependencies.quoteShellArgument(installerPath)}`];
@@ -186,7 +188,7 @@ export class ManagedCondaInstallerService {
       signal,
       timeoutMs: 10 * 60_000
     } : {
-      executable: "/bin/zsh",
+      executable: this.dependencies.platform === "darwin" ? "/bin/zsh" : "/bin/bash",
       args: ["-lc", `${this.dependencies.quoteShellArgument(installerPath)} -b -p ${this.dependencies.quoteShellArgument(condaRoot)}`],
       cwd: this.dependencies.workspacePath,
       signal,

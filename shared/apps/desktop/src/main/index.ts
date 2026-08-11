@@ -495,7 +495,7 @@ const authAuditLogPath = join(workspacePath, "tmp-auth-session.log");
 const bundledModelConfigPath = join(process.resourcesPath, "codecn.config.json");
 const bundledFeatureConfigPath = join(process.resourcesPath, "codecn.features.json");
 const bundledBootstrapConfigPath = join(process.resourcesPath, "codecn.bootstrap.json");
-const shellLabel = process.platform === "win32" ? "PowerShell" : "zsh";
+const shellLabel = process.platform === "win32" ? "PowerShell" : process.platform === "darwin" ? "zsh" : "Bash";
 
 /**
  * Schedule fully automatic git-like knowledge sync (pull/merge/push).
@@ -719,7 +719,7 @@ const canceledModelRequestIds = new Set<string>();
 const remoteAgentEventObservers = new Map<string, (event: { type: string; payload?: unknown }) => void>();
 let holonOutboxTimer: ReturnType<typeof setInterval> | null = null;
 let activeShellEnv: Record<string, string> = { ...(process.env as Record<string, string>) };
-let activeTerminalShell = process.env.SHELL?.trim() || (process.platform === "win32" ? "powershell.exe" : "/bin/zsh");
+let activeTerminalShell = process.env.SHELL?.trim() || (process.platform === "win32" ? "powershell.exe" : process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
 let automationTickRunning = false;
 let mainWindowRef: BrowserWindow | null = null;
 let trayService: DesktopTrayService | null = null;
@@ -6076,7 +6076,8 @@ async function runPreferenceHookScript(label: string, script: string) {
   if (!trimmed) {
     return;
   }
-  const result = spawnSync(process.platform === "win32" ? "powershell.exe" : "/bin/zsh", process.platform === "win32" ? ["-NoLogo", "-NoProfile", "-Command", trimmed] : ["-lc", trimmed], {
+  const hookShell = process.platform === "win32" ? "powershell.exe" : process.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
+  const result = spawnSync(hookShell, process.platform === "win32" ? ["-NoLogo", "-NoProfile", "-Command", trimmed] : ["-lc", trimmed], {
     cwd: runtime.workspacePath,
     env: activeShellEnv,
     encoding: "utf8"

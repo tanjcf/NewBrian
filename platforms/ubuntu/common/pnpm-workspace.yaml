@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  electron: true
+  esbuild: true
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+overrides:
+  rollup: npm:@rollup/wasm-node@4.60.2

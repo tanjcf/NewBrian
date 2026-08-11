@@ -17,6 +17,9 @@ platforms/windows/<relative-path>
 platforms/macos/common/<relative-path>
 platforms/macos/arm64/<relative-path>
 platforms/macos/x64/<relative-path>
+platforms/ubuntu/common/<relative-path>
+platforms/ubuntu/arm64/<relative-path>
+platforms/ubuntu/x64/<relative-path>
 ```
 
 `shared` owns a file only when the imported macOS and Windows bytes are identical.
@@ -24,6 +27,8 @@ When the same relative path differs, each platform owns its complete version in 
 overlay. Platform-only files also live in that platform's overlay. macOS files shared
 by Apple Silicon and Intel live under `macos/common`; CPU-specific native resources or
 configuration override them from `arm64` or `x64`.
+Ubuntu follows the same structure. Its common layer owns Linux packaging and
+Bash defaults, while its architecture layers identify native dependency targets.
 
 This deliberately uses complete-file overrides instead of line-level patches. A
 generated workspace is therefore normal source code that existing Node, TypeScript,
@@ -35,10 +40,12 @@ Electron, and packaging tools can consume without custom module resolution.
 local development: it builds a temporary directory, copies the shared layer, applies
 the overlay, writes provenance metadata, and then replaces the prior generated tree.
 
-The supported targets are `macos-arm64`, `macos-x64`, and `windows`. The macOS
-targets apply the common macOS overlay before the CPU overlay. The generated
+The supported targets are `macos-arm64`, `macos-x64`, `ubuntu-arm64`,
+`ubuntu-x64`, and `windows`. The macOS and Ubuntu targets each apply their own
+common platform overlay before the CPU overlay. The generated
 `codecn.arch.json` gives packaging and diagnostics an explicit architecture contract:
 `arm64` for M-series Apple Silicon and `x64` with distribution label `intel` for Intel.
+Ubuntu uses `arm64` or `x64` directly and packages AppImage plus Debian artifacts.
 
 The generated directory is disposable. Never commit or edit it.
 
@@ -47,6 +54,8 @@ The generated directory is disposable. Never commit or edit it.
 - Cross-platform change: edit `shared/` and validate both platforms.
 - macOS-wide change: edit `platforms/macos/common/` and validate both macOS targets.
 - CPU-specific macOS change: edit `platforms/macos/arm64/` or `platforms/macos/x64/`.
+- Ubuntu-wide change: edit `platforms/ubuntu/common/` and validate both Ubuntu targets.
+- CPU-specific Ubuntu change: edit `platforms/ubuntu/arm64/` or `platforms/ubuntu/x64/`.
 - Windows-only change: edit `platforms/windows/`.
 - Divergent file that becomes identical: move it into `shared/` and remove both overlays.
 - Shared file that must diverge: copy it into both overlays, then remove the shared copy.

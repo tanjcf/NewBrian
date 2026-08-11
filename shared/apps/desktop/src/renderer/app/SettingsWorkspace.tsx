@@ -1064,6 +1064,8 @@ function renderSettingsWorkspace() {
                         <option value="pwsh.exe">PowerShell 7</option>
                         <option value="cmd.exe">Command Prompt</option>
                         <option value="bash.exe">Git Bash</option>
+                        <option value="/bin/bash">Bash（Linux）</option>
+                        <option value="/bin/zsh">zsh（macOS）</option>
                       </select>
                     </div>
                     <div className="codex-setting-row">

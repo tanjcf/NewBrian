@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [macos-arm64, macos-x64, windows]
+        platform: [macos-arm64, macos-x64, ubuntu-arm64, ubuntu-x64, windows]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

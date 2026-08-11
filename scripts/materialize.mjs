@@ -11,11 +11,13 @@ const target = aliases.get(requestedTarget) ?? requestedTarget;
 const targetLayers = {
   "macos-arm64": ["platforms/macos/common", "platforms/macos/arm64"],
   "macos-x64": ["platforms/macos/common", "platforms/macos/x64"],
+  "ubuntu-arm64": ["platforms/ubuntu/common", "platforms/ubuntu/arm64"],
+  "ubuntu-x64": ["platforms/ubuntu/common", "platforms/ubuntu/x64"],
   windows: ["platforms/windows"]
 };
 
 if (!Object.hasOwn(targetLayers, target)) {
-  console.error("Usage: node scripts/materialize.mjs <macos-arm64|macos-x64|windows>");
+  console.error("Usage: node scripts/materialize.mjs <macos-arm64|macos-x64|ubuntu-arm64|ubuntu-x64|windows>");
   process.exit(1);
 }
 
@@ -43,8 +45,8 @@ for (const overlay of overlayPaths) {
 
 const metadata = {
   target,
-  platform: target.startsWith("macos-") ? "macos" : target,
-  arch: target === "macos-arm64" ? "arm64" : target === "macos-x64" ? "x64" : null,
+  platform: target.startsWith("macos-") ? "macos" : target.startsWith("ubuntu-") ? "ubuntu" : target,
+  arch: target.endsWith("-arm64") ? "arm64" : target.endsWith("-x64") ? "x64" : null,
   generatedAt: new Date().toISOString(),
   sourceLayers: ["shared", ...targetLayers[target]]
 };
