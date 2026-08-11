@@ -59,7 +59,11 @@ const [macFiles, windowsFiles] = await Promise.all([
   collect(macSource, "macos"),
   collect(windowsSource, "windows")
 ]);
-const targets = [path.join(root, "shared"), path.join(root, "platforms", "macos"), path.join(root, "platforms", "windows")];
+const targets = [
+  path.join(root, "shared"),
+  path.join(root, "platforms", "macos", "common"),
+  path.join(root, "platforms", "windows")
+];
 await Promise.all(targets.map((target) => rm(target, { recursive: true, force: true })));
 
 async function copyFile(info, targetRoot, relative) {

@@ -1,0 +1,7 @@
+{
+  "platform": "darwin",
+  "arch": "arm64",
+  "distributionLabel": "arm64",
+  "cpuFamily": "Apple Silicon"
+}
+

@@ -13,12 +13,17 @@ The repository uses two source layers:
 
 ```text
 shared/<relative-path>
-platforms/<platform>/<relative-path>
+platforms/windows/<relative-path>
+platforms/macos/common/<relative-path>
+platforms/macos/arm64/<relative-path>
+platforms/macos/x64/<relative-path>
 ```
 
 `shared` owns a file only when the imported macOS and Windows bytes are identical.
 When the same relative path differs, each platform owns its complete version in its
-overlay. Platform-only files also live in that platform's overlay.
+overlay. Platform-only files also live in that platform's overlay. macOS files shared
+by Apple Silicon and Intel live under `macos/common`; CPU-specific native resources or
+configuration override them from `arm64` or `x64`.
 
 This deliberately uses complete-file overrides instead of line-level patches. A
 generated workspace is therefore normal source code that existing Node, TypeScript,
@@ -26,16 +31,23 @@ Electron, and packaging tools can consume without custom module resolution.
 
 ## Materialization
 
-`scripts/materialize.mjs` creates `.materialized/<platform>` atomically enough for
+`scripts/materialize.mjs` creates `.materialized/<target>` atomically enough for
 local development: it builds a temporary directory, copies the shared layer, applies
 the overlay, writes provenance metadata, and then replaces the prior generated tree.
+
+The supported targets are `macos-arm64`, `macos-x64`, and `windows`. The macOS
+targets apply the common macOS overlay before the CPU overlay. The generated
+`codecn.arch.json` gives packaging and diagnostics an explicit architecture contract:
+`arm64` for M-series Apple Silicon and `x64` with distribution label `intel` for Intel.
 
 The generated directory is disposable. Never commit or edit it.
 
 ## Change rules
 
 - Cross-platform change: edit `shared/` and validate both platforms.
-- Platform-only change: edit only `platforms/<platform>/` and validate that platform.
+- macOS-wide change: edit `platforms/macos/common/` and validate both macOS targets.
+- CPU-specific macOS change: edit `platforms/macos/arm64/` or `platforms/macos/x64/`.
+- Windows-only change: edit `platforms/windows/`.
 - Divergent file that becomes identical: move it into `shared/` and remove both overlays.
 - Shared file that must diverge: copy it into both overlays, then remove the shared copy.
 - Dependency or script changes: keep root-relative paths compatible with a materialized workspace.
@@ -53,4 +65,3 @@ installer binaries, and temporary artifacts.
 
 Re-importing replaces the managed source layers, so it should only be used for an
 intentional upstream snapshot refresh with a clean Git worktree.
-

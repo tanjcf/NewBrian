@@ -7,12 +7,19 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "materialize:macos": "node scripts/materialize.mjs macos",
+    "materialize:macos-arm64": "node scripts/materialize.mjs macos-arm64",
+    "materialize:macos-x64": "node scripts/materialize.mjs macos-x64",
     "materialize:windows": "node scripts/materialize.mjs windows",
     "verify:layout": "node scripts/verify-layout.mjs",
     "check:macos": "node scripts/run-platform.mjs macos check",
+    "check:macos-arm64": "node scripts/run-platform.mjs macos-arm64 check",
+    "check:macos-x64": "node scripts/run-platform.mjs macos-x64 check",
     "check:windows": "node scripts/run-platform.mjs windows check",
     "build:macos": "node scripts/run-platform.mjs macos build",
+    "build:macos-arm64": "node scripts/run-platform.mjs macos-arm64 build",
+    "build:macos-x64": "node scripts/run-platform.mjs macos-x64 build",
+    "package:macos-arm64": "node scripts/run-platform.mjs macos-arm64 package:mac:arm64",
+    "package:macos-x64": "node scripts/run-platform.mjs macos-x64 package:mac:intel",
     "build:windows": "node scripts/run-platform.mjs windows build"
   }
 }
-

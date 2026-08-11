@@ -3,21 +3,29 @@ import path from "node:path";
 import process from "node:process";
 
 const root = path.resolve(import.meta.dirname, "..");
-const platform = process.argv[2];
-const supported = new Set(["macos", "windows"]);
+const requestedTarget = process.argv[2];
+const aliases = new Map([
+  ["macos", process.arch === "x64" ? "macos-x64" : "macos-arm64"]
+]);
+const target = aliases.get(requestedTarget) ?? requestedTarget;
+const targetLayers = {
+  "macos-arm64": ["platforms/macos/common", "platforms/macos/arm64"],
+  "macos-x64": ["platforms/macos/common", "platforms/macos/x64"],
+  windows: ["platforms/windows"]
+};
 
-if (!supported.has(platform)) {
-  console.error("Usage: node scripts/materialize.mjs <macos|windows>");
+if (!Object.hasOwn(targetLayers, target)) {
+  console.error("Usage: node scripts/materialize.mjs <macos-arm64|macos-x64|windows>");
   process.exit(1);
 }
 
 const shared = path.join(root, "shared");
-const overlay = path.join(root, "platforms", platform);
+const overlayPaths = targetLayers[target].map((layer) => path.join(root, layer));
 const outputRoot = path.join(root, ".materialized");
-const output = path.join(outputRoot, platform);
-const temporary = path.join(outputRoot, `.${platform}-${process.pid}`);
+const output = path.join(outputRoot, target);
+const temporary = path.join(outputRoot, `.${target}-${process.pid}`);
 
-for (const required of [shared, overlay]) {
+for (const required of [shared, ...overlayPaths]) {
   try {
     if (!(await stat(required)).isDirectory()) throw new Error();
   } catch {
@@ -29,12 +37,16 @@ for (const required of [shared, overlay]) {
 await mkdir(outputRoot, { recursive: true });
 await rm(temporary, { recursive: true, force: true });
 await cp(shared, temporary, { recursive: true, force: true });
-await cp(overlay, temporary, { recursive: true, force: true });
+for (const overlay of overlayPaths) {
+  await cp(overlay, temporary, { recursive: true, force: true });
+}
 
 const metadata = {
-  platform,
+  target,
+  platform: target.startsWith("macos-") ? "macos" : target,
+  arch: target === "macos-arm64" ? "arm64" : target === "macos-x64" ? "x64" : null,
   generatedAt: new Date().toISOString(),
-  sourceLayers: ["shared", `platforms/${platform}`]
+  sourceLayers: ["shared", ...targetLayers[target]]
 };
 await writeFile(path.join(temporary, ".codecn-source.json"), `${JSON.stringify(metadata, null, 2)}\n`);
 await rm(output, { recursive: true, force: true });

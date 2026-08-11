@@ -33,6 +33,14 @@ pnpm --dir apps/desktop package:mac:intel   # Intel Mac
 pnpm --dir apps/desktop package:mac:all     # both
 ```
 
+In the BRAIN repository, first materialize the matching source target. M-series
+Macs use `macos-arm64`; Intel Macs use `macos-x64`:
+
+```bash
+pnpm materialize:macos-arm64
+pnpm materialize:macos-x64
+```
+
 Artifacts (examples):
 
 - `codeCN Mac-0.1.65-arm64.dmg` — Apple Silicon

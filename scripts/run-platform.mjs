@@ -5,8 +5,8 @@ import process from "node:process";
 const root = path.resolve(import.meta.dirname, "..");
 const [platform, script, ...extra] = process.argv.slice(2);
 
-if (!new Set(["macos", "windows"]).has(platform) || !script) {
-  console.error("Usage: node scripts/run-platform.mjs <macos|windows> <pnpm-script> [args...]");
+if (!new Set(["macos", "macos-arm64", "macos-x64", "windows"]).has(platform) || !script) {
+  console.error("Usage: node scripts/run-platform.mjs <macos-arm64|macos-x64|windows> <pnpm-script> [args...]");
   process.exit(1);
 }
 
@@ -19,8 +19,7 @@ if (materializeCode !== 0) process.exit(materializeCode ?? 1);
 
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const child = spawn(command, ["run", script, ...extra], {
-  cwd: path.join(root, ".materialized", platform),
+  cwd: path.join(root, ".materialized", platform === "macos" ? (process.arch === "x64" ? "macos-x64" : "macos-arm64") : platform),
   stdio: "inherit"
 });
 child.on("close", (code) => process.exit(code ?? 1));
-
