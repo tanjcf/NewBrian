@@ -1,0 +1,3 @@
+# Preserve the upstream byte representation for the one platform protocol file
+# that intentionally uses CRLF. Other source files use Git's normal text handling.
+platforms/windows/packages/protocol/src/agent-v1.ts -text

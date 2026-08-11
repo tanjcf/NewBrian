@@ -1,0 +1,18 @@
+{
+  "name": "documents",
+  "version": "0.1.0",
+  "description": "Create, edit, inspect, and verify Word documents.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Documents",
+    "shortDescription": "Use Documents in Codex.",
+    "longDescription": "Documents adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Documents."
+  }
+}

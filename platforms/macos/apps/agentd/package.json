@@ -1,0 +1,20 @@
+{
+  "name": "@codex-forge/agentd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "build": "echo \"agentd build will move to Rust in phase 2\"",
+    "check": "node --check src/runtime.js && node --check src/tool-registry.js && node --check src/skill-registry.js && node --check src/agent-loop.js && node --check src/multi-agent-orchestrator.js && node --check src/policy-engine.js && node --check src/memory-index.js",
+    "test": "node --test src/*.test.js"
+  },
+  "dependencies": {
+    "@codex-forge/protocol": "workspace:*",
+    "docx": "9.5.1",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.1",
+    "pdfkit": "0.17.2",
+    "pptxgenjs": "4.0.1"
+  }
+}

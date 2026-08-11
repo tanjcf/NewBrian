@@ -1,0 +1,18 @@
+{
+  "name": "codecn-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform source workspace for codeCN",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "materialize:macos": "node scripts/materialize.mjs macos",
+    "materialize:windows": "node scripts/materialize.mjs windows",
+    "verify:layout": "node scripts/verify-layout.mjs",
+    "check:macos": "node scripts/run-platform.mjs macos check",
+    "check:windows": "node scripts/run-platform.mjs windows check",
+    "build:macos": "node scripts/run-platform.mjs macos build",
+    "build:windows": "node scripts/run-platform.mjs windows build"
+  }
+}
+

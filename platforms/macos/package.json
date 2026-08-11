@@ -1,0 +1,16 @@
+{
+  "name": "codecn-mac",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone macOS-style desktop shell for codeCN.",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev:desktop": "pnpm --dir apps/desktop dev",
+    "dev:agentd": "pnpm --dir apps/agentd dev",
+    "build:desktop": "pnpm --dir apps/desktop build",
+    "package:mac": "pnpm --dir apps/desktop package:mac",
+    "build": "pnpm -r build",
+    "check": "pnpm -r check",
+    "check:desktop": "pnpm --dir apps/desktop check"
+  }
+}

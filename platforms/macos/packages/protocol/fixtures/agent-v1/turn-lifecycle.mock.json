@@ -1,0 +1,99 @@
+{
+  "mock": true,
+  "description": "Phase 0 skeleton turn lifecycle for SSE contract tests. Not a production turn authority.",
+  "sessionId": "sess_mock_1",
+  "turnId": "trn_mock_1",
+  "frames": [
+    {
+      "event": "heartbeat",
+      "id": 1,
+      "data": { "ts": "2026-08-06T01:00:00.000Z", "mock": true }
+    },
+    {
+      "event": "turn.started",
+      "id": 2,
+      "data": {
+        "turnId": "trn_mock_1",
+        "sessionId": "sess_mock_1",
+        "model": "mock-model",
+        "status": "running",
+        "mock": true
+      }
+    },
+    {
+      "event": "message.delta",
+      "id": 3,
+      "data": {
+        "messageId": "msg_mock_1",
+        "textDelta": "hello",
+        "mock": true
+      }
+    },
+    {
+      "event": "tool.proposed",
+      "id": 4,
+      "data": {
+        "toolCallId": "tc_mock_1",
+        "turnId": "trn_mock_1",
+        "name": "workspace.read",
+        "arguments": { "path": "README.md" },
+        "status": "awaiting_approval",
+        "risk": "low",
+        "sideEffectClass": "workspace",
+        "mock": true
+      }
+    },
+    {
+      "event": "approval.required",
+      "id": 5,
+      "data": {
+        "approvalId": "ap_mock_1",
+        "toolCallId": "tc_mock_1",
+        "status": "pending",
+        "message": "Allow workspace.read on README.md?",
+        "mock": true
+      }
+    },
+    {
+      "event": "approval.resolved",
+      "id": 6,
+      "data": {
+        "approvalId": "ap_mock_1",
+        "toolCallId": "tc_mock_1",
+        "status": "approved",
+        "mock": true
+      }
+    },
+    {
+      "event": "tool.started",
+      "id": 7,
+      "data": {
+        "toolCallId": "tc_mock_1",
+        "turnId": "trn_mock_1",
+        "status": "running",
+        "mock": true
+      }
+    },
+    {
+      "event": "tool.completed",
+      "id": 8,
+      "data": {
+        "toolCallId": "tc_mock_1",
+        "turnId": "trn_mock_1",
+        "status": "succeeded",
+        "summary": "read 12 lines",
+        "mock": true
+      }
+    },
+    {
+      "event": "turn.completed",
+      "id": 9,
+      "data": {
+        "turnId": "trn_mock_1",
+        "sessionId": "sess_mock_1",
+        "status": "completed",
+        "mock": true
+      }
+    }
+  ]
+}

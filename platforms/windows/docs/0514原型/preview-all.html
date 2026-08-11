@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0514原型 - 全部页面预览</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: rgba(255, 255, 255, 0.06);
+        --panel2: rgba(255, 255, 255, 0.09);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.65);
+        --border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        --accent: #7aa8ff;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+          Arial, "Noto Sans", "Liberation Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        color: var(--text);
+        background: radial-gradient(1200px 700px at 20% 10%, rgba(122, 168, 255, 0.18), transparent 55%),
+          radial-gradient(900px 600px at 80% 30%, rgba(132, 255, 199, 0.12), transparent 60%),
+          radial-gradient(900px 600px at 50% 95%, rgba(255, 196, 122, 0.10), transparent 60%),
+          var(--bg);
+      }
+
+      .app {
+        height: 100%;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .sidebar, .main {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        min-height: 0;
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+      }
+
+      header {
+        padding: 14px 14px 10px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      header .title {
+        font-size: 14px;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+      header .subtitle {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .tools {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        display: grid;
+        gap: 10px;
+      }
+      .tools .row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .tools label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .tools input[type="search"] {
+        width: 100%;
+        padding: 10px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        outline: none;
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+      }
+      .tools .hint {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .list {
+        padding: 10px;
+        overflow: auto;
+      }
+      .item {
+        display: grid;
+        gap: 2px;
+        padding: 10px 10px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        user-select: none;
+      }
+      .item:hover { background: rgba(255,255,255,0.05); }
+      .item[aria-current="true"] {
+        border-color: rgba(122,168,255,0.55);
+        background: rgba(122,168,255,0.10);
+      }
+      .item .name {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .item .file {
+        font-size: 12px;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border);
+        padding: 10px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        display: grid;
+        gap: 6px;
+      }
+      .footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .footer a:hover { text-decoration: underline; }
+
+      .main {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-height: 0;
+      }
+
+      .mainbar {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 12px 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel2);
+      }
+      .mainbar .current {
+        display: grid;
+        gap: 2px;
+      }
+      .mainbar .current .label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .mainbar .current .value {
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .mainbar .actions {
+        display: inline-flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .btn {
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+        padding: 9px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .btn:hover { background: rgba(255,255,255,0.06); }
+
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #fff;
+      }
+
+      @media (max-width: 980px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { height: 44vh; }
+        .main { height: calc(56vh - 12px); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <header>
+          <div class="title">0514原型 · 全部页面预览</div>
+          <div class="subtitle">
+            左侧选页，右侧 iframe 预览。<br />
+            这是原 Axure HTML（大部分内容是图片），用于快速浏览对齐。
+          </div>
+        </header>
+
+        <section class="tools">
+          <div class="row">
+            <label for="q">筛选页面</label>
+            <input id="q" type="search" placeholder="输入关键字，例如：自动化 / 插件 / 设置 / mcp" autocomplete="off" />
+          </div>
+          <div class="hint">提示：也支持用 URL hash 直达，例如 `#page=自动化.html`</div>
+        </section>
+
+        <nav class="list" id="list" aria-label="pages"></nav>
+
+        <div class="footer">
+          <div>入口：<a href="start.html" target="_blank" rel="noreferrer">start.html</a></div>
+          <div>本页：<a href="preview-all.html" target="_blank" rel="noreferrer">preview-all.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="mainbar">
+          <div class="current">
+            <div class="label">当前页面</div>
+            <div class="value" id="currentName">（未选择）</div>
+          </div>
+          <div class="actions">
+            <button class="btn" id="openNew">新窗口打开</button>
+            <button class="btn" id="reload">刷新 iframe</button>
+            <button class="btn" id="copyLink">复制直达链接</button>
+          </div>
+        </div>
+        <iframe id="frame" title="prototype preview" loading="lazy"></iframe>
+      </main>
+    </div>
+
+    <script>
+      const PAGES = [
+        { name: "start（目录/导航）", file: "start.html" },
+        { name: "index（Axure 外壳）", file: "index.html" },
+        { name: "新对话", file: "新对话.html" },
+        { name: "自动化", file: "自动化.html" },
+        { name: "扩展", file: "扩展.html" },
+        { name: "插件", file: "插件.html" },
+        { name: "技能", file: "技能.html" },
+        { name: "MCP服务器", file: "mcp服务器.html" },
+        { name: "设置", file: "设置.html" },
+        { name: "计费与订阅", file: "计费与订阅.html" }
+      ];
+
+      const els = {
+        list: document.getElementById("list"),
+        q: document.getElementById("q"),
+        frame: document.getElementById("frame"),
+        currentName: document.getElementById("currentName"),
+        openNew: document.getElementById("openNew"),
+        reload: document.getElementById("reload"),
+        copyLink: document.getElementById("copyLink"),
+      };
+
+      function getHashPage() {
+        const m = location.hash.match(/page=([^&]+)/);
+        return m ? decodeURIComponent(m[1]) : "";
+      }
+
+      function setHashPage(file) {
+        location.hash = `page=${encodeURIComponent(file)}`;
+      }
+
+      function selectPage(file) {
+        const page = PAGES.find(p => p.file === file) || { name: file, file };
+        els.frame.src = page.file;
+        els.currentName.textContent = `${page.name}（${page.file}）`;
+        [...els.list.querySelectorAll(".item")].forEach(node => {
+          node.setAttribute("aria-current", node.dataset.file === file ? "true" : "false");
+        });
+      }
+
+      function renderList() {
+        const q = (els.q.value || "").trim().toLowerCase();
+        const items = PAGES.filter(p => {
+          if (!q) return true;
+          return (p.name + " " + p.file).toLowerCase().includes(q);
+        });
+
+        els.list.innerHTML = "";
+        for (const p of items) {
+          const div = document.createElement("div");
+          div.className = "item";
+          div.dataset.file = p.file;
+          div.setAttribute("role", "button");
+          div.tabIndex = 0;
+          div.innerHTML = `<div class="name"></div><div class="file"></div>`;
+          div.querySelector(".name").textContent = p.name;
+          div.querySelector(".file").textContent = p.file;
+          div.addEventListener("click", () => setHashPage(p.file));
+          div.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setHashPage(p.file);
+            }
+          });
+          els.list.appendChild(div);
+        }
+
+        const current = getHashPage();
+        if (current) selectPage(current);
+      }
+
+      function getDeepLink(file) {
+        const base = location.href.split("#")[0];
+        return `${base}#page=${encodeURIComponent(file)}`;
+      }
+
+      els.q.addEventListener("input", renderList);
+      window.addEventListener("hashchange", () => {
+        const file = getHashPage() || "start.html";
+        selectPage(file);
+      });
+
+      els.openNew.addEventListener("click", () => {
+        const file = getHashPage() || "start.html";
+        window.open(file, "_blank", "noreferrer");
+      });
+      els.reload.addEventListener("click", () => {
+        const file = getHashPage() || "start.html";
+        els.frame.src = file;
+      });
+      els.copyLink.addEventListener("click", async () => {
+        const file = getHashPage() || "start.html";
+        const link = getDeepLink(file);
+        try {
+          await navigator.clipboard.writeText(link);
+          els.copyLink.textContent = "已复制";
+          setTimeout(() => (els.copyLink.textContent = "复制直达链接"), 900);
+        } catch {
+          prompt("复制这个链接：", link);
+        }
+      });
+
+      // init
+      renderList();
+      const initial = getHashPage() || "start.html";
+      selectPage(initial);
+      setHashPage(initial);
+    </script>
+  </body>
+</html>

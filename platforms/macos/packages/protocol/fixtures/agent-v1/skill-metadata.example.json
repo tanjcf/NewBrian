@@ -1,0 +1,17 @@
+{
+  "skillKey": "demo.calendar",
+  "displayName": "Calendar Helper",
+  "name": "Calendar Helper",
+  "version": "1.0.0",
+  "source": "market_private",
+  "originRef": "@demo/calendar",
+  "contentHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "signatureStatus": "valid",
+  "scanStatus": "passed",
+  "verificationStatus": "verified",
+  "enabled": true,
+  "allowlisted": true,
+  "toolCompatibility": "mapped",
+  "injectionBudgetTokens": 2048,
+  "lifecycle": "active"
+}

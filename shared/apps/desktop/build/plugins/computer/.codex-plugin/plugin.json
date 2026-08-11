@@ -1,0 +1,18 @@
+{
+  "name": "computer",
+  "version": "0.1.0",
+  "description": "Use approved local Windows tools and operations safely.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Computer",
+    "shortDescription": "Use Computer in Codex.",
+    "longDescription": "Computer adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Computer."
+  }
+}

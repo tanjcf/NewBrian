@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>扩展</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">扩展中心：浏览/管理扩展（占位实现）。</div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html"><div class="t">Start</div><div class="d">目录/预览</div></a>
+          <a class="nav-item" href="./新对话.html"><div class="t">新对话</div><div class="d">会话创建</div></a>
+          <a class="nav-item" href="./自动化.html"><div class="t">自动化</div><div class="d">定时/流程</div></a>
+          <a class="nav-item" href="./扩展.html"><div class="t">扩展</div><div class="d">扩展管理</div></a>
+          <a class="nav-item" href="./插件.html"><div class="t">插件</div><div class="d">插件市场/管理</div></a>
+          <a class="nav-item" href="./技能.html"><div class="t">技能</div><div class="d">技能列表/详情</div></a>
+          <a class="nav-item" href="./mcp服务器.html"><div class="t">MCP服务器</div><div class="d">MCP 管理</div></a>
+          <a class="nav-item" href="./设置.html"><div class="t">设置</div><div class="d">偏好/通用</div></a>
+          <a class="nav-item" href="./计费与订阅.html"><div class="t">计费与订阅</div><div class="d">套餐/账单</div></a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure：<a href="../0514原型/扩展.html" target="_blank" rel="noreferrer">../0514原型/扩展.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb></div>
+            <div class="page-title" data-page-title>扩展</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <button class="btn" type="button">安装扩展</button>
+            <a class="btn" href="../0514原型/扩展.html" target="_blank" rel="noreferrer">对照原型</a>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="canvas">
+            <div class="layout">
+              <section class="pane">
+                <h1 class="h1">已安装</h1>
+                <p class="p">展示已安装扩展的状态、版本、启用开关（占位）。</p>
+                <div class="list">
+                  <div class="card"><div class="k">GitHub 集成</div><div class="v"><span class="tag">Enabled</span> <span class="tag">v1.2.0</span></div></div>
+                  <div class="card"><div class="k">Jira 集成</div><div class="v"><span class="tag">Disabled</span> <span class="tag">v0.9.3</span></div></div>
+                  <div class="card"><div class="k">Slack 通知</div><div class="v"><span class="tag">Enabled</span> <span class="tag">v1.0.1</span></div></div>
+                </div>
+              </section>
+
+              <section class="pane">
+                <h1 class="h1">扩展详情</h1>
+                <p class="p">右侧为详情与配置：权限、连接信息、作用域等（待补齐）。</p>
+                <div class="list">
+                  <div class="card"><div class="k">名称</div><div class="v">GitHub 集成</div></div>
+                  <div class="card"><div class="k">权限</div><div class="v"><span class="tag">repo:read</span> <span class="tag">issues:write</span></div></div>
+                  <div class="card"><div class="k">配置</div><div class="v">（占位）Token / Base URL / Project</div></div>
+                  <div class="card"><div class="k">操作</div><div class="v"><button class="btn" type="button">保存配置</button> <button class="btn" type="button">卸载</button></div></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

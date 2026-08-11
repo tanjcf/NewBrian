@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>新对话</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">导航与整体框架已就绪，本页为“新对话”结构化实现占位。</div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html"><div class="t">Start</div><div class="d">目录/预览</div></a>
+          <a class="nav-item" href="./新对话.html"><div class="t">新对话</div><div class="d">会话创建</div></a>
+          <a class="nav-item" href="./自动化.html"><div class="t">自动化</div><div class="d">定时/流程</div></a>
+          <a class="nav-item" href="./扩展.html"><div class="t">扩展</div><div class="d">扩展管理</div></a>
+          <a class="nav-item" href="./插件.html"><div class="t">插件</div><div class="d">插件市场/管理</div></a>
+          <a class="nav-item" href="./技能.html"><div class="t">技能</div><div class="d">技能列表/详情</div></a>
+          <a class="nav-item" href="./mcp服务器.html"><div class="t">MCP服务器</div><div class="d">MCP 管理</div></a>
+          <a class="nav-item" href="./设置.html"><div class="t">设置</div><div class="d">偏好/通用</div></a>
+          <a class="nav-item" href="./计费与订阅.html"><div class="t">计费与订阅</div><div class="d">套餐/账单</div></a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure：<a href="../0514原型/新对话.html" target="_blank" rel="noreferrer">../0514原型/新对话.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb></div>
+            <div class="page-title" data-page-title>新对话</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <a class="btn" href="../0514原型/新对话.html" target="_blank" rel="noreferrer">对照原型</a>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="canvas">
+            <div class="layout">
+              <section class="pane">
+                <h1 class="h1">新对话</h1>
+                <p class="p">以“选择模板/输入目标/选择模型与工具”为主的创建流。后续会把表单、下拉、分组与按钮态补齐。</p>
+                <div class="list">
+                  <div class="card"><div class="k">目标</div><div class="v">为用户创建一个新的对话/任务</div></div>
+                  <div class="card"><div class="k">输入</div><div class="v">标题、说明、上下文、附件（占位）</div></div>
+                  <div class="card"><div class="k">选项</div><div class="v">模型、温度、工具/插件（占位）</div></div>
+                </div>
+              </section>
+
+              <section class="pane">
+                <h1 class="h1">表单占位</h1>
+                <p class="p">这里先用卡片模拟表单块，后续按原型拆成可复用组件。</p>
+                <div class="list">
+                  <div class="card"><div class="k">对话标题</div><div class="v"><span class="tag">Input</span></div></div>
+                  <div class="card"><div class="k">任务描述</div><div class="v"><span class="tag">Textarea</span></div></div>
+                  <div class="card"><div class="k">模型选择</div><div class="v"><span class="tag">Select</span> <span class="tag">Tooling</span></div></div>
+                  <div class="card"><div class="k">操作</div><div class="v"><button class="btn" type="button">创建</button> <button class="btn" type="button">取消</button></div></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

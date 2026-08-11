@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@codex-forge/protocol": ["packages/protocol/src/index.ts"],
+      "@codex-forge/protocol/*": ["packages/protocol/src/*"],
+      "@codex-forge/ui": ["packages/ui/src/index.ts"],
+      "@codex-forge/ui/*": ["packages/ui/src/*"]
+    },
+    "strict": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": []
+  }
+}

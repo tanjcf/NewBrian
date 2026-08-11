@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>计费与订阅</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">订阅与账单：套餐、用量、发票（占位实现）。</div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html"><div class="t">Start</div><div class="d">目录/预览</div></a>
+          <a class="nav-item" href="./新对话.html"><div class="t">新对话</div><div class="d">会话创建</div></a>
+          <a class="nav-item" href="./自动化.html"><div class="t">自动化</div><div class="d">定时/流程</div></a>
+          <a class="nav-item" href="./扩展.html"><div class="t">扩展</div><div class="d">扩展管理</div></a>
+          <a class="nav-item" href="./插件.html"><div class="t">插件</div><div class="d">插件市场/管理</div></a>
+          <a class="nav-item" href="./技能.html"><div class="t">技能</div><div class="d">技能列表/详情</div></a>
+          <a class="nav-item" href="./mcp服务器.html"><div class="t">MCP服务器</div><div class="d">MCP 管理</div></a>
+          <a class="nav-item" href="./设置.html"><div class="t">设置</div><div class="d">偏好/通用</div></a>
+          <a class="nav-item" href="./计费与订阅.html"><div class="t">计费与订阅</div><div class="d">套餐/账单</div></a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure：<a href="../0514原型/计费与订阅.html" target="_blank" rel="noreferrer">../0514原型/计费与订阅.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb></div>
+            <div class="page-title" data-page-title>计费与订阅</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <button class="btn" type="button">升级套餐</button>
+            <a class="btn" href="../0514原型/计费与订阅.html" target="_blank" rel="noreferrer">对照原型</a>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="canvas">
+            <div class="layout">
+              <section class="pane">
+                <h1 class="h1">当前订阅</h1>
+                <p class="p">展示套餐、到期时间、席位/额度（占位）。</p>
+                <div class="list">
+                  <div class="card"><div class="k">套餐</div><div class="v">Pro <span class="tag">Monthly</span></div></div>
+                  <div class="card"><div class="k">到期</div><div class="v">2026-06-17</div></div>
+                  <div class="card"><div class="k">用量</div><div class="v"><span class="tag">Tokens</span> 38%（占位）</div></div>
+                </div>
+              </section>
+
+              <section class="pane">
+                <h1 class="h1">账单与发票</h1>
+                <p class="p">展示账单列表、付款方式与下载发票（占位）。</p>
+                <div style="margin-top:14px">
+                  <table class="table" aria-label="billing">
+                    <thead>
+                      <tr>
+                        <th style="width:30%">账期</th>
+                        <th style="width:22%">金额</th>
+                        <th style="width:22%">状态</th>
+                        <th style="width:26%">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>2026-05</td>
+                        <td>$29.00</td>
+                        <td><span class="tag">Paid</span></td>
+                        <td><a href="#" onclick="return false;">下载发票</a></td>
+                      </tr>
+                      <tr>
+                        <td>2026-04</td>
+                        <td>$29.00</td>
+                        <td><span class="tag">Paid</span></td>
+                        <td><a href="#" onclick="return false;">下载发票</a></td>
+                      </tr>
+                      <tr>
+                        <td>2026-03</td>
+                        <td>$29.00</td>
+                        <td><span class="tag">Paid</span></td>
+                        <td><a href="#" onclick="return false;">下载发票</a></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

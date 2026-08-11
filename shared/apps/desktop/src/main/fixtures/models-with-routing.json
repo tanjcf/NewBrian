@@ -1,0 +1,79 @@
+[
+  {
+    "id": "deepseek-v4-flash",
+    "object": "model",
+    "owned_by": "DeepSeek",
+    "name": "deepseek-v4-flash",
+    "config_id": 10,
+    "capabilities": ["chat", "tools"],
+    "input_token_price_per_million": 0.5,
+    "output_token_price_per_million": 1.0,
+    "routing": {
+      "schema_version": 1,
+      "status": "active",
+      "tier": 1,
+      "cost_weight": 10,
+      "quality_weight": 60,
+      "quality_by_task": { "chat": 70, "code": 45, "general": 55 },
+      "roles": ["chat"],
+      "capabilities": ["tools"]
+    }
+  },
+  {
+    "id": "deepseek-v4-pro",
+    "object": "model",
+    "owned_by": "DeepSeek",
+    "name": "deepseek-v4-pro",
+    "config_id": 1,
+    "capabilities": ["chat", "code", "tools"],
+    "input_token_price_per_million": 4,
+    "output_token_price_per_million": 8,
+    "routing": {
+      "schema_version": 1,
+      "status": "active",
+      "tier": 3,
+      "cost_weight": 70,
+      "quality_weight": 88,
+      "quality_by_task": { "chat": 72, "code": 92, "gov_write": 90, "research": 90, "general": 90 },
+      "roles": ["chat", "code", "gov", "research", "review"],
+      "capabilities": ["tools"]
+    }
+  },
+  {
+    "id": "kimi-k2.6",
+    "object": "model",
+    "owned_by": "Moonshot",
+    "name": "kimi-k2.6",
+    "config_id": 18,
+    "capabilities": ["vision", "multimodal"],
+    "input_token_price_per_million": 3,
+    "output_token_price_per_million": 6,
+    "routing": {
+      "schema_version": 1,
+      "status": "active",
+      "tier": 2,
+      "cost_weight": 40,
+      "quality_weight": 80,
+      "quality_by_task": { "chat": 75, "code": 70, "general": 78 },
+      "roles": ["chat", "vision"],
+      "capabilities": ["vision", "multimodal"]
+    }
+  },
+  {
+    "id": "probe-candidate",
+    "object": "model",
+    "owned_by": "lab",
+    "name": "probe-candidate",
+    "config_id": 99,
+    "capabilities": [],
+    "routing": {
+      "schema_version": 1,
+      "status": "probing",
+      "tier": 1,
+      "cost_weight": 1,
+      "quality_weight": 1,
+      "roles": ["chat"],
+      "capabilities": []
+    }
+  }
+]
