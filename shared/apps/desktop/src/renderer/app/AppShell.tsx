@@ -16,6 +16,7 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [threadHistory, setThreadHistory] = useState<ThreadHistoryState>({ entries: [], index: -1 });
   const pendingNavigationKey = useRef<string | null>(null);
+  const isMacOS = typeof navigator !== "undefined" && /Mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
 
   useEffect(() => {
     if (!activeThread) return;
@@ -88,7 +89,7 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
   }
 
   return (
-    <main className={`codex-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+    <main className={`codex-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${isMacOS ? " platform-macos" : ""}`}>
       <header className="desktop-menu">
         <button
           className="window-toggle"

@@ -220,6 +220,15 @@ textarea {
   -webkit-app-region: drag;
 }
 
+/* Reserve the native traffic-light area and avoid duplicate window controls on macOS. */
+.codex-shell.platform-macos .desktop-menu {
+  padding-left: 78px;
+}
+
+.codex-shell.platform-macos .window-controls {
+  display: none;
+}
+
 .desktop-menu button,
 .window-controls {
   -webkit-app-region: no-drag;
