@@ -33,6 +33,26 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
+
+const fallbackBrainWorkspaces = [
+  { workspaceKey: "quant", displayName: "量化交易", enabled: true },
+  { workspaceKey: "game", displayName: "游戏制作", enabled: true },
+  { workspaceKey: "video", displayName: "视频制作", enabled: true },
+  { workspaceKey: "music", displayName: "音乐创作", enabled: true },
+  { workspaceKey: "data", displayName: "数据与决策", enabled: true },
+  { workspaceKey: "software", displayName: "软件与自动化", enabled: true },
+  { workspaceKey: "document", displayName: "文档创作", enabled: true }
+];
+
+const brainWorkspaceIcon = (workspaceKey: string) => ({
+  quant: "workspace-quant",
+  game: "workspace-game",
+  video: "workspace-video",
+  music: "workspace-music",
+  data: "workspace-data",
+  software: "workspace-software",
+  document: "workspace-document"
+}[workspaceKey] || "folder");
 import { WorkspaceHtmlViewer } from "./workspace-html-viewer";
 import { LocalFileContextMenu, positionLocalFileMenu, type LocalFileMenuState } from "./LocalFileContextMenu";
 import {
@@ -416,6 +436,9 @@ export function WorkspaceModules(ctx: any) {
   const [brainWorkspaces, setBrainWorkspaces] = useState<any[]>([]);
   const [brainProjects, setBrainProjects] = useState<any[]>([]);
   const [brainConversations, setBrainConversations] = useState<any[]>([]);
+  const [brainMessages, setBrainMessages] = useState<any[]>([]);
+  const [brainDraft, setBrainDraft] = useState("");
+  const [brainMessageBusy, setBrainMessageBusy] = useState(false);
   const [selectedBrainProjectId, setSelectedBrainProjectId] = useState("");
   const [selectedBrainConversationId, setSelectedBrainConversationId] = useState("");
   const [brainWorkspaceMenuOpen, setBrainWorkspaceMenuOpen] = useState(false);
@@ -479,6 +502,38 @@ export function WorkspaceModules(ctx: any) {
     void refreshBrainConversations(selectedBrainProjectId)
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)));
   }, [selectedBrainProjectId, selectedBrainWorkspaceKey, refreshBrainConversations]);
+  useEffect(() => {
+    let disposed = false;
+    if (!selectedBrainConversationId || !window.codecn?.listBrainMessages) {
+      setBrainMessages([]);
+      setBrainDraft("");
+      return () => { disposed = true; };
+    }
+    void Promise.all([
+      window.codecn.listBrainMessages({ conversationId: selectedBrainConversationId }),
+      window.codecn.getBrainDraft?.({ conversationId: selectedBrainConversationId }) ?? Promise.resolve(null)
+    ]).then(([messages, draft]) => {
+      if (disposed) return;
+      setBrainMessages(Array.isArray(messages) ? messages : []);
+      setBrainDraft(draft?.content || "");
+    }).catch((error) => {
+      if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
+    return () => { disposed = true; };
+  }, [selectedBrainConversationId]);
+  useEffect(() => {
+    if (!selectedBrainConversationId || !selectedBrainProjectId || !window.codecn?.saveBrainDraft) return;
+    const timer = window.setTimeout(() => {
+      void window.codecn?.saveBrainDraft({
+        projectId: selectedBrainProjectId,
+        conversationId: selectedBrainConversationId,
+        content: brainDraft
+      }).catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [brainDraft, selectedBrainConversationId, selectedBrainProjectId]);
+  const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
+  const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
   useEffect(() => {
     if (!brainWorkspaceMenuOpen) return;
     const close = (event: PointerEvent) => {
@@ -3184,26 +3239,6 @@ function startNewChat() {
   }
 
 function renderSidebarModule() {
-    const fallbackBrainWorkspaces = [
-      { workspaceKey: "quant", displayName: "量化交易", enabled: true },
-      { workspaceKey: "game", displayName: "游戏制作", enabled: true },
-      { workspaceKey: "video", displayName: "视频制作", enabled: true },
-      { workspaceKey: "music", displayName: "音乐创作", enabled: true },
-      { workspaceKey: "data", displayName: "数据与决策", enabled: true },
-      { workspaceKey: "software", displayName: "软件与自动化", enabled: true },
-      { workspaceKey: "document", displayName: "文档创作", enabled: true }
-    ];
-    const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
-    const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
-    const brainWorkspaceIcon = (workspaceKey: string) => ({
-      quant: "workspace-quant",
-      game: "workspace-game",
-      video: "workspace-video",
-      music: "workspace-music",
-      data: "workspace-data",
-      software: "workspace-software",
-      document: "workspace-document"
-    }[workspaceKey] || "folder");
     return (
       <aside className="codex-sidebar">
         <div className="sidebar-scroll">
@@ -4050,6 +4085,139 @@ function renderSidebarModule() {
     if (isNewChatMode && newChatComposerHost) return createPortal(children, newChatComposerHost);
     return children;
   };
+
+  const selectedBrainProject = brainProjects.find((project) => project.id === selectedBrainProjectId);
+  const selectedBrainConversation = brainConversations.find((conversation) => conversation.id === selectedBrainConversationId);
+  const isBrainConversationSelection = Boolean(
+    selectedBrainConversationId && selectedSidebarRow === `brain-conversation:${selectedBrainConversationId}`
+  );
+
+  async function sendBrainMessage() {
+    const content = brainDraft.trim();
+    if (!content || brainMessageBusy || !selectedBrainConversationId || !selectedBrainProjectId) return;
+    if (!window.codecn?.appendBrainMessage) return;
+    setBrainMessageBusy(true);
+    setErrorMessage("");
+    try {
+      const userMessage = await window.codecn.appendBrainMessage({
+        conversationId: selectedBrainConversationId,
+        role: "user",
+        content
+      });
+      const history = [...brainMessages, userMessage];
+      setBrainMessages(history);
+      setBrainDraft("");
+      await window.codecn.saveBrainDraft?.({
+        projectId: selectedBrainProjectId,
+        conversationId: selectedBrainConversationId,
+        content: ""
+      });
+
+      if (!api?.chatWithModel || !selectedWorkspace?.id) {
+        setChatStatus("消息已保存在本地；当前没有可用的模型执行工作区。");
+        return;
+      }
+      setChatStatus("BRAIN 正在处理…");
+      const requestId = `brain-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const result = await api.chatWithModel({
+        requestId,
+        workspaceId: selectedWorkspace.id,
+        threadId: selectedThread?.id,
+        ...modelConfig,
+        apiKey: "",
+        disableResponseStorage: !desktopPreferences.configuration.saveResponses,
+        permissionMode: composerPermission,
+        systemPrompt: [
+          modelConfig.systemPrompt,
+          `当前 BRAIN 工作台：${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}`,
+          `当前本地项目：${selectedBrainProject?.name || "未命名项目"}`,
+          "回答应服务于当前工作台与项目；不得声称执行了尚未执行的工具或文件操作。"
+        ].filter(Boolean).join("\n\n"),
+        selectedSkillNames: [],
+        composerModes: [],
+        messages: history
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            createdAt: message.createdAt
+          }))
+      });
+      const finalContent = String(result?.content || "").trim() || "本轮没有生成可见回复。";
+      const assistantMessage = await window.codecn.appendBrainMessage({
+        conversationId: selectedBrainConversationId,
+        role: "assistant",
+        content: finalContent,
+        sourceRefsJson: JSON.stringify(Array.isArray(result?.citations) ? result.citations : []),
+        requestId
+      });
+      setBrainMessages((current) => [...current, assistantMessage]);
+      await refreshBrainConversations(selectedBrainProjectId);
+      setChatStatus("BRAIN 回复成功。");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setChatStatus("BRAIN 请求失败；已发送的用户消息仍保存在本地。");
+    } finally {
+      setBrainMessageBusy(false);
+    }
+  }
+
+  function renderBrainChatModule() {
+    return (
+      <main className="brain-chat-module">
+        <header className="brain-chat-header">
+          <div>
+            <span>{selectedBrainWorkspace?.displayName || "BRAIN 工作台"}</span>
+            <strong>{selectedBrainConversation?.title || "新对话"}</strong>
+          </div>
+          <small>{selectedBrainProject?.name || "本地项目"} · 本地保存</small>
+        </header>
+        <div className="brain-chat-message-scroll">
+          {!brainMessages.length ? (
+            <div className="brain-chat-welcome">
+              <SidebarIcon name={brainWorkspaceIcon(selectedBrainWorkspaceKey)} />
+              <h2>把问题交给 BRAIN</h2>
+              <p>这段对话只保存在本机，并自动归入“{selectedBrainProject?.name || "当前项目"}”。</p>
+            </div>
+          ) : null}
+          {brainMessages.map((message) => {
+            let sources: any[] = [];
+            try { sources = JSON.parse(message.sourceRefsJson || "[]"); } catch { sources = []; }
+            return (
+              <article key={message.id} className={`brain-chat-message ${message.role}`}>
+                <span>{message.role === "user" ? "你" : message.role === "assistant" ? "BRAIN" : message.role}</span>
+                <div>{message.content}</div>
+                {sources.length ? (
+                  <footer>
+                    {sources.slice(0, 5).map((source, index) => (
+                      <a key={`${message.id}:source:${index}`} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>
+                    ))}
+                  </footer>
+                ) : null}
+              </article>
+            );
+          })}
+          {brainMessageBusy ? <div className="brain-chat-working"><i />BRAIN 正在处理</div> : null}
+        </div>
+        <form className="brain-chat-composer" onSubmit={(event) => { event.preventDefault(); void sendBrainMessage(); }}>
+          <textarea
+            value={brainDraft}
+            onChange={(event) => setBrainDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void sendBrainMessage();
+              }
+            }}
+            placeholder={`给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息`}
+            disabled={brainMessageBusy}
+          />
+          <button type="submit" disabled={brainMessageBusy || !brainDraft.trim()}>发送</button>
+        </form>
+      </main>
+    );
+  }
 
 function renderChatModule() {
     return (
@@ -7119,7 +7287,9 @@ function renderWorkspaceModules() {
       return renderSettingsWorkspace();
     }
 
-    const mainModule = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
+    const mainModule = isBrainConversationSelection
+      ? renderBrainChatModule()
+      : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection
         ? renderChatModule()
@@ -7157,7 +7327,7 @@ function renderWorkspaceModules() {
         ) : null}
         {renderSidebarModule()}
         {mainModule}
-        {previewPlacement === "side" && activeFeature === "new-chat" ? renderPreviewModule("side") : null}
+        {previewPlacement === "side" && activeFeature === "new-chat" && !isBrainConversationSelection ? renderPreviewModule("side") : null}
         {renderSearchDialog()}
         {workspaceFileMenu && selectedWorkspace?.id ? <LocalFileContextMenu
           menu={workspaceFileMenu}
