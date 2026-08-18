@@ -1,5 +1,18 @@
 import type {
   AutomationSpec,
+  BrainConversationCreateInput,
+  BrainConversationDto,
+  BrainConversationGetInput,
+  BrainDraftSaveInput,
+  BrainMessageAppendInput,
+  BrainMessageDto,
+  BrainProjectCreateInput,
+  BrainProjectDto,
+  BrainProjectGetInput,
+  BrainProjectListInput,
+  BrainProjectUpdateInput,
+  BrainProjectWorkspaceInput,
+  BrainWorkspaceDto,
   MobilePairingState,
   PhaseOneSnapshot,
   PluginSpec,
@@ -383,6 +396,18 @@ export type SettingsNavIconName =
 declare global {
   interface Window {
     codecn?: {
+      listBrainWorkspaces: () => Promise<BrainWorkspaceDto[]>;
+      listBrainProjects: (input?: BrainProjectListInput) => Promise<BrainProjectDto[]>;
+      createBrainProject: (input: BrainProjectCreateInput) => Promise<BrainProjectDto>;
+      getBrainProject: (input: BrainProjectGetInput) => Promise<BrainProjectDto>;
+      updateBrainProject: (input: BrainProjectUpdateInput) => Promise<BrainProjectDto>;
+      setBrainProjectWorkspace: (input: BrainProjectWorkspaceInput) => Promise<{ ok: boolean }>;
+      createBrainConversation: (input: BrainConversationCreateInput) => Promise<BrainConversationDto>;
+      getBrainConversation: (input: BrainConversationGetInput) => Promise<BrainConversationDto>;
+      listBrainMessages: (input: BrainConversationGetInput) => Promise<BrainMessageDto[]>;
+      appendBrainMessage: (input: BrainMessageAppendInput) => Promise<BrainMessageDto>;
+      getBrainDraft: (input: BrainConversationGetInput) => Promise<{ content: string; updatedAt: string } | null>;
+      saveBrainDraft: (input: BrainDraftSaveInput) => Promise<{ ok: boolean }>;
       bootstrap: () => Promise<BootstrapPayload>;
       getSnapshot: () => Promise<PhaseOneSnapshot>;
       getGoal: (input?: { threadId?: string }) => Promise<ThreadGoalState | null>;

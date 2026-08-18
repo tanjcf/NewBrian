@@ -27,6 +27,7 @@ import type {
 import { createLocalRuntime } from "../../../agentd/src/runtime.js";
 import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
 import { decodeMcpMessages, encodeMcpMessage } from "./mcp-framing.js";
@@ -9280,7 +9281,14 @@ function createAgentTurnControlPlane() {
 
 const agentTurnControlPlane = createAgentTurnControlPlane();
 
+async function resolveBrainLocalOwnerId() {
+  const authState = await readDesktopAuthState().catch(() => null);
+  const accountId = authState?.user?.id?.trim() || authState?.user?.email?.trim().toLowerCase() || "";
+  return accountId ? `account:${accountId}` : `device:${collectDesktopDeviceFingerprint().device_id}`;
+}
+
 function registerIpc() {
+  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, resolveOwnerId: resolveBrainLocalOwnerId });
   ipcMain.handle(
     "phase1:show-app-menu",
     async (

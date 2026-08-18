@@ -1,6 +1,19 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   AutomationSpec,
+  BrainConversationCreateInput,
+  BrainConversationDto,
+  BrainConversationGetInput,
+  BrainDraftSaveInput,
+  BrainMessageAppendInput,
+  BrainMessageDto,
+  BrainProjectCreateInput,
+  BrainProjectDto,
+  BrainProjectGetInput,
+  BrainProjectListInput,
+  BrainProjectUpdateInput,
+  BrainProjectWorkspaceInput,
+  BrainWorkspaceDto,
   MobilePairingState,
   PhaseOneSnapshot,
   PluginSpec,
@@ -12,7 +25,7 @@ import type {
   SynthesizeNovelSpeechResult,
   WorkspaceCatalogItem
 } from "@codex-forge/protocol";
-import { desktopIpcChannels } from "@codex-forge/protocol";
+import { brainWorkspaceIpcChannels, desktopIpcChannels } from "@codex-forge/protocol";
 
 interface McpServerConfig {
   id: string;
@@ -223,6 +236,18 @@ interface DesktopPreferences {
 }
 
 contextBridge.exposeInMainWorld("codecn", {
+  listBrainWorkspaces: (): Promise<BrainWorkspaceDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceList),
+  listBrainProjects: (input: BrainProjectListInput = {}): Promise<BrainProjectDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectList, input),
+  createBrainProject: (input: BrainProjectCreateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectCreate, input),
+  getBrainProject: (input: BrainProjectGetInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectGet, input),
+  updateBrainProject: (input: BrainProjectUpdateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectUpdate, input),
+  setBrainProjectWorkspace: (input: BrainProjectWorkspaceInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectWorkspaceEnable, input),
+  createBrainConversation: (input: BrainConversationCreateInput): Promise<BrainConversationDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.conversationCreate, input),
+  getBrainConversation: (input: BrainConversationGetInput): Promise<BrainConversationDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.conversationGet, input),
+  listBrainMessages: (input: BrainConversationGetInput): Promise<BrainMessageDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.messageList, input),
+  appendBrainMessage: (input: BrainMessageAppendInput): Promise<BrainMessageDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.messageAppend, input),
+  getBrainDraft: (input: BrainConversationGetInput): Promise<{ content: string; updatedAt: string } | null> => ipcRenderer.invoke(brainWorkspaceIpcChannels.draftGet, input),
+  saveBrainDraft: (input: BrainDraftSaveInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.draftSave, input),
   bootstrap: () => ipcRenderer.invoke("phase1:bootstrap"),
   getSnapshot: () => ipcRenderer.invoke("phase1:get-snapshot"),
   getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke("phase1:get-goal", input),

@@ -100,6 +100,7 @@ import {
 } from "./agent-runtime-adapter.js";
 import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import {
   resolveEffectiveGatewayBaseUrl,
   syncDesktopControlPlane as syncDesktopControlPlaneProtocol,
@@ -7162,7 +7163,14 @@ function createAgentTurnControlPlane() {
 
 const agentTurnControlPlane = createAgentTurnControlPlane();
 
+async function resolveBrainLocalOwnerId() {
+  const authState = await readDesktopAuthState().catch(() => null);
+  const accountId = authState?.user?.id?.trim() || authState?.user?.email?.trim().toLowerCase() || "";
+  return accountId ? `account:${accountId}` : `device:${collectDesktopDeviceFingerprint().device_id}`;
+}
+
 function registerIpc() {
+  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, resolveOwnerId: resolveBrainLocalOwnerId });
   registerPluginRepositoryHandlers();
   const controlWindow = (action: WindowControlAction) => controlDesktopWindow(mainWindowRef, action);
   const appMenuService = new AppMenuService({
