@@ -3,6 +3,7 @@ import {
   brainWorkspaceIpcChannels,
   brainWorkspaceKeys,
   type BrainConversationCreateInput,
+  type BrainConversationListInput,
   type BrainConversationGetInput,
   type BrainDraftSaveInput,
   type BrainMessageAppendInput,
@@ -95,6 +96,18 @@ function parseConversationCreate(value: unknown): BrainConversationCreateInput {
   };
 }
 
+function parseConversationList(value: unknown): BrainConversationListInput {
+  const input = optionalRecord(value, "Conversation list");
+  if (input.includeArchived !== undefined && typeof input.includeArchived !== "boolean") {
+    throw new TypeError("includeArchived must be boolean.");
+  }
+  return {
+    projectId: optionalString(input.projectId, "projectId"),
+    workspaceKey: optionalWorkspaceKey(input.workspaceKey),
+    includeArchived: input.includeArchived === true
+  };
+}
+
 function parseConversationGet(value: unknown): BrainConversationGetInput {
   const input = requireRecord(value, "Conversation");
   return { conversationId: requireString(input.conversationId, "conversationId") };
@@ -147,6 +160,8 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.conversationCreate, async (_event, value: unknown) =>
     withoutOwner(dependencies.storage.createConversation({ ownerId: await ownerId(), ...parseConversationCreate(value) })));
+  ipcMain.handle(brainWorkspaceIpcChannels.conversationList, async (_event, value: unknown) =>
+    dependencies.storage.listConversations({ ownerId: await ownerId(), ...parseConversationList(value) }).map(withoutOwner));
   ipcMain.handle(brainWorkspaceIpcChannels.conversationGet, async (_event, value: unknown) =>
     withoutOwner(dependencies.storage.getConversation(await ownerId(), parseConversationGet(value).conversationId)));
   ipcMain.handle(brainWorkspaceIpcChannels.messageList, async (_event, value: unknown) => {

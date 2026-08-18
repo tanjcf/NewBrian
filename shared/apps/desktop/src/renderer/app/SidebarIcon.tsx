@@ -214,5 +214,26 @@ export function SidebarIcon({ name }: { name: string }) {
   if (name === "thumb-down") {
     return <svg {...common}><path d="M7 13.5v-9H4.7A1.7 1.7 0 0 0 3 6.2v5.6a1.7 1.7 0 0 0 1.7 1.7H7Z" /><path d="M7 13.5 11.2 20c.4.6 1.3.8 1.9.4.5-.3.8-.8.7-1.4l-.5-4h4.8a2.2 2.2 0 0 0 2.1-2.8l-1.5-5.6A3.4 3.4 0 0 0 15.4 4H7" /></svg>;
   }
+  if (name === "workspace-quant") {
+    return <svg {...common}><path d="M4 19V5M4 19h16" /><path d="m7 15 3-4 3 2 4-6" /><path d="m15 7h2v2" /></svg>;
+  }
+  if (name === "workspace-game") {
+    return <svg {...common}><path d="M7.5 8h9a4.5 4.5 0 0 1 4.2 6.1l-1.2 3.2a2.3 2.3 0 0 1-3.8.8L14 16h-4l-1.7 2.1a2.3 2.3 0 0 1-3.8-.8l-1.2-3.2A4.5 4.5 0 0 1 7.5 8Z" /><path d="M8 11v4M6 13h4M16.5 12h.01M18.5 14h.01" /></svg>;
+  }
+  if (name === "workspace-video") {
+    return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m10 9 5 3-5 3Z" /></svg>;
+  }
+  if (name === "workspace-music") {
+    return <svg {...common}><path d="M9 18V6l10-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /><path d="M9 9l10-2" /></svg>;
+  }
+  if (name === "workspace-data") {
+    return <svg {...common}><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>;
+  }
+  if (name === "workspace-software") {
+    return <svg {...common}><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="m8 9-3 3 3 3M12 16h5" /></svg>;
+  }
+  if (name === "workspace-document") {
+    return <svg {...common}><path d="M6 3h8l4 4v14H6Z" /><path d="M14 3v5h5M9 12h6M9 16h5" /></svg>;
+  }
   return <svg {...common}><circle cx="12" cy="12" r="8" /></svg>;
 }

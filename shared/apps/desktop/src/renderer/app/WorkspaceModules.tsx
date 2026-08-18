@@ -413,6 +413,88 @@ export function WorkspaceModules(ctx: any) {
   const [htmlPreviewRefreshToken, setHtmlPreviewRefreshToken] = useState(0);
   const [blankProjectDialogOpen, setBlankProjectDialogOpen] = useState(false);
   const [blankProjectName, setBlankProjectName] = useState("New project");
+  const [brainWorkspaces, setBrainWorkspaces] = useState<any[]>([]);
+  const [brainProjects, setBrainProjects] = useState<any[]>([]);
+  const [brainConversations, setBrainConversations] = useState<any[]>([]);
+  const [selectedBrainProjectId, setSelectedBrainProjectId] = useState("");
+  const [selectedBrainConversationId, setSelectedBrainConversationId] = useState("");
+  const [brainWorkspaceMenuOpen, setBrainWorkspaceMenuOpen] = useState(false);
+  const [brainWorkspaceBusy, setBrainWorkspaceBusy] = useState(false);
+  const brainWorkspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  const [selectedBrainWorkspaceKey, setSelectedBrainWorkspaceKey] = useState(() => {
+    try {
+      return localStorage.getItem("brain.selectedWorkspace.v1") || "software";
+    } catch {
+      return "software";
+    }
+  });
+  const refreshBrainProjects = useCallback(async (workspaceKey = selectedBrainWorkspaceKey) => {
+    if (!window.codecn?.listBrainProjects) return;
+    const projects = await window.codecn.listBrainProjects({ workspaceKey, includeArchived: false });
+    const nextProjects = Array.isArray(projects) ? projects : [];
+    setBrainProjects(nextProjects);
+    setSelectedBrainProjectId((current) => nextProjects.some((project) => project.id === current) ? current : (nextProjects[0]?.id || ""));
+  }, [selectedBrainWorkspaceKey]);
+  const refreshBrainConversations = useCallback(async (projectId = selectedBrainProjectId) => {
+    if (!projectId || !window.codecn?.listBrainConversations) {
+      setBrainConversations([]);
+      setSelectedBrainConversationId("");
+      return;
+    }
+    const conversations = await window.codecn.listBrainConversations({
+      projectId,
+      workspaceKey: selectedBrainWorkspaceKey,
+      includeArchived: false
+    });
+    const nextConversations = Array.isArray(conversations) ? conversations : [];
+    setBrainConversations(nextConversations);
+    setSelectedBrainConversationId((current) => nextConversations.some((item) => item.id === current) ? current : (nextConversations[0]?.id || ""));
+  }, [selectedBrainProjectId, selectedBrainWorkspaceKey]);
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      if (!window.codecn?.listBrainWorkspaces) return;
+      try {
+        const workspaces = await window.codecn.listBrainWorkspaces();
+        if (disposed) return;
+        const enabled = (Array.isArray(workspaces) ? workspaces : []).filter((item) => item?.enabled);
+        setBrainWorkspaces(enabled);
+        const selectedExists = enabled.some((item) => item.workspaceKey === selectedBrainWorkspaceKey);
+        const nextKey = selectedExists ? selectedBrainWorkspaceKey : (enabled[0]?.workspaceKey || "software");
+        if (nextKey !== selectedBrainWorkspaceKey) setSelectedBrainWorkspaceKey(nextKey);
+      } catch (error) {
+        if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
+      }
+    })();
+    return () => { disposed = true; };
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("brain.selectedWorkspace.v1", selectedBrainWorkspaceKey); } catch { /* session-only fallback */ }
+    setBrainWorkspaceBusy(true);
+    void refreshBrainProjects(selectedBrainWorkspaceKey)
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
+      .finally(() => setBrainWorkspaceBusy(false));
+  }, [selectedBrainWorkspaceKey, refreshBrainProjects]);
+  useEffect(() => {
+    void refreshBrainConversations(selectedBrainProjectId)
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)));
+  }, [selectedBrainProjectId, selectedBrainWorkspaceKey, refreshBrainConversations]);
+  useEffect(() => {
+    if (!brainWorkspaceMenuOpen) return;
+    const close = (event: PointerEvent) => {
+      if (event.target instanceof Node && brainWorkspaceMenuRef.current?.contains(event.target)) return;
+      setBrainWorkspaceMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBrainWorkspaceMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [brainWorkspaceMenuOpen]);
   const [projectContextMenu, setProjectContextMenu] = useState<any>(null);
   const [renameProjectDialog, setRenameProjectDialog] = useState<any>(null);
   const [pinnedWorkspaceIds, setPinnedWorkspaceIds] = useState<Set<string>>(() => {
@@ -3102,10 +3184,68 @@ function startNewChat() {
   }
 
 function renderSidebarModule() {
+    const fallbackBrainWorkspaces = [
+      { workspaceKey: "quant", displayName: "量化交易", enabled: true },
+      { workspaceKey: "game", displayName: "游戏制作", enabled: true },
+      { workspaceKey: "video", displayName: "视频制作", enabled: true },
+      { workspaceKey: "music", displayName: "音乐创作", enabled: true },
+      { workspaceKey: "data", displayName: "数据与决策", enabled: true },
+      { workspaceKey: "software", displayName: "软件与自动化", enabled: true },
+      { workspaceKey: "document", displayName: "文档创作", enabled: true }
+    ];
+    const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
+    const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
+    const brainWorkspaceIcon = (workspaceKey: string) => ({
+      quant: "workspace-quant",
+      game: "workspace-game",
+      video: "workspace-video",
+      music: "workspace-music",
+      data: "workspace-data",
+      software: "workspace-software",
+      document: "workspace-document"
+    }[workspaceKey] || "folder");
     return (
       <aside className="codex-sidebar">
         <div className="sidebar-scroll">
           <div className="sidebar-top-zone">
+            <div className="brain-workspace-switcher" ref={brainWorkspaceMenuRef}>
+              <button
+                className="brain-workspace-trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={brainWorkspaceMenuOpen}
+                onClick={() => setBrainWorkspaceMenuOpen((current) => !current)}
+              >
+                <span className="brain-workspace-trigger-icon"><SidebarIcon name={brainWorkspaceIcon(selectedBrainWorkspace?.workspaceKey)} /></span>
+                <strong>{selectedBrainWorkspace?.displayName || "软件与自动化"}</strong>
+                <span className="brain-workspace-chevron"><SidebarIcon name="chevron-down" /></span>
+              </button>
+              {brainWorkspaceMenuOpen ? (
+                <div className="brain-workspace-menu" role="menu" aria-label="切换工作台">
+                  <div className="brain-workspace-menu-title">工作台</div>
+                  {visibleBrainWorkspaces.map((workspace) => (
+                    <button
+                      key={workspace.workspaceKey}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={workspace.workspaceKey === selectedBrainWorkspaceKey}
+                      className={workspace.workspaceKey === selectedBrainWorkspaceKey ? "active" : ""}
+                      onClick={() => {
+                        setSelectedBrainWorkspaceKey(workspace.workspaceKey);
+                        setBrainWorkspaceMenuOpen(false);
+                        setSelectedBrainProjectId("");
+                        setSelectedBrainConversationId("");
+                        setSelectedSidebarRow(null);
+                      }}
+                    >
+                      <span><SidebarIcon name={brainWorkspaceIcon(workspace.workspaceKey)} /></span>
+                      <span className="brain-workspace-menu-copy"><strong>{workspace.displayName}</strong></span>
+                      <em>{workspace.workspaceKey === selectedBrainWorkspaceKey ? "✓" : ""}</em>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <nav className="feature-nav">
               {featureItems.filter((item: any) => item.id === "new-chat").map((item: any) => (
                 <button
@@ -3163,6 +3303,84 @@ function renderSidebarModule() {
             ) : null}
           </div>
           <div className="project-chat-scroll">
+          <section className="left-section brain-projects-section">
+            <div className="project-subsection-head">
+              <span className="project-subsection-label">{selectedBrainWorkspace?.displayName || "工作台"}项目</span>
+              <button
+                title="新建工作台项目"
+                aria-label="新建工作台项目"
+                type="button"
+                onClick={() => {
+                  setBlankProjectName("New project");
+                  setBlankProjectDialogOpen(true);
+                }}
+              >+</button>
+            </div>
+            <div className="brain-project-list" aria-busy={brainWorkspaceBusy}>
+              {brainWorkspaceBusy ? <div className="brain-project-empty">正在读取本地项目…</div> : null}
+              {!brainWorkspaceBusy && !brainProjects.length ? <div className="brain-project-empty">还没有项目，点击 + 创建</div> : null}
+              {!brainWorkspaceBusy && brainProjects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  className={selectedSidebarRow === `brain-project:${project.id}` ? "active" : ""}
+                  onClick={() => {
+                    setSelectedBrainProjectId(project.id);
+                    setSelectedSidebarRow(`brain-project:${project.id}`);
+                  }}
+                >
+                  <SidebarIcon name="folder" />
+                  <span>{project.name}</span>
+                  <SidebarIcon name="chevron-right" />
+                </button>
+              ))}
+            </div>
+            {selectedBrainProjectId ? (
+              <div className="brain-conversation-group">
+                <div className="brain-conversation-head">
+                  <span>对话</span>
+                  <button
+                    type="button"
+                    title="新建对话"
+                    aria-label="新建对话"
+                    onClick={async () => {
+                      try {
+                        if (!window.codecn?.createBrainConversation) return;
+                        const created = await window.codecn.createBrainConversation({
+                          projectId: selectedBrainProjectId,
+                          workspaceKey: selectedBrainWorkspaceKey,
+                          title: "新对话"
+                        });
+                        await refreshBrainConversations(selectedBrainProjectId);
+                        setSelectedBrainConversationId(created.id);
+                        setSelectedSidebarRow(`brain-conversation:${created.id}`);
+                      } catch (error) {
+                        setErrorMessage(error instanceof Error ? error.message : String(error));
+                      }
+                    }}
+                  >+</button>
+                </div>
+                <div className="brain-conversation-list">
+                  {!brainConversations.length ? <div className="brain-project-empty">暂无对话</div> : null}
+                  {brainConversations.map((conversation) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      className={selectedBrainConversationId === conversation.id ? "active" : ""}
+                      onClick={() => {
+                        setSelectedBrainConversationId(conversation.id);
+                        setSelectedSidebarRow(`brain-conversation:${conversation.id}`);
+                      }}
+                    >
+                      <SidebarIcon name="chat" />
+                      <span>{conversation.title}</span>
+                      <time>{formatRelativeTimeLabel(conversation.updatedAt)}</time>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
           <section className={`left-section projects-section organize-${sidebarOrganizeMode}${projectsCollapsed || !visibleWorkspaceCatalog.length ? " compact-project-chat" : ""}`}>
             <div className="project-subsection-head">
               <button
@@ -3233,9 +3451,19 @@ function renderSidebarModule() {
                       className="project-name-dialog"
                       onSubmit={async (event) => {
                         event.preventDefault();
-                        const created = await createBlankProject(blankProjectName);
-                        if (created) {
-                          setBlankProjectDialogOpen(false);
+                        const name = blankProjectName.trim();
+                        if (!name) return;
+                        try {
+                          if (window.codecn?.createBrainProject) {
+                            await window.codecn.createBrainProject({ name, primaryWorkspaceKey: selectedBrainWorkspaceKey });
+                            await refreshBrainProjects(selectedBrainWorkspaceKey);
+                            setBlankProjectDialogOpen(false);
+                            return;
+                          }
+                          const created = await createBlankProject(name);
+                          if (created) setBlankProjectDialogOpen(false);
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
                         }
                       }}
                     >

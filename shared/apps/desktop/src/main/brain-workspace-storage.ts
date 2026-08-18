@@ -477,6 +477,30 @@ export class BrainWorkspaceStorage {
     return mapConversation(row);
   }
 
+  listConversations(input: { ownerId: string; projectId?: string; workspaceKey?: string; includeArchived?: boolean }): BrainConversationRecord[] {
+    const ownerId = requireText(input.ownerId, "ownerId");
+    const projectId = input.projectId ? requireText(input.projectId, "projectId") : null;
+    if (projectId) this.getProject(ownerId, projectId);
+    const workspaceKey = input.workspaceKey ? requireWorkspaceKey(input.workspaceKey) : null;
+    const conditions = ["owner_id = ?"];
+    const parameters: string[] = [ownerId];
+    if (projectId) {
+      conditions.push("project_id = ?");
+      parameters.push(projectId);
+    }
+    if (workspaceKey) {
+      conditions.push("workspace_snapshot = ?");
+      parameters.push(workspaceKey);
+    }
+    if (!input.includeArchived) conditions.push("status = 'ACTIVE'");
+    const rows = this.database.prepare(`
+      SELECT * FROM brain_conversation
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY last_message_at DESC, updated_at DESC, id DESC
+    `).all(...parameters) as Record<string, unknown>[];
+    return rows.map(mapConversation);
+  }
+
   appendMessage(input: Omit<BrainMessageRecord, "id" | "createdAt"> & { ownerId: string }): BrainMessageRecord {
     const conversation = this.getConversation(input.ownerId, input.conversationId);
     if (!["system", "user", "assistant", "tool"].includes(input.role)) {

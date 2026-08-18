@@ -68,6 +68,24 @@ test("enforces local owner boundaries", () => {
   });
 });
 
+test("lists conversations by owner project and workspace without leaking archived or foreign data", () => {
+  withStorage((storage) => {
+    const quant = storage.createProject({ ownerId: "owner-a", name: "量化项目", primaryWorkspaceKey: "quant" });
+    const docs = storage.createProject({ ownerId: "owner-a", name: "文档项目", primaryWorkspaceKey: "document" });
+    const foreign = storage.createProject({ ownerId: "owner-b", name: "其他用户", primaryWorkspaceKey: "quant" });
+    const quantChat = storage.createConversation({ ownerId: "owner-a", projectId: quant.id, title: "策略讨论" });
+    storage.createConversation({ ownerId: "owner-a", projectId: docs.id, title: "报告讨论" });
+    storage.createConversation({ ownerId: "owner-b", projectId: foreign.id, title: "不可见" });
+
+    assert.deepEqual(storage.listConversations({ ownerId: "owner-a", workspaceKey: "quant" }).map((item) => item.id), [quantChat.id]);
+    assert.deepEqual(storage.listConversations({ ownerId: "owner-a", projectId: quant.id }).map((item) => item.title), ["策略讨论"]);
+    assert.throws(
+      () => storage.listConversations({ ownerId: "owner-a", projectId: foreign.id }),
+      (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN"
+    );
+  });
+});
+
 test("migration is idempotent and private model metadata has no secret columns", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-migration-"));
   let storage = new BrainWorkspaceStorage(root);

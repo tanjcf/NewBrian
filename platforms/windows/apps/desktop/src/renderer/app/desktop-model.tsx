@@ -4,6 +4,7 @@ import type {
   BrainConversationCreateInput,
   BrainConversationDto,
   BrainConversationGetInput,
+  BrainConversationListInput,
   BrainDraftSaveInput,
   BrainMessageAppendInput,
   BrainMessageDto,
@@ -257,6 +258,7 @@ declare global {
       updateBrainProject: (input: BrainProjectUpdateInput) => Promise<BrainProjectDto>;
       setBrainProjectWorkspace: (input: BrainProjectWorkspaceInput) => Promise<{ ok: boolean }>;
       createBrainConversation: (input: BrainConversationCreateInput) => Promise<BrainConversationDto>;
+      listBrainConversations: (input?: BrainConversationListInput) => Promise<BrainConversationDto[]>;
       getBrainConversation: (input: BrainConversationGetInput) => Promise<BrainConversationDto>;
       listBrainMessages: (input: BrainConversationGetInput) => Promise<BrainMessageDto[]>;
       appendBrainMessage: (input: BrainMessageAppendInput) => Promise<BrainMessageDto>;

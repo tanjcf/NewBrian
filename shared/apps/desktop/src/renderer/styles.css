@@ -10477,6 +10477,236 @@ textarea {
   border-bottom: 0;
 }
 
+.brain-workspace-switcher {
+  position: relative;
+  z-index: 30;
+  margin: 2px 2px 6px;
+}
+
+.brain-workspace-trigger {
+  width: 100%;
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 0 8px;
+  background: transparent;
+  color: #202124;
+  text-align: left;
+}
+
+.brain-workspace-trigger:hover,
+.brain-workspace-trigger[aria-expanded="true"] {
+  border-color: #e0e4ea;
+  background: #f1f3f6;
+}
+
+.brain-workspace-trigger-icon,
+.brain-workspace-trigger-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.brain-workspace-trigger strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.brain-workspace-chevron,
+.brain-workspace-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.brain-workspace-trigger[aria-expanded="true"] .brain-workspace-chevron {
+  transform: rotate(180deg);
+}
+
+.brain-workspace-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(430px, calc(100vh - 100px));
+  overflow-y: auto;
+  border: 1px solid #dfe3e8;
+  border-radius: 11px;
+  padding: 6px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
+}
+
+.brain-workspace-menu-title {
+  padding: 5px 8px 7px;
+  color: #7a828e;
+  font-size: 12px;
+}
+
+.brain-workspace-menu > button {
+  width: 100%;
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  color: #272a2f;
+  text-align: left;
+}
+
+.brain-workspace-menu > button:hover,
+.brain-workspace-menu > button.active {
+  background: #f0f3f8;
+}
+
+.brain-workspace-menu > button > span:first-child,
+.brain-workspace-menu > button > span:first-child svg {
+  width: 18px;
+  height: 18px;
+}
+
+.brain-workspace-menu-copy strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.brain-workspace-menu > button em {
+  color: #2369e8;
+  font-style: normal;
+  text-align: center;
+}
+
+.brain-projects-section {
+  padding-top: 8px;
+  padding-bottom: 4px;
+}
+
+.brain-project-list {
+  display: grid;
+  gap: 2px;
+  padding: 2px 4px 6px;
+}
+
+.brain-project-list > button {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 7px;
+  background: transparent;
+  color: #374151;
+  text-align: left;
+}
+
+.brain-project-list > button:hover,
+.brain-project-list > button.active {
+  background: #edf3ff;
+  color: #1f5fd4;
+}
+
+.brain-project-list > button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.brain-project-list > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.brain-project-empty {
+  padding: 7px 8px 9px;
+  color: #8a929f;
+  font-size: 12px;
+}
+
+.brain-conversation-group {
+  margin: 2px 4px 6px;
+  padding-top: 5px;
+  border-top: 1px solid #eef0f3;
+}
+
+.brain-conversation-head {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 7px;
+  color: #77808d;
+  font-size: 12px;
+}
+
+.brain-conversation-head button {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #586273;
+  font-size: 17px;
+}
+
+.brain-conversation-head button:hover {
+  background: #edf0f4;
+}
+
+.brain-conversation-list {
+  display: grid;
+  gap: 2px;
+}
+
+.brain-conversation-list > button {
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 7px;
+  background: transparent;
+  color: #444b55;
+  text-align: left;
+}
+
+.brain-conversation-list > button:hover,
+.brain-conversation-list > button.active {
+  background: #edf3ff;
+  color: #1f5fd4;
+}
+
+.brain-conversation-list > button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.brain-conversation-list > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.brain-conversation-list > button time {
+  color: #9aa1ac;
+  font-size: 10px;
+}
+
 .codex-sidebar .sidebar-brand {
   height: 46px;
   gap: 9px;

@@ -81,6 +81,12 @@ export interface BrainConversationCreateInput extends BrainProjectGetInput {
   workspaceKey?: BrainWorkspaceKey;
 }
 
+export interface BrainConversationListInput {
+  projectId?: string;
+  workspaceKey?: BrainWorkspaceKey;
+  includeArchived?: boolean;
+}
+
 export interface BrainConversationGetInput { conversationId: string }
 
 export interface BrainMessageAppendInput extends BrainConversationGetInput {
@@ -103,6 +109,7 @@ export const brainWorkspaceIpcChannels = {
   projectUpdate: "brain:project:update",
   projectWorkspaceEnable: "brain:project:workspace-enable",
   conversationCreate: "brain:conversation:create",
+  conversationList: "brain:conversation:list",
   conversationGet: "brain:conversation:get",
   messageList: "brain:message:list",
   messageAppend: "brain:message:append",
