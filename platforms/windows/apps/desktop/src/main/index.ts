@@ -99,6 +99,7 @@ import {
   WorktreeManager
 } from "./agent-runtime-adapter.js";
 import { CodexStorage } from "./codex-storage.js";
+import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import {
   resolveEffectiveGatewayBaseUrl,
   syncDesktopControlPlane as syncDesktopControlPlaneProtocol,
@@ -559,6 +560,7 @@ if (!singleInstanceLockAcquired) {
   process.exit(0);
 }
 const codexStorage = new CodexStorage(workspaceStateRoot);
+const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
 const governmentWritingSpecificationService = new GovernmentWritingSpecificationService(codexStorage);
 const workspaceWorktreeService = new WorkspaceWorktreeService({
   bindingsPath: desktopWorktreeBindingsPath,
@@ -8235,5 +8237,6 @@ app.on("will-quit", () => {
   registeredDictationShortcuts.clear();
   registeredCommandShortcuts.clear();
   globalShortcut.unregisterAll();
+  brainWorkspaceStorage.close();
   codexStorage.close();
 });

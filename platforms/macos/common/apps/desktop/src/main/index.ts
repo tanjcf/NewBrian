@@ -26,6 +26,7 @@ import type {
 } from "@codex-forge/protocol";
 import { createLocalRuntime } from "../../../agentd/src/runtime.js";
 import { CodexStorage } from "./codex-storage.js";
+import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
 import { decodeMcpMessages, encodeMcpMessage } from "./mcp-framing.js";
@@ -159,6 +160,7 @@ const defaultGatewayBaseUrl = app.isPackaged
 const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
 const codexStorage = new CodexStorage(workspaceStateRoot);
+const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
 
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.
@@ -10424,5 +10426,6 @@ app.on("will-quit", () => {
     try { child.kill("SIGTERM"); } catch { /* process already exited */ }
   }
   mcpRuntimeProcesses.clear();
+  brainWorkspaceStorage.close();
   codexStorage.close();
 });
