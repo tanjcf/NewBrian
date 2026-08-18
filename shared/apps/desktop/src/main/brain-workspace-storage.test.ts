@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -161,4 +161,24 @@ test("backs up an existing database before applying a newer migration", () => {
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();
   rmSync(root, { recursive: true, force: true });
+});
+
+test("creates verified snapshots and restores the latest snapshot after database corruption", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-recovery-"));
+  let storage = new BrainWorkspaceStorage(root);
+  const project = storage.createProject({ ownerId: "owner-a", name: "可恢复项目", primaryWorkspaceKey: "software" });
+  const backupPath = storage.createBackup("test");
+  assert.equal(storage.verifyIntegrity().ok, true);
+  storage.close();
+  assert.equal(Boolean(backupPath), true);
+  writeFileSync(join(root, "brain.db"), "not-a-sqlite-database", "utf8");
+
+  storage = new BrainWorkspaceStorage(root);
+  try {
+    assert.equal(storage.getProject("owner-a", project.id).name, "可恢复项目");
+    assert.equal(storage.verifyIntegrity().ok, true);
+  } finally {
+    storage.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

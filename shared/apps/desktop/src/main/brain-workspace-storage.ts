@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -120,15 +120,20 @@ function requireWorkspaceKey(value: string): BrainWorkspaceKey {
 function openDatabase(path: string) {
   mkdirSync(dirname(path), { recursive: true });
   const database = new DatabaseSync(path);
-  database.exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;");
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS brain_schema_migration (
-      version INTEGER PRIMARY KEY,
-      description TEXT NOT NULL,
-      installed_at TEXT NOT NULL
-    );
-  `);
-  return database;
+  try {
+    database.exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;");
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS brain_schema_migration (
+        version INTEGER PRIMARY KEY,
+        description TEXT NOT NULL,
+        installed_at TEXT NOT NULL
+      );
+    `);
+    return database;
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 }
 
 function currentMigrationVersion(database: DatabaseSync) {
@@ -392,12 +397,25 @@ function mapArtifact(row: Record<string, unknown>): BrainArtifactRecord {
 
 export class BrainWorkspaceStorage {
   readonly path: string;
+  readonly backupRoot: string;
   private readonly database: DatabaseSync;
 
   constructor(root: string) {
     this.path = join(root, "brain.db");
+    this.backupRoot = join(root, "backups");
     const existed = existsSync(this.path);
-    let database = openDatabase(this.path);
+    let database: DatabaseSync;
+    try {
+      database = openDatabase(this.path);
+      const integrity = database.prepare("PRAGMA quick_check").get() as { quick_check?: string } | undefined;
+      if (integrity && String(integrity.quick_check || "ok").toLowerCase() !== "ok") {
+        database.close();
+        throw new BrainStorageError("BRAIN_DATABASE_CORRUPT", "Local BRAIN database failed integrity checking");
+      }
+    } catch (error) {
+      if (!existed || !this.restoreLatestBackup()) throw error;
+      database = openDatabase(this.path);
+    }
     const currentVersion = currentMigrationVersion(database);
     if (existed && currentVersion < latestMigrationVersion) {
       database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
@@ -417,7 +435,43 @@ export class BrainWorkspaceStorage {
   }
 
   close() {
+    try { this.createBackup("shutdown"); } catch { /* Closing must continue even if a snapshot cannot be created. */ }
     this.database.close();
+  }
+
+  verifyIntegrity() {
+    const rows = this.database.prepare("PRAGMA integrity_check").all() as Array<Record<string, unknown>>;
+    const messages = rows.flatMap((row) => Object.values(row).map(String));
+    return { ok: messages.length === 1 && messages[0]?.toLowerCase() === "ok", messages };
+  }
+
+  createBackup(reason = "manual") {
+    const integrity = this.verifyIntegrity();
+    if (!integrity.ok) throw new BrainStorageError("BRAIN_DATABASE_CORRUPT", integrity.messages.join("; "));
+    mkdirSync(this.backupRoot, { recursive: true });
+    this.database.exec("PRAGMA wal_checkpoint(FULL)");
+    const safeReason = reason.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 32) || "manual";
+    const backupPath = join(this.backupRoot, `brain-${new Date().toISOString().replace(/[:.]/g, "-")}-${safeReason}.db`);
+    copyFileSync(this.path, backupPath);
+    const backups = readdirSync(this.backupRoot)
+      .filter((name) => /^brain-.*\.db$/i.test(name))
+      .sort()
+      .reverse();
+    for (const stale of backups.slice(5)) unlinkSync(join(this.backupRoot, stale));
+    return backupPath;
+  }
+
+  private restoreLatestBackup() {
+    if (!existsSync(this.backupRoot)) return false;
+    const latest = readdirSync(this.backupRoot)
+      .filter((name) => /^brain-.*\.db$/i.test(name))
+      .sort()
+      .reverse()[0];
+    if (!latest) return false;
+    const corruptPath = `${this.path}.corrupt-${Date.now()}`;
+    renameSync(this.path, corruptPath);
+    copyFileSync(join(this.backupRoot, latest), this.path);
+    return true;
   }
 
   listWorkspaces(): BrainWorkspaceRecord[] {
