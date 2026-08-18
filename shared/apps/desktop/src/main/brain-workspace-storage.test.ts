@@ -86,6 +86,36 @@ test("lists conversations by owner project and workspace without leaking archive
   });
 });
 
+test("persists owner-scoped files idempotent tasks and validated artifacts", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "文档项目", primaryWorkspaceKey: "document" });
+    const conversation = storage.createConversation({ ownerId: "owner-a", projectId: project.id, title: "修改报告" });
+    const file = storage.registerFile({
+      ownerId: "owner-a", projectId: project.id, logicalName: "报告.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sizeBytes: 1024, contentHash: "sha256:file", storageKey: "files/report.docx"
+    });
+    const taskInput = {
+      ownerId: "owner-a", projectId: project.id, conversationId: conversation.id,
+      workspaceKey: "document", taskType: "document.render", idempotencyKey: "render-report-v1"
+    };
+    const task = storage.createTask(taskInput);
+    assert.equal(storage.createTask(taskInput).id, task.id);
+    assert.equal(storage.updateTask({ ownerId: "owner-a", taskId: task.id, status: "RUNNING", progress: 0.5 }).progress, 0.5);
+    const artifact = storage.registerArtifact({
+      ownerId: "owner-a", projectId: project.id, taskId: task.id, sourceFileId: file.id,
+      artifactType: "docx", storageKey: "artifacts/report-v2.docx", contentHash: "sha256:artifact", validationStatus: "VALID"
+    });
+    assert.deepEqual(storage.listFiles("owner-a", project.id).map((item) => item.id), [file.id]);
+    assert.deepEqual(storage.listTasks("owner-a", project.id).map((item) => item.id), [task.id]);
+    assert.deepEqual(storage.listArtifacts("owner-a", project.id).map((item) => item.id), [artifact.id]);
+    assert.throws(
+      () => storage.listFiles("owner-b", project.id),
+      (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN"
+    );
+  });
+});
+
 test("migration is idempotent and private model metadata has no secret columns", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-migration-"));
   let storage = new BrainWorkspaceStorage(root);

@@ -5,7 +5,11 @@ import type {
   BrainConversationDto,
   BrainConversationGetInput,
   BrainConversationListInput,
+  BrainArtifactDto,
+  BrainArtifactRegisterInput,
   BrainDraftSaveInput,
+  BrainFileDto,
+  BrainFileRegisterInput,
   BrainMessageAppendInput,
   BrainMessageDto,
   BrainProjectCreateInput,
@@ -15,6 +19,9 @@ import type {
   BrainProjectUpdateInput,
   BrainProjectWorkspaceInput,
   BrainWorkspaceDto,
+  BrainTaskCreateInput,
+  BrainTaskDto,
+  BrainTaskUpdateInput,
   DesktopBootstrapStatus,
   DesktopAgreementConfig,
   DesktopAuthStatus,
@@ -264,6 +271,13 @@ declare global {
       appendBrainMessage: (input: BrainMessageAppendInput) => Promise<BrainMessageDto>;
       getBrainDraft: (input: BrainConversationGetInput) => Promise<{ content: string; updatedAt: string } | null>;
       saveBrainDraft: (input: BrainDraftSaveInput) => Promise<{ ok: boolean }>;
+      listBrainFiles: (input: BrainProjectGetInput) => Promise<BrainFileDto[]>;
+      registerBrainFile: (input: BrainFileRegisterInput) => Promise<BrainFileDto>;
+      listBrainTasks: (input: BrainProjectGetInput) => Promise<BrainTaskDto[]>;
+      createBrainTask: (input: BrainTaskCreateInput) => Promise<BrainTaskDto>;
+      updateBrainTask: (input: BrainTaskUpdateInput) => Promise<BrainTaskDto>;
+      listBrainArtifacts: (input: BrainProjectGetInput) => Promise<BrainArtifactDto[]>;
+      registerBrainArtifact: (input: BrainArtifactRegisterInput) => Promise<BrainArtifactDto>;
       bootstrap: () => Promise<BootstrapPayload>;
       getSnapshot: () => Promise<PhaseOneSnapshot>;
       getGoal: () => Promise<ThreadGoalState | null>;

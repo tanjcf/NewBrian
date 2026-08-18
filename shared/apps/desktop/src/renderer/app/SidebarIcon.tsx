@@ -46,6 +46,9 @@ export function SidebarIcon({ name }: { name: string }) {
   if (name === "folder-open") {
     return <svg {...common}><path d="M3.5 7h6l2 2h8.5" /><path d="m3.5 19 2.5-8h15l-2.5 8Z" /></svg>;
   }
+  if (name === "file") {
+    return <svg {...common}><path d="M6 3h8l4 4v14H6Z" /><path d="M14 3v5h5" /></svg>;
+  }
   if (name === "pin") {
     return <svg {...common}><path d="m14.7 4.9 4.4 4.4" /><path d="m16.4 7.6-4.1 4.1" /><path d="m9.9 10.1 4 4" /><path d="M8.2 15.8 10 10l4 4-5.8 1.8Z" /><path d="m8.4 15.6-3.8 3.8" /></svg>;
   }

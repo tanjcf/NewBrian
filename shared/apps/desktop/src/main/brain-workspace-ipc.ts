@@ -6,12 +6,16 @@ import {
   type BrainConversationListInput,
   type BrainConversationGetInput,
   type BrainDraftSaveInput,
+  type BrainArtifactRegisterInput,
+  type BrainFileRegisterInput,
   type BrainMessageAppendInput,
   type BrainProjectCreateInput,
   type BrainProjectGetInput,
   type BrainProjectListInput,
   type BrainProjectUpdateInput,
   type BrainProjectWorkspaceInput,
+  type BrainTaskCreateInput,
+  type BrainTaskUpdateInput,
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
@@ -138,6 +142,54 @@ function parseDraftSave(value: unknown): BrainDraftSaveInput {
   };
 }
 
+function requireFiniteNumber(value: unknown, field: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new TypeError(`${field} must be a finite number.`);
+  return value;
+}
+
+function parseFileRegister(value: unknown): BrainFileRegisterInput {
+  const input = requireRecord(value, "File register");
+  return {
+    projectId: requireString(input.projectId, "projectId"), logicalName: requireString(input.logicalName, "logicalName"),
+    mimeType: requireString(input.mimeType, "mimeType"), sizeBytes: requireFiniteNumber(input.sizeBytes, "sizeBytes"),
+    contentHash: requireString(input.contentHash, "contentHash"), storageKey: requireString(input.storageKey, "storageKey"),
+    versionNo: input.versionNo === undefined ? undefined : requireFiniteNumber(input.versionNo, "versionNo")
+  };
+}
+
+function parseTaskCreate(value: unknown): BrainTaskCreateInput {
+  const input = requireRecord(value, "Task create");
+  return {
+    projectId: requireString(input.projectId, "projectId"),
+    conversationId: optionalString(input.conversationId, "conversationId"),
+    workspaceKey: requireWorkspaceKey(input.workspaceKey), taskType: requireString(input.taskType, "taskType"),
+    requestId: optionalString(input.requestId, "requestId"), idempotencyKey: requireString(input.idempotencyKey, "idempotencyKey"),
+    maxAttempts: input.maxAttempts === undefined ? undefined : requireFiniteNumber(input.maxAttempts, "maxAttempts"),
+    resourceLimitsJson: optionalString(input.resourceLimitsJson, "resourceLimitsJson")
+  };
+}
+
+function parseTaskUpdate(value: unknown): BrainTaskUpdateInput {
+  const input = requireRecord(value, "Task update");
+  const statuses = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"];
+  if (typeof input.status !== "string" || !statuses.includes(input.status)) throw new TypeError("status is unsupported.");
+  return {
+    taskId: requireString(input.taskId, "taskId"), status: input.status as BrainTaskUpdateInput["status"],
+    progress: input.progress === undefined ? undefined : requireFiniteNumber(input.progress, "progress"),
+    errorCode: optionalString(input.errorCode, "errorCode"), errorDetail: optionalString(input.errorDetail, "errorDetail")
+  };
+}
+
+function parseArtifactRegister(value: unknown): BrainArtifactRegisterInput {
+  const input = requireRecord(value, "Artifact register");
+  return {
+    projectId: requireString(input.projectId, "projectId"), taskId: optionalString(input.taskId, "taskId"),
+    sourceFileId: optionalString(input.sourceFileId, "sourceFileId"), artifactType: requireString(input.artifactType, "artifactType"),
+    storageKey: requireString(input.storageKey, "storageKey"), contentHash: requireString(input.contentHash, "contentHash"),
+    validationStatus: optionalString(input.validationStatus, "validationStatus")
+  };
+}
+
 function withoutOwner<T extends { ownerId: string }>(value: T): Omit<T, "ownerId"> {
   const { ownerId: _ownerId, ...safe } = value;
   return safe;
@@ -188,4 +240,24 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     dependencies.storage.saveDraft({ ownerId: await ownerId(), ...parseDraftSave(value) });
     return { ok: true };
   });
+  ipcMain.handle(brainWorkspaceIpcChannels.fileList, async (_event, value: unknown) => {
+    const input = parseProjectGet(value);
+    return dependencies.storage.listFiles(await ownerId(), input.projectId).map(withoutOwner);
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.fileRegister, async (_event, value: unknown) =>
+    withoutOwner(dependencies.storage.registerFile({ ownerId: await ownerId(), ...parseFileRegister(value) })));
+  ipcMain.handle(brainWorkspaceIpcChannels.taskList, async (_event, value: unknown) => {
+    const input = parseProjectGet(value);
+    return dependencies.storage.listTasks(await ownerId(), input.projectId);
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.taskCreate, async (_event, value: unknown) =>
+    dependencies.storage.createTask({ ownerId: await ownerId(), ...parseTaskCreate(value) }));
+  ipcMain.handle(brainWorkspaceIpcChannels.taskUpdate, async (_event, value: unknown) =>
+    dependencies.storage.updateTask({ ownerId: await ownerId(), ...parseTaskUpdate(value) }));
+  ipcMain.handle(brainWorkspaceIpcChannels.artifactList, async (_event, value: unknown) => {
+    const input = parseProjectGet(value);
+    return dependencies.storage.listArtifacts(await ownerId(), input.projectId);
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.artifactRegister, async (_event, value: unknown) =>
+    dependencies.storage.registerArtifact({ ownerId: await ownerId(), ...parseArtifactRegister(value) }));
 }

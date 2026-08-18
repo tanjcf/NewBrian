@@ -439,6 +439,10 @@ export function WorkspaceModules(ctx: any) {
   const [brainMessages, setBrainMessages] = useState<any[]>([]);
   const [brainDraft, setBrainDraft] = useState("");
   const [brainMessageBusy, setBrainMessageBusy] = useState(false);
+  const [brainFiles, setBrainFiles] = useState<any[]>([]);
+  const [brainTasks, setBrainTasks] = useState<any[]>([]);
+  const [brainArtifacts, setBrainArtifacts] = useState<any[]>([]);
+  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks">("files");
   const [selectedBrainProjectId, setSelectedBrainProjectId] = useState("");
   const [selectedBrainConversationId, setSelectedBrainConversationId] = useState("");
   const [brainWorkspaceMenuOpen, setBrainWorkspaceMenuOpen] = useState(false);
@@ -532,6 +536,26 @@ export function WorkspaceModules(ctx: any) {
     }, 350);
     return () => window.clearTimeout(timer);
   }, [brainDraft, selectedBrainConversationId, selectedBrainProjectId]);
+  useEffect(() => {
+    let disposed = false;
+    if (!selectedBrainProjectId) {
+      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]);
+      return () => { disposed = true; };
+    }
+    void Promise.all([
+      window.codecn?.listBrainFiles?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.codecn?.listBrainTasks?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.codecn?.listBrainArtifacts?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
+    ]).then(([files, tasks, artifacts]) => {
+      if (disposed) return;
+      setBrainFiles(Array.isArray(files) ? files : []);
+      setBrainTasks(Array.isArray(tasks) ? tasks : []);
+      setBrainArtifacts(Array.isArray(artifacts) ? artifacts : []);
+    }).catch((error) => {
+      if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
+    return () => { disposed = true; };
+  }, [selectedBrainProjectId, selectedBrainConversationId]);
   const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
   const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
   useEffect(() => {
@@ -4219,6 +4243,51 @@ function renderSidebarModule() {
     );
   }
 
+  function renderBrainResourcePanel() {
+    const taskStatusLabel: Record<string, string> = {
+      QUEUED: "等待中", RUNNING: "运行中", SUCCEEDED: "已完成", FAILED: "失败", CANCELLED: "已取消", TIMED_OUT: "超时"
+    };
+    return (
+      <aside className="brain-resource-panel">
+        <header>
+          <strong>{selectedBrainProject?.name || "项目资源"}</strong>
+          <small>仅保存在本机</small>
+        </header>
+        <nav>
+          <button type="button" className={brainResourceTab === "files" ? "active" : ""} onClick={() => setBrainResourceTab("files")}>文件 <em>{brainFiles.length}</em></button>
+          <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => setBrainResourceTab("artifacts")}>产物 <em>{brainArtifacts.length}</em></button>
+          <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => setBrainResourceTab("tasks")}>任务 <em>{brainTasks.length}</em></button>
+        </nav>
+        <div className="brain-resource-list">
+          {brainResourceTab === "files" ? brainFiles.map((file) => (
+            <div key={file.id} className="brain-resource-row">
+              <SidebarIcon name="file" />
+              <span><strong>{file.logicalName}</strong><small>版本 {file.versionNo} · {(file.sizeBytes / 1024).toFixed(file.sizeBytes >= 1024 ? 1 : 0)} KB</small></span>
+              <em>{file.validationStatus}</em>
+            </div>
+          )) : null}
+          {brainResourceTab === "artifacts" ? brainArtifacts.map((artifact) => (
+            <div key={artifact.id} className="brain-resource-row">
+              <SidebarIcon name="file-check" />
+              <span><strong>{artifact.artifactType}</strong><small>{artifact.storageKey}</small></span>
+              <em>{artifact.validationStatus}</em>
+            </div>
+          )) : null}
+          {brainResourceTab === "tasks" ? brainTasks.map((task) => (
+            <div key={task.id} className="brain-resource-row brain-task-row">
+              <SidebarIcon name={task.status === "RUNNING" ? "automation" : "list-status"} />
+              <span><strong>{task.taskType}</strong><small>{Math.round(task.progress * 100)}% · {taskStatusLabel[task.status] || task.status}</small></span>
+              <em>{task.errorCode || ""}</em>
+            </div>
+          )) : null}
+          {brainResourceTab === "files" && !brainFiles.length ? <div className="brain-resource-empty">项目还没有文件</div> : null}
+          {brainResourceTab === "artifacts" && !brainArtifacts.length ? <div className="brain-resource-empty">生成产物会显示在这里</div> : null}
+          {brainResourceTab === "tasks" && !brainTasks.length ? <div className="brain-resource-empty">当前没有执行任务</div> : null}
+        </div>
+      </aside>
+    );
+  }
+
 function renderChatModule() {
     return (
       <section className={`task-column${isNewChatMode ? " new-chat-task" : ""}`}>
@@ -7327,6 +7396,7 @@ function renderWorkspaceModules() {
         ) : null}
         {renderSidebarModule()}
         {mainModule}
+        {isBrainConversationSelection ? renderBrainResourcePanel() : null}
         {previewPlacement === "side" && activeFeature === "new-chat" && !isBrainConversationSelection ? renderPreviewModule("side") : null}
         {renderSearchDialog()}
         {workspaceFileMenu && selectedWorkspace?.id ? <LocalFileContextMenu

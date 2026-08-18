@@ -63,6 +63,24 @@ export interface BrainMessageRecord {
   createdAt: string;
 }
 
+export interface BrainFileRecord {
+  id: string; projectId: string; ownerId: string; logicalName: string; mimeType: string;
+  sizeBytes: number; contentHash: string; storageKey: string; versionNo: number;
+  parseStatus: string; validationStatus: string; createdAt: string;
+}
+
+export interface BrainTaskRecord {
+  id: string; projectId: string; conversationId: string; workspaceKey: BrainWorkspaceKey;
+  taskType: string; status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+  progress: number; requestId: string; idempotencyKey: string; attempt: number; maxAttempts: number;
+  errorCode: string; errorDetail: string; startedAt: string; finishedAt: string; heartbeatAt: string;
+}
+
+export interface BrainArtifactRecord {
+  id: string; projectId: string; taskId: string; sourceFileId: string; artifactType: string;
+  storageKey: string; contentHash: string; validationStatus: string; createdAt: string;
+}
+
 export class BrainStorageError extends Error {
   readonly code: string;
 
@@ -343,6 +361,35 @@ function mapConversation(row: Record<string, unknown>): BrainConversationRecord 
   };
 }
 
+function mapFile(row: Record<string, unknown>): BrainFileRecord {
+  return {
+    id: String(row.id), projectId: String(row.project_id), ownerId: String(row.owner_id),
+    logicalName: String(row.logical_name), mimeType: String(row.mime_type), sizeBytes: Number(row.size_bytes),
+    contentHash: String(row.content_hash), storageKey: String(row.storage_key), versionNo: Number(row.version_no),
+    parseStatus: String(row.parse_status), validationStatus: String(row.validation_status), createdAt: String(row.created_at)
+  };
+}
+
+function mapTask(row: Record<string, unknown>): BrainTaskRecord {
+  return {
+    id: String(row.id), projectId: String(row.project_id), conversationId: String(row.conversation_id || ""),
+    workspaceKey: requireWorkspaceKey(String(row.workspace_key)), taskType: String(row.task_type),
+    status: String(row.status) as BrainTaskRecord["status"], progress: Number(row.progress),
+    requestId: String(row.request_id), idempotencyKey: String(row.idempotency_key), attempt: Number(row.attempt),
+    maxAttempts: Number(row.max_attempts), errorCode: String(row.error_code), errorDetail: String(row.error_detail),
+    startedAt: String(row.started_at || ""), finishedAt: String(row.finished_at || ""), heartbeatAt: String(row.heartbeat_at || "")
+  };
+}
+
+function mapArtifact(row: Record<string, unknown>): BrainArtifactRecord {
+  return {
+    id: String(row.id), projectId: String(row.project_id), taskId: String(row.task_id || ""),
+    sourceFileId: String(row.source_file_id || ""), artifactType: String(row.artifact_type),
+    storageKey: String(row.storage_key), contentHash: String(row.content_hash),
+    validationStatus: String(row.validation_status), createdAt: String(row.created_at)
+  };
+}
+
 export class BrainWorkspaceStorage {
   readonly path: string;
   private readonly database: DatabaseSync;
@@ -567,6 +614,137 @@ export class BrainWorkspaceStorage {
     const row = this.database.prepare("SELECT content, updated_at FROM brain_draft WHERE owner_id = ? AND conversation_id = ?")
       .get(ownerId, conversationId) as { content: string; updated_at: string } | undefined;
     return row ? { content: row.content, updatedAt: row.updated_at } : null;
+  }
+
+  registerFile(input: {
+    ownerId: string; projectId: string; logicalName: string; mimeType: string; sizeBytes: number;
+    contentHash: string; storageKey: string; versionNo?: number;
+  }): BrainFileRecord {
+    const project = this.getProject(input.ownerId, input.projectId);
+    if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0) {
+      throw new BrainStorageError("BRAIN_INPUT_INVALID", "sizeBytes must be a non-negative integer");
+    }
+    const versionNo = input.versionNo ?? 1;
+    if (!Number.isSafeInteger(versionNo) || versionNo < 1) {
+      throw new BrainStorageError("BRAIN_INPUT_INVALID", "versionNo must be a positive integer");
+    }
+    const record: BrainFileRecord = {
+      id: `file_${randomUUID()}`, projectId: project.id, ownerId: project.ownerId,
+      logicalName: requireText(input.logicalName, "logicalName"), mimeType: requireText(input.mimeType, "mimeType"),
+      sizeBytes: input.sizeBytes, contentHash: requireText(input.contentHash, "contentHash"),
+      storageKey: requireText(input.storageKey, "storageKey"), versionNo,
+      parseStatus: "PENDING", validationStatus: "PENDING", createdAt: nowIso()
+    };
+    this.database.prepare(`
+      INSERT INTO brain_file(
+        id, project_id, owner_id, logical_name, mime_type, size_bytes, content_hash, storage_key,
+        version_no, parse_status, validation_status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(record.id, record.projectId, record.ownerId, record.logicalName, record.mimeType, record.sizeBytes,
+      record.contentHash, record.storageKey, record.versionNo, record.parseStatus, record.validationStatus, record.createdAt);
+    return record;
+  }
+
+  listFiles(ownerId: string, projectId: string): BrainFileRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare(`
+      SELECT * FROM brain_file WHERE project_id = ? AND owner_id = ? ORDER BY created_at DESC, id DESC
+    `).all(projectId, ownerId) as Record<string, unknown>[]).map(mapFile);
+  }
+
+  createTask(input: {
+    ownerId: string; projectId: string; conversationId?: string; workspaceKey: string; taskType: string;
+    requestId?: string; idempotencyKey: string; maxAttempts?: number; resourceLimitsJson?: string;
+  }): BrainTaskRecord {
+    this.getProject(input.ownerId, input.projectId);
+    if (input.conversationId) {
+      const conversation = this.getConversation(input.ownerId, input.conversationId);
+      if (conversation.projectId !== input.projectId) throw new BrainStorageError("BRAIN_PROJECT_FORBIDDEN", "Task conversation belongs to another project");
+    }
+    const workspaceKey = requireWorkspaceKey(input.workspaceKey);
+    const idempotencyKey = requireText(input.idempotencyKey, "idempotencyKey");
+    const existing = this.database.prepare("SELECT * FROM brain_task WHERE project_id = ? AND idempotency_key = ?")
+      .get(input.projectId, idempotencyKey) as Record<string, unknown> | undefined;
+    if (existing) return mapTask(existing);
+    const maxAttempts = input.maxAttempts ?? 1;
+    if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+      throw new BrainStorageError("BRAIN_INPUT_INVALID", "maxAttempts must be between 1 and 10");
+    }
+    const resourceLimitsJson = input.resourceLimitsJson || "{}";
+    JSON.parse(resourceLimitsJson);
+    const id = `task_${randomUUID()}`;
+    this.database.prepare(`
+      INSERT INTO brain_task(
+        id, project_id, conversation_id, workspace_key, task_type, status, request_id,
+        idempotency_key, max_attempts, resource_limits_json
+      ) VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?, ?)
+    `).run(id, input.projectId, input.conversationId || null, workspaceKey, requireText(input.taskType, "taskType"),
+      input.requestId || "", idempotencyKey, maxAttempts, resourceLimitsJson);
+    return this.getTask(input.ownerId, id);
+  }
+
+  getTask(ownerId: string, taskId: string): BrainTaskRecord {
+    const row = this.database.prepare("SELECT * FROM brain_task WHERE id = ?").get(taskId) as Record<string, unknown> | undefined;
+    if (!row) throw new BrainStorageError("BRAIN_TASK_NOT_FOUND", "Task was not found");
+    this.getProject(ownerId, String(row.project_id));
+    return mapTask(row);
+  }
+
+  listTasks(ownerId: string, projectId: string): BrainTaskRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT * FROM brain_task WHERE project_id = ? ORDER BY COALESCE(heartbeat_at, started_at, '') DESC, id DESC")
+      .all(projectId) as Record<string, unknown>[]).map(mapTask);
+  }
+
+  updateTask(input: { ownerId: string; taskId: string; status: BrainTaskRecord["status"]; progress?: number; errorCode?: string; errorDetail?: string }): BrainTaskRecord {
+    const current = this.getTask(input.ownerId, input.taskId);
+    const statuses: BrainTaskRecord["status"][] = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"];
+    if (!statuses.includes(input.status)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "Unsupported task status");
+    const progress = input.progress ?? current.progress;
+    if (!Number.isFinite(progress) || progress < 0 || progress > 1) throw new BrainStorageError("BRAIN_INPUT_INVALID", "progress must be between 0 and 1");
+    const timestamp = nowIso();
+    const terminal = ["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"].includes(input.status);
+    const startedAt = input.status === "RUNNING" && !current.startedAt ? timestamp : (current.startedAt || null);
+    const finishedAt = terminal ? timestamp : null;
+    this.database.prepare(`
+      UPDATE brain_task SET status = ?, progress = ?, error_code = ?, error_detail = ?,
+        started_at = ?, finished_at = ?, heartbeat_at = ? WHERE id = ?
+    `).run(input.status, progress, input.errorCode || "", input.errorDetail || "", startedAt, finishedAt, timestamp, input.taskId);
+    return this.getTask(input.ownerId, input.taskId);
+  }
+
+  registerArtifact(input: {
+    ownerId: string; projectId: string; taskId?: string; sourceFileId?: string; artifactType: string;
+    storageKey: string; contentHash: string; validationStatus?: string;
+  }): BrainArtifactRecord {
+    this.getProject(input.ownerId, input.projectId);
+    if (input.taskId && this.getTask(input.ownerId, input.taskId).projectId !== input.projectId) {
+      throw new BrainStorageError("BRAIN_PROJECT_FORBIDDEN", "Artifact task belongs to another project");
+    }
+    if (input.sourceFileId) {
+      const file = this.database.prepare("SELECT project_id, owner_id FROM brain_file WHERE id = ?").get(input.sourceFileId) as { project_id: string; owner_id: string } | undefined;
+      if (!file || file.owner_id !== input.ownerId || file.project_id !== input.projectId) {
+        throw new BrainStorageError("BRAIN_PROJECT_FORBIDDEN", "Artifact source file belongs to another project");
+      }
+    }
+    const record: BrainArtifactRecord = {
+      id: `artifact_${randomUUID()}`, projectId: input.projectId, taskId: input.taskId || "",
+      sourceFileId: input.sourceFileId || "", artifactType: requireText(input.artifactType, "artifactType"),
+      storageKey: requireText(input.storageKey, "storageKey"), contentHash: requireText(input.contentHash, "contentHash"),
+      validationStatus: input.validationStatus?.trim() || "PENDING", createdAt: nowIso()
+    };
+    this.database.prepare(`
+      INSERT INTO brain_artifact(id, project_id, task_id, source_file_id, artifact_type, storage_key, content_hash, validation_status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(record.id, record.projectId, record.taskId || null, record.sourceFileId || null, record.artifactType,
+      record.storageKey, record.contentHash, record.validationStatus, record.createdAt);
+    return record;
+  }
+
+  listArtifacts(ownerId: string, projectId: string): BrainArtifactRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT * FROM brain_artifact WHERE project_id = ? ORDER BY created_at DESC, id DESC")
+      .all(projectId) as Record<string, unknown>[]).map(mapArtifact);
   }
 
   private seedWorkspaces() {

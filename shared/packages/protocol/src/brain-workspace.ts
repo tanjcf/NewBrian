@@ -101,6 +101,87 @@ export interface BrainDraftSaveInput extends BrainConversationGetInput, BrainPro
   content: string;
 }
 
+export interface BrainFileDto {
+  id: string;
+  projectId: string;
+  logicalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentHash: string;
+  storageKey: string;
+  versionNo: number;
+  parseStatus: string;
+  validationStatus: string;
+  createdAt: string;
+}
+
+export interface BrainFileRegisterInput extends BrainProjectGetInput {
+  logicalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentHash: string;
+  storageKey: string;
+  versionNo?: number;
+}
+
+export interface BrainTaskDto {
+  id: string;
+  projectId: string;
+  conversationId: string;
+  workspaceKey: BrainWorkspaceKey;
+  taskType: string;
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+  progress: number;
+  requestId: string;
+  idempotencyKey: string;
+  attempt: number;
+  maxAttempts: number;
+  errorCode: string;
+  errorDetail: string;
+  startedAt: string;
+  finishedAt: string;
+  heartbeatAt: string;
+}
+
+export interface BrainTaskCreateInput extends BrainProjectGetInput {
+  conversationId?: string;
+  workspaceKey: BrainWorkspaceKey;
+  taskType: string;
+  requestId?: string;
+  idempotencyKey: string;
+  maxAttempts?: number;
+  resourceLimitsJson?: string;
+}
+
+export interface BrainTaskUpdateInput {
+  taskId: string;
+  status: BrainTaskDto["status"];
+  progress?: number;
+  errorCode?: string;
+  errorDetail?: string;
+}
+
+export interface BrainArtifactDto {
+  id: string;
+  projectId: string;
+  taskId: string;
+  sourceFileId: string;
+  artifactType: string;
+  storageKey: string;
+  contentHash: string;
+  validationStatus: string;
+  createdAt: string;
+}
+
+export interface BrainArtifactRegisterInput extends BrainProjectGetInput {
+  taskId?: string;
+  sourceFileId?: string;
+  artifactType: string;
+  storageKey: string;
+  contentHash: string;
+  validationStatus?: string;
+}
+
 export const brainWorkspaceIpcChannels = {
   workspaceList: "brain:workspace:list",
   projectList: "brain:project:list",
@@ -114,5 +195,12 @@ export const brainWorkspaceIpcChannels = {
   messageList: "brain:message:list",
   messageAppend: "brain:message:append",
   draftGet: "brain:draft:get",
-  draftSave: "brain:draft:save"
+  draftSave: "brain:draft:save",
+  fileList: "brain:file:list",
+  fileRegister: "brain:file:register",
+  taskList: "brain:task:list",
+  taskCreate: "brain:task:create",
+  taskUpdate: "brain:task:update",
+  artifactList: "brain:artifact:list",
+  artifactRegister: "brain:artifact:register"
 } as const;
