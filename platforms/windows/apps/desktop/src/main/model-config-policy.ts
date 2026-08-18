@@ -11,6 +11,7 @@ export function normalizeModelConfig(input: Partial<ModelConfig> | undefined, fa
     provider: input?.provider?.trim() || fallback.provider,
     baseUrl: input?.baseUrl?.trim() || fallback.baseUrl,
     apiKey: typeof input?.apiKey === "string" ? input.apiKey.trim() : fallback.apiKey,
+    apiKeyConfigured: input?.apiKeyConfigured === true || fallback.apiKeyConfigured === true,
     wireApi: input?.wireApi === "chat.completions" ? "chat.completions" : "responses",
     model: input?.model?.trim() || fallback.model,
     reviewModel: input?.reviewModel?.trim() || fallback.reviewModel,

@@ -1000,7 +1000,7 @@ export function App() {
     activeFeature !== "new-chat";
 
   const projectResponseMessage = isAskingModel ? "正在思考中..." : latestAssistantMessage;
-  const apiKeyConfigured = modelConfig.apiKey.trim().length > 0;
+  const apiKeyConfigured = modelConfig.apiKeyConfigured === true || modelConfig.apiKey.trim().length > 0;
   const isUsingLoginSession = isAuthenticated && !apiKeyConfigured;
   const displayUserName = authStatus.user?.display_name || "未登录";
   const displayUserEmail = authStatus.user?.email || "尚未登录 OmniRoute 账号";

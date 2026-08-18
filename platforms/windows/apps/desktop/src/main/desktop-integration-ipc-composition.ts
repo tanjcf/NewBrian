@@ -48,6 +48,7 @@ interface DesktopIntegrationIpcCompositionDeps {
   };
   readAuthorizedDesktopModelConfig: () => Promise<ModelConfig>;
   writeRootConfig: (config: any) => Promise<any>;
+  isPrivateModelCredentialConfigured: () => Promise<boolean>;
   getActiveDesktopPreferences: () => Promise<any>;
   ensurePreviewWindow: (url: string) => any;
   closePreviewWindow: () => void;
@@ -137,7 +138,8 @@ export function registerDesktopIntegrationIpcComposition(deps: DesktopIntegratio
   });
   const modelConfigService = new ModelConfigService({
     readAuthorized: deps.readAuthorizedDesktopModelConfig,
-    writeRootConfig: deps.writeRootConfig
+    writeRootConfig: deps.writeRootConfig,
+    isCredentialConfigured: deps.isPrivateModelCredentialConfigured
   });
   registerModelConfigIpcHandlers({
     getConfig: () => modelConfigService.getConfig(),

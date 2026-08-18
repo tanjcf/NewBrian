@@ -203,10 +203,12 @@ function renderFeaturePanel() {
                     <input
                       value={modelConfig.apiKey}
                       onChange={(event) => setModelConfig((current) => ({ ...current, apiKey: event.target.value }))}
-                      placeholder="sk-..."
+                      placeholder={apiKeyConfigured ? "已安全保存；输入新密钥可替换" : "sk-..."}
                       type="password"
+                      autoComplete="new-password"
                     />
                   </label>
+                  <p className="settings-field-hint">密钥只写入操作系统保护的本地凭据保险库；保存后界面、配置文件和日志均不能回读明文。</p>
                   <div className="inline-actions">
                     <button type="button" onClick={() => void handleLogout()}>
                       退出登录

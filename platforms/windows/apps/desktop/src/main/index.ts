@@ -101,6 +101,7 @@ import {
 import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
+import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import {
   resolveEffectiveGatewayBaseUrl,
   syncDesktopControlPlane as syncDesktopControlPlaneProtocol,
@@ -470,6 +471,8 @@ const builtinPluginsRoot = app.isPackaged
   : join(app.getAppPath(), "build", "plugins");
 const bootstrapConfigPath = join(workspacePath, "codecn.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".codecn");
+const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
+const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
 const desktopAuthStatePath = join(workspaceStateRoot, "desktop-auth.json");
@@ -1310,7 +1313,7 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
     productionBaseUrl: productionGatewayBaseUrl
   }) || await readGatewayOrigin();
   const modelsUrl = `${new URL(gatewayBaseUrl).origin}/v1/models`;
-  const apiKeyCredential = effectiveConfig.apiKey?.trim() || "";
+  const apiKeyCredential = effectiveConfig.apiKey?.trim() || await privateModelCredentialVault.readForTrustedRequest();
   const accessTokenCredential = authState?.access_token?.trim() || "";
   const device = collectDesktopDeviceFingerprint();
   const credentials = [
@@ -3094,9 +3097,19 @@ async function readRootConfig(): Promise<RootConfigFile> {
       throw new SyntaxError("empty root config");
     }
     const parsed = parseJsonText<Partial<RootConfigFile>>(raw);
+    const legacyPlaintextCredential = parsed.llm?.apiKey?.trim() || "";
+    if (legacyPlaintextCredential) {
+      await privateModelCredentialVault.replace(legacyPlaintextCredential);
+      parsed.llm = { ...parsed.llm, apiKey: "", apiKeyConfigured: true } as ModelConfig;
+    }
     const bundledConfig = await readBundledRootConfig();
     const normalized = normalizeRootConfig(parsed, bundledConfig);
-    if (shouldRepairRootConfig(parsed, normalized)) {
+    normalized.llm = {
+      ...normalized.llm,
+      apiKey: "",
+      apiKeyConfigured: await privateModelCredentialVault.isConfigured()
+    };
+    if (legacyPlaintextCredential || shouldRepairRootConfig(parsed, normalized)) {
       await ensureDirectory(dirname(modelConfigPath));
       await fs.writeFile(modelConfigPath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
     }
@@ -3179,9 +3192,15 @@ async function writeRootConfig(nextConfig: ModelConfig) {
     isPackaged: app.isPackaged,
     productionBaseUrl: productionGatewayBaseUrl
   });
+  const replacementCredential = nextConfig.apiKey?.trim() || "";
+  if (replacementCredential) await privateModelCredentialVault.replace(replacementCredential);
   const payload: RootConfigFile = {
     ...currentConfig,
-    llm: normalizeModelConfig({ ...nextConfig, baseUrl: effectiveBaseUrl }),
+    llm: {
+      ...normalizeModelConfig({ ...nextConfig, baseUrl: effectiveBaseUrl, apiKey: "" }),
+      apiKey: "",
+      apiKeyConfigured: await privateModelCredentialVault.isConfigured()
+    },
     preferences: normalizeDesktopPreferences(currentConfig.preferences)
   };
   await fs.writeFile(modelConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
@@ -7336,6 +7355,7 @@ function registerIpc() {
     mobileBridgeService,
     readAuthorizedDesktopModelConfig,
     writeRootConfig,
+    isPrivateModelCredentialConfigured: () => privateModelCredentialVault.isConfigured(),
     getActiveDesktopPreferences,
     ensurePreviewWindow,
     closePreviewWindow: () => {

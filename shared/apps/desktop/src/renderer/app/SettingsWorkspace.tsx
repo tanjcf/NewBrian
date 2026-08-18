@@ -937,8 +937,8 @@ function renderSettingsWorkspace() {
                 <section className="settings-card">
                   <div className="settings-card-head">
                     <div>
-                      <strong>备用网关密钥</strong>
-                      <p>普通桌面端默认走登录会话。这里只保留给开发者、第三方集成和脚本自动化的兼容凭据。</p>
+                      <strong>私有模型凭据</strong>
+                      <p>公司模型始终通过登录会话访问，不向桌面端下发公司密钥。这里只配置你自行购买的私有模型凭据。</p>
                     </div>
                   </div>
                   <label className="settings-field">
@@ -946,10 +946,12 @@ function renderSettingsWorkspace() {
                     <input
                       value={modelConfig.apiKey}
                       onChange={(event) => setModelConfig((current) => ({ ...current, apiKey: event.target.value }))}
-                      placeholder="sk-..."
+                      placeholder={apiKeyConfigured ? "已安全保存；输入新密钥可替换" : "sk-..."}
                       type="password"
+                      autoComplete="new-password"
                     />
                   </label>
+                  <p className="settings-field-hint">密钥只写入操作系统保护的本地凭据保险库。保存后界面、配置文件和日志都不能回读明文。</p>
                   <div className="inline-actions">
                     <button type="button" onClick={() => void runSettingsSave("凭据", saveModelConfig)}>
                       保存凭据
