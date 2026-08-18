@@ -510,7 +510,7 @@ async function scheduleAutomaticUserKnowledgeSync(input?: {
 }) {
   try {
     const authState = await readDesktopAuthState();
-    const bearerToken = authState?.access_token?.trim() || authState?.gateway_api_key?.trim() || "";
+    const bearerToken = authState?.access_token?.trim() || "";
     if (!bearerToken) return;
     const gatewayBaseUrl = await readGatewayBaseUrl();
     scheduleUserKnowledgeSync({
@@ -971,7 +971,7 @@ async function reportRendererDiagnostic(input: import("@codex-forge/protocol").R
 
 async function uploadPendingDesktopErrors() {
   const authState = await readDesktopAuthState();
-  const accessToken = authState?.access_token?.trim() || authState?.gateway_api_key?.trim() || "";
+  const accessToken = authState?.access_token?.trim() || "";
   if (!accessToken) return { uploaded: 0, failed: 0 };
   const gatewayOrigin = await readGatewayOrigin();
   const device = collectDesktopDeviceFingerprint();
@@ -1007,9 +1007,6 @@ const novelTtsService = new NovelTtsService({
   readBearerToken: async () => {
     const authState = await readDesktopAuthState();
     const authSelection = selectModelRequestAuth(authState, "");
-    if (authSelection.source === "session_gateway_key") {
-      return resolveGatewayApiKeyFromSession(authSelection.sessionCookie);
-    }
     return authSelection.bearerToken || "";
   },
   appendDebugLog: appendDesktopDebugLog
@@ -1116,9 +1113,6 @@ interface DesktopAuthApiResponse {
       access_token?: string;
       refresh_token?: string;
     };
-    gateway_credential?: {
-      api_key?: string;
-    };
   };
 }
 function readWindowsMachineIdentifier() {
@@ -1184,12 +1178,11 @@ async function readDesktopAuthState(): Promise<PersistedDesktopAuthState | null>
     if (!mode) {
       return null;
     }
-    return {
+    const normalizedState: PersistedDesktopAuthState = {
       mode,
       session_cookie: typeof parsed.session_cookie === "string" ? decryptDesktopSecret(parsed.session_cookie) : "",
       access_token: typeof parsed.access_token === "string" ? decryptDesktopSecret(parsed.access_token) : "",
       refresh_token: typeof parsed.refresh_token === "string" ? decryptDesktopSecret(parsed.refresh_token) : "",
-      gateway_api_key: typeof parsed.gateway_api_key === "string" ? decryptDesktopSecret(parsed.gateway_api_key) : "",
       expires: typeof parsed.expires === "string" ? parsed.expires : "",
       auth_provider: typeof parsed.auth_provider === "string" ? parsed.auth_provider : "",
       user: parsed.user && typeof parsed.user === "object" ? (parsed.user as PersistedDesktopAuthState["user"]) : undefined,
@@ -1197,6 +1190,11 @@ async function readDesktopAuthState(): Promise<PersistedDesktopAuthState | null>
       rum_view_tags: parsed.rum_view_tags && typeof parsed.rum_view_tags === "object" ? (parsed.rum_view_tags as Record<string, unknown>) : undefined,
       last_synced_at: typeof parsed.last_synced_at === "string" ? parsed.last_synced_at : ""
     };
+    if (Object.prototype.hasOwnProperty.call(parsed, "gateway_api_key")) {
+      await writeDesktopAuthState(normalizedState);
+      await appendDesktopDebugLog("removed legacy desktop gateway credential from local auth state");
+    }
+    return normalizedState;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
@@ -1215,7 +1213,6 @@ async function writeDesktopAuthState(state: PersistedDesktopAuthState | null) {
     session_cookie: state.session_cookie ? encryptDesktopSecret(state.session_cookie) : "",
     access_token: state.access_token ? encryptDesktopSecret(state.access_token) : "",
     refresh_token: state.refresh_token ? encryptDesktopSecret(state.refresh_token) : "",
-    gateway_api_key: state.gateway_api_key ? encryptDesktopSecret(state.gateway_api_key) : "",
     last_synced_at: state.last_synced_at || nowIso()
   };
   await writeTextAtomically(desktopAuthStatePath, `${JSON.stringify(payload, null, 2)}\n`);
@@ -1223,7 +1220,7 @@ async function writeDesktopAuthState(state: PersistedDesktopAuthState | null) {
 async function syncAuthenticatedDesktopControlPlane(): Promise<DesktopControlPlaneState> {
   try {
     const authState = await readDesktopAuthState();
-    const tokenCandidates = [authState?.access_token, authState?.gateway_api_key]
+    const tokenCandidates = [authState?.access_token]
       .map((token) => token?.trim() || "")
       .filter((token, index, values) => token && values.indexOf(token) === index);
     if (tokenCandidates.length === 0) {
@@ -1311,22 +1308,17 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
   }) || await readGatewayOrigin();
   const modelsUrl = `${new URL(gatewayBaseUrl).origin}/v1/models`;
   const apiKeyCredential = effectiveConfig.apiKey?.trim() || "";
-  const gatewayApiKeyCredential = authState?.gateway_api_key?.trim() || "";
   const accessTokenCredential = authState?.access_token?.trim() || "";
   const device = collectDesktopDeviceFingerprint();
   const credentials = [
     process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
       ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
       : null,
-    gatewayApiKeyCredential ? {
-      value: gatewayApiKeyCredential,
-      headers: { Authorization: `Bearer ${gatewayApiKeyCredential}` }
-    } : null,
-    apiKeyCredential ? { value: apiKeyCredential, headers: { Authorization: `Bearer ${apiKeyCredential}` } } : null,
     accessTokenCredential ? {
       value: accessTokenCredential,
       headers: createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
-    } : null
+    } : null,
+    apiKeyCredential ? { value: apiKeyCredential, headers: { Authorization: `Bearer ${apiKeyCredential}` } } : null
   ].filter((item): item is { value: string; headers: Record<string, string> } => Boolean(item));
   let remoteModels: unknown[] = [];
   let lastError = "";
@@ -1506,7 +1498,7 @@ async function readJsonResponse(response: Response) {
 }
 async function fetchJsonWithDesktopAuth(path: string, authState: PersistedDesktopAuthState, device: DesktopDeviceFingerprint) {
   const gatewayOrigin = await readGatewayOrigin();
-  const tokenCandidates = [authState.access_token, authState.gateway_api_key]
+  const tokenCandidates = [authState.access_token]
     .map((token) => token?.trim() || "")
     .filter((token, index, list) => token && list.indexOf(token) === index);
   const sessionCookie = authState.session_cookie?.trim() || "";
@@ -1544,7 +1536,7 @@ async function fetchDesktopBillingSubscription() {
     throw new Error("Please sign in before viewing subscription information.");
   }
   const device = collectDesktopDeviceFingerprint();
-  if (!authState.access_token?.trim() && !authState.gateway_api_key?.trim() && !authState.session_cookie?.trim()) {
+  if (!authState.access_token?.trim() && !authState.session_cookie?.trim()) {
     throw new Error("Current session has no OmniRoute access credential.");
   }
   const [bootstrapResult, subscriptionsResult, usageResult] = await Promise.allSettled([
@@ -1660,7 +1652,6 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
     let { response, payload } = await fetchDesktopAuthMe(persisted.access_token, device);
     let activeAccessToken = persisted.access_token;
     let activeRefreshToken = persisted.refresh_token || "";
-    let activeGatewayKey = persisted.gateway_api_key || "";
     const firstErrorCode =
       typeof (payload as Record<string, unknown> | null)?.code === "string"
         ? String((payload as Record<string, unknown>).code)
@@ -1719,10 +1710,6 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       mode: "desktop_token",
       access_token: activeAccessToken,
       refresh_token: activeRefreshToken,
-      gateway_api_key:
-        typeof desktopPayload?.data?.gateway_credential?.api_key === "string" && desktopPayload.data.gateway_credential.api_key
-          ? desktopPayload.data.gateway_credential.api_key
-          : activeGatewayKey,
       expires: typeof desktopPayload?.expires === "string" ? desktopPayload.expires : persisted.expires,
       auth_provider: typeof desktopPayload?.authProvider === "string" ? desktopPayload.authProvider : persisted.auth_provider,
       user,
@@ -1761,7 +1748,7 @@ async function postResearchWriting(
 ): Promise<Response> {
   const authState = await readDesktopAuthState();
   if (!authState) throw new Error("请先登录再使用政务研究写作服务。");
-  const token = authState.access_token?.trim() || authState.gateway_api_key?.trim() || "";
+  const token = authState.access_token?.trim() || "";
   if (!token && !authState.session_cookie?.trim()) throw new Error("当前登录状态没有可用访问凭据。");
   const gatewayOrigin = await readGatewayOrigin();
   const headers = createDesktopAuthHeaders({ accessToken: token, device: collectDesktopDeviceFingerprint() });
@@ -1978,7 +1965,6 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
     mode: "desktop_token",
     access_token: accessToken,
     refresh_token: sessionToken,
-    gateway_api_key: desktopPayload.data?.gateway_credential?.api_key ?? "",
     expires: desktopPayload.expires ?? "",
     auth_provider: desktopPayload.authProvider ?? "",
     user,
@@ -2091,7 +2077,7 @@ async function changeDesktopAuthPassword(input: DesktopAuthChangePasswordInput) 
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        ...createDesktopAuthHeaders({ accessToken: authState.access_token || authState.gateway_api_key, device })
+        ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
       },
       body: JSON.stringify(payload)
     }).catch((error) => {
@@ -2149,7 +2135,7 @@ async function changeDesktopAuthEmail(input: DesktopAuthChangeEmailInput) {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        ...createDesktopAuthHeaders({ accessToken: authState.access_token || authState.gateway_api_key, device })
+        ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
       },
       body: JSON.stringify(payload)
     }).catch((error) => {
@@ -2208,7 +2194,6 @@ interface PersistedDesktopAuthState {
   session_cookie?: string;
   access_token?: string;
   refresh_token?: string;
-  gateway_api_key?: string;
   expires?: string;
   auth_provider?: string;
   user?: {
@@ -6566,40 +6551,6 @@ async function readGatewayBaseUrl() {
 async function readGatewayOrigin() {
   return resolveGatewayOrigin(await readGatewayBaseUrl());
 }
-async function resolveGatewayApiKeyFromSession(sessionCookie: string) {
-  const gatewayOrigin = await readGatewayOrigin();
-  const response = await fetch(`${gatewayOrigin}/api/api-keys`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Cookie: sessionCookie
-    }
-  });
-  const payload = await readJsonResponse(response);
-  if (!response.ok) {
-    throw new Error(
-      typeof (payload as Record<string, unknown> | null)?.message === "string"
-        ? String((payload as Record<string, unknown>).message)
-        : `读取 API 密钥失败 (${response.status})`
-    );
-  }
-  const items = Array.isArray(payload) ? payload : Array.isArray((payload as Record<string, unknown> | null)?.items) ? (payload as Record<string, unknown>).items as unknown[] : [];
-  const active = items.find((item) => {
-    const status = String((item as Record<string, unknown>)?.status ?? "").toLowerCase();
-    return status === "active" || status === "";
-  }) as Record<string, unknown> | undefined;
-  const rawKey = active && typeof active.key === "string"
-    ? String(active.key)
-    : active && typeof active.api_key === "string"
-      ? String(active.api_key)
-      : active && typeof active.token === "string"
-        ? String(active.token)
-        : "";
-  if (!rawKey) {
-    throw new Error("当前账号下没有可用的 API 密钥。");
-  }
-  return rawKey;
-}
 async function callModelApi(input: {
   requestId?: string;
   signal?: AbortSignal;
@@ -6636,9 +6587,7 @@ async function callModelApi(input: {
   const model = input.model.trim();
   const authState = await readDesktopAuthState();
   const authSelection = selectModelRequestAuth(authState, input.apiKey);
-  bearerToken = authSelection.source === "session_gateway_key"
-    ? await resolveGatewayApiKeyFromSession(authSelection.sessionCookie)
-    : authSelection.bearerToken;
+  bearerToken = authSelection.bearerToken;
   if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
     bearerToken = "codecn-e2e";
   }
@@ -7053,7 +7002,7 @@ function registerHolonRuntime(runtimeCommandService: RuntimeCommandService, mode
     const e2eCredential = !app.isPackaged && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
       ? process.env.CODECN_E2E_AUTH_TOKEN?.trim() || "codecn-e2e"
       : "";
-    const accessToken = authState?.access_token?.trim() || authState?.gateway_api_key?.trim() || e2eCredential;
+    const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("HOLON_AUTH_REQUIRED");
     const device = collectDesktopDeviceFingerprint();
     return {
@@ -7169,7 +7118,7 @@ async function waitForRemoteApprovalCompletion(requestId: string, signal: AbortS
 
 function registerPluginRepositoryHandlers() {
   registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: join(app.getPath("userData"), "plugins"), clientVersion: app.getVersion(), getConnection: async () => {
-      const authState = await readDesktopAuthState(), token = authState?.access_token?.trim() || authState?.gateway_api_key?.trim() || "";
+      const authState = await readDesktopAuthState(), token = authState?.access_token?.trim() || "";
       if (!token) throw new Error("PLUGIN_AUTH_REQUIRED: 请先登录再使用插件仓库。");
       const device = collectDesktopDeviceFingerprint();
       const gatewayOrigin = await readGatewayOrigin();
@@ -7184,7 +7133,7 @@ function createAgentTurnControlPlane() {
     const e2eCredential = !app.isPackaged && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
       ? process.env.CODECN_E2E_AUTH_TOKEN?.trim() || "codecn-e2e"
       : "";
-    const accessToken = authState?.access_token?.trim() || authState?.gateway_api_key?.trim() || e2eCredential;
+    const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("AGENT_TURN_AUTH_REQUIRED");
     const device = collectDesktopDeviceFingerprint();
     return {
@@ -7535,7 +7484,7 @@ function registerIpc() {
       if (!authState) throw new Error("desktop session required");
       const device = collectDesktopDeviceFingerprint();
       const gatewayOrigin = await readGatewayOrigin();
-      const accessToken = authState.access_token?.trim() || authState.gateway_api_key?.trim() || "";
+      const accessToken = authState.access_token?.trim() || "";
       return {
         gatewayOrigin,
         headers: createDesktopAuthHeaders({ accessToken, device })
@@ -7578,7 +7527,7 @@ function registerIpc() {
       if (!authState) throw new Error("desktop session required");
       const device = collectDesktopDeviceFingerprint();
       const gatewayOrigin = await readGatewayOrigin();
-      const token = authState.access_token?.trim() || authState.gateway_api_key?.trim() || "";
+      const token = authState.access_token?.trim() || "";
       const headers = createDesktopAuthHeaders({ accessToken: token, device });
       const response = await fetch(`${gatewayOrigin}/api/desktop/v1/app-update/verify`, {
         method: "POST",
@@ -7695,9 +7644,7 @@ function registerIpc() {
     }) => {
       const authState = await readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState, "");
-      let bearerToken = authSelection.source === "session_gateway_key"
-        ? await resolveGatewayApiKeyFromSession(authSelection.sessionCookie)
-        : authSelection.bearerToken;
+      let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
       }
@@ -7923,9 +7870,7 @@ function registerIpc() {
       let baseUrl = await readGatewayBaseUrl();
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
-      let bearerToken = authSelection.source === "session_gateway_key"
-        ? await resolveGatewayApiKeyFromSession(authSelection.sessionCookie)
-        : authSelection.bearerToken;
+      let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
       }

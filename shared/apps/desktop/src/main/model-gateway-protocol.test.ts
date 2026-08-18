@@ -29,15 +29,12 @@ test("retries only transient gateway failures or explicit retryable payloads", (
 
 test("selects model credentials with explicit secure precedence", () => {
   assert.deepEqual(authPolicy.selectModelRequestAuth({
-    mode: "desktop_token", gateway_api_key: " gateway ", access_token: "access"
+    mode: "desktop_token", access_token: " access "
   }, "configured"), {
-    source: "desktop_gateway_key", bearerToken: "gateway", useGatewayBaseUrl: true
+    source: "desktop_access_token", bearerToken: "access", useGatewayBaseUrl: true
   });
-  assert.equal(authPolicy.selectModelRequestAuth({ mode: "desktop_token", gateway_api_key: " ", access_token: " access " }, "configured").source, "desktop_access_token");
   assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, " configured ").source, "configured_api_key");
-  const session = authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, "");
-  assert.equal(session.source, "session_gateway_key");
-  assert.equal(session.sessionCookie, "cookie");
+  assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, "").source, "none");
   assert.equal(authPolicy.selectModelRequestAuth(null, " ").source, "none");
 });
 

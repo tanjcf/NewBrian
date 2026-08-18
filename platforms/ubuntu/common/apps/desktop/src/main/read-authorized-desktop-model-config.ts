@@ -13,7 +13,6 @@ export interface ReadAuthorizedDesktopModelConfigDependencies {
   readRootConfig: () => Promise<{ llm: Partial<ModelConfig> }>;
   readBundledRootConfig: () => Promise<{ llm?: Partial<ModelConfig> } | null>;
   readDesktopAuthState: () => Promise<{
-    gateway_api_key?: string;
     access_token?: string;
   } | null>;
   readGatewayOrigin: () => Promise<string>;
@@ -46,24 +45,19 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
     }) || await deps.readGatewayOrigin();
     const modelsUrl = `${new URL(gatewayBaseUrl).origin}/v1/models`;
     const apiKeyCredential = effectiveConfig.apiKey?.trim() || "";
-    const gatewayApiKeyCredential = authState?.gateway_api_key?.trim() || "";
     const accessTokenCredential = authState?.access_token?.trim() || "";
     const device = deps.collectDesktopDeviceFingerprint();
     const credentials = [
       process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv
         ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
         : null,
-      gatewayApiKeyCredential ? {
-        value: gatewayApiKeyCredential,
-        headers: { Authorization: `Bearer ${gatewayApiKeyCredential}` }
+      accessTokenCredential ? {
+        value: accessTokenCredential,
+        headers: deps.createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
       } : null,
       apiKeyCredential ? {
         value: apiKeyCredential,
         headers: { Authorization: `Bearer ${apiKeyCredential}` }
-      } : null,
-      accessTokenCredential ? {
-        value: accessTokenCredential,
-        headers: deps.createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
       } : null
     ].filter((item): item is { value: string; headers: Record<string, string> } => Boolean(item));
     let remoteModels: unknown[] = [];

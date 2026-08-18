@@ -139,14 +139,15 @@ test("omits an empty model request id from direct shell approvals", () => {
   assert.doesNotMatch(workspaceModulesSource, /respondApproval\(\{ approved, requestId \}\)/);
 });
 
-test("validates persisted authentication online and prioritizes gateway credentials", () => {
+test("validates persisted authentication online without accepting server gateway credentials", () => {
   assert.match(authIpcSource, /desktopIpcChannels\.auth\.getStatus[\s\S]{0,120}services\.getStatus\(\)/);
   assert.match(source, /registerAuthIpcHandlers\(\{[\s\S]{0,120}getStatus:\s*resolveDesktopAuthStatus/);
   assert.doesNotMatch(source, /getStatus:\s*resolveLocalDesktopAuthStatus/);
-  const gatewayIndex = source.indexOf("gatewayApiKeyCredential ?");
-  const configIndex = source.indexOf("apiKeyCredential ?", gatewayIndex);
-  const accessIndex = source.indexOf("accessTokenCredential ?", gatewayIndex);
-  assert.ok(gatewayIndex > 0 && configIndex > gatewayIndex && accessIndex > configIndex);
+  assert.doesNotMatch(source, /gatewayApiKeyCredential|gateway_credential|desktop_gateway_key|session_gateway_key/);
+  assert.match(source, /hasOwnProperty\.call\(parsed, "gateway_api_key"\)/);
+  const accessIndex = source.indexOf("accessTokenCredential ?");
+  const configIndex = source.indexOf("apiKeyCredential ?", accessIndex);
+  assert.ok(accessIndex > 0 && configIndex > accessIndex);
 });
 
 test("removes vulnerable xlsx parsing and stale manual-required early exits", () => {

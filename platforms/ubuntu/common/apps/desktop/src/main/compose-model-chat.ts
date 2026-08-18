@@ -145,7 +145,6 @@ export interface MacModelChatCompositionDeps {
   appendDiagnosticsLog: (line: string) => Promise<unknown>;
   readGatewayBaseUrl: () => Promise<string>;
   readDesktopAuthState: () => Promise<Record<string, unknown> | null>;
-  resolveGatewayApiKeyFromSession: (sessionCookie: string) => Promise<string>;
   getActiveDesktopPreferences: () => Promise<{ personalization?: { autoSkillEnabled?: boolean } }>;
   defaultDesktopPreferences: { personalization?: { autoSkillEnabled?: boolean } };
   makeId: (prefix: string) => string;
@@ -280,9 +279,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
     }) => {
       const authState = await deps.readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState as never, "");
-      let bearerToken = authSelection.source === "session_gateway_key"
-        ? await deps.resolveGatewayApiKeyFromSession(authSelection.sessionCookie)
-        : authSelection.bearerToken;
+      let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
       }
@@ -507,9 +504,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       let baseUrl = await deps.readGatewayBaseUrl();
       const authState = await deps.readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState as never, "");
-      let bearerToken = authSelection.source === "session_gateway_key"
-        ? await deps.resolveGatewayApiKeyFromSession(authSelection.sessionCookie)
-        : authSelection.bearerToken;
+      let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
       }
