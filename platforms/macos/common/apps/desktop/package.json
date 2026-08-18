@@ -6,44 +6,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @codex-forge/protocol build",
     "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
-    "prebuild": "pnpm --filter @codex-forge/protocol build",
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "prepare:package-resources": "node build/prepare-package-resources.cjs",
     "package:mac": "node build/package-mac.cjs",
-    "package:mac:arm64": "node build/package-mac.cjs --arm64",
-    "package:mac:intel": "node build/package-mac.cjs --x64",
-    "package:mac:all": "node build/package-mac.cjs --all",
     "package:mac:dir": "node build/package-mac.cjs dir",
     "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
-    "test:main": "node --experimental-strip-types --test src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts",
+    "test:main": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts",
     "test:storage": "node --experimental-strip-types --test src/main/codex-storage.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts src/main/thread-message-reconciliation.test.ts",
     "test:package-resources": "node --test build/prepare-package-resources.test.cjs"
   },
   "dependencies": {
-    "@aiden0z/pptx-renderer": "1.2.4",
     "@codex-forge/protocol": "workspace:*",
     "@codex-forge/ui": "workspace:*",
-    "@napi-rs/canvas": "0.1.80",
-    "docx": "9.5.1",
-    "exceljs": "4.4.0",
-    "jszip": "3.10.1",
-    "katex": "^0.18.0",
-    "mammoth": "^1.12.0",
-    "mermaid": "^11.16.0",
-    "parse5": "7.3.0",
-    "pdf-parse": "^2.4.5",
-    "pdfjs-dist": "5.4.296",
-    "pdfkit": "0.17.2",
-    "pptxgenjs": "4.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-markdown": "^10.1.0",
-    "rehype-katex": "^7.0.1",
-    "remark-gfm": "^4.0.0",
-    "remark-math": "^6.0.0",
-    "saxes": "5.0.1"
+    "@uzen/kokoro-js": "1.2.4"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -69,10 +47,30 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "build/package-resources/codecn.config.json", "to": "codecn.config.json" },
-      { "from": "build/package-resources/codecn.features.json", "to": "codecn.features.json" },
-      { "from": "../../../codecn.bootstrap.json", "to": "codecn.bootstrap.json" },
-      { "from": "src/renderer/icon.ico", "to": "codecn.ico" }
+      {
+        "from": "build/package-resources/codecn.config.json",
+        "to": "codecn.config.json"
+      },
+      {
+        "from": "build/package-resources/codecn.features.json",
+        "to": "codecn.features.json"
+      },
+      {
+        "from": "../../../codecn.bootstrap.json",
+        "to": "codecn.bootstrap.json"
+      },
+      {
+        "from": "src/renderer/icon.ico",
+        "to": "codecn.ico"
+      },
+      {
+        "from": "build/plugins",
+        "to": "plugins"
+      },
+      {
+        "from": "resources/novel-tts",
+        "to": "novel-tts"
+      }
     ],
     "mac": {
       "icon": "build/icon.icns",

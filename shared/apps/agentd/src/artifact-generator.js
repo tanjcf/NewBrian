@@ -24,9 +24,34 @@ function rows(value) {
   return value.map((row) => Array.isArray(row) ? row.map((cell) => cell == null || ["string", "number", "boolean"].includes(typeof cell) ? (cell ?? "") : String(cell)) : []);
 }
 
+/** True when the text contains CJK ideographs (Chinese prose context). */
+export function containsCjkText(value) {
+  return /[\u3400-\u9fff\uf900-\ufaff]/u.test(String(value ?? ""));
+}
+
+/**
+ * Normalize ASCII straight double quotes to Chinese curly quotes in Chinese prose.
+ * Chat replies often already use “…”; Word tool payloads frequently still use "...".
+ * Leave English-only strings unchanged so code/identifiers keep ASCII quotes.
+ */
+export function localizeChineseDoubleQuotes(value) {
+  const source = String(value ?? "");
+  if (!source || !containsCjkText(source) || !source.includes('"')) return source;
+  let opening = true;
+  return source.replace(/"/g, () => {
+    const quote = opening ? "\u201c" : "\u201d";
+    opening = !opening;
+    return quote;
+  });
+}
+
+function localizeOfficeText(value) {
+  return localizeChineseDoubleQuotes(value);
+}
+
 /** Remove inline Markdown so office generators never print raw markers. */
 export function stripInlineMarkdown(value) {
-  return String(value ?? "")
+  return localizeOfficeText(String(value ?? "")
     .replace(/!\[[^\]]*]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
@@ -39,7 +64,7 @@ export function stripInlineMarkdown(value) {
     .replace(/^[ \t]*[-*_]{3,}[ \t]*$/gm, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim());
 }
 
 function decodeBasicEntities(value) {

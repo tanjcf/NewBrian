@@ -115,6 +115,12 @@ export function SidebarIcon({ name }: { name: string }) {
   if (name === "microphone") {
     return <svg {...common}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" /></svg>;
   }
+  if (name === "speaker") {
+    return <svg {...common}><path d="M4.5 9.5v5h3.2L12 18.5V5.5L7.7 9.5H4.5Z" /><path d="M15.2 9.2a3.4 3.4 0 0 1 0 5.6" /><path d="M17.4 7a6.2 6.2 0 0 1 0 10" /></svg>;
+  }
+  if (name === "stop") {
+    return <svg {...common}><rect x="6.5" y="6.5" width="11" height="11" rx="1.5" /></svg>;
+  }
   if (name === "hand") {
     return <svg {...common}><path d="M7.5 12.5V6.7a1.3 1.3 0 0 1 2.6 0v4.8" /><path d="M10.1 11V5.2a1.3 1.3 0 0 1 2.6 0V11" /><path d="M12.7 10.7V6.1a1.3 1.3 0 0 1 2.6 0v5.3" /><path d="M15.3 11.6V8.4a1.3 1.3 0 0 1 2.6 0v5.1c0 4.2-2.4 6.7-6.1 6.7h-.9a5.5 5.5 0 0 1-4.4-2.3l-2-2.8a1.4 1.4 0 0 1 2.2-1.7l1.2 1.4" /></svg>;
   }
@@ -195,6 +201,9 @@ export function SidebarIcon({ name }: { name: string }) {
   }
   if (name === "plugin-visualize") {
     return <svg {...common}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>;
+  }
+  if (name === "plugin-figma") {
+    return <svg {...common}><path d="M8 3h4a3 3 0 0 1 0 6H8V3Z" /><path d="M8 9h4a3 3 0 1 1 0 6H8V9Z" /><path d="M8 15h4a3 3 0 1 1-3 3v-3Z" /><circle cx="15" cy="12" r="3" /></svg>;
   }
   if (name === "copy") {
     return <svg {...common}><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></svg>;

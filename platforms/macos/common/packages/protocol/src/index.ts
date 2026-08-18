@@ -927,7 +927,10 @@ export const desktopIpcChannels = {
     openTool: "phase1:open-system-tool",
     openSkillLocation: "phase1:open-skill-location",
     openLogLocation: "phase1:open-log-location",
-    reportRendererFailure: "phase1:report-renderer-failure"
+    reportRendererFailure: "phase1:report-renderer-failure",
+    reportRendererDiagnostic: "phase1:report-renderer-diagnostic",
+    synthesizeNovelSpeech: "phase1:synthesize-novel-speech",
+    cancelNovelSpeech: "phase1:cancel-novel-speech"
   },
   usageExceptionFeedback: {
     createPreview: "phase1:create-usage-exception-feedback-preview",
@@ -1069,12 +1072,11 @@ export interface DesktopAuthChangePasswordInput { currentPassword: string; newPa
 export interface DesktopAuthChangeEmailInput { email: string; code: string }
 
 export interface GoalThreadInput { threadId?: string }
-export interface CreateGoalInput { objective: string; tokenBudget?: number; threadId: string }
+export interface CreateGoalInput { objective: string; tokenBudget?: number }
 export interface UpdateGoalInput {
   status: "complete" | "blocked";
   tokensUsed?: number;
   timeUsedSeconds?: number;
-  threadId: string;
 }
 export interface SetGoalPausedInput extends GoalThreadInput { paused: boolean }
 export interface UpdateGoalObjectiveInput extends GoalThreadInput { objective: string }
@@ -1317,6 +1319,32 @@ export interface RendererFailureInput {
   message: string;
   stackTrace?: string;
   context?: Record<string, unknown>;
+}
+
+/** Non-fatal renderer diagnostics. Must never trigger crash-restart behavior. */
+export interface RendererDiagnosticInput {
+  kind: string;
+  message: string;
+  stackTrace?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface SynthesizeNovelSpeechInput {
+  text: string;
+  voiceId: string;
+  voiceLabel?: string;
+}
+
+export interface SynthesizeNovelSpeechResult {
+  ok: boolean;
+  audioBase64?: string;
+  mimeType?: string;
+  detail?: string;
+  provider?: string;
+}
+
+export interface CancelNovelSpeechResult {
+  ok: boolean;
 }
 
 export interface CreateUsageExceptionFeedbackPreviewInput {

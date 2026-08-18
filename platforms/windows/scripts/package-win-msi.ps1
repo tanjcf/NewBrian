@@ -1,5 +1,7 @@
 param(
   [switch]$SkipBuild,
+  [ValidateSet("Test", "Production")]
+  [string]$Channel = "Test",
   # Transitional upgrade substitute package ("升级文件替代包"): emit {version}ulit.MSI
   [switch]$Ulit
 )
@@ -13,7 +15,7 @@ $electronVite = Join-Path $desktopRoot "node_modules\\electron-vite\\bin\\electr
 $electronBuilder = Join-Path $desktopRoot "node_modules\\electron-builder\\cli.js"
 $asarPackageRoot = Join-Path $repoRoot "node_modules\\@electron\\asar"
 if (-not (Test-Path -LiteralPath $asarPackageRoot)) {
-  $pnpmAsarPackage = Get-ChildItem -LiteralPath (Join-Path $repoRoot "node_modules\\.pnpm") -Directory -Filter "@electron+asar@*" |
+  $pnpmAsarPackage = Get-ChildItem -LiteralPath (Join-Path $repoRoot "node_modules\\.pnpm") -Directory -Filter "@electron+asar@*" -ErrorAction SilentlyContinue |
     Sort-Object Name -Descending |
     Select-Object -First 1
   if ($null -ne $pnpmAsarPackage) {
@@ -22,12 +24,15 @@ if (-not (Test-Path -LiteralPath $asarPackageRoot)) {
 }
 $asarCli = Join-Path $asarPackageRoot "bin\\asar.js"
 $desktopPackage = Get-Content (Join-Path $desktopRoot "package.json") -Raw | ConvertFrom-Json
+$isProduction = $Channel -eq "Production"
+$channelSlug = $Channel.ToLowerInvariant()
 $productName = $desktopPackage.name
 if ($null -ne $desktopPackage.build -and -not [string]::IsNullOrWhiteSpace($desktopPackage.build.productName)) {
   $productName = $desktopPackage.build.productName
 }
-$artifactName = "$productName $($desktopPackage.version).msi"
-$releaseRoot = Join-Path $desktopRoot "release"
+$builderArtifactName = "$productName $($desktopPackage.version).msi"
+$artifactName = if ($isProduction) { $builderArtifactName } else { "$productName $($desktopPackage.version)-test.msi" }
+$releaseRoot = Join-Path (Join-Path $desktopRoot "release") $channelSlug
 $msiOut = Join-Path $releaseRoot $artifactName
 $maxPackageAttempts = 3
 $msiInstallDir = $env:CODECN_MSI_INSTALL_DIR
@@ -37,7 +42,32 @@ $packageResourcesDir = Join-Path $desktopRoot "build\\package-resources"
 $packageConfigPath = Join-Path $packageResourcesDir "codecn.config.json"
 $packageFeatureConfigPath = Join-Path $packageResourcesDir "codecn.features.json"
 $iconPath = Join-Path $desktopRoot "build\icon.ico"
-$requireSignature = $env:CODECN_REQUIRE_SIGNATURE -eq "true"
+$gatewayBaseUrl = if ($isProduction) { $env:CODECN_PRODUCTION_GATEWAY_BASE_URL } else { $env:CODECN_TEST_GATEWAY_BASE_URL }
+$previewUrl = if ($isProduction) { $env:CODECN_PRODUCTION_PREVIEW_URL } else { $env:CODECN_TEST_PREVIEW_URL }
+if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
+  $gatewayBaseUrl = if ($isProduction) { "https://api.wangjietech.com/v1" } else { "https://test.wangjietech.com/v1" }
+}
+if ([string]::IsNullOrWhiteSpace($previewUrl)) {
+  $previewUrl = if ($isProduction) { "https://api.wangjietech.com" } else { "https://test.wangjietech.com" }
+}
+$requireSignature = $isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")
+
+foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
+  $endpointUri = $null
+  if (-not [Uri]::TryCreate($endpoint, [UriKind]::Absolute, [ref]$endpointUri) -or $endpointUri.Scheme -notin @("http", "https")) {
+    throw "Invalid $Channel endpoint: $endpoint"
+  }
+  if ($endpointUri.IsLoopback) {
+    throw "$Channel MSI endpoint must not use a loopback host: $endpoint"
+  }
+}
+
+if ($isProduction) {
+  $sourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $repoRoot } else { $env:CODECN_SOURCE_ROOT }
+  $gitStatus = @(& git -C $sourceRoot status --porcelain)
+  if ($LASTEXITCODE -ne 0) { throw "Unable to verify Git status for the production release." }
+  if ($gitStatus.Count -gt 0) { throw "Production release requires a clean Git worktree." }
+}
 
 if (-not (Test-Path -LiteralPath $electronVite)) {
   throw "Missing electron-vite at $electronVite. Install deps first (pnpm install in $repoRoot)."
@@ -54,6 +84,9 @@ if (-not (Test-Path -LiteralPath $iconPath)) {
 
 Write-Host "Repo root: $repoRoot" -ForegroundColor Cyan
 Write-Host "Desktop root: $desktopRoot" -ForegroundColor Cyan
+Write-Host "Release channel: $Channel" -ForegroundColor Cyan
+Write-Host "Gateway endpoint: $gatewayBaseUrl" -ForegroundColor Cyan
+Write-Host "Preview endpoint: $previewUrl" -ForegroundColor Cyan
 if ([string]::IsNullOrWhiteSpace($msiInstallDir)) {
   Write-Host "MSI install dir: electron-builder default" -ForegroundColor Cyan
 } else {
@@ -61,6 +94,32 @@ if ([string]::IsNullOrWhiteSpace($msiInstallDir)) {
 }
 
 Write-Host "Keeping installed codeCN processes running; packaging uses an isolated output directory." -ForegroundColor DarkGray
+
+# pnpm leaves optional-platform symlinks (esbuild/napi-rs/etc.) that point at missing
+# packages; @electron/rebuild stats them and aborts. Drop dangling links before packaging.
+$danglingSweepRoots = @(
+  (Join-Path $repoRoot "node_modules"),
+  (Join-Path $desktopRoot "node_modules")
+)
+$danglingRemoved = 0
+foreach ($sweepRoot in $danglingSweepRoots) {
+  if (-not (Test-Path -LiteralPath $sweepRoot)) { continue }
+  Get-ChildItem -LiteralPath $sweepRoot -Force -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
+    ForEach-Object {
+      try {
+        if (-not (Test-Path -LiteralPath $_.FullName)) {
+          Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+          $danglingRemoved += 1
+        }
+      } catch {
+        # ignore locked / racing entries
+      }
+    }
+}
+if ($danglingRemoved -gt 0) {
+  Write-Host "Removed $danglingRemoved dangling node_modules symlink(s) before packaging." -ForegroundColor DarkGray
+}
 
 if (-not $SkipBuild) {
   Write-Host "Building desktop (electron-vite)..." -ForegroundColor Green
@@ -90,6 +149,19 @@ if ($desktopMainText -notmatch "Get-Process -Name") {
 }
 Write-Host "Verified desktop update wait loop in out/main/index.js." -ForegroundColor DarkGray
 
+# Protocol channels must be present as concrete strings. Undefined channels register as
+# ipcMain.handle(undefined) and leave the installed app process alive but UI-dead.
+$requiredIpcChannels = @(
+  "phase1:report-renderer-diagnostic",
+  "phase1:synthesize-novel-speech"
+)
+foreach ($ipcChannel in $requiredIpcChannels) {
+  if ($desktopMainText -notmatch [regex]::Escape($ipcChannel)) {
+    throw "Desktop main bundle is missing IPC channel '$ipcChannel'. Rebuild windows/packages/protocol before packaging."
+  }
+}
+Write-Host "Verified required system IPC channels in out/main/index.js." -ForegroundColor DarkGray
+
 Write-Host "Packaging MSI (electron-builder)..." -ForegroundColor Green
 $generatedMsi = $null
 $builderOut = $null
@@ -102,7 +174,7 @@ try {
     $packageConfig = [ordered]@{
       llm = [ordered]@{
         provider = "DeepSeek"
-        baseUrl = "http://120.48.151.202:8790/v1" # MSI production endpoint; dev config remains local.
+        baseUrl = $gatewayBaseUrl
         apiKey = ""
         wireApi = "responses"
         model = "auto"
@@ -128,27 +200,23 @@ try {
           autoOpenPreview = $true
           preserveTabs = $true
           highResScreenshots = $false
-          previewUrl = "http://120.48.151.202:3000"
+          previewUrl = $previewUrl
         }
       }
       mcpServers = @()
       mcpDiscoveredTools = @()
     }
     $packageConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $packageConfigPath -Encoding UTF8
-    # MSI production host rewrite: never ship loopback endpoints in packaged config.
+    # Packaged MSI configuration must never inherit local developer endpoints.
     $serializedPackageConfig = [System.IO.File]::ReadAllText($packageConfigPath)
-    $serializedPackageConfig = $serializedPackageConfig.Replace("127.0.0.1", "120.48.151.202")
     [System.IO.File]::WriteAllText($packageConfigPath, $serializedPackageConfig, [System.Text.UTF8Encoding]::new($false))
-    if ($serializedPackageConfig -match "127\.0\.0\.1") {
-      throw "Packaged configuration still contains 127.0.0.1 after production host rewrite."
-    }
-    if ($serializedPackageConfig -notmatch "120\.48\.151\.202:8790" -or $serializedPackageConfig -notmatch "120\.48\.151\.202:3000") {
-      throw "Packaged configuration missing required production endpoints 8790/3000."
+    if ($serializedPackageConfig -notmatch [regex]::Escape($gatewayBaseUrl) -or $serializedPackageConfig -notmatch [regex]::Escape($previewUrl)) {
+      throw "Packaged configuration is missing the selected $Channel endpoints."
     }
     if ($serializedPackageConfig -match '"apiKey"\s*:\s*"(?!")' -or $serializedPackageConfig -match '"extraEnv"\s*:\s*\{\s*"') {
       throw "Packaged configuration contains credentials or environment variables."
     }
-    Write-Host "Generated packaged config with production host 120.48.151.202 (8790/3000)" -ForegroundColor DarkGray
+    Write-Host "Generated sanitized $Channel packaged configuration." -ForegroundColor DarkGray
   } else {
     throw "Missing config source: $rootConfigPath"
   }
@@ -180,7 +248,7 @@ try {
   $featureConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $packageFeatureConfigPath -Encoding UTF8
   Write-Host "Sanitized packaged features: wrote portable builtin feature config" -ForegroundColor DarkGray
 
-  # Rewrite loopback hosts inside compiled desktop bundles before electron-builder packs them.
+  # Rewrite compiled endpoint defaults to the selected channel before packaging.
   $outRoot = Join-Path $desktopRoot "out"
   if (Test-Path -LiteralPath $outRoot) {
     $rewrittenFiles = 0
@@ -190,13 +258,16 @@ try {
         $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
         $utf8 = [System.Text.Encoding]::UTF8
         $text = $utf8.GetString($bytes)
-        if ($text.Contains("127.0.0.1")) {
-          $updated = $text.Replace("127.0.0.1", "120.48.151.202")
+        if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202")) {
+          $updated = $text.Replace("http://127.0.0.1:8790/v1", $gatewayBaseUrl).
+            Replace("http://120.48.151.202:8790/v1", $gatewayBaseUrl).
+            Replace("http://127.0.0.1:3000", $previewUrl).
+            Replace("http://120.48.151.202:3000", $previewUrl)
           [System.IO.File]::WriteAllText($_.FullName, $updated, [System.Text.UTF8Encoding]::new($false))
           $rewrittenFiles += 1
         }
       }
-    Write-Host ("Rewrote loopback host 127.0.0.1 -> 120.48.151.202 in {0} out/ file(s)" -f $rewrittenFiles) -ForegroundColor DarkGray
+    Write-Host ("Rewrote local defaults for the {0} channel in {1} out/ file(s)" -f $Channel, $rewrittenFiles) -ForegroundColor DarkGray
   }
   for ($attempt = 1; $attempt -le $maxPackageAttempts; $attempt++) {
     $builderRunId = "{0}-{1}" -f $PID, $attempt
@@ -214,7 +285,7 @@ try {
       if (-not [string]::IsNullOrWhiteSpace($msiInstallDir)) {
         $env:CODECN_MSI_INSTALL_DIR = $msiInstallDir
       }
-      $dirArgs = @("--win", "dir", "--config.directories.output=$builderOutRel")
+      $dirArgs = @("--win", "dir", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
       if (-not $requireSignature) { $dirArgs += "--config.win.signAndEditExecutable=false" }
       & node $electronBuilder @dirArgs
       $lastBuilderExit = $LASTEXITCODE
@@ -284,7 +355,7 @@ process.stdout.write(asar.extractFile(archive, file));
 
         Write-Host "Verified packaged codeCN executable and icon resource." -ForegroundColor DarkGray
 
-        $msiArgs = @("--win", "msi", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel")
+        $msiArgs = @("--win", "msi", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
         if (-not $requireSignature) { $msiArgs += "--config.win.signAndEditExecutable=false" }
         & node $electronBuilder @msiArgs
         $lastBuilderExit = $LASTEXITCODE
@@ -295,7 +366,7 @@ process.stdout.write(asar.extractFile(archive, file));
     }
 
     if ($lastBuilderExit -eq 0) {
-      $generatedMsi = Join-Path $builderOut $artifactName
+      $generatedMsi = Join-Path $builderOut $builderArtifactName
       if (-not (Test-Path -LiteralPath $generatedMsi)) {
         $fallbackArtifact = Get-ChildItem -LiteralPath $builderOut -Filter "*.msi" -File -Recurse |
           Sort-Object LastWriteTime -Descending |
@@ -325,7 +396,7 @@ if (Test-Path -LiteralPath $generatedMsi) {
   try {
     Copy-Item -LiteralPath $generatedMsi -Destination $msiOut -Force
   } catch {
-    $timestampedName = "{0} {1}-{2}.msi" -f $productName, $desktopPackage.version, (Get-Date -Format "yyyyMMdd-HHmmss")
+    $timestampedName = "{0} {1}-{2}-{3}.msi" -f $productName, $desktopPackage.version, $channelSlug, (Get-Date -Format "yyyyMMdd-HHmmss")
     $msiOut = Join-Path $releaseRoot $timestampedName
     Copy-Item -LiteralPath $generatedMsi -Destination $msiOut -Force
     Write-Host "Default MSI path was locked; wrote timestamped artifact instead." -ForegroundColor Yellow
@@ -338,14 +409,14 @@ if (Test-Path -LiteralPath $generatedMsi) {
     throw "MSI signature gate failed: $($signature.Status). Configure a signing certificate before release."
   }
   if (-not $requireSignature -and $signature.Status -ne "Valid") {
-    $unsignedPath = Join-Path $releaseRoot ("{0} {1}-unsigned.msi" -f $productName, $desktopPackage.version)
+    $unsignedPath = Join-Path $releaseRoot ("{0} {1}-test-unsigned.msi" -f $productName, $desktopPackage.version)
     try {
       if (Test-Path -LiteralPath $unsignedPath) {
         Remove-Item -LiteralPath $unsignedPath -Force -ErrorAction Stop
       }
       Move-Item -LiteralPath $msiOut -Destination $unsignedPath -ErrorAction Stop
     } catch {
-      $unsignedPath = Join-Path $releaseRoot ("{0} {1}-unsigned-{2}.msi" -f $productName, $desktopPackage.version, (Get-Date -Format "yyyyMMdd-HHmmss"))
+      $unsignedPath = Join-Path $releaseRoot ("{0} {1}-test-unsigned-{2}.msi" -f $productName, $desktopPackage.version, (Get-Date -Format "yyyyMMdd-HHmmss"))
       Move-Item -LiteralPath $msiOut -Destination $unsignedPath -ErrorAction Stop
       Write-Host "Default unsigned MSI path was locked; wrote timestamped artifact instead." -ForegroundColor Yellow
     }

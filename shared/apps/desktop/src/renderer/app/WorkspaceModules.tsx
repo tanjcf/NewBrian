@@ -3,6 +3,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PreviewPlacement } from "./desktop-model";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { NovelTtsButton } from "./NovelTtsButton";
+import { AssistantThinkingPanel } from "./AssistantThinkingPanel";
+import {
+  artifactPathsReferToSameFile,
+  buildFilePreviewDiagnosticContext,
+  classifyArtifactPreviewPayload,
+  classifyFilePreviewError,
+  classifyTextPreviewPayload,
+  FILE_PREVIEW_MAX_ATTEMPTS,
+  filePreviewRetryDelayMs,
+  findMatchingArtifactTab,
+  formatFilePreviewStatus,
+  isReusableArtifactPreview,
+  isStaleFilePreviewRequest,
+  type FilePreviewIssue
+} from "./file-preview-policy";
 import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
@@ -217,6 +233,7 @@ function builtinPluginIcon(packageName: string) {
   if (packageName === "browser" || packageName === "sites") return "plugin-browser";
   if (packageName === "computer") return "computer";
   if (packageName === "visualize") return "plugin-visualize";
+  if (packageName === "figma") return "plugin-figma";
   return "tool";
 }
 
@@ -297,6 +314,102 @@ export function WorkspaceModules(ctx: any) {
   const [dismissedAppUpdateVersion, setDismissedAppUpdateVersion] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<any>(null);
   const [artifactTabs, setArtifactTabs] = useState<any[]>([]);
+  const artifactTabsRef = useRef<any[]>([]);
+  useEffect(() => {
+    artifactTabsRef.current = artifactTabs;
+  }, [artifactTabs]);
+  const [ttsFollow, setTtsFollow] = useState<null | {
+    scope: "preview" | "message";
+    messageId?: string;
+    line: number;
+    endLine: number;
+    totalLines: number;
+    snippet: string;
+  }>(null);
+  const ttsFollowScrollKeyRef = useRef("");
+  const scrollTtsFollowIntoView = useCallback((follow: {
+    scope: "preview" | "message";
+    messageId?: string;
+    line: number;
+    totalLines: number;
+  }) => {
+    const scrollKey = `${follow.scope}:${follow.messageId || ""}:${follow.line}`;
+    if (ttsFollowScrollKeyRef.current === scrollKey) return;
+    ttsFollowScrollKeyRef.current = scrollKey;
+    if (follow.scope === "preview") {
+      const el = document.querySelector(`.search-file-preview [data-preview-line="${follow.line}"]`);
+      if (!(el instanceof HTMLElement)) return;
+      const scroller = el.closest("pre");
+      if (scroller instanceof HTMLElement) {
+        const elRect = el.getBoundingClientRect();
+        const scrollerRect = scroller.getBoundingClientRect();
+        const nextTop = elRect.top - scrollerRect.top - scroller.clientHeight * 0.35 + scroller.scrollTop;
+        scroller.scrollTop = Math.max(0, nextTop);
+        return;
+      }
+      el.scrollIntoView({ block: "center", behavior: "auto" });
+      return;
+    }
+    if (!follow.messageId) return;
+    const article = document.querySelector(`[data-tts-message="${follow.messageId}"]`);
+    if (!(article instanceof HTMLElement)) return;
+    const scroller = article.closest(".project-chat-scroll");
+    if (scroller instanceof HTMLElement) {
+      const ratio = Math.min(1, Math.max(0, (follow.line - 1) / Math.max(1, follow.totalLines)));
+      const articleTop = article.offsetTop;
+      const targetY = articleTop + article.offsetHeight * ratio - scroller.clientHeight * 0.35;
+      scroller.scrollTop = Math.max(0, targetY);
+      return;
+    }
+    article.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }, []);
+  useEffect(() => {
+    if (!ttsFollow) {
+      ttsFollowScrollKeyRef.current = "";
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      scrollTtsFollowIntoView(ttsFollow);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [ttsFollow, scrollTtsFollowIntoView]);
+  const applyTtsFollow = useCallback((
+    scope: "preview" | "message",
+    messageId: string | undefined,
+    target: { line: number; endLine: number; totalLines?: number; snippet: string } | null
+  ) => {
+    if (!target) {
+      setTtsFollow((current) =>
+        current
+        && current.scope === scope
+        && (scope !== "message" || current.messageId === messageId)
+          ? null
+          : current
+      );
+      return;
+    }
+    setTtsFollow((current) => {
+      const next = {
+        scope,
+        messageId,
+        line: target.line,
+        endLine: target.endLine,
+        totalLines: Math.max(1, target.totalLines || target.endLine || target.line),
+        snippet: target.snippet
+      };
+      if (
+        current
+        && current.scope === next.scope
+        && current.messageId === next.messageId
+        && current.line === next.line
+        && current.endLine === next.endLine
+        && current.snippet === next.snippet
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }, []);
   const [htmlPreviewRefreshToken, setHtmlPreviewRefreshToken] = useState(0);
   const [blankProjectDialogOpen, setBlankProjectDialogOpen] = useState(false);
   const [blankProjectName, setBlankProjectName] = useState("New project");
@@ -1387,40 +1500,191 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     activeArtifactPathRef.current = searchFilePreview?.tabPath || searchFilePreview?.path || "";
   }, [searchFilePreview]);
-  const openLocalFilePreview = useCallback((filePath: string, location?: { line?: number; endLine?: number; column?: number }) => {
-    const workspaceId = selectedWorkspace?.id;
-    if (!api || !workspaceId || !filePath) return;
+  const reportFilePreviewIssue = useCallback(async (input: {
+    filePath: string;
+    workspaceId?: string;
+    issue: FilePreviewIssue;
+    attempt: number;
+    artifact: boolean;
+    size?: number;
+    binary?: boolean;
+  }) => {
+    const context = buildFilePreviewDiagnosticContext({
+      workspaceId: input.workspaceId,
+      filePath: input.filePath,
+      reason: input.issue.reason,
+      attempt: input.attempt,
+      artifact: input.artifact,
+      size: input.size,
+      binary: input.binary,
+      errorMessage: input.issue.message
+    });
+    console.error("[file-preview]", input.issue.reason, context);
+    let reportId = "";
+    try {
+      const result = await api?.reportRendererDiagnostic?.({
+        kind: `file_preview_${input.issue.reason}`,
+        message: input.issue.message,
+        context
+      });
+      reportId = result?.id || "";
+    } catch (error) {
+      console.error("[file-preview] diagnostic report failed", error);
+    }
+    setChatStatus(formatFilePreviewStatus(input.issue, reportId || undefined));
+    return reportId;
+  }, [api, setChatStatus]);
+  const openLocalFilePreview = useCallback((filePath: string, location?: { line?: number; endLine?: number; column?: number; workspaceId?: string }) => {
+    const workspaceId = location?.workspaceId || selectedWorkspace?.id;
+    if (!api || !workspaceId || !filePath) {
+      const issue: FilePreviewIssue = {
+        ok: false,
+        reason: "no_workspace",
+        retryable: false,
+        message: !filePath ? "缺少文件路径，无法预览。" : "当前工作区不可用，无法预览文件。"
+      };
+      void reportFilePreviewIssue({ filePath: filePath || "", workspaceId, issue, attempt: 1, artifact: false });
+      return;
+    }
     setActiveFeature("new-chat");
     setIsComposingNewThread(false);
-    setActiveTreePath(filePath);
     setPreviewMode("workspace");
     setPreviewPlacement("side");
-    const loadingTab = { tabPath: filePath, path: filePath, name: filePath.split(/[\\/]/).pop() || filePath, loading: true, ...location };
-    activeArtifactPathRef.current = filePath;
-    setArtifactTabs((tabs) => tabs.some((tab) => tab.tabPath === filePath) ? tabs : [...tabs, loadingTab]);
+    const existing = findMatchingArtifactTab(artifactTabsRef.current, filePath);
+    if (existing && isReusableArtifactPreview(existing) && !location?.line) {
+      activeArtifactPathRef.current = existing.tabPath;
+      setActiveTreePath(existing.path || existing.tabPath);
+      setSearchFilePreview(existing);
+      return;
+    }
+    const existingPath = String(existing?.path || existing?.tabPath || "");
+    const requestedHasDir = /[\\/]/.test(filePath) || /^[a-zA-Z]:/.test(filePath);
+    const existingHasDir = /[\\/]/.test(existingPath);
+    const openPath = requestedHasDir || !existingHasDir ? filePath : existingPath || filePath;
+    const tabKey = String(existing?.tabPath || openPath || filePath);
+    const loadingTab = {
+      tabPath: tabKey,
+      path: openPath,
+      name: openPath.split(/[\\/]/).pop() || openPath,
+      loading: true,
+      error: undefined,
+      blankReason: undefined,
+      ...location
+    };
+    activeArtifactPathRef.current = tabKey;
+    setActiveTreePath(openPath);
+    setArtifactTabs((tabs) => {
+      const matched = findMatchingArtifactTab(tabs, filePath) || findMatchingArtifactTab(tabs, tabKey);
+      if (matched) {
+        return tabs.map((tab) => (tab === matched || tab.tabPath === matched.tabPath ? { ...tab, ...loadingTab } : tab));
+      }
+      return [...tabs, loadingTab];
+    });
     setSearchFilePreview(loadingTab);
     const requestSequence = ++filePreviewRequestSequence.current;
-    const artifact = /\.(pdf|docx|pptx|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi)$/i.test(filePath);
-    const request = artifact ? api.previewWorkspaceFile({ workspaceId, filePath }) : api.readWorkspaceFile({ workspaceId, filePath });
-    void request
-      .then((file: any) => {
-        const loadedTab = { ...file, tabPath: filePath, loading: false, ...location };
-        setArtifactTabs((tabs) => tabs.map((tab) => tab.tabPath === filePath ? loadedTab : tab));
-        if (activeArtifactPathRef.current !== filePath || requestSequence > filePreviewRequestSequence.current) return;
-        setActiveTreePath(file.path || filePath);
-        setSearchFilePreview(loadedTab);
-        if (location?.line) window.requestAnimationFrame(() => document.querySelector(`[data-preview-line="${location.line}"]`)?.scrollIntoView({ block: "center" }));
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        setArtifactTabs((tabs) => tabs.map((tab) => tab.tabPath === filePath ? { ...tab, loading: false, error: message } : tab));
-        if (activeArtifactPathRef.current === filePath) setSearchFilePreview((tab: any) => ({ ...tab, loading: false, error: message }));
-        // A generated artifact may exist on disk even when the in-app parser
-        // cannot preview it. Fall back to the native file opener so a click is
-        // never silently ignored.
-        void api.openWorkspaceFile({ workspaceId, filePath }).catch(() => undefined);
+    const requestPath = openPath;
+    const requestTabKey = tabKey;
+    const artifact = /\.(pdf|docx|pptx|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi)$/i.test(requestPath);
+    const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const stillActiveForRequest = () => {
+      const active = String(activeArtifactPathRef.current || "");
+      return artifactPathsReferToSameFile(active, requestPath)
+        || artifactPathsReferToSameFile(active, requestTabKey)
+        || artifactPathsReferToSameFile(active, filePath);
+    };
+    void (async () => {
+      let lastIssue: FilePreviewIssue | null = null;
+      let lastFile: any = null;
+      for (let attempt = 1; attempt <= FILE_PREVIEW_MAX_ATTEMPTS; attempt += 1) {
+        if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current)) return;
+        try {
+          const file = artifact
+            ? await api.previewWorkspaceFile({ workspaceId, filePath: requestPath })
+            : await api.readWorkspaceFile({ workspaceId, filePath: requestPath });
+          lastFile = file;
+          const diagnosis = artifact ? classifyArtifactPreviewPayload(file) : classifyTextPreviewPayload(file);
+          if (diagnosis.ok) {
+            if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current) || !stillActiveForRequest()) return;
+            const canonicalPath = String(file.path || requestPath);
+            const loadedTab = {
+              ...file,
+              tabPath: canonicalPath,
+              loading: false,
+              error: undefined,
+              blankReason: undefined,
+              diagnosticId: undefined,
+              ...location
+            };
+            activeArtifactPathRef.current = canonicalPath;
+            setArtifactTabs((tabs) => {
+              const next = tabs.filter((tab) =>
+                !artifactPathsReferToSameFile(String(tab.tabPath || ""), canonicalPath)
+                && !artifactPathsReferToSameFile(String(tab.path || ""), canonicalPath)
+                && !artifactPathsReferToSameFile(String(tab.tabPath || ""), requestTabKey)
+                && !artifactPathsReferToSameFile(String(tab.tabPath || ""), requestPath)
+                && !artifactPathsReferToSameFile(String(tab.tabPath || ""), filePath)
+              );
+              return [...next, loadedTab];
+            });
+            setActiveTreePath(canonicalPath);
+            setSearchFilePreview(loadedTab);
+            if (location?.line) window.requestAnimationFrame(() => document.querySelector(`[data-preview-line="${location.line}"]`)?.scrollIntoView({ block: "center" }));
+            return;
+          }
+          lastIssue = diagnosis;
+          if (!diagnosis.retryable || attempt === FILE_PREVIEW_MAX_ATTEMPTS) break;
+          await sleep(filePreviewRetryDelayMs(attempt));
+          continue;
+        } catch (error) {
+          lastIssue = classifyFilePreviewError(error);
+          if (!lastIssue.retryable || attempt === FILE_PREVIEW_MAX_ATTEMPTS) break;
+          await sleep(filePreviewRetryDelayMs(attempt));
+        }
+      }
+      if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current) || !stillActiveForRequest()) return;
+      const issue = lastIssue || {
+        ok: false as const,
+        reason: "read_failed" as const,
+        retryable: false,
+        message: "文件预览失败。"
+      };
+      const reportId = await reportFilePreviewIssue({
+        filePath: requestPath,
+        workspaceId,
+        issue,
+        attempt: FILE_PREVIEW_MAX_ATTEMPTS,
+        artifact,
+        size: lastFile?.size,
+        binary: lastFile?.binary
       });
-  }, [api, selectedWorkspace?.id]);
+      const failedTab = {
+        ...(lastFile || {}),
+        tabPath: requestTabKey,
+        path: lastFile?.path || requestPath,
+        name: lastFile?.name || requestPath.split(/[\\/]/).pop() || requestPath,
+        loading: false,
+        error: issue.message,
+        blankReason: issue.reason,
+        diagnosticId: reportId,
+        content: lastFile?.content ?? "",
+        binary: lastFile?.binary,
+        size: lastFile?.size,
+        ...location
+      };
+      setArtifactTabs((tabs) => {
+        const matched = findMatchingArtifactTab(tabs, requestTabKey)
+          || findMatchingArtifactTab(tabs, requestPath)
+          || findMatchingArtifactTab(tabs, filePath);
+        if (!matched) return [...tabs, failedTab];
+        return tabs.map((tab) => (tab === matched || tab.tabPath === matched.tabPath ? failedTab : tab));
+      });
+      setSearchFilePreview(failedTab);
+      if (issue.reason === "preview_unsupported" || issue.reason === "binary_file" || issue.reason === "read_failed") {
+        void api.openWorkspaceFile({ workspaceId, filePath: requestPath }).catch(() => undefined);
+      }
+    })();
+  }, [api, reportFilePreviewIssue, selectedWorkspace?.id, setActiveFeature, setActiveTreePath, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview]);
+
   useEffect(() => {
     if (!api?.onOpenWorkspaceFilePreview) return;
     return api.onOpenWorkspaceFilePreview((event) => {
@@ -3835,18 +4099,17 @@ function renderChatModule() {
                           : snapshot?.approval && index === conversationTurns.length - 1 ? "等待批准" : "已处理"} ${index === conversationTurns.length - 1 && lastAssistantElapsedSeconds ? formatElapsed(lastAssistantElapsedSeconds) : formatRelativeTimeLabel(turn.assistant?.createdAt || turn.user?.createdAt)}`}</span>
                       <span>›</span>
                     </div>
-                    {!isLiveTurn && (
-                      detailsExpanded
-                    ) && turn.assistant.reasoningSummary?.trim() ? (
-                      <div className="assistant-reasoning-summary" data-testid="reasoning-summary">
-                        <MarkdownMessage
-                          content={buildLiveReasoningProcess(turn.assistant.reasoningSummary)}
-                          workspaceId={selectedWorkspace?.id}
-                          onOpenLocalFile={openLocalFilePreview}
+                    {!isLiveTurn && turn.assistant.reasoningSummary?.trim() ? (
+                      <div data-testid="reasoning-summary">
+                        <AssistantThinkingPanel
+                          text={buildLiveReasoningProcess(turn.assistant.reasoningSummary)}
+                          live={false}
+                          hasAnswer={Boolean(sanitizeVisibleModelContent(turn.assistant.content).trim())}
+                          statusLabel="思考过程"
                         />
                       </div>
                     ) : null}
-                    {!isLiveTurn && detailsExpanded && ((turn.tools?.length ?? 0) > 0 || turnDetailPanelActivities.length > 0 || turn.assistant.reasoningSummary?.trim()) ? (
+                    {!isLiveTurn && detailsExpanded && ((turn.tools?.length ?? 0) > 0 || turnDetailPanelActivities.length > 0) ? (
                       <div className="assistant-activity-panel compact">
                         <div className="assistant-activity-summary">
                           <span>
@@ -3876,9 +4139,8 @@ function renderChatModule() {
                         </div>
                       </div>
                     ) : null}
-                    {isLiveTurn && detailsExpanded && !effectiveApproval ? (
+                    {isLiveTurn && !effectiveApproval ? (
                       <div className="assistant-live-progress">
-                        <div className="assistant-thinking-row">{approvalResponding ? "正在继续执行" : "正在思考"}{liveElapsedSeconds ? ` ${formatElapsed(liveElapsedSeconds)}` : ""}</div>
                         {(() => {
                           const liveAnswer = sanitizeVisibleModelContent(activeStreamContent || turn.assistant.content);
                           const planningFallback = activeStreamContent.trim() && !liveAnswer
@@ -3891,21 +4153,15 @@ function renderChatModule() {
                           );
                           const processSteps = formatLiveProcessSteps(dedupedAssistantActivities);
                           return (
-                            <div className="assistant-reasoning-summary live" data-testid="reasoning-summary-live">
-                              <div className="assistant-live-thinking-text" data-testid="reasoning-summary-text">
-                                {liveThinking}
-                              </div>
-                              {processSteps.length ? (
-                                <div className="assistant-live-process-list" data-testid="reasoning-process-list">
-                                  {processSteps.map((step, stepIndex) => (
-                                    <div className="assistant-live-process-item" key={`live-process-${step.title}-${stepIndex}`}>
-                                      <strong>{step.title}</strong>
-                                      {step.detail ? <span>{step.detail}</span> : null}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
+                            <AssistantThinkingPanel
+                              text={liveThinking}
+                              processSteps={processSteps}
+                              live
+                              hasAnswer={Boolean(liveAnswer.trim())}
+                              statusLabel={approvalResponding ? "正在继续执行" : (liveAnswer.trim() ? "思考过程" : "正在思考")}
+                              elapsedLabel={liveElapsedSeconds ? formatElapsed(liveElapsedSeconds) : ""}
+                              testId="reasoning-summary-live"
+                            />
                           );
                         })()}
                       </div>
@@ -3971,8 +4227,9 @@ function renderChatModule() {
                           : "本轮没有生成可见回复。请再发一条消息继续，或重新描述你的需求。");
                       return (
                     <article
-                      className="assistant-block"
+                      className={`assistant-block${ttsFollow?.scope === "message" && ttsFollow.messageId === turn.assistant.id ? " tts-following" : ""}`}
                       data-message-id={turn.assistant.id}
+                      data-tts-message={turn.assistant.id}
                       data-content-length={turn.assistant.content.length}
                       data-rendered-content-length={displayContent.length}
                       data-empty-fallback={!renderedContent.trim() ? "true" : undefined}
@@ -4022,6 +4279,16 @@ function renderChatModule() {
                         >
                           <SidebarIcon name="copy" />
                         </button>
+                        <NovelTtsButton
+                          className="message-action-tts"
+                          disabled={turn.assistant.id === "assistant-pending"}
+                          text={sanitizeVisibleModelContent(turn.assistant.content)}
+                          sourceText={sanitizeVisibleModelContent(turn.assistant.content)}
+                          synthesizer={api?.synthesizeNovelSpeech}
+                          canceller={api?.cancelNovelSpeech}
+                          onStatus={setChatStatus}
+                          onFollow={(target) => applyTtsFollow("message", turn.assistant!.id, target)}
+                        />
                       </div>
                     </article>
                       );
@@ -4051,7 +4318,6 @@ function renderChatModule() {
                       <span>›</span>
                     </div>
                     <div className="assistant-live-progress">
-                      <div className="assistant-thinking-row">正在思考{liveElapsedSeconds ? ` ${formatElapsed(liveElapsedSeconds)}` : ""}</div>
                       {(() => {
                         const liveAnswer = sanitizeVisibleModelContent(activeStreamContent);
                         const planningFallback = activeStreamContent.trim() && !liveAnswer
@@ -4064,21 +4330,15 @@ function renderChatModule() {
                         );
                         const processSteps = formatLiveProcessSteps(visibleAssistantActivities);
                         return (
-                          <div className="assistant-reasoning-summary live" data-testid="reasoning-summary-live">
-                            <div className="assistant-live-thinking-text" data-testid="reasoning-summary-text">
-                              {liveThinking}
-                            </div>
-                            {processSteps.length ? (
-                              <div className="assistant-live-process-list" data-testid="reasoning-process-list">
-                                {processSteps.map((step, stepIndex) => (
-                                  <div className="assistant-live-process-item" key={`pending-process-${step.title}-${stepIndex}`}>
-                                    <strong>{step.title}</strong>
-                                    {step.detail ? <span>{step.detail}</span> : null}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
+                          <AssistantThinkingPanel
+                            text={liveThinking}
+                            processSteps={processSteps}
+                            live
+                            hasAnswer={Boolean(liveAnswer.trim())}
+                            statusLabel={liveAnswer.trim() ? "思考过程" : "正在思考"}
+                            elapsedLabel={liveElapsedSeconds ? formatElapsed(liveElapsedSeconds) : ""}
+                            testId="reasoning-summary-live"
+                          />
                         );
                       })()}
                     </div>
@@ -4441,7 +4701,18 @@ function renderChatModule() {
           </div>
         ) : null}
 
-        {renderComposerPortal(<footer className={`composer-area${isNewChatMode ? " new-chat-composer" : ""}${composerImages.length ? " has-images" : ""}`}>
+        {renderComposerPortal(<footer className={`composer-area${isNewChatMode ? " new-chat-composer" : ""}${composerImages.length ? " has-images" : ""}${ttsFollow ? " has-tts-follow" : ""}`}>
+          {ttsFollow ? (
+            <div className="novel-tts-follow-cue novel-tts-follow-cue--dock" data-tts-follow={ttsFollow.messageId || "preview"} aria-live="polite">
+              <strong>正在朗读</strong>
+              <span>
+                {ttsFollow.scope === "preview" ? "预览" : "消息"}
+                {" · "}
+                第 {ttsFollow.line}{ttsFollow.endLine !== ttsFollow.line ? `–${ttsFollow.endLine}` : ""} 行
+              </span>
+              {ttsFollow.snippet ? <em>{ttsFollow.snippet}</em> : null}
+            </div>
+          ) : null}
           {showJumpToLatest ? (
             <button
               type="button"
@@ -5083,6 +5354,17 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 <span>{searchFilePreview.path}</span>
               </div>
               <div className="artifact-file-actions">
+                {!searchFilePreview.loading && !searchFilePreview.error && !searchFilePreview.binary ? (
+                  <NovelTtsButton
+                    className="artifact-tts"
+                    text={String(searchFilePreview.content || "")}
+                    sourceText={String(searchFilePreview.content || "")}
+                    synthesizer={api?.synthesizeNovelSpeech}
+                    canceller={api?.cancelNovelSpeech}
+                    onStatus={setChatStatus}
+                    onFollow={(target) => applyTtsFollow("preview", undefined, target)}
+                  />
+                ) : null}
                 {!searchFilePreview.loading && !searchFilePreview.error ? (
                   <em>{String(searchFilePreview.kind || searchFilePreview.language || "FILE").toUpperCase()} · {Math.max(1, Math.ceil(searchFilePreview.size / 1024))} KB</em>
                 ) : null}
@@ -5155,8 +5437,13 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             </header>
             {searchFilePreview.loading ? (
               <div className="search-file-preview-state">正在读取文件...</div>
-            ) : searchFilePreview.error ? (
-              <div className="search-file-preview-state error">{searchFilePreview.error}</div>
+            ) : searchFilePreview.error || searchFilePreview.blankReason || (!searchFilePreview.binary && !searchFilePreview.kind && !String(searchFilePreview.content || "").length && !searchFilePreview.loading) ? (
+              <div className="search-file-preview-state error" data-testid="file-preview-blank-state">
+                <strong>{searchFilePreview.error || "预览内容为空"}</strong>
+                {searchFilePreview.blankReason ? <span>原因代码：{searchFilePreview.blankReason}</span> : null}
+                {searchFilePreview.diagnosticId ? <span>诊断编号：{searchFilePreview.diagnosticId}</span> : null}
+                <button type="button" className="artifact-retry-button" onClick={() => openLocalFilePreview(searchFilePreview.tabPath || searchFilePreview.path, searchFilePreview.line ? { line: searchFilePreview.line, endLine: searchFilePreview.endLine } : undefined)}>重试预览</button>
+              </div>
             ) : searchFilePreview.kind === "pdf" ? (
               <WorkspacePdfViewer dataUrl={searchFilePreview.dataUrl} />
             ) : searchFilePreview.kind === "docx" ? (
@@ -5192,11 +5479,28 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 {searchFilePreview.truncated ? (
                   <div className="search-file-preview-notice">文件较大，仅显示前 512 KB。</div>
                 ) : null}
-                <pre><code>{searchFilePreview.line ? String(searchFilePreview.content || "").split("\n").map((line: string, index: number) => {
-                  const lineNumber = index + 1;
-                  const selected = lineNumber >= searchFilePreview.line && lineNumber <= (searchFilePreview.endLine || searchFilePreview.line);
-                  return <span className={selected ? "preview-line selected" : "preview-line"} data-preview-line={lineNumber} key={lineNumber}><i>{lineNumber}</i>{line}{index < String(searchFilePreview.content || "").split("\n").length - 1 ? "\n" : ""}</span>;
-                }) : searchFilePreview.content}</code></pre>
+                <pre><code>{(() => {
+                  const contentLines = String(searchFilePreview.content || "").split("\n");
+                  return contentLines.map((line: string, index: number) => {
+                    const lineNumber = index + 1;
+                    const citationSelected = Boolean(searchFilePreview.line)
+                      && lineNumber >= searchFilePreview.line
+                      && lineNumber <= (searchFilePreview.endLine || searchFilePreview.line);
+                    const ttsSelected = ttsFollow?.scope === "preview"
+                      && lineNumber >= ttsFollow.line
+                      && lineNumber <= ttsFollow.endLine;
+                    const className = [
+                      "preview-line",
+                      citationSelected ? "selected" : "",
+                      ttsSelected ? "tts-active" : ""
+                    ].filter(Boolean).join(" ");
+                    return (
+                      <span className={className} data-preview-line={lineNumber} key={lineNumber}>
+                        <i>{lineNumber}</i>{line}{index < contentLines.length - 1 ? "\n" : ""}
+                      </span>
+                    );
+                  });
+                })()}</code></pre>
               </>
             )}
           </section>
@@ -6237,22 +6541,8 @@ function selectSearchTarget(workspaceId?: string, threadId?: string, filePath?: 
       });
     }
     if (filePath) {
-      setActiveTreePath(filePath);
-      setPreviewMode("workspace");
+      openLocalFilePreview(filePath, workspaceId ? { workspaceId } : undefined);
       setPreviewPlacement("center");
-      if (workspaceId && api) {
-        setSearchFilePreview({ path: filePath, name: filePath, loading: true });
-        void api.readWorkspaceFile({ workspaceId, filePath })
-          .then((file: any) => setSearchFilePreview({ ...file, loading: false }))
-          .catch((error: unknown) => {
-            setSearchFilePreview({
-              path: filePath,
-              name: filePath,
-              loading: false,
-              error: error instanceof Error ? error.message : String(error)
-            });
-          });
-      }
     } else {
       setSearchFilePreview(null);
     }

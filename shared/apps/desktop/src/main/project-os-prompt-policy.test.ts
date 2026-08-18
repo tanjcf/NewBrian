@@ -28,6 +28,7 @@ test("selectProjectManagerReferences keeps prefs and tails digest", () => {
   const selected = selectProjectManagerReferences([
     { name: "user-output-rules.md", content: "- Prefer Chinese\n" },
     { name: "learning-open-questions.md", content: "- (none)\n" },
+    { name: "programming-guardrails.md", content: "# Programming Guardrails\n" },
     { name: "session-digest.md", content: `${"old\n".repeat(2_000)}tail-marker` },
     { name: "project-knowledge.md", content: "- CODECN候选: demo\n" },
     { name: "other.md", content: "should drop" }
@@ -36,6 +37,7 @@ test("selectProjectManagerReferences keeps prefs and tails digest", () => {
   assert.deepEqual(names, [
     "user-output-rules.md",
     "learning-open-questions.md",
+    "programming-guardrails.md",
     "session-digest.md",
     "project-knowledge.md"
   ]);

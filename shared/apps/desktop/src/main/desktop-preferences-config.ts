@@ -65,7 +65,7 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
   },
   environment: {
     defaultOpenTarget: "visual-studio",
-    terminalShell: process.platform === "win32" ? "powershell.exe" : process.platform === "darwin" ? "/bin/zsh" : "/bin/bash",
+    terminalShell: process.platform === "win32" ? "powershell.exe" : "/bin/zsh",
     extraEnv: {},
     autoBootstrapConda: true
   },
@@ -154,8 +154,8 @@ export function normalizeDesktopPreferencesValue(
       uiFontFamily: String(input?.appearance?.uiFontFamily ?? "").trim() || context.defaults.appearance.uiFontFamily,
       codeFontFamily: String(input?.appearance?.codeFontFamily ?? "").trim() || context.defaults.appearance.codeFontFamily,
       contrast: Math.max(0, Math.min(100, Number(input?.appearance?.contrast ?? context.defaults.appearance.contrast) || context.defaults.appearance.contrast)),
-      uiFontSize: Math.max(11, Math.min(20, Number(input?.appearance?.uiFontSize ?? context.defaults.appearance.uiFontSize) || context.defaults.appearance.uiFontSize)),
-      codeFontSize: Math.max(10, Math.min(18, Number(input?.appearance?.codeFontSize ?? context.defaults.appearance.codeFontSize) || context.defaults.appearance.codeFontSize)),
+      uiFontSize: Math.max(11, Math.min(28, Number(input?.appearance?.uiFontSize ?? context.defaults.appearance.uiFontSize) || context.defaults.appearance.uiFontSize)),
+      codeFontSize: Math.max(10, Math.min(24, Number(input?.appearance?.codeFontSize ?? context.defaults.appearance.codeFontSize) || context.defaults.appearance.codeFontSize)),
       sidebarTranslucent: typeof input?.appearance?.sidebarTranslucent === "boolean" ? input.appearance.sidebarTranslucent : context.defaults.appearance.sidebarTranslucent,
       pointerCursor: typeof input?.appearance?.pointerCursor === "boolean" ? input.appearance.pointerCursor : context.defaults.appearance.pointerCursor,
       diffMarks: input?.appearance?.diffMarks === "marks" ? "marks" : context.defaults.appearance.diffMarks

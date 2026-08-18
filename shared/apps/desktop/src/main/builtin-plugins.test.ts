@@ -6,7 +6,7 @@ import test from "node:test";
 const { builtinPluginCatalog, builtinPluginUri } = await import(new URL("../shared/builtin-plugins.ts", import.meta.url).href) as typeof import("../shared/builtin-plugins.js");
 
 test("ships every advertised builtin plugin with a valid manifest and executable skill", async () => {
-  assert.equal(builtinPluginCatalog.length, 10);
+  assert.equal(builtinPluginCatalog.length, 11);
   assert.equal(new Set(builtinPluginCatalog.map((plugin) => plugin.id)).size, builtinPluginCatalog.length);
   for (const plugin of builtinPluginCatalog) {
     const root = resolve("build", "plugins", plugin.packageName);
@@ -17,6 +17,26 @@ test("ships every advertised builtin plugin with a valid manifest and executable
     assert.match(skill, new RegExp(`name: ${plugin.packageName}`));
     assert.match(skill, /description:\s*\S/);
     assert.equal(builtinPluginUri(plugin.packageName), `builtin:${plugin.packageName}`);
+  }
+});
+
+test("figma builtin ships router skill plus specialized figma-* skills", async () => {
+  const root = resolve("build", "plugins", "figma");
+  const skill = await readFile(resolve(root, "skills", "figma", "SKILL.md"), "utf8");
+  assert.match(skill, /name: figma/);
+  assert.match(skill, /figma-generate-diagram/);
+  assert.match(skill, /FIGMA_ACCESS_TOKEN|Figma MCP/);
+  const specialized = [
+    "figma-generate-diagram",
+    "figma-design-to-code",
+    "figma-create-new-file",
+    "figma-use"
+  ];
+  for (const name of specialized) {
+    assert.match(
+      await readFile(resolve(root, "skills", name, "SKILL.md"), "utf8"),
+      new RegExp(`name:\\s*${name}`)
+    );
   }
 });
 

@@ -4,7 +4,10 @@ import {
   type OpenLogLocationResult,
   type OpenSkillLocationInput,
   type OpenSystemToolInput,
+  type RendererDiagnosticInput,
   type RendererFailureInput,
+  type SynthesizeNovelSpeechInput,
+  type SynthesizeNovelSpeechResult,
   type SystemOpenResult,
   type SystemToolEntry
 } from "@codex-forge/protocol";
@@ -17,6 +20,9 @@ interface SystemIpcServices {
   openSkillLocation: (input: OpenSkillLocationInput) => MaybePromise<SystemOpenResult>;
   openLogLocation: () => MaybePromise<OpenLogLocationResult>;
   reportRendererFailure: (input: RendererFailureInput) => MaybePromise<{ ok: boolean; id: string }>;
+  reportRendererDiagnostic: (input: RendererDiagnosticInput) => MaybePromise<{ ok: boolean; id: string }>;
+  synthesizeNovelSpeech: (input: SynthesizeNovelSpeechInput) => MaybePromise<SynthesizeNovelSpeechResult>;
+  cancelNovelSpeech: () => MaybePromise<{ ok: boolean }>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -60,8 +66,60 @@ export function parseRendererFailureInput(input: unknown): RendererFailureInput 
   };
 }
 
+export function parseRendererDiagnosticInput(input: unknown): RendererDiagnosticInput {
+  if (!isRecord(input)
+    || typeof input.kind !== "string"
+    || !input.kind.trim()
+    || input.kind.length > 80
+    || typeof input.message !== "string"
+    || (input.stackTrace !== undefined && typeof input.stackTrace !== "string")
+    || (input.context !== undefined && !isRecord(input.context))) {
+    throw new TypeError("Renderer diagnostic input is invalid.");
+  }
+  return {
+    kind: input.kind.trim(),
+    message: input.message,
+    stackTrace: input.stackTrace,
+    context: input.context
+  };
+}
+
+export function parseSynthesizeNovelSpeechInput(input: unknown): SynthesizeNovelSpeechInput {
+  if (!isRecord(input)
+    || typeof input.text !== "string"
+    || !input.text.trim()
+    || input.text.length > 20_000
+    || typeof input.voiceId !== "string"
+    || !input.voiceId.trim()
+    || input.voiceId.length > 80
+    || (input.voiceLabel !== undefined && typeof input.voiceLabel !== "string")) {
+    throw new TypeError("Novel speech input is invalid.");
+  }
+  return {
+    text: input.text,
+    voiceId: input.voiceId.trim(),
+    voiceLabel: typeof input.voiceLabel === "string" ? input.voiceLabel : undefined
+  };
+}
+
 /** Register native system capabilities behind validated, data-only IPC contracts. */
 export function registerSystemIpcHandlers(services: SystemIpcServices) {
+  const channels = [
+    ["system.getTools", desktopIpcChannels.system.getTools],
+    ["system.openTool", desktopIpcChannels.system.openTool],
+    ["system.openSkillLocation", desktopIpcChannels.system.openSkillLocation],
+    ["system.openLogLocation", desktopIpcChannels.system.openLogLocation],
+    ["system.reportRendererFailure", desktopIpcChannels.system.reportRendererFailure],
+    ["system.reportRendererDiagnostic", desktopIpcChannels.system.reportRendererDiagnostic],
+    ["system.synthesizeNovelSpeech", desktopIpcChannels.system.synthesizeNovelSpeech],
+    ["system.cancelNovelSpeech", desktopIpcChannels.system.cancelNovelSpeech]
+  ] as const;
+  for (const [name, channel] of channels) {
+    if (typeof channel !== "string" || !channel.trim()) {
+      throw new Error(`Missing IPC channel ${name}. Rebuild @codex-forge/protocol before packaging.`);
+    }
+  }
+
   ipcMain.handle(desktopIpcChannels.system.getTools, () => services.getTools());
   ipcMain.handle(desktopIpcChannels.system.openTool, (_event, input: unknown) =>
     services.openTool(parseOpenToolInput(input))
@@ -73,4 +131,11 @@ export function registerSystemIpcHandlers(services: SystemIpcServices) {
   ipcMain.handle(desktopIpcChannels.system.reportRendererFailure, (_event, input: unknown) =>
     services.reportRendererFailure(parseRendererFailureInput(input))
   );
+  ipcMain.handle(desktopIpcChannels.system.reportRendererDiagnostic, (_event, input: unknown) =>
+    services.reportRendererDiagnostic(parseRendererDiagnosticInput(input))
+  );
+  ipcMain.handle(desktopIpcChannels.system.synthesizeNovelSpeech, (_event, input: unknown) =>
+    services.synthesizeNovelSpeech(parseSynthesizeNovelSpeechInput(input))
+  );
+  ipcMain.handle(desktopIpcChannels.system.cancelNovelSpeech, () => services.cancelNovelSpeech());
 }

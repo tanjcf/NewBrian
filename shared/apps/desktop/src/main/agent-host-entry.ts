@@ -16,7 +16,7 @@ function sendEvent(event: "terminal.update" | "mcp.status" | "agent.event" | "ag
 
 const terminal = new TerminalSessionService({
   cwd: process.cwd(),
-  shell: process.env.SHELL?.trim() || (process.platform === "win32" ? "powershell.exe" : process.platform === "darwin" ? "/bin/zsh" : "/bin/bash"),
+  shell: process.env.SHELL?.trim() || (process.platform === "win32" ? "powershell.exe" : "/bin/zsh"),
   prompt: process.platform === "win32" ? "PS>" : "$",
   processManager,
   onUpdate: (snapshot) => sendEvent("terminal.update", snapshot)

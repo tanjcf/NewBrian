@@ -40,9 +40,15 @@ async function collect(base, platform, current = "") {
       continue;
     }
     if (excludedExtensions.has(path.extname(entry.name).toLowerCase())) continue;
+    const normalized = relative.split(path.sep).join("/");
+    // Local diagnostic dumps and transient lock copies are not managed source.
+    if (/^apps\/desktop\/_[^/]+\.txt(\.err)?$/.test(normalized)) continue;
+    if (normalized === "apps/desktop/composer-attachment-errors-test-out.txt") continue;
+    if (/^apps\/desktop\/pnpm-lock\.yaml\.\d+$/.test(normalized)) continue;
+    if (/\.workspaces\.json\.\d+\./.test(normalized)) continue;
     const absolute = path.join(base, relative);
     const content = await readFile(absolute);
-    result.set(relative.split(path.sep).join("/"), {
+    result.set(normalized, {
       absolute,
       hash: createHash("sha256").update(content).digest("hex")
     });

@@ -20,6 +20,7 @@ if (materializeCode !== 0) process.exit(materializeCode ?? 1);
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const child = spawn(command, ["run", script, ...extra], {
   cwd: path.join(root, ".materialized", platform === "macos" ? (process.arch === "x64" ? "macos-x64" : "macos-arm64") : platform),
-  stdio: "inherit"
+  stdio: "inherit",
+  env: { ...process.env, CODECN_SOURCE_ROOT: root }
 });
 child.on("close", (code) => process.exit(code ?? 1));

@@ -56,6 +56,23 @@ node scripts/run-platform.mjs ubuntu-x64 dev:desktop
 node scripts/run-platform.mjs windows dev:desktop
 ```
 
+Windows has three explicit runtime/release environments:
+
+```bash
+node scripts/run-platform.mjs windows dev:desktop       # local development
+pnpm package:windows:test                               # unsigned MSI for installation testing
+pnpm package:windows:production                         # signed production MSI from a clean worktree
+```
+
+Test artifacts are written to `apps/desktop/release/test`; production artifacts are
+written to `apps/desktop/release/production`. Production packaging always requires a
+valid Authenticode signature. Override service endpoints with
+`CODECN_TEST_GATEWAY_BASE_URL` / `CODECN_TEST_PREVIEW_URL` or
+`CODECN_PRODUCTION_GATEWAY_BASE_URL` / `CODECN_PRODUCTION_PREVIEW_URL`. Test
+defaults are `https://test.wangjietech.com/v1` and `https://test.wangjietech.com`;
+production defaults are `https://api.wangjietech.com/v1` and
+`https://api.wangjietech.com`.
+
 Create architecture-specific macOS installers with:
 
 ```bash

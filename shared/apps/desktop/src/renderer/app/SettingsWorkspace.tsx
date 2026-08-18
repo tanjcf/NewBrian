@@ -206,6 +206,32 @@ export function SettingsWorkspace(ctx: any) {
     }
   }
 
+  function openFigmaDesktopMcpPreset() {
+    const existing = mcpServers.find((server: any) => {
+      const name = String(server.name || "").toLowerCase();
+      const url = String(server.url || "");
+      return name.includes("figma") || url.includes("127.0.0.1:3845") || url.includes("mcp.figma.com");
+    });
+    if (existing) {
+      openMcpSettingsEditor(existing);
+      setChatStatus?.("已打开现有 Figma MCP 配置。");
+      return;
+    }
+    resetMcpDraft();
+    setMcpWorkingDirectory(""); setMcpBearerTokenEnv(""); setMcpHeaders([]); setMcpHeaderEnv([]); setMcpEnvPassthrough([]);
+    setMcpDraft((current: any) => ({
+      ...current,
+      name: "Figma Desktop",
+      transport: "sse",
+      command: "",
+      args: "",
+      url: "http://127.0.0.1:3845/mcp",
+      enabled: true
+    }));
+    setMcpSettingsView("new");
+    setChatStatus?.("已预填 Figma 桌面 MCP：请先在 Figma Dev Mode 启用桌面 MCP，再保存并启动。");
+  }
+
   async function saveMcpSettingsEditor() {
     const baseEnv = String(mcpDraft.env || "").split("\n").filter((line) => line && !line.startsWith("CODECN_MCP_"));
     const extended = [
@@ -1064,8 +1090,6 @@ function renderSettingsWorkspace() {
                         <option value="pwsh.exe">PowerShell 7</option>
                         <option value="cmd.exe">Command Prompt</option>
                         <option value="bash.exe">Git Bash</option>
-                        <option value="/bin/bash">Bash（Linux）</option>
-                        <option value="/bin/zsh">zsh（macOS）</option>
                       </select>
                     </div>
                     <div className="codex-setting-row">
@@ -1353,9 +1377,15 @@ function renderSettingsWorkspace() {
               <>
                 {mcpSettingsView === "list" ? (
                   <div className="codex-mcp-settings">
-                    <div className="settings-page-head"><div><h3>MCP 服务器</h3><p>连接外部工具和数据源。</p></div></div>
+                    <div className="settings-page-head"><div><h3>MCP 服务器</h3><p>连接外部工具和数据源。写 Figma 云端稿优先接 Figma Desktop MCP。</p></div></div>
                     <section className="codex-mcp-group">
-                      <div className="codex-mcp-group-head"><strong>服务器</strong><button type="button" onClick={() => openMcpSettingsEditor()}>＋ 添加服务器</button></div>
+                      <div className="codex-mcp-group-head">
+                        <strong>服务器</strong>
+                        <div className="inline-actions">
+                          <button type="button" onClick={() => openFigmaDesktopMcpPreset()}>＋ Figma Desktop MCP</button>
+                          <button type="button" onClick={() => openMcpSettingsEditor()}>＋ 添加服务器</button>
+                        </div>
+                      </div>
                       <div className="codex-mcp-list">
                         {mcpServers.map((server: any) => (
                           <div className="codex-mcp-row" key={server.id}>
@@ -1456,8 +1486,8 @@ function renderSettingsWorkspace() {
                 <section className="appearance-reference-panel">
                   <button type="button" className="appearance-option-row" onClick={() => updateAppearancePreference({ pointerCursor: !desktopPreferences.appearance.pointerCursor })}><span><strong>{"\u4f7f\u7528\u6307\u9488\u5149\u6807"}</strong><em>{"\u60ac\u505c\u4ea4\u4e92\u5143\u7d20\u65f6\u5207\u6362\u4e3a\u6307\u9488\u5149\u6807"}</em></span><span className={"appearance-switch " + (desktopPreferences.appearance.pointerCursor ? "enabled" : "")}><i /></span></button>
                   <div className="appearance-option-row"><span><strong>{"\u51cf\u5c11\u52a8\u6001\u6548\u679c"}</strong><em>{"\u51cf\u5c11\u52a8\u753b\u6548\u679c\u6216\u5339\u914d\u7cfb\u7edf\u8bbe\u7f6e"}</em></span><div className="appearance-segmented">{["\u7cfb\u7edf", "\u5f00\u542f", "\u5173\u95ed"].map((label, index) => <button type="button" key={label} className={(desktopPreferences.appearance.reduceMotion ? 1 : 0) === index ? "active" : ""} onClick={() => updateAppearancePreference({ reduceMotion: index === 1 })}>{label}</button>)}</div></div>
-                  <div className="appearance-option-row"><span><strong>UI {"\u5b57\u53f7"}</strong><em>{"\u8c03\u6574 Codex \u754c\u9762\u4f7f\u7528\u7684\u57fa\u51c6\u5b57\u53f7"}</em></span><label className="appearance-number"><input type="number" min="11" max="20" value={desktopPreferences.appearance.uiFontSize} onChange={(event) => updateAppearancePreference({ uiFontSize: Number(event.target.value) || 14 })} /> px</label></div>
-                  <div className="appearance-option-row"><span><strong>{"\u4ee3\u7801\u5b57\u4f53\u5927\u5c0f"}</strong><em>{"\u8c03\u6574\u804a\u5929\u548c\u5dee\u5f02\u89c6\u56fe\u4e2d\u4ee3\u7801\u4f7f\u7528\u7684\u57fa\u7840\u5b57\u53f7"}</em></span><label className="appearance-number"><input type="number" min="10" max="18" value={desktopPreferences.appearance.codeFontSize} onChange={(event) => updateAppearancePreference({ codeFontSize: Number(event.target.value) || 12 })} /> px</label></div>
+                  <div className="appearance-option-row"><span><strong>UI {"\u5b57\u53f7"}</strong><em>{"\u8c03\u6574\u754c\u9762\u57fa\u51c6\u5b57\u53f7\uff08Ctrl+\u6eda\u8f6e\u53ef\u7b49\u6bd4\u7f29\u653e\uff09"}</em></span><label className="appearance-number"><input type="number" min="11" max="28" value={desktopPreferences.appearance.uiFontSize} onChange={(event) => updateAppearancePreference({ uiFontSize: Number(event.target.value) || 14 })} /> px</label></div>
+                  <div className="appearance-option-row"><span><strong>{"\u4ee3\u7801\u5b57\u4f53\u5927\u5c0f"}</strong><em>{"\u8c03\u6574\u804a\u5929\u548c\u5dee\u5f02\u89c6\u56fe\u4e2d\u4ee3\u7801\u57fa\u7840\u5b57\u53f7\uff08\u968f UI \u5b57\u53f7\u7b49\u6bd4\uff09"}</em></span><label className="appearance-number"><input type="number" min="10" max="24" value={desktopPreferences.appearance.codeFontSize} onChange={(event) => updateAppearancePreference({ codeFontSize: Number(event.target.value) || 12 })} /> px</label></div>
                   <div className="appearance-option-row"><span><strong>{"\u5dee\u5f02\u6807\u8bb0"}</strong><em>{"\u4f7f\u7528\u989c\u8272\u6216 +/- \u6807\u8bb0\u663e\u793a\u66f4\u6539"}</em></span><div className="appearance-segmented">{["\u989c\u8272", "+/-"].map((label) => <button type="button" key={label} className={(desktopPreferences.appearance.diffMarks === "color" ? "\u989c\u8272" : "+/-") === label ? "active" : ""} onClick={() => updateAppearancePreference({ diffMarks: label === "\u989c\u8272" ? "color" : "marks" })}>{label}</button>)}</div></div>
                 </section>
               </div>
@@ -1579,7 +1609,26 @@ function renderSettingsWorkspace() {
                   <div className="settings-grid">
                     <label className="settings-field"><span>自动初始化 Conda</span><button type="button" className="settings-inline-toggle" onClick={() => setDesktopPreferences((current) => ({ ...current, environment: { ...current.environment, autoBootstrapConda: !current.environment.autoBootstrapConda } }))}><SettingsSwitch enabled={desktopPreferences.environment.autoBootstrapConda} /></button></label>
                   </div>
-                  <label className="settings-field"><span>额外环境变量</span><textarea value={environmentEnvText} onChange={(event) => setEnvironmentEnvText(event.target.value)} placeholder={"KEY=value\nANOTHER_KEY=value"} rows={5} /></label>
+                  <label className="settings-field">
+                    <span>Figma 访问令牌</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      placeholder="figd_…（Personal Access Token）"
+                      value={(() => {
+                        const line = String(environmentEnvText || "").split(/\r?\n/).find((row: string) => row.startsWith("FIGMA_ACCESS_TOKEN="));
+                        return line ? line.slice("FIGMA_ACCESS_TOKEN=".length) : "";
+                      })()}
+                      onChange={(event) => {
+                        const token = event.target.value;
+                        const rows = String(environmentEnvText || "").split(/\r?\n/).filter((row: string) => row && !row.startsWith("FIGMA_ACCESS_TOKEN="));
+                        if (token.trim()) rows.push(`FIGMA_ACCESS_TOKEN=${token}`);
+                        setEnvironmentEnvText(rows.join("\n"));
+                      }}
+                    />
+                    <em className="settings-field-hint">内置 Figma 插件写入云端设计稿/FigJam 需要此令牌，或在 MCP 中连接 Figma。未配置时仍可用聊天 Mermaid / Visualize 画本地流程图。</em>
+                  </label>
+                  <label className="settings-field"><span>额外环境变量</span><textarea value={environmentEnvText} onChange={(event) => setEnvironmentEnvText(event.target.value)} placeholder={"KEY=value\nFIGMA_ACCESS_TOKEN=figd_xxx"} rows={5} /></label>
                   <dl className="settings-facts"><div><dt>平台</dt><dd>{bootstrapState}</dd></div><div><dt>工作目录</dt><dd>{snapshot.session.workspacePath}</dd></div><div><dt>Conda</dt><dd>{desktopBootstrapStatus.conda.status}</dd></div></dl>
                 </section>
               </>

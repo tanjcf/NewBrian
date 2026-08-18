@@ -59,6 +59,57 @@ test("ensureProjectSkill scaffolds CODECN.md and Project OS skill", async () => 
     assert.match(skill, /CODECN\.md/);
     assert.match(skill, /Do \*\*not\*\* use tools to create or edit `\.codecn`/);
     assert.match(skill, /update `CODECN\.md` with workspace tools/);
+    assert.match(skill, /Programming Guardrails \(coding\)/);
+    assert.match(skill, /references\/programming-guardrails\.md/);
+    assert.match(skill, /references\/java-javadoc-rules\.md/);
+    assert.match(skill, /references\/backend-technical-design-framework\.md/);
+    assert.match(
+      readFileSync(join(shadow.referencesPath, "programming-guardrails.md"), "utf8"),
+      /Encoding Rules/
+    );
+    assert.match(
+      readFileSync(join(shadow.referencesPath, "java-javadoc-rules.md"), "utf8"),
+      /Mandatory method template/
+    );
+    assert.match(
+      readFileSync(join(shadow.referencesPath, "backend-technical-design-framework.md"), "utf8"),
+      /Layered backend structure/
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ensureProjectSkill upgrades older project-manager templates with programming pack", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-project-os-upgrade-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "Legacy" });
+    await shadow.ensureProjectSkill();
+    writeFileSync(
+      join(shadow.skillPath, "SKILL.md"),
+      [
+        "---",
+        "name: legacy-project-manager",
+        "description: old",
+        "---",
+        "",
+        "# Legacy",
+        "",
+        "## Project OS",
+        "",
+        "CODECN.md",
+        "",
+        "## Required Workflow (PAHF)",
+        "",
+        "Pre-Action Clarification",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await shadow.ensureProjectSkill();
+    const skill = readFileSync(join(shadow.skillPath, "SKILL.md"), "utf8");
+    assert.match(skill, /Programming Guardrails \(coding\)/);
+    assert.equal(existsSync(join(shadow.referencesPath, "programming-guardrails.md")), true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

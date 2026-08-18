@@ -1,5 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import {
+  ensureProgrammingSkillReferences,
+  PROGRAMMING_SKILL_TEMPLATE_MARKER
+} from "./programming-skill-seed.js";
 
 /**
  * Hermes/PAHF-style active user-shadow learning for project-manager.
@@ -548,12 +552,14 @@ ${body}
 function buildSkillMarkdown(projectName) {
   return `---
 name: ${safeName(projectName)}-project-manager
-description: Always-on Project OS + preference shadow for this workspace. Own PAHF personalization under .codecn; durable architecture lives in repo-root CODECN.md.
+description: Always-on Project OS + preference shadow for this workspace. Own PAHF personalization under .codecn; durable architecture lives in repo-root CODECN.md. When coding (especially Java/Spring), enforce seeded programming guardrails, Javadoc, encoding, and backend design references.
+metadata:
+  short-description: Project OS, preferences, and coding guardrails
 ---
 
 # ${projectName} Project Manager
 
-This skill is the always-on shadow for ${projectName}. It combines Claude Code–style **Project OS** (repo-root \`CODECN.md\`) with a Hermes/PAHF **personalization** loop (runtime-managed preference files).
+This skill is the always-on shadow for ${projectName}. It combines Claude Code–style **Project OS** (repo-root \`CODECN.md\`) with a Hermes/PAHF **personalization** loop (runtime-managed preference files) and seeded **programming guardrails** for reliable code edits.
 
 ## Project OS (repo layer)
 
@@ -571,12 +577,24 @@ This skill is the always-on shadow for ${projectName}. It combines Claude Code�
 5. Do not call tools merely to re-read injected preference references.
 6. Ask at most one preference question per turn. Prefer completing the task when memory already covers the ambiguity.
 
+## ${PROGRAMMING_SKILL_TEMPLATE_MARKER}
+
+When the user request edits, generates, completes, or documents source code—especially Java/Spring on Windows—follow the seeded programming-skill pack:
+
+1. Read and enforce \`references/programming-guardrails.md\` (core rules, encoding, patch strategy, recovery, real-fix evaluation).
+2. When touching any \`.java\` file, also enforce \`references/java-javadoc-rules.md\`. Missing required method Javadoc in a touched type means the change is incomplete.
+3. Before designing or implementing Spring/backend modules, follow \`references/backend-technical-design-framework.md\`; mark unused sections \`N/A\` with a concrete reason.
+4. Prefer smallest safe patches; preserve UTF-8 without BOM; never claim a coding fix complete without stating verified vs unverified evidence.
+
 ## Runtime knowledge files (do not edit with tools)
 
 - \`references/user-output-rules.md\`: distilled habits, preferences, and corrections.
 - \`references/learning-open-questions.md\`: open preference questions to ask before acting.
 - \`references/session-digest.md\`: append-only session summaries.
 - \`references/project-knowledge.md\`: short CODECN.md candidate index only (not the architecture source of truth).
+- \`references/programming-guardrails.md\`: coding reliability, encoding, Java safety, Spring structure, patch/recovery, evaluation.
+- \`references/java-javadoc-rules.md\`: mandatory Java method Javadoc rules.
+- \`references/backend-technical-design-framework.md\`: mandatory Spring/backend design sections.
 `;
 }
 
@@ -650,9 +668,12 @@ export class UserShadow {
       || !existingSkill.includes("PAHF")
       || !existingSkill.includes("Pre-Action Clarification")
       || !existingSkill.includes("CODECN.md")
-      || !existingSkill.includes("Project OS")) {
+      || !existingSkill.includes("Project OS")
+      || !existingSkill.includes(PROGRAMMING_SKILL_TEMPLATE_MARKER)
+      || !existingSkill.includes("references/programming-guardrails.md")) {
       await fs.writeFile(skillFile, buildSkillMarkdown(this.projectName), "utf8");
     }
+    await ensureProgrammingSkillReferences(this.referencesPath, fs.writeFile.bind(fs), fs.mkdir.bind(fs));
     const outputRulesPath = this.outputRulesPath();
     await appendUnique(outputRulesPath, "# User Output Rules", DEFAULT_OUTPUT_RULES);
     await sanitizeOutputRules(outputRulesPath);

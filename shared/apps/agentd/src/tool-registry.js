@@ -872,9 +872,7 @@ export function createBuiltinToolRegistry() {
       },
       validate: requireCommand,
       async execute(input, context) {
-        const shellCommand = process.platform === "win32"
-          ? "powershell.exe"
-          : process.env.SHELL?.trim() || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+        const shellCommand = process.platform === "win32" ? "powershell.exe" : "/bin/zsh";
         const normalizedCommand = process.platform === "win32"
           ? normalizeWindowsShellCommand(input.command)
           : input.command;

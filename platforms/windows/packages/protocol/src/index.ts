@@ -927,7 +927,10 @@ export const desktopIpcChannels = {
     openTool: "phase1:open-system-tool",
     openSkillLocation: "phase1:open-skill-location",
     openLogLocation: "phase1:open-log-location",
-    reportRendererFailure: "phase1:report-renderer-failure"
+    reportRendererFailure: "phase1:report-renderer-failure",
+    reportRendererDiagnostic: "phase1:report-renderer-diagnostic",
+    synthesizeNovelSpeech: "phase1:synthesize-novel-speech",
+    cancelNovelSpeech: "phase1:cancel-novel-speech"
   },
   usageExceptionFeedback: {
     createPreview: "phase1:create-usage-exception-feedback-preview",
@@ -1316,6 +1319,36 @@ export interface RendererFailureInput {
   message: string;
   stackTrace?: string;
   context?: Record<string, unknown>;
+}
+
+/** Non-fatal renderer diagnostics. Must never trigger crash-restart behavior. */
+export interface RendererDiagnosticInput {
+  kind: string;
+  message: string;
+  stackTrace?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface SynthesizeNovelSpeechInput {
+  text: string;
+  voiceId: string;
+  voiceLabel?: string;
+}
+
+export interface SynthesizeNovelSpeechResult {
+  ok: boolean;
+  audioBase64?: string;
+  mimeType?: string;
+  detail?: string;
+  provider?: string;
+  /** When true, main process is already playing WAV natively — renderer should only drive UI progress. */
+  playingInMain?: boolean;
+  /** Estimated duration for follow-along UI when playingInMain. */
+  durationMs?: number;
+}
+
+export interface CancelNovelSpeechResult {
+  ok: boolean;
 }
 
 export interface CreateUsageExceptionFeedbackPreviewInput {

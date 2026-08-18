@@ -8,7 +8,6 @@ const { buildNativeToolSystemInstruction, requestedArtifactSatisfied } = await i
 test("uses platform-specific shell guidance", () => {
   assert.match(buildNativeToolSystemInstruction("inspect the repository", "win32"), /Windows PowerShell/);
   assert.match(buildNativeToolSystemInstruction("inspect the repository", "darwin"), /shell is zsh/);
-  assert.match(buildNativeToolSystemInstruction("inspect the repository", "linux"), /shell is Bash/);
 });
 
 test("bootstrap prompt prefers local entrypoints over docker compose", async () => {

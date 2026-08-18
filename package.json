@@ -28,6 +28,8 @@
     "package:macos-x64": "node scripts/run-platform.mjs macos-x64 package:mac:intel",
     "package:ubuntu-arm64": "node scripts/run-platform.mjs ubuntu-arm64 package:linux:arm64",
     "package:ubuntu-x64": "node scripts/run-platform.mjs ubuntu-x64 package:linux:x64",
-    "build:windows": "node scripts/run-platform.mjs windows build"
+    "build:windows": "node scripts/run-platform.mjs windows build",
+    "package:windows:test": "node scripts/run-platform.mjs windows package:win-msi:test",
+    "package:windows:production": "node scripts/run-platform.mjs windows package:win-msi:production"
   }
 }

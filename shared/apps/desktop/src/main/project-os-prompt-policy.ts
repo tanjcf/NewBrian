@@ -13,7 +13,9 @@ export const PROJECT_MANAGER_TAIL_CHARS = 4_096;
  */
 export const PROJECT_MANAGER_ALWAYS_INJECT = new Set([
   "user-output-rules.md",
-  "learning-open-questions.md"
+  "learning-open-questions.md",
+  // Seeded from programming-skill; keep core coding guardrails always-on.
+  "programming-guardrails.md"
 ]);
 
 export const PROJECT_MANAGER_TAIL_INJECT = new Set([

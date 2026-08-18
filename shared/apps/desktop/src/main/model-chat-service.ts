@@ -31,6 +31,7 @@ import {
   type ModelChatTimingStage
 // @ts-expect-error Node's native TypeScript test runner requires the source extension.
 } from "./model-chat-timing.ts";
+import { expandLetterChoiceRequest } from "./letter-choice-policy.js";
 
 interface ModelChatRuntime extends ModelChatGoalRuntime {
   getToolDescriptors(): Array<{
@@ -407,7 +408,16 @@ export class ModelChatService {
           }, input.requestId);
         }
       }
-      const latestUserRequest = [...input.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+      const rawLatestUserRequest = [...input.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+      const letterChoice = expandLetterChoiceRequest(rawLatestUserRequest, input.messages);
+      const latestUserRequest = letterChoice.request;
+      if (letterChoice.expanded) {
+        emitReasoningSummary(
+          letterChoice.letter
+            ? `已识别选项 ${letterChoice.letter}${letterChoice.optionText ? `：${letterChoice.optionText}` : ""}，将直接执行而不是重复提问。\n`
+            : "已识别重复选项抱怨，将按已完成进度继续推进。\n"
+        );
+      }
       const mediaKind = this.dependencies.runMediaGeneration
         && shouldRunMediaGenerationTurn({ autoDecision: prepared.autoDecision })
         ? resolveMediaGenerationKind({ autoDecision: prepared.autoDecision })
@@ -579,7 +589,21 @@ export class ModelChatService {
         setRuntimeState: (state) => runtime.setThreadState(state)
       });
       let state = preparedContext.state;
-      const requestMessages = preparedContext.requestMessages;
+      const requestMessages = letterChoice.expanded
+        ? (() => {
+          let lastUserIndex = -1;
+          for (let index = preparedContext.requestMessages.length - 1; index >= 0; index -= 1) {
+            if (preparedContext.requestMessages[index]?.role === "user") {
+              lastUserIndex = index;
+              break;
+            }
+          }
+          if (lastUserIndex < 0) return preparedContext.requestMessages;
+          return preparedContext.requestMessages.map((message, index) =>
+            index === lastUserIndex ? { ...message, content: latestUserRequest } : message
+          );
+        })()
+        : preparedContext.requestMessages;
       const effectiveSystemPrompt = this.dependencies.buildSystemPrompt({
         baseSystemPrompt: input.systemPrompt,
         composerModes,

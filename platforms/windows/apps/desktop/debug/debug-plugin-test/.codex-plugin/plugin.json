@@ -1,0 +1,18 @@
+{
+  "name": "debug-plugin-test",
+  "version": "0.1.0",
+  "description": "debug",
+  "author": {
+    "name": "codeCN"
+  },
+  "interface": {
+    "displayName": "Debug Plugin Test",
+    "shortDescription": "debug",
+    "longDescription": "debug",
+    "developerName": "codeCN",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ]
+  }
+}

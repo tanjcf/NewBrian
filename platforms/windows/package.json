@@ -7,12 +7,14 @@
   "scripts": {
     "dev:desktop": "pnpm --filter @codex-forge/desktop dev",
     "dev:agentd": "pnpm --filter @codex-forge/agentd dev",
-    "package:win-msi": "powershell -NoLogo -ExecutionPolicy Bypass -File scripts/package-win-msi.ps1",
+    "package:win-msi": "pnpm run package:win-msi:test",
+    "package:win-msi:test": "powershell -NoLogo -ExecutionPolicy Bypass -File scripts/package-win-msi.ps1 -Channel Test",
+    "package:win-msi:production": "powershell -NoLogo -ExecutionPolicy Bypass -File scripts/package-win-msi.ps1 -Channel Production",
     "package:mac": "pnpm --filter @codex-forge/desktop package:mac",
     "build": "pnpm -r build",
     "lint": "pnpm run check",
     "check": "pnpm run check:architecture && pnpm -r check",
     "check:architecture": "node scripts/check-architecture.mjs",
-    "script:package-win-msi": "powershell -NoLogo -ExecutionPolicy Bypass -File scripts/package-win-msi.ps1"
+    "script:package-win-msi": "pnpm run package:win-msi:test"
   }
 }

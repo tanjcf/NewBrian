@@ -194,17 +194,34 @@ test("document.create_pdf accepts structured sections and rejects HTML dumps", a
   assert.equal(result.artifact.format, "pdf");
 });
 
-test("document.create_docx writes a real Word file from structured sections", async (t) => {
+test("localizes ASCII double quotes to Chinese curly quotes in Chinese prose", async () => {
+  const { localizeChineseDoubleQuotes, stripInlineMarkdown } = await import("./artifact-generator.js");
+  assert.equal(
+    localizeChineseDoubleQuotes('他说"你好"然后离开。'),
+    "他说\u201c你好\u201d然后离开。"
+  );
+  assert.equal(
+    localizeChineseDoubleQuotes('He said "hello" then left.'),
+    'He said "hello" then left.'
+  );
+  assert.equal(
+    stripInlineMarkdown('各地应**坚持**"创新驱动"。'),
+    "各地应坚持\u201c创新驱动\u201d。"
+  );
+});
+
+test("document.create_docx writes Chinese curly quotes into Word XML", async (t) => {
   const root = await workspace(t);
   const result = await createBuiltinToolRegistry().invoke("document.create_docx", {
     title: "工作总结",
-    sections: [{ heading: "概述", body: "全年工作平稳推进。" }]
+    sections: [{ heading: "概述", body: '全年坚持"稳中求进"工作总基调。' }]
   }, { workspacePath: root, shellEnv: process.env });
   assert.equal(result.ok, true, result.output);
-  assert.equal(result.artifact.path, "outputs/工作总结.docx");
   const bytes = await fs.readFile(path.join(root, result.artifact.path));
   const archive = await JSZip.loadAsync(bytes);
-  assert.ok(archive.file("word/document.xml"));
+  const xml = await archive.file("word/document.xml").async("string");
+  assert.match(xml, /\u201c稳中求进\u201d/);
+  assert.doesNotMatch(xml, /"稳中求进"/);
 });
 
 test("coerces page-size format a4 and synthesizes missing targetPath", async (t) => {

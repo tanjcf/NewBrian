@@ -1169,15 +1169,22 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
           messages: loopSnapshot.messages
         });
       if (!parsed) {
-        throw new Error("Official evidence research completed, but its read URLs or case candidates were not sufficient to build a confirmable writing specification.");
+        const insufficientEvidenceMessage = "官方证据研究已完成，但已读取的网址或案例候选不足以形成可确认的写作规格。请补充可核验的官方来源或案例后继续。";
+        loopSnapshot = {
+          status: "completed",
+          messages: [...loopSnapshot.messages, { role: "assistant", content: insufficientEvidenceMessage, toolCalls: [] }],
+          pending: null,
+          finalContent: insufficientEvidenceMessage
+        };
+      } else {
+        const specificationContent = serializeGovernmentWritingSpecificationMarkdown(parsed);
+        loopSnapshot = {
+          status: "completed",
+          messages: [...loopSnapshot.messages, { role: "assistant", content: specificationContent, toolCalls: [] }],
+          pending: null,
+          finalContent: specificationContent
+        };
       }
-      const specificationContent = serializeGovernmentWritingSpecificationMarkdown(parsed);
-      loopSnapshot = {
-        status: "completed",
-        messages: [...loopSnapshot.messages, { role: "assistant", content: specificationContent, toolCalls: [] }],
-        pending: null,
-        finalContent: specificationContent
-      };
     }
     let previousSignature = "";
     for (let continuation = 1; continuation <= 12; continuation += 1) {
@@ -1191,7 +1198,9 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       if (loopSnapshot.status !== "completed") break;
       const signature = snapshot.plan.map((step) => `${step.stepId}:${step.status}:${step.result}`).join("|");
       if (signature === previousSignature) {
-        throw new Error("目标连续执行没有产生进度，已安全停止以避免重复副作用；可从当前持久化步骤继续。");
+        const stalledMessage = "目标连续执行没有产生进度，已安全停止以避免重复副作用；可从当前持久化步骤继续。";
+        loopSnapshot = { ...loopSnapshot, status: "completed", pending: null, finalContent: stalledMessage };
+        break;
       }
       const orphanUnsafeToolCall = (input.runtime.sessionMachine.events as Array<{ type?: string; payload?: { id?: string; callId?: string; replaySafe?: boolean; name?: string } }>)
         .reduce<{ open: Map<string, boolean>; unsafeOrphan: boolean }>((state, event) => {
@@ -1210,7 +1219,9 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         }
       }
       if (orphanUnsafeToolCall.unsafeOrphan) {
-        throw new Error("检测到可能已产生副作用但未落盘结果的工具调用，已抑制自动续接以避免重复执行；请从当前持久化进度手动继续。");
+        const unsafeOrphanMessage = "检测到可能已产生副作用但未落盘结果的工具调用，已抑制自动续接以避免重复执行；请从当前持久化进度手动继续。";
+        loopSnapshot = { ...loopSnapshot, status: "completed", pending: null, finalContent: unsafeOrphanMessage };
+        break;
       }
       previousSignature = signature;
       input.publishActivity({

@@ -10,11 +10,6 @@
     "test": "node --test src/*.test.js"
   },
   "dependencies": {
-    "@codex-forge/protocol": "workspace:*",
-    "docx": "9.5.1",
-    "exceljs": "4.4.0",
-    "jszip": "3.10.1",
-    "pdfkit": "0.17.2",
-    "pptxgenjs": "4.0.1"
+    "@codex-forge/protocol": "workspace:*"
   }
 }
