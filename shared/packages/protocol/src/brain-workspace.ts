@@ -1,3 +1,4 @@
+import type { DocumentAnchor } from "./document-anchor.js";
 import type { BrainWorkspaceKey } from "./workspace-types.js";
 export { brainWorkspaceKeys } from "./workspace-types.js";
 export type { BrainWorkspaceKey } from "./workspace-types.js";
@@ -176,12 +177,13 @@ export interface BrainArtifactRegisterInput extends BrainProjectGetInput {
 
 export interface BrainAnnotationDto {
   id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
-  geometryJson: string; structuralAnchorJson: string; selectedText: string; createdBy: string; createdAt: string;
+  anchor: DocumentAnchor; instruction: string; status: "OPEN" | "APPLIED" | "DISMISSED";
+  supersedesAnnotationId: string; selectedText: string; createdBy: string; createdAt: string;
 }
 
 export interface BrainAnnotationCreateInput extends BrainProjectGetInput {
-  fileId: string; fileVersion: number; pageOrSheet?: string; annotationType: string;
-  geometryJson?: string; structuralAnchorJson?: string; selectedText?: string;
+  fileId: string; fileVersion: number; anchor: DocumentAnchor; instruction: string;
+  status?: "OPEN" | "APPLIED" | "DISMISSED"; supersedesAnnotationId?: string;
 }
 
 export interface BrainChangeSetDto { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }

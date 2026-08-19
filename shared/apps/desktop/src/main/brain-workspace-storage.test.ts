@@ -120,8 +120,20 @@ test("persists annotations and enforces file project ownership", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "文档项目", primaryWorkspaceKey: "document" });
     const file = storage.registerFile({ ownerId: "owner-a", projectId: project.id, logicalName: "说明.md", mimeType: "text/markdown", sizeBytes: 12, contentHash: "sha", storageKey: "files/readme.md" });
-    const annotation = storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1, pageOrSheet: "line:2", annotationType: "text-range", selectedText: "旧内容" });
+    const anchor = {
+      anchorId: "markdown:line:2", objectId: "markdown:line:2", format: "markdown" as const,
+      locator: { kind: "text-range" as const, startLine: 2, endLine: 2, startCharacter: 0, endCharacter: 3 },
+      selectedText: "旧内容"
+    };
+    const annotation = storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1, anchor, instruction: "替换为新内容" });
     assert.equal(storage.listAnnotations("owner-a", project.id)[0]?.id, annotation.id);
+    assert.deepEqual(storage.listAnnotations("owner-a", project.id)[0]?.anchor, anchor);
+    assert.equal(annotation.instruction, "替换为新内容");
+    const dismissed = storage.createAnnotation({
+      ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1,
+      anchor, instruction: "不再修改", status: "DISMISSED", supersedesAnnotationId: annotation.id
+    });
+    assert.equal(dismissed.supersedesAnnotationId, annotation.id);
     const change = storage.createChangeSet({ ownerId: "owner-a", projectId: project.id, annotationId: annotation.id, baseFileVersion: 1, changeSummary: "替换标注文本", diffJson: JSON.stringify({ replace: "新内容" }) });
     assert.equal(storage.listChangeSets("owner-a", project.id)[0]?.status, "PROPOSED");
     assert.equal(change.annotationId, annotation.id);
@@ -133,7 +145,15 @@ test("persists annotations and enforces file project ownership", () => {
       () => storage.updateChangeSet({ ownerId: "owner-b", projectId: project.id, changeSetId: change.id, status: "REJECTED" }),
       (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN"
     );
-    assert.throws(() => storage.createAnnotation({ ownerId: "owner-b", projectId: project.id, fileId: file.id, fileVersion: 1, annotationType: "text-range" }), (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN");
+    assert.throws(() => storage.createAnnotation({ ownerId: "owner-b", projectId: project.id, fileId: file.id, fileVersion: 1, anchor, instruction: "越权" }), (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN");
+    assert.throws(
+      () => storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 2, anchor, instruction: "过期版本" }),
+      (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_FILE_VERSION_CONFLICT"
+    );
+    assert.throws(
+      () => storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1, anchor: { ...anchor, anchorId: "" }, instruction: "无效锚点" }),
+      (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_ANNOTATION_INVALID"
+    );
   });
 });
 
@@ -147,7 +167,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 1);
+      assert.equal(Number(migrations.count), 2);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);
@@ -177,7 +197,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v1.bak`;
+  const backupPath = `${databasePath}.v0-before-v2.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();

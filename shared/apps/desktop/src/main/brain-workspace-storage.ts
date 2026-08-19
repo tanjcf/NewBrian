@@ -7,6 +7,7 @@ import {
   brainWorkspaceModes,
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
+import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 
 export { brainWorkspaceKeys } from "@codex-forge/protocol";
 export type { BrainWorkspaceKey } from "@codex-forge/protocol";
@@ -50,7 +51,8 @@ export interface BrainConversationRecord {
 
 export interface BrainAnnotationRecord {
   id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
-  geometryJson: string; structuralAnchorJson: string; selectedText: string; createdBy: string; createdAt: string;
+  anchor: DocumentAnchor; instruction: string; status: "OPEN" | "APPLIED" | "DISMISSED";
+  supersedesAnnotationId: string; selectedText: string; createdBy: string; createdAt: string;
 }
 export interface BrainChangeSetRecord { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }
 
@@ -93,7 +95,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 1;
+const latestMigrationVersion = 2;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -320,6 +322,17 @@ function migrationOneSql() {
   `;
 }
 
+function migrationTwoSql() {
+  return `
+    ALTER TABLE brain_annotation ADD COLUMN anchor_json TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE brain_annotation ADD COLUMN instruction TEXT NOT NULL DEFAULT '';
+    ALTER TABLE brain_annotation ADD COLUMN status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'APPLIED', 'DISMISSED'));
+    ALTER TABLE brain_annotation ADD COLUMN supersedes_annotation_id TEXT NOT NULL DEFAULT '';
+    CREATE INDEX idx_brain_annotation_file_version_created
+      ON brain_annotation(file_id, file_version, created_at DESC);
+  `;
+}
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -334,7 +347,15 @@ function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
 }
 
 function mapAnnotation(row: Record<string, unknown>): BrainAnnotationRecord {
-  return { id: String(row.id), fileId: String(row.file_id), fileVersion: Number(row.file_version), pageOrSheet: String(row.page_or_sheet), annotationType: String(row.annotation_type), geometryJson: String(row.geometry_json), structuralAnchorJson: String(row.structural_anchor_json), selectedText: String(row.selected_text), createdBy: String(row.created_by), createdAt: String(row.created_at) };
+  return {
+    id: String(row.id), fileId: String(row.file_id), fileVersion: Number(row.file_version),
+    pageOrSheet: String(row.page_or_sheet), annotationType: String(row.annotation_type),
+    anchor: JSON.parse(String(row.anchor_json || "{}")) as DocumentAnchor,
+    instruction: String(row.instruction || ""),
+    status: String(row.status || "OPEN") as BrainAnnotationRecord["status"],
+    supersedesAnnotationId: String(row.supersedes_annotation_id || ""),
+    selectedText: String(row.selected_text), createdBy: String(row.created_by), createdAt: String(row.created_at)
+  };
 }
 function mapChangeSet(row: Record<string, unknown>): BrainChangeSetRecord { return { id: String(row.id), annotationId: String(row.annotation_id), taskId: String(row.task_id || ""), baseFileVersion: Number(row.base_file_version), resultFileVersion: Number(row.result_file_version || 0), changeSummary: String(row.change_summary), diffJson: String(row.diff_json), status: String(row.status) as BrainChangeSetRecord["status"], createdAt: String(row.created_at), reviewedAt: String(row.reviewed_at || "") }; }
 
@@ -427,6 +448,7 @@ export class BrainWorkspaceStorage {
     this.database = database;
     try {
       applyMigration(this.database, 1, "BRAIN local-first workspace schema", migrationOneSql());
+      applyMigration(this.database, 2, "Structured immutable document annotations", migrationTwoSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -706,13 +728,47 @@ export class BrainWorkspaceStorage {
     `).all(projectId, ownerId) as Record<string, unknown>[]).map(mapFile);
   }
 
-  createAnnotation(input: { ownerId: string; projectId: string; fileId: string; fileVersion: number; pageOrSheet?: string; annotationType: string; geometryJson?: string; structuralAnchorJson?: string; selectedText?: string }): BrainAnnotationRecord {
+  createAnnotation(input: {
+    ownerId: string; projectId: string; fileId: string; fileVersion: number;
+    anchor: DocumentAnchor; instruction: string;
+    status?: "OPEN" | "APPLIED" | "DISMISSED"; supersedesAnnotationId?: string;
+  }): BrainAnnotationRecord {
     this.getProject(input.ownerId, input.projectId);
-    const file = this.database.prepare("SELECT id FROM brain_file WHERE id = ? AND project_id = ? AND owner_id = ?").get(input.fileId, input.projectId, input.ownerId);
+    const file = this.database.prepare("SELECT id, version_no FROM brain_file WHERE id = ? AND project_id = ? AND owner_id = ?")
+      .get(input.fileId, input.projectId, input.ownerId) as { id: string; version_no: number } | undefined;
     if (!file) throw new BrainStorageError("BRAIN_FILE_NOT_FOUND", "Annotation file does not belong to project");
     if (!Number.isSafeInteger(input.fileVersion) || input.fileVersion < 1) throw new BrainStorageError("BRAIN_INPUT_INVALID", "fileVersion must be positive");
-    const record: BrainAnnotationRecord = { id: `annotation_${randomUUID()}`, fileId: input.fileId, fileVersion: input.fileVersion, pageOrSheet: input.pageOrSheet || "", annotationType: requireText(input.annotationType, "annotationType"), geometryJson: input.geometryJson || "{}", structuralAnchorJson: input.structuralAnchorJson || "{}", selectedText: input.selectedText || "", createdBy: input.ownerId, createdAt: nowIso() };
-    this.database.prepare("INSERT INTO brain_annotation(id, file_id, file_version, page_or_sheet, annotation_type, geometry_json, structural_anchor_json, selected_text, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(record.id, record.fileId, record.fileVersion, record.pageOrSheet, record.annotationType, record.geometryJson, record.structuralAnchorJson, record.selectedText, record.createdBy, record.createdAt);
+    if (Number(file.version_no) !== input.fileVersion) throw new BrainStorageError("BRAIN_FILE_VERSION_CONFLICT", "Annotation file version is stale");
+    try { validateDocumentAnchor(input.anchor); } catch (error) {
+      throw new BrainStorageError("BRAIN_ANNOTATION_INVALID", error instanceof Error ? error.message : "Annotation anchor is invalid");
+    }
+    const instruction = requireText(input.instruction, "instruction");
+    const status = input.status ?? "OPEN";
+    if (!["OPEN", "APPLIED", "DISMISSED"].includes(status)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "annotation status is invalid");
+    const supersedesAnnotationId = input.supersedesAnnotationId?.trim() ?? "";
+    if (supersedesAnnotationId) {
+      const predecessor = this.database.prepare("SELECT id FROM brain_annotation WHERE id = ? AND file_id = ? AND file_version = ?")
+        .get(supersedesAnnotationId, input.fileId, input.fileVersion);
+      if (!predecessor) throw new BrainStorageError("BRAIN_ANNOTATION_NOT_FOUND", "Superseded annotation does not belong to this file version");
+    }
+    const pageOrSheet = input.anchor.format === "xlsx"
+      ? input.anchor.sheet
+      : "page" in input.anchor ? String(input.anchor.page) : "";
+    const record: BrainAnnotationRecord = {
+      id: `annotation_${randomUUID()}`, fileId: input.fileId, fileVersion: input.fileVersion,
+      pageOrSheet, annotationType: input.anchor.locator.kind, anchor: structuredClone(input.anchor),
+      instruction, status, supersedesAnnotationId, selectedText: input.anchor.selectedText ?? "",
+      createdBy: input.ownerId, createdAt: nowIso()
+    };
+    this.database.prepare(`
+      INSERT INTO brain_annotation(
+        id, file_id, file_version, page_or_sheet, annotation_type, geometry_json,
+        structural_anchor_json, selected_text, created_by, created_at,
+        anchor_json, instruction, status, supersedes_annotation_id
+      ) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, ?, ?, ?, ?, ?)
+    `).run(record.id, record.fileId, record.fileVersion, record.pageOrSheet, record.annotationType,
+      record.selectedText, record.createdBy, record.createdAt, JSON.stringify(record.anchor), record.instruction,
+      record.status, record.supersedesAnnotationId);
     return record;
   }
 

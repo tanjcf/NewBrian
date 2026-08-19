@@ -18,6 +18,7 @@ import {
   type BrainTaskUpdateInput,
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
+import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
 
@@ -268,11 +269,15 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.annotationCreate, async (_event, value: unknown) => {
     const input = requireRecord(value, "Annotation create");
+    const status = input.status;
+    if (status !== undefined && status !== "OPEN" && status !== "APPLIED" && status !== "DISMISSED") {
+      throw new TypeError("annotation status is invalid");
+    }
     return dependencies.storage.createAnnotation({
       ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), fileId: requireString(input.fileId, "fileId"),
-      fileVersion: Number(input.fileVersion), pageOrSheet: typeof input.pageOrSheet === "string" ? input.pageOrSheet : "",
-      annotationType: requireString(input.annotationType, "annotationType"), geometryJson: typeof input.geometryJson === "string" ? input.geometryJson : "{}",
-      structuralAnchorJson: typeof input.structuralAnchorJson === "string" ? input.structuralAnchorJson : "{}", selectedText: typeof input.selectedText === "string" ? input.selectedText : ""
+      fileVersion: Number(input.fileVersion), anchor: input.anchor as DocumentAnchor,
+      instruction: requireString(input.instruction, "instruction"), status,
+      supersedesAnnotationId: typeof input.supersedesAnnotationId === "string" ? input.supersedesAnnotationId : undefined
     });
   });
   ipcMain.handle(brainWorkspaceIpcChannels.changeSetList, async (_event, value: unknown) => {

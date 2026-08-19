@@ -97,7 +97,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [x] Define discriminated anchors for image, PDF, DOCX, PPTX, XLSX, and text.
 - [x] Write fixture tests that reopen and extract representative files of every format.
 - [ ] Render each format with stable object IDs and coordinate transforms.
-- [ ] Store immutable annotations separately from originals.
+- [x] Store immutable annotations separately from originals.
 - [ ] Submit annotation IDs through chat and produce a bounded revision preview.
 - [ ] Export a new valid file revision and verify it by reparsing and visual rendering.
 - [ ] Run document workers outside Electron main and migrate their supervision to Rust Core.
