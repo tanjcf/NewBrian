@@ -104,6 +104,7 @@ import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
+import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import {
   resolveEffectiveGatewayBaseUrl,
@@ -587,7 +588,9 @@ const quantStrategyScheduler = new QuantStrategyScheduler({
   resolveOwnerId: resolveBrainLocalOwnerId,
   execute: async (input) => { brainWorkspaceStorage.enqueueQuantStrategyExecution(input); }
 });
+const quantStrategyTaskRunner = new QuantStrategyTaskRunner({ store: brainWorkspaceStorage, simulation: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });
 let quantStrategyTimer: NodeJS.Timeout | null = null;
+let quantStrategyTaskTimer: NodeJS.Timeout | null = null;
 const governmentWritingSpecificationService = new GovernmentWritingSpecificationService(codexStorage);
 const workspaceWorktreeService = new WorkspaceWorktreeService({
   bindingsPath: desktopWorktreeBindingsPath,
@@ -8338,6 +8341,9 @@ app.whenReady().then(async () => {
   void quantStrategyScheduler.tick();
   quantStrategyTimer = setInterval(() => { void quantStrategyScheduler.tick(); }, 60_000);
   quantStrategyTimer.unref();
+  void quantStrategyTaskRunner.tick();
+  quantStrategyTaskTimer = setInterval(() => { void quantStrategyTaskRunner.tick(); }, 15_000);
+  quantStrategyTaskTimer.unref();
   void scheduleAutomaticUserKnowledgeSync({
     projectWorkspacePath: initialWorkspace?.path,
     projectKey: initialWorkspace?.name || initialWorkspace?.id,
@@ -8372,6 +8378,8 @@ app.on("will-quit", () => {
   automationTimerService.stop();
   if (quantStrategyTimer) clearInterval(quantStrategyTimer);
   quantStrategyTimer = null;
+  if (quantStrategyTaskTimer) clearInterval(quantStrategyTaskTimer);
+  quantStrategyTaskTimer = null;
   desktopControlPlaneHeartbeat.stop();
   if (holonOutboxTimer) clearInterval(holonOutboxTimer);
   holonOutboxTimer = null;

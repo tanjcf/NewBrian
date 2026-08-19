@@ -59,10 +59,17 @@ export class QuantSimulationService {
     return fill;
   }
   snapshot(projectId: string, prices: Record<string, number>): PortfolioSnapshot { return this.session(projectId).ledger.snapshot(prices); }
+  skillSnapshot(projectId: string, skillId: string, prices: Record<string, number>): PortfolioSnapshot {
+    const ledger = this.session(projectId).skillLedgers.get(skillId);
+    return ledger ? ledger.snapshot(prices) : new SimulationLedger(this.session(projectId).initialCash).snapshot(prices);
+  }
   recordSkillSnapshot(projectId: string, skillId: string, prices: Record<string, number>): void {
     const session = this.session(projectId);
-    const ledger = session.skillLedgers.get(skillId);
-    if (!ledger) throw new Error("QUANT_SKILL_SESSION_NOT_FOUND");
+    let ledger = session.skillLedgers.get(skillId);
+    if (!ledger) {
+      ledger = new SimulationLedger(session.initialCash);
+      session.skillLedgers.set(skillId, ledger);
+    }
     ledger.recordSkillSnapshot(skillId, prices);
     this.persist(projectId);
   }

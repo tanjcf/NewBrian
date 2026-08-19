@@ -25,6 +25,8 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [scheduleTime, setScheduleTime] = useState("15:10");
   const [scheduleExchange, setScheduleExchange] = useState<"SSE" | "SZSE" | "BSE">("SSE");
   const [scheduleStatus, setScheduleStatus] = useState("");
+  const [skillPerformance, setSkillPerformance] = useState<Record<string, any>>({});
+  const [strategyTasks, setStrategyTasks] = useState<any[]>([]);
 
   useEffect(() => {
     if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
@@ -50,6 +52,25 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
       .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划读取失败"));
   }, [projectId]);
 
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const items = await window.codecn?.listBrainTasks?.({ projectId });
+        if (active) setStrategyTasks((Array.isArray(items) ? items : []).filter((item) => String(item.taskType || "").startsWith("quant.strategy.")));
+      } catch { if (active) setStrategyTasks([]); }
+      const entries = await Promise.all(schedules.map(async (item) => {
+        try { return [item.skillId, await window.codecn?.getQuantSkillPerformance?.({ projectId, skillId: item.skillId })] as const; }
+        catch { return [item.skillId, null] as const; }
+      }));
+      if (active) setSkillPerformance(Object.fromEntries(entries.filter((entry) => entry[1])));
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [projectId, schedules]);
+
   const latest = bars.at(-1)!;
   const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [bars, latest.close]);
   const chart = useMemo(() => {
@@ -70,7 +91,7 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
 
   const createSchedule = () => {
     if (!projectId || !window.codecn?.createQuantStrategySchedule) { setScheduleStatus("模拟项目尚未连接"); return; }
-    void window.codecn.createQuantStrategySchedule({ projectId, skillId, exchange: scheduleExchange, runAt: scheduleTime })
+    void window.codecn.createQuantStrategySchedule({ projectId, skillId, exchange: scheduleExchange, runAt: scheduleTime, symbol, quantity })
       .then((created: any) => { setSchedules((items) => [...items, created]); setScheduleStatus("策略计划已保存，仅进入模拟任务队列"); })
       .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划保存失败"));
   };
@@ -104,7 +125,9 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
         <label>交易日执行时间<input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} /></label>
         <button type="button" disabled={!skillId.trim()} onClick={createSchedule}>创建模拟计划</button>
       </div>
-      {schedules.length ? <div className="brain-quant-schedule-list">{schedules.map((item) => <article key={item.id}><strong>{item.skillId}</strong><span>{item.exchange} · 交易日 {item.runAt} · Asia/Shanghai</span><em>{item.enabled ? "已启用" : "已停用"}</em></article>)}</div> : <div className="brain-quant-empty">尚未创建量化 Skill 计划。计划只会生成模拟任务，并以“计划 + 交易日期”防止重复运行。</div>}
+      {schedules.length ? <div className="brain-quant-schedule-list">{schedules.map((item) => <article key={item.id}><strong>{item.skillId}</strong><span>{item.symbol} · {item.quantity} 股 · {item.exchange} · 交易日 {item.runAt}</span><em>{item.enabled ? "已启用" : "已停用"}</em></article>)}</div> : <div className="brain-quant-empty">尚未创建量化 Skill 计划。计划只会生成模拟任务，并以“计划 + 交易日期”防止重复运行。</div>}
+      {Object.keys(skillPerformance).length ? <div className="brain-quant-schedule-list">{Object.values(skillPerformance).map((item: any) => <article key={`performance-${item.skillId}`}><strong>{item.skillId} 收益</strong><span>累计 {Number(item.totalReturnPercent).toFixed(2)}% · 最大回撤 {Number(item.maxDrawdownPercent).toFixed(2)}% · {item.tradeCount} 笔</span><em>胜率 {Number(item.winRatePercent).toFixed(1)}%</em></article>)}</div> : null}
+      {strategyTasks.slice(0, 5).map((task) => <small key={task.id} className="brain-quant-order-status">{String(task.taskType).replace("quant.strategy.", "")} · {task.status}{task.errorCode ? ` · ${task.errorCode}` : ""}</small>)}
       {scheduleStatus ? <small className="brain-quant-order-status">{scheduleStatus}</small> : null}
     </section>
   </main>;

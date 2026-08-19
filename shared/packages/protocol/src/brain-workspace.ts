@@ -144,6 +144,8 @@ export interface BrainTaskDto {
   idempotencyKey: string;
   attempt: number;
   maxAttempts: number;
+  resourceLimitsJson: string;
+  resultJson: string;
   errorCode: string;
   errorDetail: string;
   startedAt: string;

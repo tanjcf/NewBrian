@@ -379,9 +379,12 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       const input = requireRecord(value, "Quant schedule create");
       const exchange = requireString(input.exchange, "exchange");
       if (exchange !== "SSE" && exchange !== "SZSE" && exchange !== "BSE") throw new TypeError("exchange is invalid");
+      const quantity = Number(input.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) throw new TypeError("quantity must be a positive integer");
       return dependencies.storage.createQuantStrategySchedule({
         ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"),
-        skillId: requireString(input.skillId, "skillId"), exchange, runAt: requireString(input.runAt, "runAt")
+        skillId: requireString(input.skillId, "skillId"), exchange, runAt: requireString(input.runAt, "runAt"),
+        symbol: requireString(input.symbol, "symbol"), quantity
       });
     });
   }

@@ -8,6 +8,8 @@ export interface QuantStrategySchedule {
   timezone: "Asia/Shanghai";
   runAt: string;
   enabled: boolean;
+  symbol: string;
+  quantity: number;
 }
 
 export interface QuantStrategyExecution {
@@ -17,6 +19,8 @@ export interface QuantStrategyExecution {
   exchange: ChinaExchange;
   tradingDate: string;
   idempotencyKey: string;
+  symbol: string;
+  quantity: number;
 }
 
 export interface QuantStrategyScheduleStore {
@@ -75,7 +79,8 @@ export class QuantStrategyScheduler {
       if (!this.store.claim(schedule.id, clock.date, idempotencyKey)) continue;
       const execution: QuantStrategyExecution = {
         scheduleId: schedule.id, projectId: schedule.projectId, skillId: schedule.skillId,
-        exchange: schedule.exchange, tradingDate: clock.date, idempotencyKey
+        exchange: schedule.exchange, tradingDate: clock.date, idempotencyKey,
+        symbol: schedule.symbol, quantity: schedule.quantity
       };
       try {
         await this.execute(execution);

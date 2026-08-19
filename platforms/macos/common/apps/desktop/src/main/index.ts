@@ -30,6 +30,7 @@ import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
+import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
@@ -192,7 +193,9 @@ const quantStrategyScheduler = new QuantStrategyScheduler({
   resolveOwnerId: resolveBrainLocalOwnerId,
   execute: async (input) => { brainWorkspaceStorage.enqueueQuantStrategyExecution(input); }
 });
+const quantStrategyTaskRunner = new QuantStrategyTaskRunner({ store: brainWorkspaceStorage, simulation: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });
 let quantStrategyTimer: NodeJS.Timeout | null = null;
+let quantStrategyTaskTimer: NodeJS.Timeout | null = null;
 
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.
@@ -10525,6 +10528,9 @@ app.whenReady().then(async () => {
   void quantStrategyScheduler.tick();
   quantStrategyTimer = setInterval(() => { void quantStrategyScheduler.tick(); }, 60_000);
   quantStrategyTimer.unref();
+  void quantStrategyTaskRunner.tick();
+  quantStrategyTaskTimer = setInterval(() => { void quantStrategyTaskRunner.tick(); }, 15_000);
+  quantStrategyTaskTimer.unref();
   const authStatus = await resolveDesktopAuthStatus();
   if (authStatus.authenticated) {
     void startDesktopBootstrapAfterAuth().catch((error) => {
@@ -10555,6 +10561,8 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   if (quantStrategyTimer) clearInterval(quantStrategyTimer);
   quantStrategyTimer = null;
+  if (quantStrategyTaskTimer) clearInterval(quantStrategyTaskTimer);
+  quantStrategyTaskTimer = null;
   if (registeredPopupShortcut) {
     try { globalShortcut.unregister(registeredPopupShortcut); } catch { /* shortcut already released */ }
     registeredPopupShortcut = "";

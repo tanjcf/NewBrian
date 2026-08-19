@@ -190,7 +190,7 @@ contextBridge.exposeInMainWorld("codecn", {
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantSkillPerformance: (input: { projectId: string; skillId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillPerformance, input),
   listQuantStrategySchedules: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleList, input),
-  createQuantStrategySchedule: (input: { projectId: string; skillId: string; exchange: "SSE" | "SZSE" | "BSE"; runAt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleCreate, input),
+  createQuantStrategySchedule: (input: { projectId: string; skillId: string; exchange: "SSE" | "SZSE" | "BSE"; runAt: string; symbol: string; quantity: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleCreate, input),
   bootstrap: () => ipcRenderer.invoke(desktopIpcChannels.core.bootstrap),
   getSnapshot: () => ipcRenderer.invoke(desktopIpcChannels.core.getSnapshot),
   getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke(desktopIpcChannels.goal.get, input),

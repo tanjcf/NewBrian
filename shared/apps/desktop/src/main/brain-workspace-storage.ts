@@ -79,6 +79,7 @@ export interface BrainTaskRecord {
   id: string; projectId: string; conversationId: string; workspaceKey: BrainWorkspaceKey;
   taskType: string; status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
   progress: number; requestId: string; idempotencyKey: string; attempt: number; maxAttempts: number;
+  resourceLimitsJson: string; resultJson: string;
   errorCode: string; errorDetail: string; startedAt: string; finishedAt: string; heartbeatAt: string;
 }
 
@@ -97,7 +98,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 5;
+const latestMigrationVersion = 6;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -383,6 +384,14 @@ function migrationFiveSql() {
   `;
 }
 
+function migrationSixSql() {
+  return `
+    ALTER TABLE brain_quant_strategy_schedule ADD COLUMN symbol TEXT NOT NULL DEFAULT '600519';
+    ALTER TABLE brain_quant_strategy_schedule ADD COLUMN quantity INTEGER NOT NULL DEFAULT 100 CHECK(quantity > 0);
+    ALTER TABLE brain_task ADD COLUMN result_json TEXT NOT NULL DEFAULT '{}';
+  `;
+}
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -453,7 +462,9 @@ function mapTask(row: Record<string, unknown>): BrainTaskRecord {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)), taskType: String(row.task_type),
     status: String(row.status) as BrainTaskRecord["status"], progress: Number(row.progress),
     requestId: String(row.request_id), idempotencyKey: String(row.idempotency_key), attempt: Number(row.attempt),
-    maxAttempts: Number(row.max_attempts), errorCode: String(row.error_code), errorDetail: String(row.error_detail),
+    maxAttempts: Number(row.max_attempts), resourceLimitsJson: String(row.resource_limits_json || "{}"),
+    resultJson: String(row.result_json || "{}"),
+    errorCode: String(row.error_code), errorDetail: String(row.error_detail),
     startedAt: String(row.started_at || ""), finishedAt: String(row.finished_at || ""), heartbeatAt: String(row.heartbeat_at || "")
   };
 }
@@ -503,6 +514,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 3, "Bind BRAIN projects to authorized local workspaces", migrationThreeSql());
       applyMigration(this.database, 4, "Persist isolated quantitative simulation ledgers", migrationFourSql());
       applyMigration(this.database, 5, "Schedule idempotent quantitative strategy simulations", migrationFiveSql());
+      applyMigration(this.database, 6, "Bind quantitative schedules to symbols and target quantities", migrationSixSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -924,7 +936,7 @@ export class BrainWorkspaceStorage {
       .all(projectId) as Record<string, unknown>[]).map(mapTask);
   }
 
-  updateTask(input: { ownerId: string; taskId: string; status: BrainTaskRecord["status"]; progress?: number; errorCode?: string; errorDetail?: string }): BrainTaskRecord {
+  updateTask(input: { ownerId: string; taskId: string; status: BrainTaskRecord["status"]; progress?: number; errorCode?: string; errorDetail?: string; resultJson?: string }): BrainTaskRecord {
     const current = this.getTask(input.ownerId, input.taskId);
     const statuses: BrainTaskRecord["status"][] = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"];
     if (!statuses.includes(input.status)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "Unsupported task status");
@@ -935,10 +947,36 @@ export class BrainWorkspaceStorage {
     const startedAt = input.status === "RUNNING" && !current.startedAt ? timestamp : (current.startedAt || null);
     const finishedAt = terminal ? timestamp : null;
     this.database.prepare(`
-      UPDATE brain_task SET status = ?, progress = ?, error_code = ?, error_detail = ?,
+      UPDATE brain_task SET status = ?, progress = ?, error_code = ?, error_detail = ?, result_json = ?,
         started_at = ?, finished_at = ?, heartbeat_at = ? WHERE id = ?
-    `).run(input.status, progress, input.errorCode || "", input.errorDetail || "", startedAt, finishedAt, timestamp, input.taskId);
+    `).run(input.status, progress, input.errorCode || "", input.errorDetail || "", input.resultJson ?? current.resultJson,
+      startedAt, finishedAt, timestamp, input.taskId);
     return this.getTask(input.ownerId, input.taskId);
+  }
+
+  listRunnableQuantStrategyTasks(ownerId: string): BrainTaskRecord[] {
+    return (this.database.prepare(`SELECT task.* FROM brain_task task
+        JOIN brain_project project ON project.id = task.project_id
+        WHERE project.owner_id = ? AND task.task_type LIKE 'quant.strategy.%'
+          AND task.status IN ('QUEUED', 'FAILED') AND task.attempt < task.max_attempts
+        ORDER BY COALESCE(task.heartbeat_at, task.started_at, '') ASC, task.id ASC`)
+      .all(requireText(ownerId, "ownerId")) as Record<string, unknown>[]).map(mapTask);
+  }
+
+  claimQuantStrategyTask(ownerId: string, taskId: string): BrainTaskRecord | null {
+    const normalizedOwnerId = requireText(ownerId, "ownerId");
+    const normalizedTaskId = requireText(taskId, "taskId");
+    const timestamp = nowIso();
+    const claimed = this.database.prepare(`UPDATE brain_task SET
+        status = 'RUNNING', attempt = attempt + 1, progress = 0.05,
+        error_code = '', error_detail = '', started_at = COALESCE(started_at, ?),
+        finished_at = NULL, heartbeat_at = ?
+      WHERE id = ? AND task_type LIKE 'quant.strategy.%'
+        AND status IN ('QUEUED', 'FAILED') AND attempt < max_attempts
+        AND EXISTS (SELECT 1 FROM brain_project project WHERE project.id = brain_task.project_id AND project.owner_id = ?)`)
+      .run(timestamp, timestamp, normalizedTaskId, normalizedOwnerId);
+    if (Number(claimed.changes) !== 1) return null;
+    return this.getTask(normalizedOwnerId, normalizedTaskId);
   }
 
   registerArtifact(input: {
@@ -992,27 +1030,34 @@ export class BrainWorkspaceStorage {
     `).run(normalizedProjectId, normalizedState, nowIso());
   }
 
-  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; exchange: ChinaExchange; runAt: string }): QuantStrategySchedule {
+  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; exchange: ChinaExchange; runAt: string; symbol: string; quantity: number }): QuantStrategySchedule {
     this.getProject(input.ownerId, input.projectId);
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(input.runAt)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "runAt must use HH:mm");
     if (!(["SSE", "SZSE", "BSE"] as const).includes(input.exchange)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "exchange is invalid");
     const skillId = requireText(input.skillId, "skillId");
+    const symbol = requireText(input.symbol, "symbol");
+    if (!Number.isInteger(input.quantity) || input.quantity <= 0) throw new BrainStorageError("BRAIN_INPUT_INVALID", "quantity must be a positive integer");
     const existing = this.database.prepare(`SELECT * FROM brain_quant_strategy_schedule
       WHERE project_id = ? AND skill_id = ? AND exchange = ? AND run_at = ?`)
       .get(input.projectId, skillId, input.exchange, input.runAt) as Record<string, unknown> | undefined;
-    if (existing) return {
-      id: String(existing.id), projectId: String(existing.project_id), skillId: String(existing.skill_id),
-      exchange: String(existing.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(existing.run_at), enabled: Number(existing.enabled) === 1
-    };
+    if (existing) {
+      this.database.prepare("UPDATE brain_quant_strategy_schedule SET symbol = ?, quantity = ?, updated_at = ? WHERE id = ?")
+        .run(symbol, input.quantity, nowIso(), String(existing.id));
+      return {
+        id: String(existing.id), projectId: String(existing.project_id), skillId: String(existing.skill_id),
+        exchange: String(existing.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(existing.run_at),
+        enabled: Number(existing.enabled) === 1, symbol, quantity: input.quantity
+      };
+    }
     const timestamp = nowIso();
     const record: QuantStrategySchedule = {
       id: `quant_schedule_${randomUUID()}`, projectId: input.projectId, skillId,
-      exchange: input.exchange, timezone: "Asia/Shanghai", runAt: input.runAt, enabled: true
+      exchange: input.exchange, timezone: "Asia/Shanghai", runAt: input.runAt, enabled: true, symbol, quantity: input.quantity
     };
     this.database.prepare(`
-      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, exchange, timezone, run_at, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `).run(record.id, record.projectId, record.skillId, record.exchange, record.timezone, record.runAt, timestamp, timestamp);
+      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, exchange, timezone, run_at, enabled, symbol, quantity, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+    `).run(record.id, record.projectId, record.skillId, record.exchange, record.timezone, record.runAt, record.symbol, record.quantity, timestamp, timestamp);
     return record;
   }
 
@@ -1021,7 +1066,8 @@ export class BrainWorkspaceStorage {
     return (this.database.prepare("SELECT * FROM brain_quant_strategy_schedule WHERE project_id = ? ORDER BY created_at, id")
       .all(projectId) as Record<string, unknown>[]).map((row) => ({
         id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
-        exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: Number(row.enabled) === 1
+        exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: Number(row.enabled) === 1,
+        symbol: String(row.symbol), quantity: Number(row.quantity)
       }));
   }
 
@@ -1032,7 +1078,8 @@ export class BrainWorkspaceStorage {
           WHERE schedule.enabled = 1 AND project.owner_id = ? ORDER BY schedule.id`)
         .all(requireText(ownerId, "ownerId")) as Record<string, unknown>[]).map((row) => ({
           id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
-          exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: true
+          exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: true,
+          symbol: String(row.symbol), quantity: Number(row.quantity)
         })),
       claim: (scheduleId, tradingDate, idempotencyKey) => {
         const timestamp = nowIso();
@@ -1071,7 +1118,7 @@ export class BrainWorkspaceStorage {
       requestId: input.idempotencyKey,
       idempotencyKey: input.idempotencyKey,
       maxAttempts: 3,
-      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, simulationOnly: true })
+      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, symbol: input.symbol, quantity: input.quantity, simulationOnly: true })
     });
   }
 

@@ -74,17 +74,24 @@ test("enforces local owner boundaries", () => {
 test("persists owner-scoped strategy schedules and claims one run per trading date", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "量化项目", primaryWorkspaceKey: "quant" });
-    const schedule = storage.createQuantStrategySchedule({ ownerId: "owner-a", projectId: project.id, skillId: "trend", exchange: "SSE", runAt: "15:10" });
-    assert.equal(storage.createQuantStrategySchedule({ ownerId: "owner-a", projectId: project.id, skillId: "trend", exchange: "SSE", runAt: "15:10" }).id, schedule.id);
+    const scheduleInput = { ownerId: "owner-a", projectId: project.id, skillId: "trend", exchange: "SSE" as const, runAt: "15:10", symbol: "600519", quantity: 100 };
+    const schedule = storage.createQuantStrategySchedule(scheduleInput);
+    assert.equal(storage.createQuantStrategySchedule(scheduleInput).id, schedule.id);
     assert.equal(storage.listQuantStrategySchedules("owner-a", project.id)[0]?.id, schedule.id);
     assert.throws(() => storage.listQuantStrategySchedules("owner-b", project.id), /Project belongs to another local owner/);
     const runs = storage.quantStrategyScheduleStore();
     assert.equal(runs.listEnabled("owner-b").length, 0);
     assert.equal(runs.listEnabled("owner-a").length, 1);
     const key = `quant-strategy:${schedule.id}:2026-08-20`;
-    const queued = storage.enqueueQuantStrategyExecution({ scheduleId: schedule.id, projectId: project.id, skillId: "trend", exchange: "SSE", tradingDate: "2026-08-20", idempotencyKey: key });
+    const queued = storage.enqueueQuantStrategyExecution({ scheduleId: schedule.id, projectId: project.id, skillId: "trend", exchange: "SSE", tradingDate: "2026-08-20", idempotencyKey: key, symbol: "600519", quantity: 100 });
     assert.equal(queued.idempotencyKey, key);
     assert.match(queued.taskType, /^quant\.strategy\./u);
+    assert.equal(JSON.parse(queued.resourceLimitsJson).symbol, "600519");
+    assert.equal(storage.listRunnableQuantStrategyTasks("owner-b").length, 0);
+    assert.equal(storage.listRunnableQuantStrategyTasks("owner-a").length, 1);
+    assert.equal(storage.claimQuantStrategyTask("owner-b", queued.id), null);
+    assert.equal(storage.claimQuantStrategyTask("owner-a", queued.id)?.status, "RUNNING");
+    assert.equal(storage.claimQuantStrategyTask("owner-a", queued.id), null);
     assert.equal(runs.claim(schedule.id, "2026-08-20", key), true);
     assert.equal(runs.claim(schedule.id, "2026-08-20", key), false);
     runs.complete(schedule.id, "2026-08-20", key);
@@ -191,7 +198,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 5);
+      assert.equal(Number(migrations.count), 6);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);
@@ -221,7 +228,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v5.bak`;
+  const backupPath = `${databasePath}.v0-before-v6.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();
