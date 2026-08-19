@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const bars = [
+const fallbackBars = [
   { date: "08-15", open: 1682, high: 1708, low: 1674, close: 1698, volume: "2.1M" },
   { date: "08-16", open: 1698, high: 1721, low: 1691, close: 1714, volume: "2.4M" },
   { date: "08-17", open: 1714, high: 1730, low: 1702, close: 1722, volume: "1.8M" },
@@ -12,13 +12,17 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [symbol, setSymbol] = useState("600519");
   const [interval, setInterval] = useState("日线");
   const [adjustment, setAdjustment] = useState("前复权");
+  const [bars, setBars] = useState(fallbackBars);
   const [status, setStatus] = useState("本地演示数据");
   useEffect(() => {
     if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
     let active = true;
     void window.codecn.createQuantSession({ projectId, initialCash: 100_000 }).then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: "1d", adjustment: "forward" } })).then((result: any[]) => {
-      if (active) setStatus(result.length ? `已加载 ${result.length} 条行情` : "暂无已同步行情，显示演示数据");
-    }).catch(() => { if (active) setStatus("行情服务暂不可用，显示演示数据"); });
+      if (!active) return;
+      const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
+      if (valid.length) { setBars(valid.slice(-30)); setStatus(`已加载 ${valid.length} 条真实行情`); }
+      else { setBars(fallbackBars); setStatus("暂无已同步行情，显示演示数据"); }
+    }).catch(() => { if (active) { setBars(fallbackBars); setStatus("行情服务暂不可用，显示演示数据"); } });
     return () => { active = false; };
   }, [projectId, symbol]);
   const latest = bars.at(-1)!;
