@@ -33,6 +33,8 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
+import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
+import { buildAnnotationChatReference, createTextLineAnchor } from "./document-annotation-policy";
 import { QuantWorkspace } from "./QuantWorkspace";
 import {
   brainWorkspaceModes,
@@ -439,6 +441,11 @@ export function WorkspaceModules(ctx: any) {
   const [brainFiles, setBrainFiles] = useState<any[]>([]);
   const [brainTasks, setBrainTasks] = useState<any[]>([]);
   const [brainArtifacts, setBrainArtifacts] = useState<any[]>([]);
+  const [brainAnnotations, setBrainAnnotations] = useState<any[]>([]);
+  const [documentAnnotationActive, setDocumentAnnotationActive] = useState(false);
+  const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
+  const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
+  const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
   const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks">("files");
   const initialBrainWorkspaceSelection = useRef(restoreBrainWorkspaceSelection({
     serialized: (() => { try { return localStorage.getItem(BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
@@ -563,23 +570,30 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     let disposed = false;
     if (!selectedBrainProjectId) {
-      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]);
+      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]); setBrainAnnotations([]);
       return () => { disposed = true; };
     }
     void Promise.all([
       window.codecn?.listBrainFiles?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
       window.codecn?.listBrainTasks?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
-      window.codecn?.listBrainArtifacts?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
-    ]).then(([files, tasks, artifacts]) => {
+      window.codecn?.listBrainArtifacts?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.codecn?.listBrainAnnotations?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
+    ]).then(([files, tasks, artifacts, annotations]) => {
       if (disposed) return;
       setBrainFiles(Array.isArray(files) ? files : []);
       setBrainTasks(Array.isArray(tasks) ? tasks : []);
       setBrainArtifacts(Array.isArray(artifacts) ? artifacts : []);
+      setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
     }).catch((error) => {
       if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
     });
     return () => { disposed = true; };
   }, [selectedBrainProjectId, selectedBrainConversationId]);
+  useEffect(() => {
+    setDocumentAnnotationActive(false);
+    setDocumentAnnotationCandidate(null);
+    setDocumentAnnotationInstruction("");
+  }, [selectedBrainProjectId, searchFilePreview?.tabPath, searchFilePreview?.path]);
   const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
   const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
   useEffect(() => {
@@ -4285,11 +4299,11 @@ function renderSidebarModule() {
         </nav>
         <div className="brain-resource-list">
           {brainResourceTab === "files" ? brainFiles.map((file) => (
-            <div key={file.id} className="brain-resource-row">
+            <button key={file.id} type="button" className="brain-resource-row" onClick={() => openLocalFilePreview(file.storageKey)}>
               <SidebarIcon name="file" />
               <span><strong>{file.logicalName}</strong><small>版本 {file.versionNo} · {(file.sizeBytes / 1024).toFixed(file.sizeBytes >= 1024 ? 1 : 0)} KB</small></span>
               <em>{file.validationStatus}</em>
-            </div>
+            </button>
           )) : null}
           {brainResourceTab === "artifacts" ? brainArtifacts.map((artifact) => (
             <div key={artifact.id} className="brain-resource-row">
@@ -5809,6 +5823,48 @@ function renderChatModule() {
     );
   }
 
+  const normalizeDocumentPath = (value: unknown) => String(value || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  const activeBrainFile = searchFilePreview ? brainFiles.find((file) => {
+    const previewPath = normalizeDocumentPath(searchFilePreview.tabPath || searchFilePreview.path || searchFilePreview.name);
+    const storageKey = normalizeDocumentPath(file.storageKey);
+    const logicalName = normalizeDocumentPath(file.logicalName);
+    return previewPath === storageKey || previewPath.endsWith(`/${storageKey}`)
+      || previewPath === logicalName || previewPath.endsWith(`/${logicalName}`);
+  }) ?? null : null;
+  const activeTextAnnotationFormat = (() => {
+    const name = String(activeBrainFile?.logicalName || searchFilePreview?.name || "").toLowerCase();
+    if (name.endsWith(".md") || name.endsWith(".markdown")) return "markdown" as const;
+    if (name.endsWith(".txt")) return "txt" as const;
+    return null;
+  })();
+  const saveDocumentAnnotation = async () => {
+    if (!activeBrainFile || !selectedBrainProjectId || !documentAnnotationCandidate || !documentAnnotationInstruction.trim()) return;
+    if (!window.codecn?.createBrainAnnotation) return;
+    setDocumentAnnotationBusy(true);
+    try {
+      const annotation = await window.codecn.createBrainAnnotation({
+        projectId: selectedBrainProjectId,
+        fileId: activeBrainFile.id,
+        fileVersion: activeBrainFile.versionNo,
+        anchor: documentAnnotationCandidate,
+        instruction: documentAnnotationInstruction.trim()
+      });
+      setBrainAnnotations((current) => [annotation, ...current]);
+      setDocumentAnnotationCandidate(null);
+      setDocumentAnnotationInstruction("");
+      setChatStatus(`标注 ${annotation.id} 已保存。`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDocumentAnnotationBusy(false);
+    }
+  };
+  const sendDocumentAnnotationToChat = (annotation: any) => {
+    const reference = buildAnnotationChatReference(annotation);
+    setBrainDraft((current) => [current.trim(), reference].filter(Boolean).join("\n\n"));
+    setChatStatus(`标注 ${annotation.id} 已加入 BRAIN 对话。`);
+  };
+
 function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "center">) {
     const isCenter = placement === "center";
 
@@ -5925,6 +5981,22 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 </button>
               </div>
             </header>
+            <DocumentAnnotationLayer
+              file={activeBrainFile}
+              annotations={brainAnnotations}
+              active={documentAnnotationActive}
+              candidate={documentAnnotationCandidate}
+              instruction={documentAnnotationInstruction}
+              busy={documentAnnotationBusy}
+              onToggle={() => {
+                setDocumentAnnotationActive((current) => !current);
+                setDocumentAnnotationCandidate(null);
+                setDocumentAnnotationInstruction("");
+              }}
+              onInstructionChange={setDocumentAnnotationInstruction}
+              onSave={() => void saveDocumentAnnotation()}
+              onSendToChat={sendDocumentAnnotationToChat}
+            />
             {searchFilePreview.loading ? (
               <div className="search-file-preview-state">正在读取文件...</div>
             ) : searchFilePreview.error || searchFilePreview.blankReason || (!searchFilePreview.binary && !searchFilePreview.kind && !String(searchFilePreview.content || "").length && !searchFilePreview.loading) ? (
@@ -5985,7 +6057,15 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                       ttsSelected ? "tts-active" : ""
                     ].filter(Boolean).join(" ");
                     return (
-                      <span className={className} data-preview-line={lineNumber} key={lineNumber}>
+                      <span
+                        className={`${className}${documentAnnotationCandidate?.anchorId === `${activeTextAnnotationFormat}:line:${lineNumber}` ? " annotation-candidate" : ""}`}
+                        data-preview-line={lineNumber}
+                        key={lineNumber}
+                        onClick={() => {
+                          if (!documentAnnotationActive || !activeTextAnnotationFormat) return;
+                          setDocumentAnnotationCandidate(createTextLineAnchor(activeTextAnnotationFormat, lineNumber, line));
+                        }}
+                      >
                         <i>{lineNumber}</i>{line}{index < contentLines.length - 1 ? "\n" : ""}
                       </span>
                     );

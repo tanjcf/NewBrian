@@ -7,6 +7,8 @@ import type {
   BrainConversationListInput,
   BrainArtifactDto,
   BrainArtifactRegisterInput,
+  BrainAnnotationCreateInput,
+  BrainAnnotationDto,
   BrainDraftSaveInput,
   BrainFileDto,
   BrainFileRegisterInput,
@@ -273,6 +275,8 @@ declare global {
       saveBrainDraft: (input: BrainDraftSaveInput) => Promise<{ ok: boolean }>;
       listBrainFiles: (input: BrainProjectGetInput) => Promise<BrainFileDto[]>;
       registerBrainFile: (input: BrainFileRegisterInput) => Promise<BrainFileDto>;
+      listBrainAnnotations: (input: BrainProjectGetInput) => Promise<BrainAnnotationDto[]>;
+      createBrainAnnotation: (input: BrainAnnotationCreateInput) => Promise<BrainAnnotationDto>;
       listBrainTasks: (input: BrainProjectGetInput) => Promise<BrainTaskDto[]>;
       createBrainTask: (input: BrainTaskCreateInput) => Promise<BrainTaskDto>;
       updateBrainTask: (input: BrainTaskUpdateInput) => Promise<BrainTaskDto>;
