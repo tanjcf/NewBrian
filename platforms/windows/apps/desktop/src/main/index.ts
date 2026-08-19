@@ -7276,7 +7276,18 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
-  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, quant: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });
+  registerBrainWorkspaceIpcHandlers({
+    storage: brainWorkspaceStorage,
+    quant: quantSimulationService,
+    resolveOwnerId: resolveBrainLocalOwnerId,
+    resolveWorkspaceRoot: async (workspaceId) => {
+      const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
+      if (!workspace) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_AUTHORIZED");
+      const root = await fs.realpath(workspace.path);
+      if (!(await fs.stat(root)).isDirectory()) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_DIRECTORY");
+      return root;
+    }
+  });
   registerPluginRepositoryHandlers();
   const controlWindow = (action: WindowControlAction) => controlDesktopWindow(mainWindowRef, action);
   const appMenuService = new AppMenuService({

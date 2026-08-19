@@ -29,6 +29,7 @@ export interface BrainProjectRecord {
   id: string;
   ownerId: string;
   name: string;
+  localWorkspaceId: string;
   primaryWorkspaceKey: BrainWorkspaceKey;
   status: BrainProjectStatus;
   lastConversationId: string;
@@ -95,7 +96,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 2;
+const latestMigrationVersion = 3;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -333,6 +334,14 @@ function migrationTwoSql() {
   `;
 }
 
+function migrationThreeSql() {
+  return `
+    ALTER TABLE brain_project ADD COLUMN local_workspace_id TEXT NOT NULL DEFAULT '';
+    CREATE INDEX idx_brain_project_owner_local_workspace
+      ON brain_project(owner_id, local_workspace_id);
+  `;
+}
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -364,6 +373,7 @@ function mapProject(row: Record<string, unknown>): BrainProjectRecord {
     id: String(row.id),
     ownerId: String(row.owner_id),
     name: String(row.name),
+    localWorkspaceId: String(row.local_workspace_id || ""),
     primaryWorkspaceKey: requireWorkspaceKey(String(row.primary_workspace_key)),
     status: String(row.status) as BrainProjectStatus,
     lastConversationId: String(row.last_conversation_id || ""),
@@ -449,6 +459,7 @@ export class BrainWorkspaceStorage {
     try {
       applyMigration(this.database, 1, "BRAIN local-first workspace schema", migrationOneSql());
       applyMigration(this.database, 2, "Structured immutable document annotations", migrationTwoSql());
+      applyMigration(this.database, 3, "Bind BRAIN projects to authorized local workspaces", migrationThreeSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -501,7 +512,7 @@ export class BrainWorkspaceStorage {
       .map(mapWorkspace);
   }
 
-  createProject(input: { ownerId: string; name: string; primaryWorkspaceKey: string }): BrainProjectRecord {
+  createProject(input: { ownerId: string; name: string; primaryWorkspaceKey: string; localWorkspaceId?: string }): BrainProjectRecord {
     const ownerId = requireText(input.ownerId, "ownerId");
     const name = requireText(input.name, "name");
     const workspaceKey = requireWorkspaceKey(input.primaryWorkspaceKey);
@@ -510,13 +521,14 @@ export class BrainWorkspaceStorage {
       throw new BrainStorageError("BRAIN_WORKSPACE_DISABLED", `Workspace is disabled: ${workspaceKey}`);
     }
     const id = `project_${randomUUID()}`;
+    const localWorkspaceId = input.localWorkspaceId?.trim() ?? "";
     const timestamp = nowIso();
     this.database.exec("BEGIN IMMEDIATE");
     try {
       this.database.prepare(`
-        INSERT INTO brain_project(id, owner_id, name, primary_workspace_key, status, created_at, updated_at, last_opened_at)
-        VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-      `).run(id, ownerId, name, workspaceKey, timestamp, timestamp, timestamp);
+        INSERT INTO brain_project(id, owner_id, name, local_workspace_id, primary_workspace_key, status, created_at, updated_at, last_opened_at)
+        VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
+      `).run(id, ownerId, name, localWorkspaceId, workspaceKey, timestamp, timestamp, timestamp);
       this.database.prepare("INSERT INTO brain_project_workspace(project_id, workspace_key, enabled) VALUES (?, ?, 1)")
         .run(id, workspaceKey);
       this.database.exec("COMMIT");
@@ -548,16 +560,17 @@ export class BrainWorkspaceStorage {
     return (rows as Record<string, unknown>[]).map(mapProject);
   }
 
-  updateProject(input: { ownerId: string; projectId: string; name?: string; status?: BrainProjectStatus }): BrainProjectRecord {
+  updateProject(input: { ownerId: string; projectId: string; name?: string; status?: BrainProjectStatus; localWorkspaceId?: string }): BrainProjectRecord {
     const current = this.getProject(input.ownerId, input.projectId);
     const name = input.name === undefined ? current.name : requireText(input.name, "name");
     const status = input.status ?? current.status;
+    const localWorkspaceId = input.localWorkspaceId === undefined ? current.localWorkspaceId : input.localWorkspaceId.trim();
     if (status !== "ACTIVE" && status !== "ARCHIVED") {
       throw new BrainStorageError("BRAIN_INPUT_INVALID", `Unsupported project status: ${status}`);
     }
     const timestamp = nowIso();
-    this.database.prepare("UPDATE brain_project SET name = ?, status = ?, updated_at = ?, last_opened_at = ? WHERE id = ? AND owner_id = ?")
-      .run(name, status, timestamp, timestamp, input.projectId, input.ownerId);
+    this.database.prepare("UPDATE brain_project SET name = ?, local_workspace_id = ?, status = ?, updated_at = ?, last_opened_at = ? WHERE id = ? AND owner_id = ?")
+      .run(name, localWorkspaceId, status, timestamp, timestamp, input.projectId, input.ownerId);
     return this.getProject(input.ownerId, input.projectId);
   }
 

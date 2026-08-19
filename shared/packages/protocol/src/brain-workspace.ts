@@ -17,6 +17,7 @@ export interface BrainWorkspaceDto {
 export interface BrainProjectDto {
   id: string;
   name: string;
+  localWorkspaceId: string;
   primaryWorkspaceKey: BrainWorkspaceKey;
   status: "ACTIVE" | "ARCHIVED";
   lastConversationId: string;
@@ -55,6 +56,7 @@ export interface BrainProjectListInput {
 export interface BrainProjectCreateInput {
   name: string;
   primaryWorkspaceKey: BrainWorkspaceKey;
+  localWorkspaceId?: string;
 }
 
 export interface BrainProjectGetInput { projectId: string }
@@ -62,6 +64,7 @@ export interface BrainProjectGetInput { projectId: string }
 export interface BrainProjectUpdateInput extends BrainProjectGetInput {
   name?: string;
   status?: "ACTIVE" | "ARCHIVED";
+  localWorkspaceId?: string;
 }
 
 export interface BrainProjectWorkspaceInput extends BrainProjectGetInput {

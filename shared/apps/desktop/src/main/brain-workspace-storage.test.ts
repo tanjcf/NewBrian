@@ -32,7 +32,7 @@ test("seeds all seven workspaces and rejects unknown workspace keys", () => {
 test("persists projects conversations messages and drafts across restart", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-restart-"));
   let storage = new BrainWorkspaceStorage(root);
-  const project = storage.createProject({ ownerId: "owner-a", name: "策略实验", primaryWorkspaceKey: "quant" });
+  const project = storage.createProject({ ownerId: "owner-a", name: "策略实验", primaryWorkspaceKey: "quant", localWorkspaceId: "workspace-local-1" });
   const conversation = storage.createConversation({ ownerId: "owner-a", projectId: project.id, title: "回测讨论" });
   storage.appendMessage({
     ownerId: "owner-a",
@@ -48,6 +48,7 @@ test("persists projects conversations messages and drafts across restart", () =>
 
   storage = new BrainWorkspaceStorage(root);
   try {
+    assert.equal(storage.getProject("owner-a", project.id).localWorkspaceId, "workspace-local-1");
     assert.equal(storage.getProject("owner-a", project.id).lastConversationId, conversation.id);
     assert.equal(storage.listMessages("owner-a", conversation.id)[0]?.content, "测试 2025 年策略");
     assert.equal(storage.readDraft("owner-a", conversation.id)?.content, "未发送草稿");
@@ -167,7 +168,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 2);
+      assert.equal(Number(migrations.count), 3);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);
@@ -197,7 +198,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v2.bak`;
+  const backupPath = `${databasePath}.v0-before-v3.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();

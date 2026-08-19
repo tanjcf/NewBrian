@@ -3553,7 +3553,11 @@ function renderSidebarModule() {
                         if (!name) return;
                         try {
                           if (window.codecn?.createBrainProject) {
-                            await window.codecn.createBrainProject({ name, primaryWorkspaceKey: selectedBrainWorkspaceKey });
+                            await window.codecn.createBrainProject({
+                              name,
+                              primaryWorkspaceKey: selectedBrainWorkspaceKey,
+                              ...(selectedWorkspace?.id ? { localWorkspaceId: selectedWorkspace.id } : {})
+                            });
                             await refreshBrainProjects(selectedBrainWorkspaceKey);
                             setBlankProjectDialogOpen(false);
                             return;

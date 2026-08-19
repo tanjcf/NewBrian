@@ -25,6 +25,7 @@ import type { QuantSimulationService } from "./quant-simulation-service.ts";
 interface BrainWorkspaceIpcDependencies {
   storage: BrainWorkspaceStorage;
   resolveOwnerId: () => Promise<string> | string;
+  resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
 }
 
@@ -69,7 +70,11 @@ function parseProjectList(value: unknown): BrainProjectListInput {
 
 function parseProjectCreate(value: unknown): BrainProjectCreateInput {
   const input = requireRecord(value, "Project create");
-  return { name: requireString(input.name, "name"), primaryWorkspaceKey: requireWorkspaceKey(input.primaryWorkspaceKey) };
+  return {
+    name: requireString(input.name, "name"),
+    primaryWorkspaceKey: requireWorkspaceKey(input.primaryWorkspaceKey),
+    localWorkspaceId: optionalString(input.localWorkspaceId, "localWorkspaceId")
+  };
 }
 
 function parseProjectGet(value: unknown): BrainProjectGetInput {
@@ -81,7 +86,10 @@ function parseProjectUpdate(value: unknown): BrainProjectUpdateInput {
   const input = requireRecord(value, "Project update");
   const status = input.status;
   if (status !== undefined && status !== "ACTIVE" && status !== "ARCHIVED") throw new TypeError("status is unsupported.");
-  return { projectId: requireString(input.projectId, "projectId"), name: optionalString(input.name, "name"), status };
+  return {
+    projectId: requireString(input.projectId, "projectId"), name: optionalString(input.name, "name"), status,
+    localWorkspaceId: optionalString(input.localWorkspaceId, "localWorkspaceId")
+  };
 }
 
 function parseProjectWorkspace(value: unknown): BrainProjectWorkspaceInput {
@@ -203,12 +211,18 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   ipcMain.handle(brainWorkspaceIpcChannels.workspaceList, () => dependencies.storage.listWorkspaces());
   ipcMain.handle(brainWorkspaceIpcChannels.projectList, async (_event, value: unknown) =>
     dependencies.storage.listProjects({ ownerId: await ownerId(), ...parseProjectList(value) }).map(withoutOwner));
-  ipcMain.handle(brainWorkspaceIpcChannels.projectCreate, async (_event, value: unknown) =>
-    withoutOwner(dependencies.storage.createProject({ ownerId: await ownerId(), ...parseProjectCreate(value) })));
+  ipcMain.handle(brainWorkspaceIpcChannels.projectCreate, async (_event, value: unknown) => {
+    const input = parseProjectCreate(value);
+    if (input.localWorkspaceId) await dependencies.resolveWorkspaceRoot(input.localWorkspaceId);
+    return withoutOwner(dependencies.storage.createProject({ ownerId: await ownerId(), ...input }));
+  });
   ipcMain.handle(brainWorkspaceIpcChannels.projectGet, async (_event, value: unknown) =>
     withoutOwner(dependencies.storage.getProject(await ownerId(), parseProjectGet(value).projectId)));
-  ipcMain.handle(brainWorkspaceIpcChannels.projectUpdate, async (_event, value: unknown) =>
-    withoutOwner(dependencies.storage.updateProject({ ownerId: await ownerId(), ...parseProjectUpdate(value) })));
+  ipcMain.handle(brainWorkspaceIpcChannels.projectUpdate, async (_event, value: unknown) => {
+    const input = parseProjectUpdate(value);
+    if (input.localWorkspaceId) await dependencies.resolveWorkspaceRoot(input.localWorkspaceId);
+    return withoutOwner(dependencies.storage.updateProject({ ownerId: await ownerId(), ...input }));
+  });
   ipcMain.handle(brainWorkspaceIpcChannels.projectWorkspaceEnable, async (_event, value: unknown) => {
     dependencies.storage.setProjectWorkspace({ ownerId: await ownerId(), ...parseProjectWorkspace(value) });
     return { ok: true };
