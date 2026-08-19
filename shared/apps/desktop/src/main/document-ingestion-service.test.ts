@@ -12,3 +12,11 @@ test("text ingestion normalizes newlines and creates line anchors", () => {
 test("text ingestion rejects unsupported formats", () => {
   assert.throws(() => new DocumentIngestionService().ingestText("report.pdf", "x"), /TXT and Markdown/);
 });
+
+test("adapts isolated worker results into the ingestion contract", async () => {
+  const result = await new DocumentIngestionService().ingestFile({
+    ingest: async () => ({ status: "completed", error_code: "", format: "markdown", text: "a", anchors: [{ format: "markdown", locator: { line: 1 }, selectedText: "a" }], warnings: [] })
+  }, { requestId: "read", projectRoot: "C:/project", relativePath: "a.md" });
+  assert.equal(result.format, "markdown");
+  assert.equal(result.anchors[0]?.locator.line, 1);
+});

@@ -1,4 +1,5 @@
 import type { DocumentAnchor, DocumentFormat } from "../../../packages/protocol/src/document-anchor.ts";
+import type { DocumentWorkerClient, DocumentWorkerIngestInput } from "./document-worker-client.ts";
 
 export interface DocumentIngestionResult {
   format: DocumentFormat;
@@ -19,5 +20,13 @@ export class DocumentIngestionService {
     const lines = content.replaceAll("\r\n", "\n").split("\n");
     const anchors = lines.map((line, index) => ({ format, locator: { line: index + 1 }, selectedText: line }));
     return { format, text: lines.join("\n"), anchors, warnings: [] };
+  }
+
+  async ingestFile(client: Pick<DocumentWorkerClient, "ingest">, input: DocumentWorkerIngestInput): Promise<DocumentIngestionResult> {
+    const result = await client.ingest(input);
+    if (result.status !== "completed" || !result.format || result.text === undefined || !result.anchors || !result.warnings) {
+      throw new Error("DOCUMENT_INGESTION_INCOMPLETE");
+    }
+    return { format: result.format, text: result.text, anchors: result.anchors, warnings: result.warnings };
   }
 }
