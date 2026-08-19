@@ -1,5 +1,6 @@
 mod approval;
 mod file_ops;
+mod git_ops;
 mod path_policy;
 mod process_ops;
 mod protocol;
@@ -91,6 +92,35 @@ fn handle(
                 &request.payload,
                 request.resource_limits.max_output_bytes,
                 &request.request_id,
+            ) {
+                Ok(result) => Response::completed(request.request_id, result),
+                Err(code) => Response::failed(request.request_id, code),
+            }
+        }
+        "git.status" | "git.diff" => match git_ops::read(
+            &request.operation,
+            boundary,
+            &request.payload,
+            request.resource_limits.timeout_ms,
+            request.resource_limits.max_output_bytes,
+        ) {
+            Ok(result) => Response::completed(request.request_id, result),
+            Err(code) => Response::failed(request.request_id, code),
+        },
+        "git.add" | "git.commit" => {
+            if let Err(code) = approvals.consume(
+                &request.approval_token,
+                &request.project_id,
+                &request.operation,
+            ) {
+                return Response::failed(request.request_id, code);
+            }
+            match git_ops::mutate(
+                &request.operation,
+                boundary,
+                &request.payload,
+                request.resource_limits.timeout_ms,
+                request.resource_limits.max_output_bytes,
             ) {
                 Ok(result) => Response::completed(request.request_id, result),
                 Err(code) => Response::failed(request.request_id, code),

@@ -133,6 +133,15 @@ fn temporary_project() -> PathBuf {
     root
 }
 
+fn git(project_root: &PathBuf, args: &[&str]) {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(project_root)
+        .status()
+        .expect("run git fixture command");
+    assert!(status.success(), "git fixture command failed: {args:?}");
+}
+
 #[test]
 fn enforces_project_boundary_approval_replay_and_cancellation_over_stdio() {
     let root = temporary_project();
@@ -413,6 +422,168 @@ fn rejects_caller_environment_and_stops_active_processes_on_core_shutdown() {
     );
     assert!(core.close_input_and_wait(std::time::Duration::from_secs(2)));
 
+    drop(core);
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn reads_bounded_git_status_and_diff_inside_the_project() {
+    let root = temporary_project();
+    git(&root, &["init", "--quiet"]);
+    git(&root, &["config", "user.name", "BRAIN Test"]);
+    git(&root, &["config", "user.email", "brain@example.invalid"]);
+    fs::write(root.join("tracked.txt"), b"before\n").expect("tracked fixture");
+    git(&root, &["add", "tracked.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "initial"]);
+    fs::write(root.join("tracked.txt"), b"after\n").expect("modified fixture");
+
+    let mut core = CoreProcess::start(&root);
+    let status = core.request("git-status", "git.status", "", json!({ "repository": "." }));
+    assert_eq!(status["status"], "completed");
+    let status_text = STANDARD
+        .decode(
+            status["result"]["stdout_base64"]
+                .as_str()
+                .expect("status output"),
+        )
+        .expect("status base64");
+    assert!(String::from_utf8_lossy(&status_text).contains("tracked.txt"));
+
+    let diff = core.request(
+        "git-diff",
+        "git.diff",
+        "",
+        json!({ "repository": ".", "staged": false, "paths": ["tracked.txt"] }),
+    );
+    assert_eq!(diff["status"], "completed");
+    let diff_text = STANDARD
+        .decode(
+            diff["result"]["stdout_base64"]
+                .as_str()
+                .expect("diff output"),
+        )
+        .expect("diff base64");
+    assert!(String::from_utf8_lossy(&diff_text).contains("+after"));
+
+    let escaped = core.request(
+        "git-escape",
+        "git.status",
+        "",
+        json!({ "repository": ".." }),
+    );
+    assert_eq!(escaped["error_code"], "BRAIN_CORE_PATH_ESCAPE");
+
+    let limited = core.request_with_limits(
+        "git-limit",
+        "git.diff",
+        "",
+        json!({ "repository": ".", "staged": false, "paths": ["tracked.txt"] }),
+        1_000,
+        4,
+    );
+    assert_eq!(limited["error_code"], "BRAIN_CORE_OUTPUT_LIMIT");
+
+    drop(core);
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn stages_and_commits_only_with_operation_scoped_single_use_approvals() {
+    let root = temporary_project();
+    git(&root, &["init", "--quiet"]);
+    git(&root, &["config", "user.name", "BRAIN Test"]);
+    git(&root, &["config", "user.email", "brain@example.invalid"]);
+    fs::write(root.join("change.txt"), b"approved\n").expect("change fixture");
+    let mut core = CoreProcess::start(&root);
+
+    let denied = core.request(
+        "git-add-denied",
+        "git.add",
+        "",
+        json!({ "repository": ".", "paths": ["change.txt"] }),
+    );
+    assert_eq!(denied["error_code"], "BRAIN_CORE_APPROVAL_REQUIRED");
+
+    let add_token = "cafebabecafebabecafebabecafebabe";
+    core.request(
+        "git-add-approval",
+        "approval.register",
+        "",
+        json!({ "token": add_token, "operation": "git.add", "ttl_ms": 30_000 }),
+    );
+    let added = core.request(
+        "git-add",
+        "git.add",
+        add_token,
+        json!({ "repository": ".", "paths": ["change.txt"] }),
+    );
+    assert_eq!(added["status"], "completed");
+    let replay = core.request(
+        "git-add-replay",
+        "git.add",
+        add_token,
+        json!({ "repository": ".", "paths": ["change.txt"] }),
+    );
+    assert_eq!(replay["error_code"], "BRAIN_CORE_APPROVAL_REQUIRED");
+
+    let commit_token = "deadbeefdeadbeefdeadbeefdeadbeef";
+    core.request(
+        "git-commit-approval",
+        "approval.register",
+        "",
+        json!({ "token": commit_token, "operation": "git.commit", "ttl_ms": 30_000 }),
+    );
+    let committed = core.request(
+        "git-commit",
+        "git.commit",
+        commit_token,
+        json!({ "repository": ".", "message": "test: approved commit" }),
+    );
+    assert_eq!(committed["status"], "completed");
+    let output = Command::new("git")
+        .args(["log", "-1", "--format=%s"])
+        .current_dir(&root)
+        .output()
+        .expect("read commit");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "test: approved commit"
+    );
+
+    drop(core);
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn rejects_git_mutation_without_a_matching_approval_scope() {
+    let root = temporary_project();
+    git(&root, &["init", "--quiet"]);
+    fs::write(root.join("change.txt"), b"change\n").expect("change fixture");
+    let mut core = CoreProcess::start(&root);
+    let token = "8899aabbccddeeff0011223344556677";
+    core.request(
+        "wrong-approval",
+        "approval.register",
+        "",
+        json!({ "token": token, "operation": "git.commit", "ttl_ms": 30_000 }),
+    );
+    let wrong_scope = core.request(
+        "wrong-scope",
+        "git.add",
+        token,
+        json!({ "repository": ".", "paths": ["change.txt"] }),
+    );
+    assert_eq!(
+        wrong_scope["error_code"],
+        "BRAIN_CORE_APPROVAL_SCOPE_MISMATCH"
+    );
+    let commit = core.request(
+        "commit-with-replayed-scope",
+        "git.commit",
+        token,
+        json!({ "repository": ".", "message": "must not commit" }),
+    );
+    assert_eq!(commit["error_code"], "BRAIN_CORE_APPROVAL_REQUIRED");
     drop(core);
     fs::remove_dir_all(root).expect("cleanup");
 }
