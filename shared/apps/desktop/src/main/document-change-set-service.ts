@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { realpath, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
+import type { TextDocumentAnchor } from "@codex-forge/protocol/document-anchor";
 
 export interface TextChangeSet {
   status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED";
@@ -34,7 +35,8 @@ export class DocumentChangeSetService {
     relativePath: string;
     currentFileVersion: number;
     changeSet: TextChangeSet;
-    allowedRange: { start: number; end: number };
+    allowedRange?: { start: number; end: number };
+    textAnchor?: TextDocumentAnchor;
     expectedContentHash?: string;
   }): Promise<TextChangeSetPreview> {
     if (input.changeSet.baseFileVersion !== input.currentFileVersion) throw new Error("DOCUMENT_CHANGE_SET_VERSION_CONFLICT");
@@ -50,7 +52,9 @@ export class DocumentChangeSetService {
     const beforeHash = hash(before);
     if (input.expectedContentHash && input.expectedContentHash !== beforeHash) throw new Error("DOCUMENT_CHANGE_SET_CONTENT_CONFLICT");
     const operations = parseOperations(input.changeSet.diffJson);
-    assertAllowedRange(input.allowedRange, before.length, operations);
+    const allowedRange = input.textAnchor ? textAnchorRange(before, input.textAnchor) : input.allowedRange;
+    if (!allowedRange) throw new Error("DOCUMENT_CHANGE_SET_ANNOTATION_RANGE_INVALID");
+    assertAllowedRange(allowedRange, before.length, operations);
     const after = applyOperations(before, operations);
     if (after === before) throw new Error("DOCUMENT_CHANGE_SET_EMPTY");
     return { path: resolvedTarget, fileVersion: input.currentFileVersion, contentHash: beforeHash, before, after, operations };
@@ -62,7 +66,8 @@ export class DocumentChangeSetService {
     outputRelativePath: string;
     currentFileVersion: number;
     changeSet: TextChangeSet;
-    allowedRange: { start: number; end: number };
+    allowedRange?: { start: number; end: number };
+    textAnchor?: TextDocumentAnchor;
     expectedContentHash?: string;
   }): Promise<AppliedTextChangeSet> {
     if (input.changeSet.status !== "ACCEPTED") throw new Error("DOCUMENT_CHANGE_SET_NOT_ACCEPTED");
@@ -86,6 +91,26 @@ export class DocumentChangeSetService {
     }
     return { path: output, fileVersion: input.currentFileVersion + 1, contentHash: hash(verified), content: verified };
   }
+}
+
+export function textAnchorRange(content: string, anchor: TextDocumentAnchor) {
+  if (anchor.locator.kind !== "text-range") throw new Error("DOCUMENT_CHANGE_SET_ANNOTATION_RANGE_INVALID");
+  const lines = content.split(/(?<=\n)/);
+  const startLine = lines[anchor.locator.startLine - 1];
+  const endLine = lines[anchor.locator.endLine - 1];
+  if (startLine === undefined || endLine === undefined) throw new Error("DOCUMENT_CHANGE_SET_ANNOTATION_RANGE_INVALID");
+  const visibleLength = (line: string) => line.replace(/\r?\n$/, "").length;
+  if (anchor.locator.startCharacter < 0 || anchor.locator.startCharacter > visibleLength(startLine)
+    || anchor.locator.endCharacter < 0 || anchor.locator.endCharacter > visibleLength(endLine)) {
+    throw new Error("DOCUMENT_CHANGE_SET_ANNOTATION_RANGE_INVALID");
+  }
+  const offsets: number[] = [];
+  let offset = 0;
+  for (const line of lines) { offsets.push(offset); offset += line.length; }
+  const start = offsets[anchor.locator.startLine - 1] + anchor.locator.startCharacter;
+  const end = offsets[anchor.locator.endLine - 1] + anchor.locator.endCharacter;
+  if (end < start) throw new Error("DOCUMENT_CHANGE_SET_ANNOTATION_RANGE_INVALID");
+  return { start, end };
 }
 
 function parseOperations(value: string): TextOperation[] {

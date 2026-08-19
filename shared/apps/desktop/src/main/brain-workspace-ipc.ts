@@ -20,6 +20,7 @@ import {
 } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
 
 interface BrainWorkspaceIpcDependencies {
@@ -208,6 +209,7 @@ function withoutOwner<T extends { ownerId: string }>(value: T): Omit<T, "ownerId
 
 export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIpcDependencies) {
   const ownerId = () => Promise.resolve(dependencies.resolveOwnerId()).then((value) => requireString(value, "ownerId"));
+  const revisions = new BrainDocumentRevisionService(dependencies);
   ipcMain.handle(brainWorkspaceIpcChannels.workspaceList, () => dependencies.storage.listWorkspaces());
   ipcMain.handle(brainWorkspaceIpcChannels.projectList, async (_event, value: unknown) =>
     dependencies.storage.listProjects({ ownerId: await ownerId(), ...parseProjectList(value) }).map(withoutOwner));
@@ -310,7 +312,15 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     const input = requireRecord(value, "Change set update");
     const status = input.status;
     if (status !== "ACCEPTED" && status !== "REJECTED" && status !== "REVERTED") throw new TypeError("status is invalid");
-    return dependencies.storage.updateChangeSet({ ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), changeSetId: requireString(input.changeSetId, "changeSetId"), status, resultFileVersion: input.resultFileVersion === undefined ? undefined : Number(input.resultFileVersion) });
+    return dependencies.storage.updateChangeSet({ ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), changeSetId: requireString(input.changeSetId, "changeSetId"), status });
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.changeSetPreview, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Change set preview");
+    return revisions.preview(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.changeSetId, "changeSetId"));
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.changeSetExport, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Change set export");
+    return revisions.export(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.changeSetId, "changeSetId"));
   });
   if (dependencies.quant) {
     ipcMain.handle(brainWorkspaceIpcChannels.quantSessionCreate, async (_event, value: unknown) => {

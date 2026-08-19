@@ -190,7 +190,18 @@ export interface BrainAnnotationCreateInput extends BrainProjectGetInput {
 }
 
 export interface BrainChangeSetDto { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }
-export interface BrainChangeSetUpdateInput { projectId: string; changeSetId: string; status: "ACCEPTED" | "REJECTED" | "REVERTED"; resultFileVersion?: number; }
+export interface BrainChangeSetUpdateInput { projectId: string; changeSetId: string; status: "ACCEPTED" | "REJECTED" | "REVERTED"; }
+export interface BrainChangeSetPreviewInput extends BrainProjectGetInput { changeSetId: string; }
+export interface BrainChangeSetPreviewResult {
+  changeSetId: string; annotationId: string; fileId: string; fileVersion: number;
+  relativePath: string; contentHash: string; before: string; after: string;
+  operations: Array<{ start: number; end: number; replacement: string }>;
+}
+export interface BrainChangeSetExportResult {
+  changeSet: BrainChangeSetDto;
+  file: BrainFileDto;
+  relativePath: string;
+}
 
 export const brainWorkspaceIpcChannels = {
   workspaceList: "brain:workspace:list",
@@ -222,5 +233,7 @@ export const brainWorkspaceIpcChannels = {
   annotationCreate: "brain:annotation:create",
   changeSetList: "brain:change-set:list",
   changeSetCreate: "brain:change-set:create",
-  changeSetUpdate: "brain:change-set:update"
+  changeSetUpdate: "brain:change-set:update",
+  changeSetPreview: "brain:change-set:preview",
+  changeSetExport: "brain:change-set:export"
 } as const;
