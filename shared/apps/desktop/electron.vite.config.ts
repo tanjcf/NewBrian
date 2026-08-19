@@ -1,7 +1,13 @@
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { mainRollupOutput } from "./build-output-policy";
+
+const optionalMainEntry = (name: string, relativePath: string) => {
+  const entryPath = resolve(__dirname, relativePath);
+  return existsSync(entryPath) ? { [name]: entryPath } : {};
+};
 
 export default defineConfig({
   main: {
@@ -23,9 +29,9 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "src/main/index.ts"),
           "agent-host-entry": resolve(__dirname, "src/main/agent-host-entry.ts"),
-          "pdf-text-extractor": resolve(__dirname, "src/main/pdf-text-extractor.ts"),
-          "word-text-extractor": resolve(__dirname, "src/main/word-text-extractor.ts"),
-          "spreadsheet-text-extractor": resolve(__dirname, "src/main/spreadsheet-text-extractor.ts"),
+          ...optionalMainEntry("pdf-text-extractor", "src/main/pdf-text-extractor.ts"),
+          ...optionalMainEntry("word-text-extractor", "src/main/word-text-extractor.ts"),
+          ...optionalMainEntry("spreadsheet-text-extractor", "src/main/spreadsheet-text-extractor.ts"),
           "novel-tts-kokoro-worker": resolve(__dirname, "src/main/novel-tts-kokoro-worker.ts"),
           "tool-host-worker": resolve(__dirname, "../agentd/src/tool-host-worker.js")
         }
@@ -46,6 +52,11 @@ export default defineConfig({
           format: "cjs",
           entryFileNames: "[name].cjs"
         }
+      }
+    },
+    resolve: {
+      alias: {
+        "@codex-forge/protocol": resolve(__dirname, "../../packages/protocol/src")
       }
     }
   },

@@ -27,14 +27,6 @@ export function resolveMaxSteps(value) {
   return Math.floor(n);
 }
 
-/** `null`/`undefined`/non-finite/`<=0` means unlimited (Codex/OpenClaw-aligned). */
-export function resolveMaxSteps(value) {
-  if (value == null) return Number.POSITIVE_INFINITY;
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return Number.POSITIVE_INFINITY;
-  return Math.floor(n);
-}
-
 function toolMessage(call, result) {
   const content = {
     ok: result.ok,

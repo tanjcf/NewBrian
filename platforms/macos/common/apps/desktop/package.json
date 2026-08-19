@@ -17,11 +17,26 @@
     "test:package-resources": "node --test build/prepare-package-resources.test.cjs"
   },
   "dependencies": {
+    "@aiden0z/pptx-renderer": "1.2.4",
     "@codex-forge/protocol": "workspace:*",
     "@codex-forge/ui": "workspace:*",
+    "@napi-rs/canvas": "0.1.80",
+    "@uzen/kokoro-js": "1.2.4",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.1",
+    "katex": "^0.18.0",
+    "mammoth": "^1.12.0",
+    "mermaid": "^11.16.0",
+    "parse5": "7.3.0",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "5.4.296",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@uzen/kokoro-js": "1.2.4"
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "saxes": "5.0.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

@@ -31,10 +31,6 @@ export function userVisibleThreads<T extends { kind?: string | null }>(threads: 
   return threads.filter(isUserVisibleThread);
 }
 
-/**
- * Prefer the currently selected visible thread; if selection points at a hidden
- * subagent, fall back to its parent, then the most recently active visible thread.
- */
 export function resolveUserVisibleThreadSelection<
   T extends { id: string; kind?: string | null; parentThreadId?: string | null; updatedAt?: string }
 >(threads: readonly T[], selectedThreadId: string | undefined | null): T | undefined {
