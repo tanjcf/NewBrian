@@ -450,7 +450,16 @@ export function WorkspaceModules(ctx: any) {
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
   const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
-  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks">("files");
+  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant">("files");
+  const brainResourcePanelRef = useRef<HTMLElement | null>(null);
+  const [brainResourceWidth, setBrainResourceWidth] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem("brain.resource-panel-width"));
+      return Number.isFinite(stored) && stored >= 320 && stored <= 760 ? stored : 480;
+    } catch {
+      return 480;
+    }
+  });
   const initialBrainWorkspaceSelection = useRef(restoreBrainWorkspaceSelection({
     serialized: (() => { try { return localStorage.getItem(BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
     legacyWorkspaceKey: (() => { try { return localStorage.getItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })()
@@ -465,6 +474,36 @@ export function WorkspaceModules(ctx: any) {
   const [brainWorkspaceBusy, setBrainWorkspaceBusy] = useState(false);
   const [brainWorkspaceAvailability, setBrainWorkspaceAvailability] = useState<"loading" | "ready" | "unavailable">("loading");
   const brainWorkspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    setBrainResourceTab((current) => selectedBrainWorkspaceKey === "quant" ? (current === "quant" ? current : "quant") : (current === "quant" ? "files" : current));
+  }, [selectedBrainWorkspaceKey]);
+  useEffect(() => {
+    const frame = brainResourcePanelRef.current?.closest<HTMLElement>(".workspace-frame");
+    if (!frame) return;
+    frame.style.setProperty("--brain-resource-panel-width", `${brainResourceWidth}px`);
+    try { localStorage.setItem("brain.resource-panel-width", String(brainResourceWidth)); } catch { /* local preferences may be unavailable */ }
+    return () => frame.style.removeProperty("--brain-resource-panel-width");
+  }, [brainResourceWidth]);
+  const attachBrainResourcePanel = useCallback((node: HTMLElement | null) => {
+    brainResourcePanelRef.current = node;
+    node?.closest<HTMLElement>(".workspace-frame")?.style.setProperty("--brain-resource-panel-width", `${brainResourceWidth}px`);
+  }, [brainResourceWidth]);
+  const resizeBrainResourcePanel = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const frame = brainResourcePanelRef.current?.closest<HTMLElement>(".workspace-frame");
+    if (!frame) return;
+    event.preventDefault();
+    const frameRect = frame.getBoundingClientRect();
+    const maximum = Math.max(320, Math.min(760, frameRect.width - 540));
+    const update = (clientX: number) => setBrainResourceWidth(Math.round(Math.max(320, Math.min(maximum, frameRect.right - clientX))));
+    const onMove = (moveEvent: PointerEvent) => update(moveEvent.clientX);
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    update(event.clientX);
+  }, []);
   const switchBrainWorkspace = useCallback((workspaceKey: BrainWorkspaceKey) => {
     setBrainWorkspaceSelection((current) => selectBrainWorkspace(current, workspaceKey));
     const catalog = brainWorkspaceSelection.catalogs[workspaceKey];
@@ -4299,7 +4338,19 @@ function renderSidebarModule() {
       QUEUED: "等待中", RUNNING: "运行中", SUCCEEDED: "已完成", FAILED: "失败", CANCELLED: "已取消", TIMED_OUT: "超时"
     };
     return (
-      <aside className="brain-resource-panel">
+      <aside className="brain-resource-panel" ref={attachBrainResourcePanel}>
+        <button
+          type="button"
+          className="brain-resource-resize-handle"
+          aria-label="调整右侧面板宽度"
+          title="拖动调整右侧面板宽度"
+          onPointerDown={resizeBrainResourcePanel}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            setBrainResourceWidth((current) => Math.max(320, Math.min(760, current + (event.key === "ArrowLeft" ? 24 : -24))));
+          }}
+        />
         <header>
           <strong>{selectedBrainProject?.name || "项目资源"}</strong>
           <small>仅保存在本机</small>
@@ -4308,8 +4359,10 @@ function renderSidebarModule() {
           <button type="button" className={brainResourceTab === "files" ? "active" : ""} onClick={() => setBrainResourceTab("files")}>文件 <em>{brainFiles.length}</em></button>
           <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => setBrainResourceTab("artifacts")}>产物 <em>{brainArtifacts.length}</em></button>
           <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => setBrainResourceTab("tasks")}>任务 <em>{brainTasks.length}</em></button>
+          {selectedBrainWorkspaceKey === "quant" ? <button type="button" className={brainResourceTab === "quant" ? "active" : ""} onClick={() => setBrainResourceTab("quant")}>行情</button> : null}
         </nav>
-        <div className="brain-resource-list">
+        <div className={`brain-resource-list${brainResourceTab === "quant" ? " quant-plugin" : ""}`}>
+          {brainResourceTab === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} compact /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
             <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
               setActiveBrainDocumentFileId(file.id);
@@ -7531,7 +7584,7 @@ function renderWorkspaceModules() {
     }
 
     const mainModule = isBrainConversationSelection
-      ? selectedBrainWorkspaceKey === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} /> : renderBrainChatModule()
+      ? renderBrainChatModule()
       : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection

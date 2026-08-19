@@ -1,25 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 
-const fallbackBars = [
-  { timestamp: "2026-08-15", open: 1682, high: 1708, low: 1674, close: 1698, volume: 2_100_000 },
-  { timestamp: "2026-08-16", open: 1698, high: 1721, low: 1691, close: 1714, volume: 2_400_000 },
-  { timestamp: "2026-08-17", open: 1714, high: 1730, low: 1702, close: 1722, volume: 1_800_000 },
-  { timestamp: "2026-08-18", open: 1722, high: 1744, low: 1710, close: 1738, volume: 2_700_000 },
-  { timestamp: "2026-08-19", open: 1738, high: 1752, low: 1728, close: 1746, volume: 2_300_000 }
-];
-
-export function QuantWorkspace({ projectId }: { projectId?: string }) {
+export function QuantWorkspace({ projectId, compact = false }: { projectId?: string; compact?: boolean }) {
   const [symbol, setSymbol] = useState("600519");
   const [interval, setInterval] = useState("日线");
   const [adjustment, setAdjustment] = useState("前复权");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [bars, setBars] = useState<any[]>(fallbackBars);
+  const [bars, setBars] = useState<any[]>([]);
   const [queryVersion, setQueryVersion] = useState(0);
   const [quantity, setQuantity] = useState(100);
   const [orderStatus, setOrderStatus] = useState("");
   const [portfolio, setPortfolio] = useState<any>({ cash: 100_000, marketValue: 0, totalValue: 100_000, totalReturnPercent: 0, positions: [] });
-  const [status, setStatus] = useState("本地演示数据");
+  const [status, setStatus] = useState("尚未查询行情");
   const [schedules, setSchedules] = useState<any[]>([]);
   const [skillId, setSkillId] = useState("trend-following");
   const [scheduleTime, setScheduleTime] = useState("15:10");
@@ -39,9 +31,9 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
         if (!active) return;
         const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
         if (valid.length) { setBars(valid.slice(-60)); setStatus(`已加载 ${valid.length} 条真实行情 · ${valid[0].source?.provider || "已配置数据源"}`); }
-        else { setBars(fallbackBars); setStatus("暂无已同步行情，显示演示数据"); }
+        else { setBars([]); setStatus("该条件下暂无已同步行情"); }
       })
-      .catch(() => { if (active) { setBars(fallbackBars); setStatus("行情服务暂不可用，显示演示数据"); } });
+      .catch(() => { if (active) { setBars([]); setStatus("行情服务暂不可用，未使用演示数据"); } });
     return () => { active = false; };
   }, [projectId, symbol, interval, adjustment, startDate, endDate, queryVersion]);
 
@@ -71,10 +63,11 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
     return () => { active = false; window.clearInterval(timer); };
   }, [projectId, schedules]);
 
-  const latest = bars.at(-1)!;
-  const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [bars, latest.close]);
+  const latest = bars.at(-1);
+  const returnPercent = useMemo(() => bars.length && latest ? ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2) : "0.00", [bars, latest]);
   const chart = useMemo(() => {
     const width = 760; const priceHeight = 250; const volumeHeight = 70;
+    if (!bars.length) return { width, priceHeight, volumeHeight, high: 0, low: 0, maxVolume: 1, step: width, bodyWidth: 3, y: () => 0 };
     const high = Math.max(...bars.map((bar) => bar.high)); const low = Math.min(...bars.map((bar) => bar.low));
     const span = Math.max(high - low, 1); const maxVolume = Math.max(...bars.map((bar) => Number(bar.volume)), 1);
     const step = width / Math.max(bars.length, 1); const bodyWidth = Math.max(3, Math.min(12, step * 0.55));
@@ -82,6 +75,7 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   }, [bars]);
 
   const executeOrder = (side: "buy" | "sell") => {
+    if (!latest) { setOrderStatus("暂无真实行情，不能生成模拟成交"); return; }
     if (!projectId || !window.codecn?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
     void window.codecn.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side, quantity, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
       .then(() => window.codecn.getQuantSnapshot?.({ projectId, prices: { [symbol]: latest.close } }))
@@ -96,7 +90,7 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
       .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划保存失败"));
   };
 
-  return <main className="brain-quant-module">
+  return <main className={`brain-quant-module${compact ? " compact" : ""}`}>
     <header className="brain-quant-header"><div><span>量化交易</span><strong>行情与模拟盘</strong></div><small>{status} · 不连接真实券商</small></header>
     <section className="brain-quant-toolbar">
       <label>代码<input value={symbol} onChange={(event) => setSymbol(event.target.value)} /></label>
@@ -108,8 +102,10 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
     </section>
     <section className="brain-quant-grid">
       <div className="brain-quant-chart"><div className="brain-quant-chart-head"><strong>{symbol}</strong><span>{interval} · {adjustment} · 区间 {returnPercent}%</span></div>
+        {!bars.length ? <div className="brain-quant-chart-empty"><strong>暂无行情数据</strong><span>请确认行情节点已连接，或调整代码、日期、周期和复权方式后重新查询。</span></div> : <>
         <svg viewBox={`0 0 ${chart.width} ${chart.priceHeight + chart.volumeHeight}`} role="img" aria-label={`${symbol} K线和成交量图`} preserveAspectRatio="none">{bars.map((bar, index) => { const x = chart.step * index + chart.step / 2; const up = bar.close >= bar.open; const bodyTop = chart.y(Math.max(bar.open, bar.close)); const bodyHeight = Math.max(1.5, Math.abs(chart.y(bar.open) - chart.y(bar.close))); const color = up ? "#ef4444" : "#16a34a"; const volumeHeight = (Number(bar.volume) / chart.maxVolume) * (chart.volumeHeight - 18); return <g key={`${bar.timestamp}-${index}`}><line x1={x} x2={x} y1={chart.y(bar.high)} y2={chart.y(bar.low)} stroke={color} strokeWidth="1"/><rect x={x - chart.bodyWidth / 2} y={bodyTop} width={chart.bodyWidth} height={bodyHeight} fill={color}/><rect x={x - chart.bodyWidth / 2} y={chart.priceHeight + chart.volumeHeight - volumeHeight} width={chart.bodyWidth} height={volumeHeight} fill={color} opacity="0.55"/></g>; })}</svg>
-        <div className="brain-quant-chart-axis"><span>{String(bars[0].timestamp).slice(5, 10)}</span><span>最高 {chart.high.toFixed(2)} / 最低 {chart.low.toFixed(2)}</span><span>{String(latest.timestamp).slice(5, 10)}</span></div>
+        <div className="brain-quant-chart-axis"><span>{String(bars[0].timestamp).slice(5, 10)}</span><span>最高 {chart.high.toFixed(2)} / 最低 {chart.low.toFixed(2)}</span><span>{String(latest?.timestamp).slice(5, 10)}</span></div>
+        </>}
       </div>
       <aside className="brain-quant-side"><h3>模拟持仓</h3><div className="brain-quant-total"><small>总资产</small><strong>¥{portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong><em>{portfolio.totalReturnPercent >= 0 ? "+" : ""}{portfolio.totalReturnPercent.toFixed(2)}%</em></div>
         <dl><div><dt>可用现金</dt><dd>¥{portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>持仓市值</dt><dd>¥{portfolio.marketValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>累计收益</dt><dd className={portfolio.totalValue >= 100_000 ? "positive" : "negative"}>{portfolio.totalValue >= 100_000 ? "+" : ""}¥{(portfolio.totalValue - 100_000).toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div></dl>

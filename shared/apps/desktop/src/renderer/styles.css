@@ -10888,6 +10888,7 @@ textarea {
 }
 
 .brain-resource-panel {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -10895,6 +10896,38 @@ textarea {
   border-left: 1px solid #e7eaee;
   background: #fbfcfd;
   overflow: hidden;
+}
+
+.brain-resource-resize-handle {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  width: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.brain-resource-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 2px;
+  height: 42px;
+  border-radius: 2px;
+  background: transparent;
+  transform: translateY(-50%);
+  transition: background 120ms ease;
+}
+
+.brain-resource-resize-handle:hover::after,
+.brain-resource-resize-handle:focus-visible::after {
+  background: #7aa2e8;
 }
 
 .brain-resource-panel > header {
@@ -10954,6 +10987,10 @@ textarea {
   min-height: 0;
   overflow-y: auto;
   padding: 10px;
+}
+
+.brain-resource-list.quant-plugin {
+  padding: 0;
 }
 
 .brain-resource-row {
@@ -17534,6 +17571,9 @@ textarea {
 .brain-quant-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; padding: 20px 28px; } .brain-quant-chart, .brain-quant-side, .brain-quant-skills { border: 1px solid var(--border-subtle, #ddd); background: var(--surface-raised, #fff); } .brain-quant-chart { min-height: 330px; padding: 16px; } .brain-quant-chart-head { display: flex; justify-content: space-between; } .brain-quant-candles { height: 210px; display: flex; align-items: start; justify-content: space-around; padding: 12px 6%; border-bottom: 1px solid #e5e5e5; } .brain-quant-candle { position: relative; display: flex; flex-direction: column; align-items: center; width: 42px; height: 190px; } .brain-quant-candle i { width: 1px; background: #87958f; } .brain-quant-candle b { position: absolute; top: 60px; width: 12px; background: #16865f; } .brain-quant-candle b.down { background: #c4584f; } .brain-quant-candle small { position: absolute; top: 170px; color: #888; font-size: 10px; } .brain-quant-volume { height: 60px; display: flex; align-items: end; justify-content: space-around; padding: 0 8%; } .brain-quant-volume i { width: 16px; background: #a9cfc0; }
 .brain-quant-side { padding: 16px; } .brain-quant-side h3, .brain-quant-skills h3 { margin: 0; font-size: 15px; } .brain-quant-total { display: grid; gap: 5px; padding: 22px 0 15px; border-bottom: 1px solid #e5e5e5; } .brain-quant-total small, .brain-quant-side dt { color: #777; font-size: 12px; } .brain-quant-total strong { font-size: 22px; } .brain-quant-total em, .positive { color: #16865f; font-style: normal; } .brain-quant-side dl { display: grid; gap: 10px; margin: 15px 0 20px; } .brain-quant-side dl div { display: flex; justify-content: space-between; } .brain-quant-side dd { margin: 0; font-size: 13px; } .brain-quant-side .primary { width: 100%; } .brain-quant-order-status { display: block; margin-top: 10px; color: #287c62; font-size: 12px; line-height: 1.4; }
 .brain-quant-chart svg { display: block; width: 100%; height: 320px; margin-top: 12px; border-bottom: 1px solid var(--border-subtle, #ddd); }
+.brain-quant-chart-empty { min-height: 240px; display: grid; place-content: center; gap: 8px; padding: 20px; color: var(--text-secondary, #777); text-align: center; }
+.brain-quant-chart-empty strong { color: var(--text-primary, #202020); font-size: 14px; }
+.brain-quant-chart-empty span { max-width: 360px; font-size: 12px; line-height: 1.6; }
 .brain-quant-chart-axis { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; color: var(--text-secondary, #777); font-size: 11px; }
 .brain-quant-order-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .brain-quant-order-controls label { grid-column: 1 / -1; display: grid; gap: 4px; color: var(--text-secondary, #777); font-size: 12px; }
@@ -17551,6 +17591,25 @@ textarea {
 .brain-quant-schedule-list article { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(230px, 2fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border-subtle, #ddd); border-radius: 9px; }
 .brain-quant-schedule-list span, .brain-quant-schedule-list em { color: var(--text-secondary, #777); font-size: 12px; font-style: normal; }
 .brain-quant-skills { margin: 0 28px; padding: 16px; } .brain-quant-skills header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; } .brain-quant-skills table { width: 100%; border-collapse: collapse; font-size: 13px; } .brain-quant-skills th, .brain-quant-skills td { padding: 10px 8px; text-align: left; border-top: 1px solid #e8e8e8; } .brain-quant-skills th { color: #777; font-size: 12px; font-weight: 500; }
+.brain-quant-module.compact { height: 100%; padding-bottom: 18px; background: #fbfcfd; }
+.brain-quant-module.compact .brain-quant-header { align-items: start; padding: 14px 12px 10px; }
+.brain-quant-module.compact .brain-quant-header strong { font-size: 16px; }
+.brain-quant-module.compact .brain-quant-header small { max-width: 54%; text-align: right; line-height: 1.45; }
+.brain-quant-module.compact .brain-quant-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
+.brain-quant-module.compact .brain-quant-toolbar label:first-child,
+.brain-quant-module.compact .brain-quant-toolbar button { grid-column: 1 / -1; }
+.brain-quant-module.compact .brain-quant-toolbar input,
+.brain-quant-module.compact .brain-quant-toolbar select { width: 100%; min-width: 0; box-sizing: border-box; }
+.brain-quant-module.compact .brain-quant-grid { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+.brain-quant-module.compact .brain-quant-chart { min-height: 280px; padding: 12px; }
+.brain-quant-module.compact .brain-quant-chart-head { gap: 8px; }
+.brain-quant-module.compact .brain-quant-chart-head span { text-align: right; }
+.brain-quant-module.compact .brain-quant-chart svg { height: 260px; }
+.brain-quant-module.compact .brain-quant-chart-empty { min-height: 210px; }
+.brain-quant-module.compact .brain-quant-skills { margin: 0 12px; padding: 12px; overflow-x: auto; }
+.brain-quant-module.compact .brain-quant-skills table { min-width: 520px; }
+.brain-quant-module.compact .brain-quant-schedule-form { grid-template-columns: 1fr; }
+.brain-quant-module.compact .brain-quant-schedule-list article { grid-template-columns: 1fr; gap: 5px; }
 @media (max-width: 800px) { .brain-quant-grid { grid-template-columns: 1fr; padding: 16px; } .brain-quant-header, .brain-quant-toolbar { padding-left: 16px; padding-right: 16px; } .brain-quant-skills { margin: 0 16px; overflow-x: auto; } .brain-quant-skills table { min-width: 560px; } .brain-quant-schedule-form { grid-template-columns: 1fr 1fr; } }
 
 @media (max-width: 640px) {
@@ -17765,4 +17824,43 @@ textarea {
 .document-annotation-layer.active + pre .preview-line,
 .document-annotation-layer.active ~ pre .preview-line {
   cursor: crosshair;
+}
+
+/* Keep BRAIN conversation and the workspace plugin on one row after every legacy layout override. */
+.codex-shell:not(.sidebar-collapsed) .workspace-frame:has(> .brain-resource-panel),
+.codex-shell:not(.sidebar-collapsed) .workspace-frame.preview-hidden:has(> .brain-resource-panel),
+.codex-shell:not(.sidebar-collapsed) .workspace-frame.preview-centered:has(> .brain-resource-panel) {
+  grid-template-columns: clamp(280px, 24vw, 372px) minmax(360px, 1fr) var(--brain-resource-panel-width, 480px) !important;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-frame:has(> .brain-resource-panel) > .codex-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.workspace-frame:has(> .brain-resource-panel) > .brain-chat-module {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.workspace-frame:has(> .brain-resource-panel) > .brain-resource-panel {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel),
+.codex-shell.sidebar-collapsed .workspace-frame.preview-hidden:has(> .brain-resource-panel),
+.codex-shell.sidebar-collapsed .workspace-frame.preview-centered:has(> .brain-resource-panel) {
+  grid-template-columns: minmax(360px, 1fr) var(--brain-resource-panel-width, 480px) !important;
+}
+
+.workspace-frame.sidebar-collapsed:has(> .brain-resource-panel) > .brain-chat-module,
+.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel) > .brain-chat-module {
+  grid-column: 1;
+}
+
+.workspace-frame.sidebar-collapsed:has(> .brain-resource-panel) > .brain-resource-panel,
+.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel) > .brain-resource-panel {
+  grid-column: 2;
 }

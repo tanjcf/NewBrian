@@ -113,7 +113,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 
 - [x] Define adjusted OHLCV and turnover contracts with exchange timezone and source metadata.
 - [x] Add fixture and provider-contract tests for daily, weekly, monthly, range, and adjustment modes.
-- [ ] Render candlestick and volume charts in the right plugin panel with resize and empty states.
+- [x] Render candlestick and volume charts in the right plugin panel with resize and empty states.
 - [x] Implement a double-entry simulation ledger for cash, orders, fills, positions, fees, and P&L.
 - [ ] Schedule strategy skills with idempotency keys and market-calendar constraints.
 - [x] Compute isolated per-skill return, drawdown, volatility, risk-adjusted return, win rate, and trade count.

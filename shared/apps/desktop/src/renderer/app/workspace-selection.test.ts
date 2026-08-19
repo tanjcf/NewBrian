@@ -75,3 +75,23 @@ test("renders explicit loading unavailable migration and empty catalog states", 
   assert.match(source, /还没有项目/);
   assert.match(source, /暂无对话/);
 });
+
+test("keeps quant conversation in the center and renders market tools in the right resource panel", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const workspaceRenderer = source.slice(source.indexOf("function renderWorkspaceModules"));
+  const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
+
+  assert.match(workspaceRenderer, /isBrainConversationSelection\s*\?\s*renderBrainChatModule\(\)/);
+  assert.doesNotMatch(workspaceRenderer, /selectedBrainWorkspaceKey === "quant"\s*\?\s*<QuantWorkspace/);
+  assert.match(resourcePanel, /selectedBrainWorkspaceKey === "quant"/);
+  assert.match(resourcePanel, /<QuantWorkspace[^>]+compact/);
+  assert.match(resourcePanel, /brain-resource-resize-handle/);
+});
+
+test("never substitutes fabricated market bars when the provider is empty or unavailable", () => {
+  const source = readFileSync(new URL("./QuantWorkspace.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /fallbackBars|演示数据.*显示/);
+  assert.match(source, /setBars\(\[\]\)/);
+  assert.match(source, /暂无行情数据/);
+  assert.match(source, /暂无真实行情，不能生成模拟成交/);
+});
