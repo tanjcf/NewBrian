@@ -9,8 +9,11 @@
     "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "prepare:package-resources": "node build/prepare-package-resources.cjs",
-    "package:mac": "node build/package-mac.cjs",
-    "package:mac:dir": "node build/package-mac.cjs dir",
+    "build:rust-core": "node ../../scripts/build-rust-core.mjs",
+    "package:mac": "pnpm run package:mac:arm64",
+    "package:mac:arm64": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --arm64",
+    "package:mac:intel": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --x64",
+    "package:mac:dir": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dir",
     "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "test:main": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts",
     "test:storage": "node --experimental-strip-types --test src/main/codex-storage.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts src/main/thread-message-reconciliation.test.ts",
@@ -85,6 +88,10 @@
       {
         "from": "resources/novel-tts",
         "to": "novel-tts"
+      },
+      {
+        "from": "build/rust-core/brain-core",
+        "to": "brain-core/brain-core"
       }
     ],
     "mac": {

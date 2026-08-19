@@ -58,7 +58,8 @@ const features = {
       capabilities: ["shell", "approval"]
     }
   ],
-  automations: []
+  automations: [],
+  runtime: { rustCoreTools: "disabled" }
 };
 
 function preparePackageResources() {

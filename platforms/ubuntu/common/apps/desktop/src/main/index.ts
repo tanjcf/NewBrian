@@ -54,6 +54,7 @@ import {
 } from "./rollout-store.js";
 import { AgentHostClient } from "./agent-host-client.js";
 import { AgentHostLoopBridge } from "./agent-host-loop-bridge.js";
+import { createAgentHostQuitCoordinator } from "./agent-host-quit-coordinator.js";
 import { AgentTurnControlPlaneService } from "./agent-turn-control-plane.js";
 import { composeAndRegisterModelChat } from "./compose-model-chat.js";
 import { DesktopErrorCollector } from "./desktop-error-collector.js";
@@ -62,6 +63,10 @@ import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import { createLinuxSecretProtector } from "./linux-secret-protector.js";
 import { GovernmentWritingSpecificationService } from "./government-writing-specification-service.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
+import { RustCoreClient } from "./rust-core-client.js";
+import { RustCoreService } from "./rust-core-service.js";
+import { RustCoreToolRouter } from "./rust-core-tool-router.js";
+import { resolveUnixRustCoreBinary } from "./rust-core-binary-unix.js";
 import {
   publishWorkspaceFilePreviewFromMain
 } from "./model-chat-runtime-setup.js";
@@ -241,7 +246,29 @@ let mobilePairingState: MobilePairingState = {
 let mobilePairingToken = "";
 let mainWindowRef: BrowserWindow | null = null;
 const agentHostProcessManager = new ManagedChildProcessManager({ gracefulTimeoutMs: 3_000 });
+const rustCoreProcessManager = new ManagedChildProcessManager({ gracefulTimeoutMs: 3_000 });
+let rustCoreService: RustCoreService | null = null;
+function getRustCoreService() {
+  if (rustCoreService) return rustCoreService;
+  rustCoreService = new RustCoreService({
+    binaryPath: resolveUnixRustCoreBinary({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appDirectory }),
+    processManager: rustCoreProcessManager,
+    createClient: (child) => {
+      if (!child.stdin || !child.stdout || !child.stderr) throw new Error("BRAIN_CORE_PIPE_REQUIRED");
+      return new RustCoreClient({ child: {
+        stdin: child.stdin, stdout: child.stdout, stderr: child.stderr, exitCode: child.exitCode,
+        kill: (signal) => child.kill(signal), once: (event, listener) => child.once(event, listener)
+      } });
+    }
+  });
+  return rustCoreService;
+}
 let agentHostLoopBridge: AgentHostLoopBridge;
+const rustCoreToolRouter = new RustCoreToolRouter({
+  mode: async () => (await readFeatureConfig()).runtime.rustCoreTools,
+  acquire: (binding) => getRustCoreService().acquire(binding),
+  shellCommand: (command) => ({ executable: "/bin/bash", args: ["-lc", command] })
+});
 const agentHostClient = new AgentHostClient({
   entryPath: join(appDirectory, "agent-host-entry.js"),
   cwd: workspacePath,
@@ -254,7 +281,10 @@ const agentHostClient = new AgentHostClient({
     if (event.event === "agent.event") return agentHostLoopBridge.handleHostEvent(event.payload as never);
   }
 });
-agentHostLoopBridge = new AgentHostLoopBridge({ client: agentHostClient });
+agentHostLoopBridge = new AgentHostLoopBridge({
+  client: agentHostClient,
+  invokeTool: (input) => rustCoreToolRouter.invoke(input)
+});
 const officialGovernmentWebService = new OfficialGovernmentWebService();
 const governmentWritingSpecificationService = new GovernmentWritingSpecificationService(codexStorage);
 const desktopErrorOutbox = new DesktopErrorOutbox(join(workspaceStateRoot, "error-reports"));
@@ -1843,6 +1873,7 @@ interface FeatureConfigFile {
   skills: SkillSpec[];
   plugins: PluginSpec[];
   automations: AutomationSpec[];
+  runtime: { rustCoreTools: "disabled" | "read" | "read-write" };
 }
 
 interface BootstrapEnvironmentConfigItem {
@@ -2380,6 +2411,7 @@ function resolvePluginStoragePath(value: string) {
 }
 
 const defaultFeatureConfig: FeatureConfigFile = {
+  runtime: { rustCoreTools: "disabled" },
   skills: [
     {
       id: "skill-thread-fork",
@@ -4558,7 +4590,12 @@ function normalizeFeatureConfig(parsed: Partial<FeatureConfigFile>): FeatureConf
       status: skill.status === "planned" || skill.status === "disabled" ? skill.status : "enabled"
     })),
     plugins,
-    automations: Array.isArray(parsed.automations) ? parsed.automations : defaultFeatureConfig.automations
+    automations: Array.isArray(parsed.automations) ? parsed.automations : defaultFeatureConfig.automations,
+    runtime: {
+      rustCoreTools: parsed.runtime?.rustCoreTools === "read" || parsed.runtime?.rustCoreTools === "read-write"
+        ? parsed.runtime.rustCoreTools
+        : "disabled"
+    }
   };
 }
 
@@ -4658,7 +4695,12 @@ async function writeFeatureConfig(nextConfig: FeatureConfigFile) {
   const payload: FeatureConfigFile = {
     skills: Array.isArray(nextConfig.skills) ? nextConfig.skills : [],
     plugins: Array.isArray(nextConfig.plugins) ? nextConfig.plugins : [],
-    automations: Array.isArray(nextConfig.automations) ? nextConfig.automations : []
+    automations: Array.isArray(nextConfig.automations) ? nextConfig.automations : [],
+    runtime: {
+      rustCoreTools: nextConfig.runtime?.rustCoreTools === "read" || nextConfig.runtime?.rustCoreTools === "read-write"
+        ? nextConfig.runtime.rustCoreTools
+        : "disabled"
+    }
   };
   await fs.writeFile(featureConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   return payload;
@@ -10407,6 +10449,15 @@ function setupAppMenu(window: BrowserWindow) {
   window.webContents.on("did-navigate", refreshNavItems);
   window.webContents.on("did-navigate-in-page", refreshNavItems);
 }
+
+const processQuitCoordinator = createAgentHostQuitCoordinator({
+  shutdown: async () => {
+    await Promise.all([agentHostClient.shutdown(), rustCoreService?.shutdown()]);
+  },
+  quit: () => app.quit(),
+  onError: (error) => console.error("BRAIN process shutdown failed", error)
+});
+app.on("before-quit", (event) => processQuitCoordinator.beforeQuit(event));
 
 app.whenReady().then(async () => {
   protocol.handle("codecn-attachment", async (request) => {

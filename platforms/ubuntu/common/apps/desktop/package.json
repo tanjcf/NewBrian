@@ -11,9 +11,10 @@
     "prebuild": "pnpm --filter @codex-forge/protocol build",
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "prepare:package-resources": "node build/prepare-package-resources.cjs",
-    "package:linux:x64": "pnpm run build && node node_modules/electron-builder/cli.js --linux AppImage deb --x64",
-    "package:linux:arm64": "pnpm run build && node node_modules/electron-builder/cli.js --linux AppImage deb --arm64",
-    "package:linux:dir": "pnpm run build && node node_modules/electron-builder/cli.js --linux dir",
+    "build:rust-core": "node ../../scripts/build-rust-core.mjs",
+    "package:linux:x64": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --linux AppImage deb --x64",
+    "package:linux:arm64": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --linux AppImage deb --arm64",
+    "package:linux:dir": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --linux dir",
     "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "test:main": "node --experimental-strip-types --test src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts",
     "test:storage": "node --experimental-strip-types --test src/main/codex-storage.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts src/main/thread-message-reconciliation.test.ts",
@@ -70,7 +71,8 @@
       { "from": "build/package-resources/codecn.config.json", "to": "codecn.config.json" },
       { "from": "build/package-resources/codecn.features.json", "to": "codecn.features.json" },
       { "from": "../../../codecn.bootstrap.json", "to": "codecn.bootstrap.json" },
-      { "from": "src/renderer/icon.ico", "to": "codecn.ico" }
+      { "from": "src/renderer/icon.ico", "to": "codecn.ico" },
+      { "from": "build/rust-core/brain-core", "to": "brain-core/brain-core" }
     ],
     "linux": {
       "category": "Development",
