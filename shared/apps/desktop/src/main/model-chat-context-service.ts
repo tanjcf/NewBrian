@@ -101,6 +101,7 @@ export class ModelChatContextService {
         role: message.role,
         content: message.content,
         createdAt: message.createdAt,
+        reasoningSummary: message.reasoningSummary,
         attachments: message.attachments
       }));
     const latestMessage = input.messages.at(-1);

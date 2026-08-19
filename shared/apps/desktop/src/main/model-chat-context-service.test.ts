@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { ThreadStateFile } from "./thread-state-factory.js";
-
-const { ModelChatContextService } = await import(
-  new URL("./model-chat-context-service.ts", import.meta.url).href
-) as typeof import("./model-chat-context-service.js");
+// @ts-expect-error Node's native TypeScript test runner requires the source extension.
+import { ModelChatContextService } from "./model-chat-context-service.ts";
+// @ts-expect-error Node's native TypeScript test runner requires the source extension.
+import { buildUpstreamModelMessages } from "./model-gateway-protocol.ts";
 
 test("runs Codex-style model compaction and persists replacement history before the main turn", async () => {
   const root = await mkdtemp(join(tmpdir(), "codecn-context-compaction-"));
@@ -110,6 +110,65 @@ test("persists an automatically routed central skill for activity replay", async
     assert.equal(skillEvent?.payload.name, "government-research-writing");
     assert.equal("instructionPath" in (skillEvent?.payload ?? {}), false);
     assert.match(await readFile(rolloutPath, "utf8"), /government-research-writing/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("preserves assistant reasoning summary in the next model request", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codecn-context-reasoning-"));
+  const rolloutPath = join(root, "rollout.jsonl");
+  const service = new ModelChatContextService({
+    makeId: (prefix: string) => `${prefix}-fixed`,
+    nowIso: () => "2026-08-19T00:00:00.000Z",
+    getEventLogPath: () => rolloutPath,
+    writeThreadState: async () => undefined,
+    callModel: async () => ({ content: "unused" })
+  });
+  const state: ThreadStateFile = {
+    version: 2,
+    messages: [{
+      id: "assistant-previous",
+      role: "assistant",
+      content: "已完成上一轮检查。",
+      reasoningSummary: "先检查项目，再给出结论。",
+      createdAt: "2026-08-19T00:00:00.000Z"
+    }],
+    memories: [],
+    runs: [],
+    timeline: [],
+    events: []
+  };
+  const messages = [{
+    id: "user-next",
+    role: "user" as const,
+    content: "继续",
+    createdAt: "2026-08-19T00:01:00.000Z"
+  }];
+  try {
+    const result = await service.prepare({
+      workspace: { id: "workspace", name: "Workspace", path: root, threads: [] },
+      thread: { id: "thread", title: "Thread", summary: "", updatedAt: "2026-08-19T00:01:00.000Z" },
+      state,
+      messages,
+      persistedAt: "2026-08-19T00:01:00.000Z",
+      turnId: "turn-2",
+      loadedSkills: [],
+      disclosedSkills: [],
+      recalledMemories: [],
+      modelInput: {
+        requestId: "request-2", provider: "provider", baseUrl: "https://example.invalid", apiKey: "key",
+        wireApi: "chat.completions", model: "thinking-model", reviewModel: "thinking-model", reasoningEffort: "low",
+        disableResponseStorage: true, systemPrompt: "system", messages
+      },
+      abortSignal: new AbortController().signal,
+      setRuntimeState: () => undefined
+    });
+
+    const priorAssistant = result.requestMessages.find((message) => message.id === "assistant-previous");
+    assert.equal(priorAssistant?.reasoningSummary, "先检查项目，再给出结论。");
+    const upstream = buildUpstreamModelMessages("chat.completions", "", result.requestMessages);
+    assert.equal(upstream[0]?.reasoning_content, "先检查项目，再给出结论。");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

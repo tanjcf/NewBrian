@@ -201,7 +201,12 @@ export interface ModelChatServiceDependencies {
     modelInput: ModelChatInput;
     abortSignal: AbortSignal;
     setRuntimeState: (state: ThreadStateFile) => void;
-  }) => Promise<{ state: ThreadStateFile; requestMessages: Array<{ role: "system" | "user" | "assistant"; content: string; attachments?: unknown[] }> }>;
+  }) => Promise<{ state: ThreadStateFile; requestMessages: Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+    reasoningSummary?: string;
+    attachments?: unknown[];
+  }> }>;
   buildSystemPrompt: (input: Record<string, unknown>) => string;
   /** Optional authorized model catalog for main-agent economics briefing. */
   getAuthorizedModels?: () => Array<Record<string, unknown>>;
