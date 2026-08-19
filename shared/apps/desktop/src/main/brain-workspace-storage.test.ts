@@ -60,6 +60,29 @@ test("persists projects conversations messages and drafts across restart", () =>
   }
 });
 
+test("marks interrupted game previews failed on restart without replaying them", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "试玩恢复", primaryWorkspaceKey: "game" });
+    const task = storage.createTask({
+      ownerId: "owner-a",
+      projectId: project.id,
+      workspaceKey: "game",
+      taskType: "game.preview",
+      requestId: "preview-request",
+      idempotencyKey: "preview-session",
+      maxAttempts: 1
+    });
+    storage.updateTask({ ownerId: "owner-a", taskId: task.id, status: "RUNNING", progress: 0.5 });
+
+    assert.equal(storage.reconcileInterruptedGamePreviews(), 1);
+    const recovered = storage.getTask("owner-a", task.id);
+    assert.equal(recovered.status, "FAILED");
+    assert.equal(recovered.errorCode, "BRAIN_GAME_PREVIEW_INTERRUPTED");
+    assert.match(recovered.resultJson, /replayed.*false/);
+    assert.equal(storage.reconcileInterruptedGamePreviews(), 0);
+  });
+});
+
 test("enforces local owner boundaries", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "私有项目", primaryWorkspaceKey: "document" });

@@ -838,6 +838,7 @@ function getRustCoreService() {
         throw new Error("BRAIN_CORE_PIPE_REQUIRED: Rust Core stdio pipes are unavailable.");
       }
       return new RustCoreClient({
+        defaultTimeoutMs: 600_000,
         child: {
           stdin: child.stdin,
           stdout: child.stdout,
@@ -5076,7 +5077,7 @@ function registerWorkspaceMediaAgentTools(
 }
 async function capturePreviewWindow() {
   const preferences = await getActiveDesktopPreferences();
-  const targetUrl = preferences.browser.previewUrl;
+  const targetUrl = previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl;
   const previewWindow = await ensurePreviewWindow(targetUrl);
   if (preferences.browser.highResScreenshots) {
     previewWindow.webContents.setZoomFactor(1.5);
@@ -7302,6 +7303,21 @@ function registerIpc() {
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
+    acquireRustCore: (binding) => getRustCoreService().acquire(binding),
+    platform: process.platform,
+    confirmGamePreview: async ({ projectName, projectRoot, command }) => {
+      const result = await dialog.showMessageBox(mainWindowRef ?? undefined, {
+        type: "warning",
+        title: "启动游戏试玩",
+        message: `允许启动“${projectName}”的试玩服务吗？`,
+        detail: `项目目录：${projectRoot}\n运行命令：${command}\n\n项目脚本可能执行本地代码。只有在你信任该项目时才启动。`,
+        buttons: ["启动试玩", "取消"],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true
+      });
+      return result.response === 0;
+    },
     resolveOwnerId: resolveBrainLocalOwnerId,
     resolveWorkspaceRoot: async (workspaceId) => {
       const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);

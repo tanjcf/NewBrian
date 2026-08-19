@@ -4369,7 +4369,7 @@ function renderSidebarModule() {
         </nav>
         <div className={`brain-resource-list${brainResourceTab === "quant" || brainResourceTab === "game" ? " quant-plugin" : ""}`}>
           {brainResourceTab === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} compact /> : null}
-          {brainResourceTab === "game" ? <GameWorkspace projectId={selectedBrainProject?.id} onRequestPreview={(request) => { setBrainDraft(request); setChatStatus("试玩请求已放入对话输入框，请确认后发送。"); }} /> : null}
+          {brainResourceTab === "game" ? <GameWorkspace projectId={selectedBrainProject?.id} conversationId={selectedBrainConversationId || undefined} /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
             <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
               setActiveBrainDocumentFileId(file.id);

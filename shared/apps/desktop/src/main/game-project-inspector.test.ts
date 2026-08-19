@@ -18,7 +18,7 @@ test("detects a web game, its safe preview script, and bounded asset counts", as
 
   assert.equal(result.engine, "web");
   assert.equal(result.displayName, "tiny-racer");
-  assert.deepEqual(result.preview, { supported: true, command: "npm", args: ["run", "dev"], requiresApproval: true });
+  assert.deepEqual(result.preview, { supported: true, command: "npm", args: ["run", "dev"], url: "http://127.0.0.1:5173", requiresApproval: true });
   assert.equal(result.assets.scripts, 1);
   assert.equal(result.assets.scenes, 1);
   assert.equal(result.assets.audio, 1);

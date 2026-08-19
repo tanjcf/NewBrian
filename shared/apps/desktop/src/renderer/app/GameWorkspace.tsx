@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BrainGameProjectInspection } from "@codex-forge/protocol";
+import type { BrainGamePreviewState, BrainGameProjectInspection } from "@codex-forge/protocol";
 
 const engineNames: Record<BrainGameProjectInspection["engine"], string> = {
   web: "Web 游戏", godot: "Godot", unity: "Unity", unreal: "Unreal Engine", unknown: "未识别"
@@ -10,11 +10,22 @@ const assetLabels: Array<[keyof BrainGameProjectInspection["assets"], string]> =
   ["video", "视频"], ["models", "模型"], ["other", "其他"]
 ];
 
-export function GameWorkspace({ projectId, onRequestPreview }: { projectId?: string; onRequestPreview: (request: string) => void }) {
+const activePreviewStatuses = new Set<BrainGamePreviewState["status"]>(["STARTING", "RUNNING", "READY", "STOPPING"]);
+
+const previewStatusNames: Record<BrainGamePreviewState["status"], string> = {
+  STARTING: "正在启动", RUNNING: "等待预览就绪", READY: "可以试玩", STOPPING: "正在停止",
+  SUCCEEDED: "已结束", FAILED: "启动失败", CANCELLED: "已停止", TIMED_OUT: "启动超时"
+};
+
+export function GameWorkspace({ projectId, conversationId }: { projectId?: string; conversationId?: string }) {
   const [inspection, setInspection] = useState<BrainGameProjectInspection | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState("");
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [preview, setPreview] = useState<BrainGamePreviewState | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [evidencePath, setEvidencePath] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -35,9 +46,58 @@ export function GameWorkspace({ projectId, onRequestPreview }: { projectId?: str
     return () => { active = false; };
   }, [projectId, refreshVersion]);
 
+  useEffect(() => {
+    if (!projectId || !preview || !activePreviewStatuses.has(preview.status) || !window.codecn?.getBrainGamePreviewStatus) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void window.codecn?.getBrainGamePreviewStatus({ projectId }).then((state) => {
+        if (active) setPreview(state);
+      }).catch(() => undefined);
+    }, 750);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [projectId, preview?.status]);
+
+  useEffect(() => { setPreview(null); setPreviewError(""); setPreviewBusy(false); setEvidencePath(""); }, [projectId]);
+
   const previewCommand = inspection?.preview.supported
     ? [inspection.preview.command, ...(inspection.preview.args || [])].filter(Boolean).join(" ")
     : "";
+
+  const startPreview = async () => {
+    if (!projectId || !window.codecn?.startBrainGamePreview) return;
+    setPreviewBusy(true); setPreviewError("");
+    try {
+      setPreview(await window.codecn.startBrainGamePreview({ projectId, ...(conversationId ? { conversationId } : {}) }));
+    } catch (reason) {
+      const detail = reason instanceof Error ? reason.message : String(reason);
+      if (!detail.includes("BRAIN_GAME_PREVIEW_DECLINED")) setPreviewError("试玩启动失败，请检查工程启动脚本或任务日志。");
+    } finally { setPreviewBusy(false); }
+  };
+
+  const stopPreview = async () => {
+    if (!projectId || !window.codecn?.stopBrainGamePreview) return;
+    setPreviewBusy(true); setPreviewError("");
+    try { setPreview(await window.codecn.stopBrainGamePreview({ projectId })); }
+    catch { setPreviewError("未能停止试玩进程，请查看任务状态。"); }
+    finally { setPreviewBusy(false); }
+  };
+
+  const openPreview = async () => {
+    if (preview?.status !== "READY" || !preview.previewUrl || !window.codecn?.openBrowserPreview) return;
+    setPreviewError("");
+    try { await window.codecn.openBrowserPreview(preview.previewUrl); }
+    catch { setPreviewError("试玩页面打开失败，请确认预览服务仍在运行。"); }
+  };
+
+  const captureEvidence = async () => {
+    if (preview?.status !== "READY" || !window.codecn?.captureBrowserPreview) return;
+    setPreviewBusy(true); setPreviewError("");
+    try {
+      const result = await window.codecn.captureBrowserPreview();
+      setEvidencePath(result.path);
+    } catch { setPreviewError("试玩截图保存失败，请先打开试玩页面。"); }
+    finally { setPreviewBusy(false); }
+  };
 
   return <section className="brain-game-plugin" aria-label="游戏制作项目检查">
     <header>
@@ -54,7 +114,16 @@ export function GameWorkspace({ projectId, onRequestPreview }: { projectId?: str
       </dl>
       <section className="brain-game-assets"><h3>项目资产</h3><div>{assetLabels.map(([key, label]) => <article key={key}><strong>{inspection.assets[key]}</strong><span>{label}</span></article>)}</div></section>
       <section className="brain-game-preview"><h3>可运行预览</h3>
-        {previewCommand ? <><code>{previewCommand}</code><small>启动会经过当前项目权限审批；本面板不会绕过审批直接执行命令。</small><button type="button" onClick={() => onRequestPreview(`请在当前游戏项目中经过权限审批后运行试玩命令 \`${previewCommand}\`，确认预览地址可以打开，并记录启动结果、错误日志和试玩验证证据。`)}>生成试玩请求</button></> : <p>尚未发现可验证的试玩入口。可在项目中配置受支持的启动脚本后重新检查。</p>}
+        {previewCommand ? <><code>{previewCommand}</code><small>启动前会显示系统确认框；命令由主进程重新检查工程后确定，本面板不能传入或修改命令。</small>
+          {preview ? <div className={`brain-game-preview-state ${preview.status.toLowerCase()}`} role="status"><strong>{previewStatusNames[preview.status]}</strong>{preview.previewUrl ? <span>{preview.previewUrl}</span> : null}{preview.errorCode ? <small>错误代码：{preview.errorCode}</small> : null}</div> : null}
+          {preview?.status === "READY" ? <div className="brain-game-preview-actions"><button type="button" onClick={() => void openPreview()}>打开试玩</button><button type="button" onClick={() => void captureEvidence()} disabled={previewBusy}>保存试玩截图</button></div> : null}
+          {evidencePath ? <small>试玩证据已保存：{evidencePath}</small> : null}
+          {preview?.output ? <details><summary>运行日志</summary><pre>{preview.output}</pre></details> : null}
+          {previewError ? <p className="error">{previewError}</p> : null}
+          {preview && activePreviewStatuses.has(preview.status)
+            ? <button type="button" onClick={() => void stopPreview()} disabled={previewBusy || preview.status === "STOPPING"}>{preview.status === "STOPPING" ? "停止中…" : "停止试玩"}</button>
+            : <button type="button" onClick={() => void startPreview()} disabled={previewBusy}>{previewBusy ? "等待确认…" : "启动试玩"}</button>}
+        </> : <p>尚未发现可验证的试玩入口。可在项目中配置受支持的启动脚本后重新检查。</p>}
       </section>
       {inspection.warnings.length ? <section className="brain-game-warnings"><h3>注意事项</h3>{inspection.warnings.map((warning) => <p key={warning}>{warning}</p>)}</section> : null}
     </> : null}

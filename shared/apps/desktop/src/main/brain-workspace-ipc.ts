@@ -23,6 +23,7 @@ import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
 import { inspectGameProject } from "./game-project-inspector.js";
+import { GamePreviewService, type GamePreviewRustClient } from "./game-preview-service.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
@@ -32,6 +33,9 @@ interface BrainWorkspaceIpcDependencies {
   resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
+  acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" }) => Promise<GamePreviewRustClient>;
+  confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
+  platform?: NodeJS.Platform;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -51,6 +55,26 @@ function requireString(value: unknown, field: string) {
 function optionalString(value: unknown, field: string) {
   if (value === undefined) return undefined;
   return requireString(value, field);
+}
+
+function rejectUnexpectedKeys(input: Record<string, unknown>, allowed: readonly string[], label: string) {
+  const unexpected = Object.keys(input).filter((key) => !allowed.includes(key));
+  if (unexpected.length) throw new TypeError(`${label} contains unsupported fields: ${unexpected.join(", ")}`);
+}
+
+function parseGamePreviewStart(value: unknown) {
+  const input = requireRecord(value, "Game preview start");
+  rejectUnexpectedKeys(input, ["projectId", "conversationId"], "Game preview start");
+  return {
+    projectId: requireString(input.projectId, "projectId"),
+    conversationId: optionalString(input.conversationId, "conversationId")
+  };
+}
+
+function parseGamePreviewProject(value: unknown) {
+  const input = requireRecord(value, "Game preview");
+  rejectUnexpectedKeys(input, ["projectId"], "Game preview");
+  return { projectId: requireString(input.projectId, "projectId") };
 }
 
 function requireWorkspaceKey(value: unknown): BrainWorkspaceKey {
@@ -214,6 +238,17 @@ function withoutOwner<T extends { ownerId: string }>(value: T): Omit<T, "ownerId
 export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIpcDependencies) {
   const ownerId = () => Promise.resolve(dependencies.resolveOwnerId()).then((value) => requireString(value, "ownerId"));
   const revisions = new BrainDocumentRevisionService(dependencies);
+  const gamePreviews = dependencies.acquireRustCore && dependencies.confirmGamePreview
+    ? new GamePreviewService({
+      storage: dependencies.storage,
+      resolveWorkspaceRoot: dependencies.resolveWorkspaceRoot,
+      acquireRustCore: dependencies.acquireRustCore,
+      confirmStart: dependencies.confirmGamePreview,
+      inspectProject: inspectGameProject,
+      platform: dependencies.platform
+    })
+    : null;
+  if (gamePreviews) dependencies.storage.reconcileInterruptedGamePreviews();
   ipcMain.handle(brainWorkspaceIpcChannels.workspaceList, () => dependencies.storage.listWorkspaces());
   ipcMain.handle(brainWorkspaceIpcChannels.projectList, async (_event, value: unknown) =>
     dependencies.storage.listProjects({ ownerId: await ownerId(), ...parseProjectList(value) }).map(withoutOwner));
@@ -311,6 +346,14 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
     return inspectGameProject(await dependencies.resolveWorkspaceRoot(project.localWorkspaceId));
   });
+  if (gamePreviews) {
+    ipcMain.handle(brainWorkspaceIpcChannels.gamePreviewStart, async (_event, value: unknown) =>
+      gamePreviews.start(await ownerId(), parseGamePreviewStart(value)));
+    ipcMain.handle(brainWorkspaceIpcChannels.gamePreviewStatus, async (_event, value: unknown) =>
+      gamePreviews.status(await ownerId(), parseGamePreviewProject(value).projectId));
+    ipcMain.handle(brainWorkspaceIpcChannels.gamePreviewStop, async (_event, value: unknown) =>
+      gamePreviews.stop(await ownerId(), parseGamePreviewProject(value).projectId));
+  }
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
     return dependencies.storage.listAnnotations(await ownerId(), input.projectId);

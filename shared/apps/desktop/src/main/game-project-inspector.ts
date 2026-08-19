@@ -83,7 +83,7 @@ export async function inspectGameProject(projectRoot: string, options: InspectOp
       const manifest = JSON.parse(await readSmallText(packageJsonPath)) as { name?: unknown; scripts?: Record<string, unknown> };
       if (typeof manifest.name === "string" && manifest.name.trim()) displayName = manifest.name.trim();
       const script = ["dev", "start", "preview"].find((name) => typeof manifest.scripts?.[name] === "string");
-      if (script) preview = { supported: true, command: "npm", args: ["run", script], requiresApproval: true };
+      if (script) preview = { supported: true, command: "npm", args: ["run", script], url: "http://127.0.0.1:5173", requiresApproval: true };
       else warnings.push("package.json 未提供 dev、start 或 preview 试玩脚本。");
     } catch {
       warnings.push("package.json 无法安全解析，未生成试玩命令。");

@@ -17631,6 +17631,14 @@ textarea {
 .brain-game-preview code { padding: 10px; overflow-x: auto; border-radius: 6px; background: #19212a; color: #e8edf2; font-size: 12px; white-space: nowrap; }
 .brain-game-preview small, .brain-game-preview p, .brain-game-warnings p { margin: 0; color: var(--text-secondary, #777); font-size: 11px; line-height: 1.55; }
 .brain-game-preview button { border-color: #2867df; background: #2867df; color: #fff; }
+.brain-game-preview-state { display: grid; gap: 4px; padding: 10px; border: 1px solid #d7dce2; border-radius: 7px; background: #f6f8fa; }
+.brain-game-preview-state.ready { border-color: #8cc9a2; background: #edf8f1; color: #176b39; }
+.brain-game-preview-state.failed, .brain-game-preview-state.timed_out { border-color: #e0aaa6; background: #fff2f1; color: #a32922; }
+.brain-game-preview details { font-size: 11px; }
+.brain-game-preview summary { cursor: pointer; color: var(--text-secondary, #777); }
+.brain-game-preview pre { max-height: 180px; margin: 7px 0 0; padding: 9px; overflow: auto; border-radius: 6px; background: #19212a; color: #e8edf2; white-space: pre-wrap; word-break: break-word; }
+.brain-game-preview p.error { color: #b3261e; }
+.brain-game-preview-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .brain-game-warnings p + p { margin-top: 6px; }
 .brain-workspace-plugin-empty { min-height: 320px; display: grid; place-content: center; gap: 8px; padding: 24px; text-align: center; }
 .brain-workspace-plugin-empty strong { font-size: 14px; }

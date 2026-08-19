@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const appDirectory = join(dirname(fileURLToPath(import.meta.url)), "..");
+const appDirectory = process.env.CODECN_E2E_APP_DIRECTORY?.trim()
+  ? process.env.CODECN_E2E_APP_DIRECTORY.trim()
+  : join(dirname(fileURLToPath(import.meta.url)), "..");
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 async function readPages(debugPort) {

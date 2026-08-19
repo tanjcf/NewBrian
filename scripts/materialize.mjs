@@ -26,6 +26,11 @@ const overlayPaths = targetLayers[target].map((layer) => path.join(root, layer))
 const outputRoot = path.join(root, ".materialized");
 const output = path.join(outputRoot, target);
 const temporary = path.join(outputRoot, `.${target}-${process.pid}`);
+const ignoredDirectoryNames = new Set(["node_modules", "release", "tmp"]);
+
+function includeManagedSource(source) {
+  return !source.split(path.sep).some((segment) => ignoredDirectoryNames.has(segment));
+}
 
 for (const required of [shared, ...overlayPaths]) {
   try {
@@ -38,9 +43,9 @@ for (const required of [shared, ...overlayPaths]) {
 
 await mkdir(outputRoot, { recursive: true });
 await rm(temporary, { recursive: true, force: true });
-await cp(shared, temporary, { recursive: true, force: true });
+await cp(shared, temporary, { recursive: true, force: true, filter: includeManagedSource });
 for (const overlay of overlayPaths) {
-  await cp(overlay, temporary, { recursive: true, force: true });
+  await cp(overlay, temporary, { recursive: true, force: true, filter: includeManagedSource });
 }
 
 const metadata = {

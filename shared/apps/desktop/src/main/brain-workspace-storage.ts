@@ -936,6 +936,23 @@ export class BrainWorkspaceStorage {
       .all(projectId) as Record<string, unknown>[]).map(mapTask);
   }
 
+  reconcileInterruptedGamePreviews(): number {
+    const timestamp = nowIso();
+    const resultJson = JSON.stringify({
+      schemaVersion: 1,
+      status: "FAILED",
+      errorCode: "BRAIN_GAME_PREVIEW_INTERRUPTED",
+      replayed: false,
+      recoveredAt: timestamp
+    });
+    const result = this.database.prepare(`UPDATE brain_task SET
+      status = 'FAILED', error_code = 'BRAIN_GAME_PREVIEW_INTERRUPTED',
+      error_detail = 'The desktop application stopped before the preview process completed.',
+      result_json = ?, finished_at = ?, heartbeat_at = ?
+      WHERE task_type = 'game.preview' AND status IN ('QUEUED', 'RUNNING')`).run(resultJson, timestamp, timestamp);
+    return Number(result.changes);
+  }
+
   updateTask(input: { ownerId: string; taskId: string; status: BrainTaskRecord["status"]; progress?: number; errorCode?: string; errorDetail?: string; resultJson?: string }): BrainTaskRecord {
     const current = this.getTask(input.ownerId, input.taskId);
     const statuses: BrainTaskRecord["status"][] = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"];

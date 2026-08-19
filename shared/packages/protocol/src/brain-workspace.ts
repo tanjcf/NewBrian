@@ -69,11 +69,28 @@ export interface BrainGameProjectInspection {
   displayName: string;
   markers: string[];
   assets: { scripts: number; scenes: number; images: number; audio: number; video: number; models: number; other: number };
-  preview: { supported: boolean; command?: string; args?: string[]; requiresApproval: true };
+  preview: { supported: boolean; command?: string; args?: string[]; url?: string; requiresApproval: true };
   warnings: string[];
   scannedEntries: number;
   skippedEntries: number;
   truncated: boolean;
+}
+
+export type BrainGamePreviewStatus = "STARTING" | "RUNNING" | "READY" | "STOPPING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+
+export interface BrainGamePreviewState {
+  schemaVersion: 1;
+  sessionId: string;
+  projectId: string;
+  taskId: string;
+  status: BrainGamePreviewStatus;
+  command: string;
+  previewUrl: string;
+  startedAt: string;
+  readyAt: string;
+  finishedAt: string;
+  errorCode: string;
+  output: string;
 }
 
 export interface BrainProjectUpdateInput extends BrainProjectGetInput {
@@ -255,6 +272,9 @@ export const brainWorkspaceIpcChannels = {
   artifactList: "brain:artifact:list",
   artifactRegister: "brain:artifact:register",
   gameProjectInspect: "brain:game:project-inspect",
+  gamePreviewStart: "brain:game:preview-start",
+  gamePreviewStatus: "brain:game:preview-status",
+  gamePreviewStop: "brain:game:preview-stop",
   quantSessionCreate: "brain:quant:session-create",
   quantBarsQuery: "brain:quant:bars-query",
   quantOrderExecute: "brain:quant:order-execute",

@@ -17,6 +17,7 @@ import type {
   BrainFileDto,
   BrainFileRegisterInput,
   BrainGameProjectInspection,
+  BrainGamePreviewState,
   BrainDocumentIngestInput,
   BrainDocumentIngestResult,
   BrainMessageAppendInput,
@@ -442,6 +443,9 @@ declare global {
       listBrainArtifacts: (input: BrainProjectGetInput) => Promise<BrainArtifactDto[]>;
       registerBrainArtifact: (input: BrainArtifactRegisterInput) => Promise<BrainArtifactDto>;
       inspectBrainGameProject: (input: BrainProjectGetInput) => Promise<BrainGameProjectInspection>;
+      startBrainGamePreview: (input: { projectId: string; conversationId?: string }) => Promise<BrainGamePreviewState>;
+      getBrainGamePreviewStatus: (input: BrainProjectGetInput) => Promise<BrainGamePreviewState>;
+      stopBrainGamePreview: (input: BrainProjectGetInput) => Promise<BrainGamePreviewState>;
       bootstrap: () => Promise<BootstrapPayload>;
       getSnapshot: () => Promise<PhaseOneSnapshot>;
       getGoal: (input?: { threadId?: string }) => Promise<ThreadGoalState | null>;
