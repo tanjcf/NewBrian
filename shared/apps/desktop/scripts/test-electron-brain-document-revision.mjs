@@ -106,6 +106,15 @@ await evaluate(`([...document.querySelectorAll('.document-change-set-list button
 await waitFor("accepted change set", `document.querySelector('.document-change-set-list')?.textContent?.includes("已接受")`);
 await evaluate(`([...document.querySelectorAll('.document-change-set-list button')].find((item) => item.textContent?.trim() === '导出新版本'))?.click()`);
 await waitFor("exported version", `document.querySelector('.document-change-set-list')?.textContent?.includes("已导出 v2")`);
+await evaluate(`location.reload()`);
+await new Promise((resolve) => setTimeout(resolve, 1_500));
+await waitFor("reloaded BRAIN document project", `document.body?.innerText?.includes("文档修改闭环 E2E")`);
+await evaluate(`([...document.querySelectorAll('.brain-project-list button')].find((item) => item.textContent?.includes('文档修改闭环 E2E')))?.click()`);
+await waitFor("reloaded BRAIN conversation", `document.body?.innerText?.includes("修改 note.md")`);
+await evaluate(`([...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes('修改 note.md')))?.click()`);
+await waitFor("exported file resource", `Boolean([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.v2.md') && item.textContent?.includes('版本 2')))`);
+await evaluate(`([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.v2.md') && item.textContent?.includes('版本 2')))?.click()`);
+await waitFor("reopened exported revision", `document.querySelector('.search-file-preview')?.textContent?.includes(${JSON.stringify(replacement)}) && document.querySelector('.search-file-preview')?.textContent?.includes('note.v2.md')`);
 
 const durable = JSON.parse(await evaluate(`(async () => JSON.stringify({
   files: await window.codecn.listBrainFiles({ projectId: ${JSON.stringify(seeded.projectId)} }),

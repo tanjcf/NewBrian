@@ -99,7 +99,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [ ] Render each format with stable object IDs and coordinate transforms.
 - [x] Store immutable annotations separately from originals.
 - [x] Submit annotation IDs through chat and produce a bounded revision preview.
-- [ ] Export a new valid file revision and verify it by reparsing and visual rendering.
+- [x] Export a new valid file revision and verify it by reparsing and visual rendering.
 - [ ] Run document workers outside Electron main and migrate their supervision to Rust Core.
 
 ### Task 6: Quantitative trading workspace
