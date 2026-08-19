@@ -202,5 +202,10 @@ export const brainWorkspaceIpcChannels = {
   taskCreate: "brain:task:create",
   taskUpdate: "brain:task:update",
   artifactList: "brain:artifact:list",
-  artifactRegister: "brain:artifact:register"
+  artifactRegister: "brain:artifact:register",
+  quantSessionCreate: "brain:quant:session-create",
+  quantBarsQuery: "brain:quant:bars-query",
+  quantOrderExecute: "brain:quant:order-execute",
+  quantSnapshot: "brain:quant:snapshot",
+  quantSkillPerformance: "brain:quant:skill-performance"
 } as const;
