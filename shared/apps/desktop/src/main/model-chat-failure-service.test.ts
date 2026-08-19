@@ -69,6 +69,22 @@ test("labels model callback timeouts as the terminal failure code", async () => 
   assert.equal(state.state.messages[0].excludeFromModelContext, true);
 });
 
+test("classifies reasoning context gateway errors for automatic repair", async () => {
+  const state = fixture();
+  await state.service.persistFailure({
+    workspace: { id: "ws" },
+    thread: { id: "thread" },
+    requestId: "request-reasoning",
+    turnId: "turn-reasoning",
+    reasoningSummary: "正在继续工具调用",
+    error: new Error("模型网关请求失败（HTTP 400）；The reasoning_content in the thinking mode must be passed back to the API.")
+  });
+  assert.equal(state.events.at(-1)?.code, "gateway_reasoning_context_required");
+  assert.equal(state.events.at(-1)?.remediation, "retry_without_stale_thinking_context");
+  assert.equal(state.reports[0].context.failureCode, "gateway_reasoning_context_required");
+  assert.equal(state.reports[0].context.httpStatus, 400);
+});
+
 test("persists a visible failure assistant when approval/media fail with empty stream", async () => {
   const state = fixture();
   await state.service.persistFailure({

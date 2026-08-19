@@ -70,6 +70,8 @@ export class ModelChatFailureService {
     const failureMessage = input.error instanceof Error ? input.error.message : String(input.error);
     const failureCode = input.error instanceof Error && "code" in input.error
       ? String((input.error as { code?: unknown }).code ?? "")
+      : /reasoning_content[\s\S]{0,120}must be passed back|must be passed back[\s\S]{0,120}reasoning_content/i.test(failureMessage)
+        ? "gateway_reasoning_context_required"
       : /model callback timed out|model_callback_timeout/i.test(failureMessage)
         ? "model_callback_timeout"
         : /Tool Host exited|hostFailure|tool host/i.test(failureMessage)
@@ -111,10 +113,15 @@ export class ModelChatFailureService {
       });
     }
     await this.dependencies.writeThreadState(input.workspace, input.thread, state);
+    const gatewayReasoningRepair = failureCode === "gateway_reasoning_context_required";
     await this.dependencies.appendEvents(input.workspace, input.thread, [this.dependencies.createEvent("error", {
       stage: "model_request",
       message: failureMessage,
-      code: failureCode
+      code: failureCode,
+      ...(gatewayReasoningRepair ? {
+        httpStatus: 400,
+        remediation: "retry_without_stale_thinking_context"
+      } : {})
     }, input.turnId)]);
     await this.dependencies.updateMetadata({
       workspaceId: input.workspace.id,
@@ -134,6 +141,10 @@ export class ModelChatFailureService {
         turnId: input.turnId,
         stage: "model_request",
         failureCode,
+        ...(gatewayReasoningRepair ? {
+          httpStatus: 400,
+          remediation: "retry_without_stale_thinking_context"
+        } : {}),
         terminal: true
       }
     }).catch(() => undefined);
