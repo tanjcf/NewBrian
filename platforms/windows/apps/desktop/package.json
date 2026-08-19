@@ -89,6 +89,8 @@
       "package.json",
       "node_modules/jszip/**",
       "node_modules/exceljs/**",
+      "node_modules/pdf-parse/**",
+      "node_modules/pdfjs-dist/**",
       "node_modules/@uzen/kokoro-js/**",
       "node_modules/@huggingface/transformers/**",
       "node_modules/phonemizer/**",

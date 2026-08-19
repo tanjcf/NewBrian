@@ -6,9 +6,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @codex-forge/protocol build",
+    "predev": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
     "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
-    "prebuild": "pnpm --filter @codex-forge/protocol build",
+    "prebuild": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "prepare:package-resources": "node build/prepare-package-resources.cjs",
     "build:rust-core": "node ../../scripts/build-rust-core.mjs",
@@ -65,13 +65,18 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/jszip/**",
+      "node_modules/exceljs/**",
+      "node_modules/pdf-parse/**",
+      "node_modules/pdfjs-dist/**"
     ],
     "extraResources": [
       { "from": "build/package-resources/codecn.config.json", "to": "codecn.config.json" },
       { "from": "build/package-resources/codecn.features.json", "to": "codecn.features.json" },
       { "from": "../../../codecn.bootstrap.json", "to": "codecn.bootstrap.json" },
       { "from": "src/renderer/icon.ico", "to": "codecn.ico" },
+      { "from": "document-worker.js", "to": "document-worker.js" },
       { "from": "build/rust-core/brain-core", "to": "brain-core/brain-core" }
     ],
     "linux": {

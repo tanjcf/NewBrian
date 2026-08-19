@@ -18,9 +18,9 @@ test("document worker client sends bounded requests and resolves results", async
   const client = new DocumentWorkerClient({ child, defaultTimeoutMs: 500 });
   const requestPromise = client.ingest({ requestId: "read-1", projectRoot: "C:/project", relativePath: "notes.md", maxBytes: 99_999_999 });
   const request = JSON.parse(child.stdin.read()?.toString() ?? "{}");
-  assert.equal(request.protocol_version, "1");
+  assert.equal(request.protocol_version, "2");
   assert.equal(request.max_bytes, 20 * 1024 * 1024);
-  child.stdout.write(`${JSON.stringify({ protocol_version: "1", request_id: "read-1", status: "completed", error_code: "", format: "markdown", text: "hello", anchors: [], warnings: [] })}\n`);
+  child.stdout.write(`${JSON.stringify({ protocol_version: "2", request_id: "read-1", status: "completed", error_code: "", format: "markdown", text: "hello", anchors: [], warnings: [] })}\n`);
   assert.equal((await requestPromise).text, "hello");
   await client.shutdown();
 });
@@ -29,7 +29,7 @@ test("document worker client fails closed on worker error", async () => {
   const child = makeChild();
   const client = new DocumentWorkerClient({ child, defaultTimeoutMs: 500 });
   const pending = client.ingest({ requestId: "read-2", projectRoot: "C:/project", relativePath: "notes.md" });
-  child.stdout.write(`${JSON.stringify({ protocol_version: "1", request_id: "read-2", status: "failed", error_code: "DOCUMENT_WORKER_PATH_FORBIDDEN" })}\n`);
+  child.stdout.write(`${JSON.stringify({ protocol_version: "2", request_id: "read-2", status: "failed", error_code: "DOCUMENT_WORKER_PATH_FORBIDDEN" })}\n`);
   await assert.rejects(pending, /DOCUMENT_WORKER_PATH_FORBIDDEN/);
   await client.shutdown();
 });

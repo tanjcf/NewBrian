@@ -18,7 +18,19 @@ export class DocumentIngestionService {
     const format = formatByName(name);
     if (!format) throw new TypeError("only TXT and Markdown are supported by the local text reader");
     const lines = content.replaceAll("\r\n", "\n").split("\n");
-    const anchors = lines.map((line, index) => ({ format, locator: { line: index + 1 }, selectedText: line }));
+    const anchors: DocumentAnchor[] = lines.map((line, index) => ({
+      anchorId: `${format}:line:${index + 1}`,
+      objectId: `${format}:line:${index + 1}`,
+      format,
+      locator: {
+        kind: "text-range",
+        startLine: index + 1,
+        endLine: index + 1,
+        startCharacter: 0,
+        endCharacter: line.length
+      },
+      selectedText: line
+    }));
     return { format, text: lines.join("\n"), anchors, warnings: [] };
   }
 

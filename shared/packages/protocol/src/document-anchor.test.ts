@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateDocumentAnchor } from "./document-anchor.ts";
+import { validateDocumentAnchor, type DocumentAnchor } from "./document-anchor.ts";
 
-test("document anchors preserve format-specific coordinates", () => {
-  assert.doesNotThrow(() => validateDocumentAnchor({ format: "pdf", locator: { page: 2 }, page: 2, rect: { x: 1, y: 2, width: 10, height: 20 }, selectedText: "公告" }));
-  assert.doesNotThrow(() => validateDocumentAnchor({ format: "xlsx", locator: { sheet: "Sheet1", range: "A1:C4" }, sheet: "Sheet1", range: "A1:C4" }));
+const anchors: DocumentAnchor[] = [
+  { anchorId: "image:region:0", objectId: "image", format: "image", locator: { kind: "image-region", regionIndex: 0 }, rect: { x: 0, y: 0, width: 640, height: 480 }, transform: { coordinateSpace: "pixels", basisWidth: 640, basisHeight: 480, scale: 1 } },
+  { anchorId: "pdf:page:2:text:0", objectId: "pdf:page:2:text:0", format: "pdf", locator: { kind: "pdf-text", page: 2, textRange: { start: 0, end: 2 } }, page: 2, rect: { x: 1, y: 2, width: 10, height: 20 }, transform: { coordinateSpace: "pdf-points", basisWidth: 595, basisHeight: 842, scale: 1 }, selectedText: "公告" },
+  { anchorId: "docx:p:3", objectId: "docx:p:3", format: "docx", locator: { kind: "docx-object", objectType: "paragraph", paragraphIndex: 3, textRange: { start: 0, end: 4 } }, selectedText: "项目说明" },
+  { anchorId: "pptx:s:1:shape:8", objectId: "pptx:s:1:shape:8", format: "pptx", locator: { kind: "pptx-shape", slide: 1, shapeId: "8", zIndex: 2 }, page: 1, rect: { x: 1, y: 2, width: 3, height: 4 }, transform: { coordinateSpace: "slide-emu", basisWidth: 12192000, basisHeight: 6858000, scale: 1 } },
+  { anchorId: "xlsx:Sheet1:A1:C4", objectId: "xlsx:Sheet1:A1:C4", format: "xlsx", locator: { kind: "xlsx-range", sheet: "Sheet1", range: "A1:C4" }, sheet: "Sheet1", range: "A1:C4" },
+  { anchorId: "markdown:line:2", objectId: "markdown:line:2", format: "markdown", locator: { kind: "text-range", startLine: 2, endLine: 2, startCharacter: 0, endCharacter: 3 }, selectedText: "正文" }
+];
+
+test("accepts every discriminated document anchor format", () => {
+  for (const anchor of anchors) assert.doesNotThrow(() => validateDocumentAnchor(anchor));
 });
 
-test("document anchors reject invalid geometry", () => {
-  assert.throws(() => validateDocumentAnchor({ format: "image", locator: {}, rect: { x: 0, y: 0, width: -1, height: 2 } }), /negative/);
+test("rejects cross-format locators and invalid geometry", () => {
+  assert.throws(() => validateDocumentAnchor({ ...anchors[0], rect: { x: 0, y: 0, width: -1, height: 2 } } as DocumentAnchor), /negative/);
+  assert.throws(() => validateDocumentAnchor({ ...anchors[1], page: 3 } as DocumentAnchor), /does not match/);
+  assert.throws(() => validateDocumentAnchor({ ...anchors[4], sheet: "Other" } as DocumentAnchor), /does not match/);
 });

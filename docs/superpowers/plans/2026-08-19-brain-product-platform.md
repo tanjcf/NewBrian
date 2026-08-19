@@ -94,8 +94,8 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create: `workers/documents/src/worker.ts`
 - Create: `shared/apps/desktop/src/renderer/app/DocumentAnnotationLayer.tsx`
 
-- [ ] Define discriminated anchors for image, PDF, DOCX, PPTX, XLSX, and text.
-- [ ] Write fixture tests that reopen and extract representative files of every format.
+- [x] Define discriminated anchors for image, PDF, DOCX, PPTX, XLSX, and text.
+- [x] Write fixture tests that reopen and extract representative files of every format.
 - [ ] Render each format with stable object IDs and coordinate transforms.
 - [ ] Store immutable annotations separately from originals.
 - [ ] Submit annotation IDs through chat and produce a bounded revision preview.

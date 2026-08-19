@@ -1,6 +1,10 @@
-import type { DocumentAnchor, DocumentFormat } from "./document-anchor.ts";
+import type { DocumentAnchor, DocumentFormat } from "./document-anchor.js";
 
-export const DOCUMENT_WORKER_PROTOCOL_VERSION = "1" as const;
+const { validateDocumentAnchor } = await import(
+  new URL(import.meta.url.endsWith(".ts") ? "./document-anchor.ts" : "./document-anchor.js", import.meta.url).href
+) as typeof import("./document-anchor.js");
+
+export const DOCUMENT_WORKER_PROTOCOL_VERSION = "2" as const;
 
 export interface DocumentWorkerRequest {
   protocol_version: typeof DOCUMENT_WORKER_PROTOCOL_VERSION;
@@ -36,6 +40,8 @@ export function parseDocumentWorkerResponse(value: unknown): DocumentWorkerRespo
     if (typeof input.text !== "string" || !Array.isArray(input.anchors) || !Array.isArray(input.warnings)) {
       throw new TypeError("completed document worker response is incomplete");
     }
+    for (const anchor of input.anchors) validateDocumentAnchor(anchor as DocumentAnchor);
+    if (!input.warnings.every((warning) => typeof warning === "string")) throw new TypeError("document worker warnings are invalid");
   }
   return input as unknown as DocumentWorkerResponse;
 }
