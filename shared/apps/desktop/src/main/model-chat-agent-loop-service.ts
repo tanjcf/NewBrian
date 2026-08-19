@@ -61,6 +61,8 @@ interface AgentMessage {
   content: string;
   attachments?: unknown[];
   reasoningSummary?: string;
+  /** Opaque provider trace retained only for the active tool continuation. */
+  providerReasoningContent?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
 }
 
@@ -449,7 +451,11 @@ export interface ModelChatAgentLoopDependencies<TRuntimeSnapshot, TResult> {
         reason: string;
       }) => void;
     };
-  }) => Promise<{ content?: string; toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }> }>;
+  }) => Promise<{
+    content?: string;
+    providerReasoningContent?: string;
+    toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
+  }>;
   projectEvent: (input: {
     requestId: string;
     workspacePath: string;

@@ -8751,6 +8751,7 @@ async function callModelApi(input: {
       role: "system" | "user" | "assistant" | "tool";
       content: string;
       reasoningSummary?: string;
+      providerReasoningContent?: string;
       toolCallId?: string;
       name?: string;
       toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
@@ -8845,6 +8846,7 @@ async function callModelApi(input: {
         toolCallId: message.toolCallId,
         name: message.name,
         reasoningSummary: message.reasoningSummary,
+        providerReasoningContent: message.providerReasoningContent,
         toolCalls: message.toolCalls
       }))
   );
@@ -8867,7 +8869,7 @@ async function callModelApi(input: {
         message.content && (typeof message.content !== "string" || message.content.trim())
       );
       const reasoning = message.role === "assistant"
-        ? String(message.reasoningSummary || "").trim()
+        ? String(message.providerReasoningContent || "").trim()
         : "";
       // Thinking-mode vendors require prior assistant reasoning_content before
       // function_call items (Auto + Kimi / DeepSeek via gateway).
@@ -8894,8 +8896,8 @@ async function callModelApi(input: {
       upstreamMessages.push({
         role: message.role,
         content: message.content,
-        ...(message.role === "assistant" && message.reasoningSummary?.trim()
-          ? { reasoning_content: message.reasoningSummary.trim() }
+        ...(message.role === "assistant" && message.providerReasoningContent?.trim()
+          ? { reasoning_content: message.providerReasoningContent.trim() }
           : {}),
         ...(message.toolCalls?.length ? {
           tool_calls: message.toolCalls.map((call) => ({
@@ -9043,6 +9045,7 @@ async function callModelApi(input: {
   return {
     content: appendUrlCitations(envelope.content, envelope.citations),
     reasoningSummary: envelope.reasoningSummary ?? "",
+    providerReasoningContent: envelope.reasoningSummary ?? "",
     toolCalls: envelope.toolCalls,
     webSearchCalls: envelope.webSearchCalls,
     citations: envelope.citations,

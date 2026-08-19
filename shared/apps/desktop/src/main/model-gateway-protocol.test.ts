@@ -74,12 +74,12 @@ test("serializes tool calls and outputs for both wire protocols", () => {
   assert.equal(chat[1].tool_call_id, "call-1");
 });
 
-test("preserves assistant reasoning_content when continuing a thinking chat after a tool call", () => {
+test("does not send the visible reasoning summary as provider reasoning_content", () => {
   const messages = [
     {
       role: "assistant",
       content: "",
-      reasoningSummary: "先检查可用插件",
+      reasoningSummary: "正在分析请求目标、约束与当前上下文。",
       toolCalls: [{ id: "call-1", name: "plugin.list", arguments: {} }]
     },
     { role: "tool", content: { ok: true }, toolCallId: "call-1", name: "plugin.list" }
@@ -87,15 +87,33 @@ test("preserves assistant reasoning_content when continuing a thinking chat afte
 
   const chat = protocol.buildUpstreamModelMessages("chat.completions", "", messages);
 
-  assert.equal(chat[0].reasoning_content, "先检查可用插件");
+  assert.equal("reasoning_content" in chat[0], false);
   assert.equal(chat[0].tool_calls[0].function.name, "plugin.list");
 
   const responses = protocol.buildUpstreamModelMessages("responses", "", messages);
-  assert.equal(responses[0].role, "assistant");
-  assert.equal(responses[0].reasoning_content, "先检查可用插件");
-  assert.equal(responses[1].type, "function_call");
-  assert.equal(responses[1].name, "plugin.list");
-  assert.equal(responses[2].type, "function_call_output");
+  assert.equal(responses.some((item: any) => item?.reasoning_content), false);
+  assert.equal(responses[0].type, "function_call");
+  assert.equal(responses[0].name, "plugin.list");
+  assert.equal(responses[1].type, "function_call_output");
+});
+
+test("preserves provider reasoning_content only for an in-memory tool continuation", () => {
+  const messages = [
+    {
+      role: "assistant",
+      content: "",
+      reasoningSummary: "正在读取文件。",
+      providerReasoningContent: "provider-issued-opaque-reasoning",
+      toolCalls: [{ id: "call-1", name: "workspace.read", arguments: { path: "README.md" } }]
+    },
+    { role: "tool", content: { ok: true }, toolCallId: "call-1", name: "workspace.read" }
+  ] as const;
+
+  const chat = protocol.buildUpstreamModelMessages("chat.completions", "", messages);
+  assert.equal(chat[0].reasoning_content, "provider-issued-opaque-reasoning");
+
+  const responses = protocol.buildUpstreamModelMessages("responses", "", messages);
+  assert.equal(responses[0].reasoning_content, "provider-issued-opaque-reasoning");
 });
 
 test("streams response deltas through a terminal SSE event", async () => {

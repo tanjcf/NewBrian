@@ -340,13 +340,13 @@ export class AgentLoop {
       const calls = Array.isArray(response.toolCalls) ? response.toolCalls : [];
       // Thinking-mode providers (DeepSeek / Kimi / Qwen …) require the prior
       // assistant reasoning_content to be echoed on the next request after tools.
-      const reasoningSummary = typeof response.reasoningSummary === "string"
-        ? response.reasoningSummary.trim()
+      const providerReasoningContent = typeof response.providerReasoningContent === "string"
+        ? response.providerReasoningContent.trim()
         : "";
       this.messages.push({
         role: "assistant",
         content: response.content ?? "",
-        ...(reasoningSummary ? { reasoningSummary } : {}),
+        ...(providerReasoningContent ? { providerReasoningContent } : {}),
         toolCalls: structuredClone(calls)
       });
       this.onEvent({ type: "model_response", payload: { step: this.steps, toolCallCount: calls.length } });

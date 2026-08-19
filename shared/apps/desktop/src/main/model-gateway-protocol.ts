@@ -70,6 +70,12 @@ interface EncodedModelMessage {
   toolCallId?: string;
   name?: string;
   reasoningSummary?: string;
+  /**
+   * Opaque provider-issued thinking trace for the current in-memory tool loop.
+   * This is deliberately distinct from the user-visible reasoning summary and
+   * must never be persisted with thread history.
+   */
+  providerReasoningContent?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
 }
 
@@ -95,7 +101,7 @@ export function buildUpstreamModelMessages(
         message.content && (typeof message.content !== "string" || message.content.trim())
       );
       const reasoning = message.role === "assistant"
-        ? String(message.reasoningSummary || "").trim()
+        ? String(message.providerReasoningContent || "").trim()
         : "";
       // Thinking-mode vendors (Kimi/DeepSeek via gateway) require the prior
       // assistant reasoning_content to be echoed before function_call items,
@@ -128,8 +134,8 @@ export function buildUpstreamModelMessages(
     upstreamMessages.push({
       role: message.role,
       content: message.content,
-      ...(message.role === "assistant" && message.reasoningSummary?.trim()
-        ? { reasoning_content: message.reasoningSummary.trim() }
+      ...(message.role === "assistant" && message.providerReasoningContent?.trim()
+        ? { reasoning_content: message.providerReasoningContent.trim() }
         : {}),
       ...(message.toolCalls?.length ? {
         tool_calls: message.toolCalls.map((call) => ({

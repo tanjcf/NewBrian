@@ -149,8 +149,8 @@ Simulation includes holdings, cash, cost basis, realized and unrealized P&L, ord
 
 ## 10. Reliability and observability
 
-- Model thinking context is persisted and replayed using provider-required fields such as `reasoning_content`.
-- Private chain-of-thought is not placed in diagnostics; only bounded summaries and stable features are retained.
+- Provider-required `reasoning_content` is retained only in memory for the current tool continuation, then discarded.
+- Private chain-of-thought is never placed in thread history, diagnostics, error reports, or rollout logs; only bounded user-visible summaries and stable features are retained.
 - Error reports preserve structured category, symptom, possible cause, recent conversation starts, and diagnostic tails under a fixed size budget.
 - Every request carries request, thread, turn, and project identifiers.
 - Durable state changes use atomic writes or transactions and versioned migrations.

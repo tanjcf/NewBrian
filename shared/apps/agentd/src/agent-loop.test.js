@@ -246,7 +246,7 @@ test("keeps the loop resumable when the model call fails after a tool result", a
   assert.equal(completed.finalContent, "recovered");
 });
 
-test("echoes assistant reasoningSummary after a tool call for thinking-mode providers", async () => {
+test("retains opaque provider reasoning only for the next in-memory tool step", async () => {
   const tools = new ToolRegistry().register({
     name: "echo",
     title: "Echo",
@@ -265,12 +265,14 @@ test("echoes assistant reasoningSummary after a tool call for thinking-mode prov
     if (requests === 1) {
       return {
         content: "",
-        reasoningSummary: "先调用 echo",
+        reasoningSummary: "正在调用 echo",
+        providerReasoningContent: "provider-issued-opaque-reasoning",
         toolCalls: [{ id: "call-1", name: "echo", arguments: { text: "ok" } }]
       };
     }
     const assistant = messages.find((message) => message.role === "assistant");
-    assert.equal(assistant?.reasoningSummary, "先调用 echo");
+    assert.equal(assistant?.reasoningSummary, undefined);
+    assert.equal(assistant?.providerReasoningContent, "provider-issued-opaque-reasoning");
     return { content: "done", toolCalls: [] };
   });
   assert.equal(completed.status, "completed");

@@ -115,7 +115,7 @@ test("persists an automatically routed central skill for activity replay", async
   }
 });
 
-test("preserves assistant reasoning summary in the next model request", async () => {
+test("does not serialize persisted assistant reasoning summaries as provider thinking context", async () => {
   const root = await mkdtemp(join(tmpdir(), "codecn-context-reasoning-"));
   const rolloutPath = join(root, "rollout.jsonl");
   const service = new ModelChatContextService({
@@ -168,7 +168,7 @@ test("preserves assistant reasoning summary in the next model request", async ()
     const priorAssistant = result.requestMessages.find((message) => message.id === "assistant-previous");
     assert.equal(priorAssistant?.reasoningSummary, "先检查项目，再给出结论。");
     const upstream = buildUpstreamModelMessages("chat.completions", "", result.requestMessages);
-    assert.equal(upstream[0]?.reasoning_content, "先检查项目，再给出结论。");
+    assert.equal("reasoning_content" in (upstream[0] ?? {}), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

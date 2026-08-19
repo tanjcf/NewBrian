@@ -6600,6 +6600,7 @@ async function callModelApi(input: {
       toolCallId?: string;
       name?: string;
       toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
+      providerReasoningContent?: string;
       createdAt?: string;
       attachments?: Array<{ name: string; path: string; url: string }>;
   }>;
@@ -6748,6 +6749,7 @@ async function callModelApi(input: {
         toolCallId: message.toolCallId,
         name: message.name,
         reasoningSummary: message.reasoningSummary,
+        providerReasoningContent: message.providerReasoningContent,
         toolCalls: message.toolCalls
       }))
   );
@@ -6835,6 +6837,7 @@ async function callModelApi(input: {
   return {
     content: appendUrlCitations(envelope.content, envelope.citations),
     reasoningSummary: envelope.reasoningSummary ?? "",
+    providerReasoningContent: envelope.reasoningSummary ?? "",
     toolCalls: envelope.toolCalls,
     webSearchCalls: envelope.webSearchCalls,
     citations: envelope.citations,

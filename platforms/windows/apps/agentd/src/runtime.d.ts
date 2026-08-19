@@ -244,8 +244,10 @@ export interface AgentLoopMessage {
   content: string;
   toolCallId?: string;
   name?: string;
-  /** Provider thinking trace; must be echoed as reasoning_content on later steps. */
+  /** User-visible progress summary. It is safe to persist but is never sent as provider thinking context. */
   reasoningSummary?: string;
+  /** Opaque provider thinking trace for the active in-memory tool continuation only. */
+  providerReasoningContent?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
 }
 
@@ -268,6 +270,7 @@ export type AgentModelCallback = (input: {
 }) => Promise<{
   content?: string;
   reasoningSummary?: string;
+  providerReasoningContent?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
 }>;
 
