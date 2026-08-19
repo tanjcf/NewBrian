@@ -39,3 +39,30 @@ test("market data service rejects incomplete or impossible remote bars", async (
 test("market data service rejects non-http URLs", () => {
   assert.throws(() => new MarketDataService([], "file:///etc/passwd"), /HTTP or HTTPS/);
 });
+
+test("provider contract preserves daily weekly monthly range and every adjustment mode", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: unknown[] = [];
+  globalThis.fetch = async (_url, init) => {
+    const query = JSON.parse(String(init?.body)) as { symbol: string; interval: "1d" | "1w" | "1mo"; adjustment: "forward" | "backward" | "none"; startDate: string; endDate: string };
+    requests.push(query);
+    return new Response(JSON.stringify({ bars: [{
+      symbol: query.symbol, exchange: "XSHG", timezone: "Asia/Shanghai", interval: query.interval, adjustment: query.adjustment,
+      timestamp: `${query.endDate}T15:00:00+08:00`, open: 10, high: 12, low: 9, close: 11, volume: 100, turnover: 1_100,
+      changePercent: 1, source: { provider: "adapter", dataset: `${query.interval}-${query.adjustment}`, fetchedAt: "2026-08-20T08:00:00Z" }
+    }] }), { status: 200 });
+  };
+  try {
+    const service = new MarketDataService([], "http://market.test/query");
+    for (const interval of ["1d", "1w", "1mo"] as const) {
+      for (const adjustment of ["forward", "backward", "none"] as const) {
+        const result = await service.queryAsync({ symbol: "600519", interval, adjustment, startDate: "2026-01-01", endDate: "2026-08-20" });
+        assert.equal(result[0]?.interval, interval);
+        assert.equal(result[0]?.adjustment, adjustment);
+        assert.equal(result[0]?.source.dataset, `${interval}-${adjustment}`);
+      }
+    }
+    assert.equal(requests.length, 9);
+    assert.ok(requests.every((request: any) => request.startDate === "2026-01-01" && request.endDate === "2026-08-20"));
+  } finally { globalThis.fetch = originalFetch; }
+});

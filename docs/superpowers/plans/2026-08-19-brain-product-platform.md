@@ -112,12 +112,12 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create: `rust/brain-core/src/backtest.rs`
 
 - [x] Define adjusted OHLCV and turnover contracts with exchange timezone and source metadata.
-- [ ] Add fixture and provider-contract tests for daily, weekly, monthly, range, and adjustment modes.
+- [x] Add fixture and provider-contract tests for daily, weekly, monthly, range, and adjustment modes.
 - [ ] Render candlestick and volume charts in the right plugin panel with resize and empty states.
-- [ ] Implement a double-entry simulation ledger for cash, orders, fills, positions, fees, and P&L.
+- [x] Implement a double-entry simulation ledger for cash, orders, fills, positions, fees, and P&L.
 - [ ] Schedule strategy skills with idempotency keys and market-calendar constraints.
 - [x] Compute isolated per-skill return, drawdown, volatility, risk-adjusted return, win rate, and trade count.
-- [ ] Prove no live broker order path exists in this phase.
+- [x] Prove no live broker order path exists in this phase.
 
 ### Task 7: Remaining workspace programs
 

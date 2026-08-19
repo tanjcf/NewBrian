@@ -7,6 +7,15 @@ export interface SimulationLedgerState {
   skillValues: Array<{ skillId: string; values: number[] }>;
 }
 
+export type SimulationAccount = "cash" | "position_cost" | "fees" | "trade_proceeds" | "cost_of_sales";
+export interface SimulationJournalEntry {
+  orderId: string;
+  account: SimulationAccount;
+  debit: number;
+  credit: number;
+  createdAt: string;
+}
+
 export class SimulationLedger {
   private cash: number;
   private readonly initialCash: number;
@@ -15,6 +24,7 @@ export class SimulationLedger {
   private readonly fills: SimulatedFill[] = [];
   private readonly fillsByOrderId = new Map<string, SimulatedFill>();
   private readonly skillValues = new Map<string, number[]>();
+  private readonly journal: SimulationJournalEntry[] = [];
 
   constructor(initialCash: number) {
     if (!Number.isFinite(initialCash) || initialCash <= 0) throw new RangeError("initialCash must be positive");
@@ -57,10 +67,11 @@ export class SimulationLedger {
     const grossAmount = order.quantity * order.price;
     const fee = grossAmount * feeRate;
     const current = this.positions.get(order.symbol) ?? { quantity: 0, averageCost: 0 };
+    const costBasis = current.averageCost * order.quantity;
     let fillRealizedPnl = 0;
     if (order.side === "buy") {
       if (this.cash < grossAmount + fee) throw new Error("INSUFFICIENT_CASH");
-      current.averageCost = (current.quantity * current.averageCost + grossAmount + fee) / (current.quantity + order.quantity);
+      current.averageCost = (current.quantity * current.averageCost + grossAmount) / (current.quantity + order.quantity);
       current.quantity += order.quantity;
       this.cash -= grossAmount + fee;
     } else {
@@ -75,7 +86,30 @@ export class SimulationLedger {
     const fill: SimulatedFill = { ...order, fee, grossAmount, netCashChange: order.side === "buy" ? -(grossAmount + fee) : grossAmount - fee, realizedPnl: fillRealizedPnl };
     this.fills.push(fill);
     this.fillsByOrderId.set(orderId, fill);
+    this.recordJournal(fill, costBasis);
     return fill;
+  }
+
+  journalEntries(): SimulationJournalEntry[] { return this.journal.map((entry) => ({ ...entry })); }
+
+  private recordJournal(fill: SimulatedFill, costBasis: number): void {
+    const entries: SimulationJournalEntry[] = fill.side === "buy"
+      ? [
+          { orderId: fill.id, account: "position_cost", debit: fill.grossAmount, credit: 0, createdAt: fill.createdAt },
+          { orderId: fill.id, account: "fees", debit: fill.fee, credit: 0, createdAt: fill.createdAt },
+          { orderId: fill.id, account: "cash", debit: 0, credit: fill.grossAmount + fill.fee, createdAt: fill.createdAt }
+        ]
+      : [
+          { orderId: fill.id, account: "cash", debit: fill.grossAmount - fill.fee, credit: 0, createdAt: fill.createdAt },
+          { orderId: fill.id, account: "fees", debit: fill.fee, credit: 0, createdAt: fill.createdAt },
+          { orderId: fill.id, account: "cost_of_sales", debit: costBasis, credit: 0, createdAt: fill.createdAt },
+          { orderId: fill.id, account: "position_cost", debit: 0, credit: costBasis, createdAt: fill.createdAt },
+          { orderId: fill.id, account: "trade_proceeds", debit: 0, credit: fill.grossAmount, createdAt: fill.createdAt }
+        ];
+    const debit = entries.reduce((sum, entry) => sum + entry.debit, 0);
+    const credit = entries.reduce((sum, entry) => sum + entry.credit, 0);
+    if (Math.abs(debit - credit) > 1e-7) throw new Error("QUANT_JOURNAL_UNBALANCED");
+    this.journal.push(...entries);
   }
 
   snapshot(prices: Record<string, number>): PortfolioSnapshot {

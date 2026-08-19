@@ -45,3 +45,25 @@ test("ledger state survives restart without duplicating an idempotent order", ()
   assert.deepEqual(restored.execute({ ...order, price: 999 }), original.execute(order));
   assert.deepEqual(restored.snapshot({ A: 12 }), original.snapshot({ A: 12 }));
 });
+
+test("records balanced double-entry journals for buys and sells", () => {
+  const ledger = new SimulationLedger(10_000);
+  ledger.execute({ id: "buy-1", symbol: "A", side: "buy", quantity: 100, price: 10, feeRate: 0.001, createdAt: "2026-08-20T01:00:00Z" });
+  ledger.execute({ id: "sell-1", symbol: "A", side: "sell", quantity: 40, price: 12, feeRate: 0.001, createdAt: "2026-08-21T01:00:00Z" });
+  for (const orderId of ["buy-1", "sell-1"]) {
+    const entries = ledger.journalEntries().filter((entry) => entry.orderId === orderId);
+    assert.ok(entries.some((entry) => entry.account === "cash"));
+    assert.ok(entries.some((entry) => entry.account === "position_cost"));
+    assert.ok(entries.some((entry) => entry.account === "fees"));
+    const debit = entries.reduce((sum, entry) => sum + entry.debit, 0);
+    const credit = entries.reduce((sum, entry) => sum + entry.credit, 0);
+    assert.ok(Math.abs(debit - credit) < 1e-7);
+  }
+});
+
+test("rebuilds the same balanced journal after ledger restart", () => {
+  const ledger = new SimulationLedger(10_000);
+  ledger.execute({ id: "buy-restore", symbol: "A", side: "buy", quantity: 10, price: 10, feeRate: 0.001, createdAt: "2026-08-20T01:00:00Z" });
+  const restored = SimulationLedger.restore(ledger.exportState());
+  assert.deepEqual(restored.journalEntries(), ledger.journalEntries());
+});
