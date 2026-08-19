@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./session-machine": "./dist/session-machine.js"
+    "./session-machine": "./dist/session-machine.js",
+    "./rust-core": "./dist/rust-core.js"
   },
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
