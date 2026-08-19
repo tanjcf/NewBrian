@@ -99,6 +99,7 @@ import {
   WorktreeManager
 } from "./agent-runtime-adapter.js";
 import { CodexStorage } from "./codex-storage.js";
+import { DocumentWorkerProcess } from "../../../../../../shared/apps/desktop/src/main/document-worker-process.ts";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
@@ -413,6 +414,10 @@ import {
   waitWithTimeout
 } from "./agent-collaboration.js";
 const appDirectory = dirname(fileURLToPath(import.meta.url));
+const documentWorkerProcess = new DocumentWorkerProcess({
+  appDirectory,
+  resourcesPath: process.resourcesPath
+});
 protocol.registerSchemesAsPrivileged([
   { scheme: "codecn-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   { scheme: "codecn-artifact", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
@@ -6073,6 +6078,19 @@ async function extractSpreadsheetAttachmentText(filePath: string) {
   return runAttachmentTextExtractor("spreadsheet-text-extractor.js", filePath);
 }
 async function extractTextAttachment(filePath: string, extension: string) {
+  if ([".pdf", ".docx", ".pptx", ".xlsx"].includes(extension)) {
+    try {
+      const result = await documentWorkerProcess.ingest({
+        requestId: `attachment-${randomUUID()}`,
+        projectRoot: dirname(filePath),
+        relativePath: basename(filePath),
+        maxBytes: 20 * 1024 * 1024
+      });
+      if (result.status === "completed") return result.text;
+    } catch (error) {
+      void appendDesktopDebugLog(`document worker fallback extension=${extension} error=${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   if (extension === ".pdf") return extractPdfAttachmentText(filePath);
   if (extension === ".docx") return extractWordAttachmentText(filePath);
   if (extension === ".xlsx") return extractSpreadsheetAttachmentText(filePath);
@@ -8256,6 +8274,7 @@ app.on("before-quit", (event) => {
   agentHostQuitCoordinator.beforeQuit(event);
 });
 app.on("will-quit", () => {
+  void documentWorkerProcess.shutdown();
   desktopErrorCollector.stop();
   automationTimerService.stop();
   desktopControlPlaneHeartbeat.stop();

@@ -4,7 +4,7 @@ import { isAbsolute, relative, resolve, extname } from "node:path";
 
 const VERSION = "1";
 const MAX_DEFAULT_BYTES = 5 * 1024 * 1024;
-const formats = new Map([[".txt", "txt"], [".md", "markdown"], [".markdown", "markdown"], [".docx", "docx"], [".pdf", "pdf"], [".xlsx", "xlsx"]]);
+const formats = new Map([[".txt", "txt"], [".md", "markdown"], [".markdown", "markdown"], [".docx", "docx"], [".pdf", "pdf"], [".pptx", "pptx"], [".xlsx", "xlsx"]]);
 const output = process.stdout;
 
 function response(requestId, values) {
@@ -31,8 +31,8 @@ async function ingest(request) {
     const lines = text.replaceAll("\r\n", "\n").split("\n");
     const anchors = lines.map((line, index) => ({
       format,
-      locator: format === "pdf" ? { page: 1, line: index + 1 } : { line: index + 1 },
-      ...(format === "pdf" ? { page: 1 } : {}),
+      locator: format === "pdf" || format === "pptx" ? { page: 1, line: index + 1 } : { line: index + 1 },
+      ...(format === "pdf" || format === "pptx" ? { page: 1 } : {}),
       ...(format === "xlsx" ? { sheet: "Sheet1" } : {}),
       selectedText: line
     }));
@@ -55,6 +55,18 @@ async function extractText(filePath, format) {
     const parser = new PDFParse({ data: await readFile(filePath), disableFontFace: true, useSystemFonts: false, isOffscreenCanvasSupported: false, isImageDecoderSupported: false });
     try { return (await parser.getText()).text; } finally { await parser.destroy(); }
   }
+  if (format === "pptx") {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(await readFile(filePath));
+    const slideNames = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const slides = [];
+    for (const slideName of slideNames) {
+      const xml = await zip.file(slideName)?.async("string") ?? "";
+      const text = [...xml.matchAll(/<(?:a:)?t\b[^>]*>([\s\S]*?)<\/(?:a:)?t>/g)].map((match) => decodeXml(match[1])).join(" ").trim();
+      if (text) slides.push(`Slide ${slides.length + 1}: ${text}`);
+    }
+    return slides.join("\n");
+  }
   if (format === "xlsx") {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
@@ -68,6 +80,10 @@ async function extractText(filePath, format) {
     return chunks.join("\n\n");
   }
   throw new Error("DOCUMENT_WORKER_FORMAT_UNSUPPORTED");
+}
+
+function decodeXml(value) {
+  return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 
 createInterface({ input: process.stdin }).on("line", (line) => {
