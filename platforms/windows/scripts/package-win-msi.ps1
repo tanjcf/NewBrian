@@ -409,6 +409,7 @@ if ($null -eq $generatedMsi) {
 }
 
 if (Test-Path -LiteralPath $generatedMsi) {
+  New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
   try {
     Copy-Item -LiteralPath $generatedMsi -Destination $msiOut -Force
   } catch {
