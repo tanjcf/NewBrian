@@ -13,20 +13,23 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [interval, setInterval] = useState("日线");
   const [adjustment, setAdjustment] = useState("前复权");
   const [bars, setBars] = useState(fallbackBars);
+  const [queryVersion, setQueryVersion] = useState(0);
   const [orderStatus, setOrderStatus] = useState("");
   const [portfolio, setPortfolio] = useState({ cash: 84986.2, marketValue: 17500, totalValue: 102486.2, totalReturnPercent: 2.49 });
   const [status, setStatus] = useState("本地演示数据");
   useEffect(() => {
     if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
     let active = true;
-    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 }).then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: "1d", adjustment: "forward" } })).then((result: any[]) => {
+    const intervalValue = interval === "周线" ? "1w" : interval === "月线" ? "1mo" : "1d";
+    const adjustmentValue = adjustment === "后复权" ? "backward" : adjustment === "不复权" ? "none" : "forward";
+    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 }).then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: intervalValue, adjustment: adjustmentValue } })).then((result: any[]) => {
       if (!active) return;
       const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
       if (valid.length) { setBars(valid.slice(-30)); setStatus(`已加载 ${valid.length} 条真实行情`); }
       else { setBars(fallbackBars); setStatus("暂无已同步行情，显示演示数据"); }
     }).catch(() => { if (active) { setBars(fallbackBars); setStatus("行情服务暂不可用，显示演示数据"); } });
     return () => { active = false; };
-  }, [projectId, symbol]);
+  }, [projectId, symbol, interval, adjustment, queryVersion]);
   const latest = bars.at(-1)!;
   const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [latest.close]);
   return <main className="brain-quant-module">
@@ -35,7 +38,7 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
       <label>代码<input value={symbol} onChange={(e) => setSymbol(e.target.value)} /></label>
       <label>周期<select value={interval} onChange={(e) => setInterval(e.target.value)}><option>日线</option><option>周线</option><option>月线</option></select></label>
       <label>复权<select value={adjustment} onChange={(e) => setAdjustment(e.target.value)}><option>前复权</option><option>后复权</option><option>不复权</option></select></label>
-      <button type="button">查询行情</button>
+      <button type="button" onClick={() => setQueryVersion((value) => value + 1)}>查询行情</button>
     </section>
     <section className="brain-quant-grid">
       <div className="brain-quant-chart"><div className="brain-quant-chart-head"><strong>{symbol} 贵州茅台</strong><span>{interval} · {adjustment}</span></div><div className="brain-quant-candles" aria-label="K线图">{bars.map((bar) => <div className="brain-quant-candle" key={bar.date}><i style={{ height: `${Math.max(18, bar.high - bar.low)}px`, marginTop: `${Math.max(4, 70 - bar.high + 1720)}px` }} /><b className={bar.close >= bar.open ? "up" : "down"} style={{ height: `${Math.max(8, Math.abs(bar.close - bar.open))}px` }} /><small>{bar.date}</small></div>)}</div><div className="brain-quant-volume">{bars.map((bar) => <i key={bar.date} style={{ height: `${20 + Number.parseFloat(bar.volume) * 8}px` }} />)}</div></div>
