@@ -2,6 +2,7 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+#[derive(Clone)]
 pub struct ProjectBoundary {
     root: PathBuf,
 }
