@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 const fallbackBars = [
-  { date: "08-15", open: 1682, high: 1708, low: 1674, close: 1698, volume: "2.1M" },
-  { date: "08-16", open: 1698, high: 1721, low: 1691, close: 1714, volume: "2.4M" },
-  { date: "08-17", open: 1714, high: 1730, low: 1702, close: 1722, volume: "1.8M" },
-  { date: "08-18", open: 1722, high: 1744, low: 1710, close: 1738, volume: "2.7M" },
-  { date: "08-19", open: 1738, high: 1752, low: 1728, close: 1746, volume: "2.3M" }
+  { timestamp: "2026-08-15", open: 1682, high: 1708, low: 1674, close: 1698, volume: 2_100_000 },
+  { timestamp: "2026-08-16", open: 1698, high: 1721, low: 1691, close: 1714, volume: 2_400_000 },
+  { timestamp: "2026-08-17", open: 1714, high: 1730, low: 1702, close: 1722, volume: 1_800_000 },
+  { timestamp: "2026-08-18", open: 1722, high: 1744, low: 1710, close: 1738, volume: 2_700_000 },
+  { timestamp: "2026-08-19", open: 1738, high: 1752, low: 1728, close: 1746, volume: 2_300_000 }
 ];
 
 export function QuantWorkspace({ projectId }: { projectId?: string }) {
@@ -14,45 +14,70 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [adjustment, setAdjustment] = useState("前复权");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [bars, setBars] = useState(fallbackBars);
+  const [bars, setBars] = useState<any[]>(fallbackBars);
   const [queryVersion, setQueryVersion] = useState(0);
+  const [quantity, setQuantity] = useState(100);
   const [orderStatus, setOrderStatus] = useState("");
-  const [portfolio, setPortfolio] = useState({ cash: 84986.2, marketValue: 17500, totalValue: 102486.2, totalReturnPercent: 2.49 });
+  const [portfolio, setPortfolio] = useState<any>({ cash: 100_000, marketValue: 0, totalValue: 100_000, totalReturnPercent: 0, positions: [] });
   const [status, setStatus] = useState("本地演示数据");
+
   useEffect(() => {
     if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
     let active = true;
     const intervalValue = interval === "周线" ? "1w" : interval === "月线" ? "1mo" : "1d";
     const adjustmentValue = adjustment === "后复权" ? "backward" : adjustment === "不复权" ? "none" : "forward";
-    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 }).then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: intervalValue, adjustment: adjustmentValue, startDate: startDate || undefined, endDate: endDate || undefined } })).then((result: any[]) => {
-      if (!active) return;
-      const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
-      if (valid.length) { setBars(valid.slice(-30)); setStatus(`已加载 ${valid.length} 条真实行情`); }
-      else { setBars(fallbackBars); setStatus("暂无已同步行情，显示演示数据"); }
-    }).catch(() => { if (active) { setBars(fallbackBars); setStatus("行情服务暂不可用，显示演示数据"); } });
+    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 })
+      .then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: intervalValue, adjustment: adjustmentValue, startDate: startDate || undefined, endDate: endDate || undefined } }))
+      .then((result: any[]) => {
+        if (!active) return;
+        const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
+        if (valid.length) { setBars(valid.slice(-60)); setStatus(`已加载 ${valid.length} 条真实行情 · ${valid[0].source?.provider || "已配置数据源"}`); }
+        else { setBars(fallbackBars); setStatus("暂无已同步行情，显示演示数据"); }
+      })
+      .catch(() => { if (active) { setBars(fallbackBars); setStatus("行情服务暂不可用，显示演示数据"); } });
     return () => { active = false; };
   }, [projectId, symbol, interval, adjustment, startDate, endDate, queryVersion]);
+
   const latest = bars.at(-1)!;
-  const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [latest.close]);
+  const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [bars, latest.close]);
+  const chart = useMemo(() => {
+    const width = 760; const priceHeight = 250; const volumeHeight = 70;
+    const high = Math.max(...bars.map((bar) => bar.high)); const low = Math.min(...bars.map((bar) => bar.low));
+    const span = Math.max(high - low, 1); const maxVolume = Math.max(...bars.map((bar) => Number(bar.volume)), 1);
+    const step = width / Math.max(bars.length, 1); const bodyWidth = Math.max(3, Math.min(12, step * 0.55));
+    return { width, priceHeight, volumeHeight, high, low, maxVolume, step, bodyWidth, y: (price: number) => 10 + ((high - price) / span) * (priceHeight - 20) };
+  }, [bars]);
+
+  const executeOrder = (side: "buy" | "sell") => {
+    if (!projectId || !window.codecn?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
+    void window.codecn.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side, quantity, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
+      .then(() => window.codecn.getQuantSnapshot?.({ projectId, prices: { [symbol]: latest.close } }))
+      .then((snapshot: any) => { if (snapshot) setPortfolio(snapshot); setOrderStatus(`已模拟${side === "buy" ? "买入" : "卖出"} ${symbol} ${quantity} 股`); })
+      .catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
+  };
+
   return <main className="brain-quant-module">
     <header className="brain-quant-header"><div><span>量化交易</span><strong>行情与模拟盘</strong></div><small>{status} · 不连接真实券商</small></header>
     <section className="brain-quant-toolbar">
-      <label>代码<input value={symbol} onChange={(e) => setSymbol(e.target.value)} /></label>
-      <label>周期<select value={interval} onChange={(e) => setInterval(e.target.value)}><option>日线</option><option>周线</option><option>月线</option></select></label>
-      <label>复权<select value={adjustment} onChange={(e) => setAdjustment(e.target.value)}><option>前复权</option><option>后复权</option><option>不复权</option></select></label>
-      <label>开始日期<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
-      <label>结束日期<input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></label>
+      <label>代码<input value={symbol} onChange={(event) => setSymbol(event.target.value)} /></label>
+      <label>周期<select value={interval} onChange={(event) => setInterval(event.target.value)}><option>日线</option><option>周线</option><option>月线</option></select></label>
+      <label>复权<select value={adjustment} onChange={(event) => setAdjustment(event.target.value)}><option>前复权</option><option>后复权</option><option>不复权</option></select></label>
+      <label>开始日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+      <label>结束日期<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
       <button type="button" onClick={() => setQueryVersion((value) => value + 1)}>查询行情</button>
     </section>
     <section className="brain-quant-grid">
-      <div className="brain-quant-chart"><div className="brain-quant-chart-head"><strong>{symbol} 贵州茅台</strong><span>{interval} · {adjustment}</span></div><div className="brain-quant-candles" aria-label="K线图">{bars.map((bar) => <div className="brain-quant-candle" key={bar.date}><i style={{ height: `${Math.max(18, bar.high - bar.low)}px`, marginTop: `${Math.max(4, 70 - bar.high + 1720)}px` }} /><b className={bar.close >= bar.open ? "up" : "down"} style={{ height: `${Math.max(8, Math.abs(bar.close - bar.open))}px` }} /><small>{bar.date}</small></div>)}</div><div className="brain-quant-volume">{bars.map((bar) => <i key={bar.date} style={{ height: `${20 + Number.parseFloat(bar.volume) * 8}px` }} />)}</div></div>
-      <aside className="brain-quant-side"><h3>模拟持仓</h3><div className="brain-quant-total"><small>总资产</small><strong>¥{portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong><em>+{portfolio.totalReturnPercent.toFixed(2)}%</em></div><dl><div><dt>可用现金</dt><dd>¥{portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>持仓市值</dt><dd>¥{portfolio.marketValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>累计收益</dt><dd className="positive">+¥{(portfolio.totalValue - 100000).toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div></dl><button type="button" className="primary" onClick={() => {
-        if (!projectId || !window.codecn?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
-        void window.codecn.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side: "buy", quantity: 100, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
-          .then(() => window.codecn.getQuantSnapshot?.({ projectId, prices: { [symbol]: latest.close } }))
-          .then((snapshot: any) => { if (snapshot) setPortfolio(snapshot); setOrderStatus(`已模拟买入 ${symbol} 100 股`); }).catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
-      }}>模拟买入 100 股</button>{orderStatus ? <small className="brain-quant-order-status">{orderStatus}</small> : null}</aside>
+      <div className="brain-quant-chart"><div className="brain-quant-chart-head"><strong>{symbol}</strong><span>{interval} · {adjustment} · 区间 {returnPercent}%</span></div>
+        <svg viewBox={`0 0 ${chart.width} ${chart.priceHeight + chart.volumeHeight}`} role="img" aria-label={`${symbol} K线和成交量图`} preserveAspectRatio="none">{bars.map((bar, index) => { const x = chart.step * index + chart.step / 2; const up = bar.close >= bar.open; const bodyTop = chart.y(Math.max(bar.open, bar.close)); const bodyHeight = Math.max(1.5, Math.abs(chart.y(bar.open) - chart.y(bar.close))); const color = up ? "#ef4444" : "#16a34a"; const volumeHeight = (Number(bar.volume) / chart.maxVolume) * (chart.volumeHeight - 18); return <g key={`${bar.timestamp}-${index}`}><line x1={x} x2={x} y1={chart.y(bar.high)} y2={chart.y(bar.low)} stroke={color} strokeWidth="1"/><rect x={x - chart.bodyWidth / 2} y={bodyTop} width={chart.bodyWidth} height={bodyHeight} fill={color}/><rect x={x - chart.bodyWidth / 2} y={chart.priceHeight + chart.volumeHeight - volumeHeight} width={chart.bodyWidth} height={volumeHeight} fill={color} opacity="0.55"/></g>; })}</svg>
+        <div className="brain-quant-chart-axis"><span>{String(bars[0].timestamp).slice(5, 10)}</span><span>最高 {chart.high.toFixed(2)} / 最低 {chart.low.toFixed(2)}</span><span>{String(latest.timestamp).slice(5, 10)}</span></div>
+      </div>
+      <aside className="brain-quant-side"><h3>模拟持仓</h3><div className="brain-quant-total"><small>总资产</small><strong>¥{portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong><em>{portfolio.totalReturnPercent >= 0 ? "+" : ""}{portfolio.totalReturnPercent.toFixed(2)}%</em></div>
+        <dl><div><dt>可用现金</dt><dd>¥{portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>持仓市值</dt><dd>¥{portfolio.marketValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>累计收益</dt><dd className={portfolio.totalValue >= 100_000 ? "positive" : "negative"}>{portfolio.totalValue >= 100_000 ? "+" : ""}¥{(portfolio.totalValue - 100_000).toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div></dl>
+        <div className="brain-quant-order-controls"><label>数量<input type="number" min="1" step="100" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}/></label><button type="button" className="primary" onClick={() => executeOrder("buy")}>模拟买入</button><button type="button" onClick={() => executeOrder("sell")}>模拟卖出</button></div>
+        {portfolio.positions?.length ? <ul className="brain-quant-position-list">{portfolio.positions.map((position: any) => <li key={position.symbol}><strong>{position.symbol}</strong><span>{position.quantity} 股</span><em className={position.unrealizedPnl >= 0 ? "positive" : "negative"}>{position.unrealizedPnl >= 0 ? "+" : ""}¥{position.unrealizedPnl.toFixed(2)}</em></li>)}</ul> : <small>暂无模拟持仓</small>}
+        {orderStatus ? <small className="brain-quant-order-status">{orderStatus}</small> : null}
+      </aside>
     </section>
-    <section className="brain-quant-skills"><header><h3>Skill 模拟表现</h3><span>按同一初始资金比较</span></header><table><thead><tr><th>Skill</th><th>收益率</th><th>最大回撤</th><th>交易次数</th><th>胜率</th></tr></thead><tbody><tr><td>趋势跟踪</td><td className="positive">+12.40%</td><td>-4.81%</td><td>28</td><td>57.1%</td></tr><tr><td>均值回归</td><td className="positive">+8.16%</td><td>-6.20%</td><td>41</td><td>53.7%</td></tr></tbody></table></section>
+    <section className="brain-quant-skills"><header><h3>Skill 模拟表现</h3><span>每个 Skill 使用独立的同额初始资金</span></header><div className="brain-quant-empty">尚未运行量化 Skill。创建并运行策略后，这里将显示真实收益率、最大回撤、波动率、风险调整收益、交易次数和胜率。</div></section>
   </main>;
 }

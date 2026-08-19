@@ -2,7 +2,7 @@ import type { MarketDataQuery, PortfolioSnapshot, QuantBar, SimulatedFill, Simul
 import { MarketDataService } from "./market-data-service.ts";
 import { SimulationLedger } from "./simulation-ledger.ts";
 
-type QuantSession = { ledger: SimulationLedger; market: MarketDataService };
+type QuantSession = { ledger: SimulationLedger; skillLedgers: Map<string, SimulationLedger>; market: MarketDataService; initialCash: number };
 
 export class QuantSimulationService {
   private readonly sessions = new Map<string, QuantSession>();
@@ -12,7 +12,7 @@ export class QuantSimulationService {
   createSession(projectId: string, initialCash = 100_000, fixtures: QuantBar[] = []): void {
     if (!projectId.trim()) throw new TypeError("projectId is required");
     if (this.sessions.has(projectId)) return;
-    this.sessions.set(projectId, { ledger: new SimulationLedger(initialCash), market: new MarketDataService(fixtures, this.remoteUrl) });
+    this.sessions.set(projectId, { ledger: new SimulationLedger(initialCash), skillLedgers: new Map(), market: new MarketDataService(fixtures, this.remoteUrl), initialCash });
   }
 
   private session(projectId: string): QuantSession {
@@ -23,8 +23,26 @@ export class QuantSimulationService {
 
   queryBars(projectId: string, query: MarketDataQuery): QuantBar[] { return this.session(projectId).market.query(query); }
   queryBarsAsync(projectId: string, query: MarketDataQuery): Promise<QuantBar[]> { return this.session(projectId).market.queryAsync(query); }
-  executeOrder(projectId: string, order: SimulatedOrder): SimulatedFill { return this.session(projectId).ledger.execute(order); }
+  executeOrder(projectId: string, order: SimulatedOrder): SimulatedFill {
+    const session = this.session(projectId);
+    if (!order.skillId) return session.ledger.execute(order);
+    let ledger = session.skillLedgers.get(order.skillId);
+    if (!ledger) {
+      ledger = new SimulationLedger(session.initialCash);
+      session.skillLedgers.set(order.skillId, ledger);
+    }
+    return ledger.execute(order);
+  }
   snapshot(projectId: string, prices: Record<string, number>): PortfolioSnapshot { return this.session(projectId).ledger.snapshot(prices); }
-  recordSkillSnapshot(projectId: string, skillId: string, prices: Record<string, number>): void { this.session(projectId).ledger.recordSkillSnapshot(skillId, prices); }
-  performance(projectId: string, skillId: string): SkillPerformance { return this.session(projectId).ledger.performance(skillId); }
+  recordSkillSnapshot(projectId: string, skillId: string, prices: Record<string, number>): void {
+    const session = this.session(projectId);
+    const ledger = session.skillLedgers.get(skillId);
+    if (!ledger) throw new Error("QUANT_SKILL_SESSION_NOT_FOUND");
+    ledger.recordSkillSnapshot(skillId, prices);
+  }
+  performance(projectId: string, skillId: string): SkillPerformance {
+    const ledger = this.session(projectId).skillLedgers.get(skillId);
+    if (!ledger) throw new Error("QUANT_SKILL_SESSION_NOT_FOUND");
+    return ledger.performance(skillId);
+  }
 }

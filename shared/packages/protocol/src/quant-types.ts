@@ -4,6 +4,10 @@ export type OrderSide = "buy" | "sell";
 
 export interface QuantBar {
   symbol: string;
+  exchange: string;
+  timezone: string;
+  interval: BarInterval;
+  adjustment: AdjustmentMode;
   timestamp: string;
   open: number;
   high: number;
@@ -12,6 +16,11 @@ export interface QuantBar {
   volume: number;
   turnover: number;
   changePercent: number;
+  source: {
+    provider: string;
+    dataset: string;
+    fetchedAt: string;
+  };
 }
 
 export interface MarketDataQuery {
@@ -64,6 +73,8 @@ export interface SkillPerformance {
   skillId: string;
   totalReturnPercent: number;
   maxDrawdownPercent: number;
+  volatilityPercent: number;
+  riskAdjustedReturn: number;
   tradeCount: number;
   winRatePercent: number;
 }

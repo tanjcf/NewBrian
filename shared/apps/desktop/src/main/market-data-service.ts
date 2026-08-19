@@ -19,7 +19,13 @@ export class MarketDataService {
     const start = input.startDate ? Date.parse(input.startDate) : -Infinity;
     const end = input.endDate ? Date.parse(input.endDate) : Infinity;
     if (Number.isNaN(start) || Number.isNaN(end) || start > end) throw new RangeError("invalid date range");
-    return this.fixtures.filter((bar) => bar.symbol === input.symbol && Date.parse(bar.timestamp) >= start && Date.parse(bar.timestamp) <= end);
+    return this.fixtures.filter((bar) =>
+      bar.symbol === input.symbol
+      && bar.interval === input.interval
+      && bar.adjustment === input.adjustment
+      && Date.parse(bar.timestamp) >= start
+      && Date.parse(bar.timestamp) <= end
+    );
   }
 
   async queryAsync(input: MarketDataQuery): Promise<QuantBar[]> {
@@ -28,6 +34,38 @@ export class MarketDataService {
     if (!response.ok) throw new Error(`MARKET_DATA_HTTP_${response.status}`);
     const payload = await response.json() as { bars?: unknown };
     if (!Array.isArray(payload.bars)) throw new Error("MARKET_DATA_INVALID_RESPONSE");
-    return payload.bars.filter((bar): bar is QuantBar => Boolean(bar && typeof bar === "object" && typeof (bar as QuantBar).symbol === "string" && typeof (bar as QuantBar).close === "number"));
+    const bars = payload.bars.map(parseQuantBar);
+    if (bars.some((bar) => bar.symbol !== input.symbol || bar.interval !== input.interval || bar.adjustment !== input.adjustment)) {
+      throw new Error("MARKET_DATA_QUERY_MISMATCH");
+    }
+    return bars;
   }
+}
+
+function parseQuantBar(value: unknown): QuantBar {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("MARKET_DATA_INVALID_BAR");
+  const bar = value as Record<string, unknown>;
+  const source = bar.source;
+  const numericFields = ["open", "high", "low", "close", "volume", "turnover", "changePercent"] as const;
+  if (
+    typeof bar.symbol !== "string" || !bar.symbol.trim()
+    || typeof bar.exchange !== "string" || !bar.exchange.trim()
+    || typeof bar.timezone !== "string" || !bar.timezone.trim()
+    || !["1d", "1w", "1mo"].includes(String(bar.interval))
+    || !["forward", "backward", "none"].includes(String(bar.adjustment))
+    || typeof bar.timestamp !== "string" || Number.isNaN(Date.parse(bar.timestamp))
+    || numericFields.some((field) => typeof bar[field] !== "number" || !Number.isFinite(bar[field] as number))
+    || !source || typeof source !== "object" || Array.isArray(source)
+  ) throw new Error("MARKET_DATA_INVALID_BAR");
+  const metadata = source as Record<string, unknown>;
+  if (typeof metadata.provider !== "string" || !metadata.provider.trim()
+    || typeof metadata.dataset !== "string" || !metadata.dataset.trim()
+    || typeof metadata.fetchedAt !== "string" || Number.isNaN(Date.parse(metadata.fetchedAt))) {
+    throw new Error("MARKET_DATA_INVALID_BAR");
+  }
+  const open = bar.open as number; const high = bar.high as number; const low = bar.low as number; const close = bar.close as number;
+  if (low < 0 || high < Math.max(open, close) || low > Math.min(open, close) || (bar.volume as number) < 0 || (bar.turnover as number) < 0) {
+    throw new Error("MARKET_DATA_INVALID_BAR");
+  }
+  return value as QuantBar;
 }

@@ -26,3 +26,13 @@ test("ledger makes repeated order ids idempotent", () => {
   assert.equal(ledger.snapshot({ A: 10 }).cash, 900);
   assert.equal(ledger.snapshot({ A: 10 }).positions[0]?.quantity, 10);
 });
+
+test("skill performance includes volatility and risk-adjusted return", () => {
+  const ledger = new SimulationLedger(1_000);
+  ledger.execute({ id: "skill-buy", skillId: "trend", symbol: "A", side: "buy", quantity: 10, price: 10, feeRate: 0, createdAt: "now" });
+  ledger.recordSkillSnapshot("trend", { A: 11 });
+  ledger.recordSkillSnapshot("trend", { A: 9 });
+  const result = ledger.performance("trend");
+  assert.ok(result.volatilityPercent > 0);
+  assert.equal(Number.isFinite(result.riskAdjustedReturn), true);
+});

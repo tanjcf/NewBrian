@@ -57,7 +57,10 @@ export class SimulationLedger {
     return { cash: this.cash, initialCash: this.initialCash, marketValue, totalValue: this.cash + marketValue, realizedPnl: this.realizedPnl, unrealizedPnl, totalReturnPercent: ((this.cash + marketValue - this.initialCash) / this.initialCash) * 100, positions };
   }
 
-  recordSkillSnapshot(skillId: string, prices: Record<string, number>): void { const value = this.snapshot(prices).totalValue; this.skillValues.set(skillId, [...(this.skillValues.get(skillId) ?? []), value]); }
+  recordSkillSnapshot(skillId: string, prices: Record<string, number>): void {
+    const value = this.snapshot(prices).totalValue;
+    this.skillValues.set(skillId, [...(this.skillValues.get(skillId) ?? [this.initialCash]), value]);
+  }
   performance(skillId: string): SkillPerformance {
     const values = this.skillValues.get(skillId) ?? [this.initialCash];
     let peak = values[0]; let maxDrawdown = 0;
@@ -65,6 +68,18 @@ export class SimulationLedger {
     const trades = this.fills.filter((fill) => fill.skillId === skillId);
     const sells = trades.filter((fill) => fill.side === "sell");
     const wins = sells.filter((fill) => fill.realizedPnl > 0).length;
-    return { skillId, totalReturnPercent: ((values.at(-1)! - this.initialCash) / this.initialCash) * 100, maxDrawdownPercent: maxDrawdown, tradeCount: trades.length, winRatePercent: sells.length ? wins / sells.length * 100 : 0 };
+    const returns = values.slice(1).map((value, index) => values[index] > 0 ? value / values[index] - 1 : 0);
+    const mean = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
+    const variance = returns.length > 1 ? returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1) : 0;
+    const volatilityPercent = Math.sqrt(variance) * 100;
+    return {
+      skillId,
+      totalReturnPercent: ((values.at(-1)! - this.initialCash) / this.initialCash) * 100,
+      maxDrawdownPercent: maxDrawdown,
+      volatilityPercent,
+      riskAdjustedReturn: volatilityPercent > 0 ? (mean * 100) / volatilityPercent : 0,
+      tradeCount: trades.length,
+      winRatePercent: sells.length ? wins / sells.length * 100 : 0
+    };
   }
 }
