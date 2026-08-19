@@ -1,4 +1,5 @@
 mod approval;
+mod document_ops;
 mod file_ops;
 mod git_ops;
 mod path_policy;
@@ -6,6 +7,7 @@ mod process_ops;
 mod protocol;
 
 use approval::ApprovalRegistry;
+use document_ops::DocumentWorkerConfig;
 use path_policy::ProjectBoundary;
 use protocol::{validate_request, Request, Response};
 use serde_json::{json, Value};
@@ -156,6 +158,36 @@ fn main() -> io::Result<()> {
         .next()
         .map(PathBuf::from)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "project root is required"))?;
+    let mut document_worker_runtime = None;
+    let mut document_worker = None;
+    while let Some(flag) = arguments.next() {
+        let value = arguments.next().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "startup option value is required",
+            )
+        })?;
+        if flag == std::ffi::OsStr::new("--document-worker-runtime") {
+            document_worker_runtime = Some(PathBuf::from(value));
+        } else if flag == std::ffi::OsStr::new("--document-worker") {
+            document_worker = Some(PathBuf::from(value));
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "unsupported startup option",
+            ));
+        }
+    }
+    let document_worker = match (document_worker_runtime, document_worker) {
+        (Some(runtime), Some(worker)) => Some(DocumentWorkerConfig::bind(runtime, worker)?),
+        (None, None) => None,
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "document worker runtime and entry must be configured together",
+            ))
+        }
+    };
     let boundary = ProjectBoundary::bind(&project_root)?;
     let stdin = io::stdin();
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
@@ -207,17 +239,25 @@ fn main() -> io::Result<()> {
             write_response(&stdout, &response)?;
             continue;
         }
-        if request.operation == "process.run" {
+        if request.operation == "process.run" || request.operation == "document.ingest" {
             if let Err(code) = validate_request(&request) {
                 write_response(&stdout, &Response::failed(request.request_id, code))?;
                 continue;
             }
-            if let Err(code) = approvals.consume(
-                &request.approval_token,
-                &request.project_id,
-                &request.operation,
-            ) {
-                write_response(&stdout, &Response::failed(request.request_id, code))?;
+            if request.operation == "process.run" {
+                if let Err(code) = approvals.consume(
+                    &request.approval_token,
+                    &request.project_id,
+                    &request.operation,
+                ) {
+                    write_response(&stdout, &Response::failed(request.request_id, code))?;
+                    continue;
+                }
+            } else if document_worker.is_none() {
+                write_response(
+                    &stdout,
+                    &Response::failed(request.request_id, "BRAIN_CORE_DOCUMENT_WORKER_UNAVAILABLE"),
+                )?;
                 continue;
             }
             let request_id = request.request_id;
@@ -229,14 +269,31 @@ fn main() -> io::Result<()> {
             let worker_boundary = boundary.clone();
             let worker_processes = Arc::clone(&active_processes);
             let worker_stdout = Arc::clone(&stdout);
+            let worker_document = document_worker.clone();
             workers.push(thread::spawn(move || {
-                let response = match process_ops::run_process(
-                    &worker_boundary,
-                    &request.payload,
-                    request.resource_limits.timeout_ms,
-                    request.resource_limits.max_output_bytes,
-                    &cancellation,
-                ) {
+                let operation = request.operation.clone();
+                let result = if operation == "document.ingest" {
+                    document_ops::ingest(
+                        &worker_boundary,
+                        worker_document
+                            .as_ref()
+                            .expect("document worker checked before spawn"),
+                        &request_id,
+                        &request.payload,
+                        request.resource_limits.timeout_ms,
+                        request.resource_limits.max_output_bytes,
+                        &cancellation,
+                    )
+                } else {
+                    process_ops::run_process(
+                        &worker_boundary,
+                        &request.payload,
+                        request.resource_limits.timeout_ms,
+                        request.resource_limits.max_output_bytes,
+                        &cancellation,
+                    )
+                };
+                let response = match result {
                     Ok(result) => Response::completed(request_id.clone(), result),
                     Err("BRAIN_CORE_CANCELLED") => {
                         let mut response =

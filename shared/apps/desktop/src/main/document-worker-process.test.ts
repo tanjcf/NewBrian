@@ -29,3 +29,31 @@ test("document worker process performs a bounded text ingestion round trip", asy
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("routes document ingestion through Rust Core without approval or credentials", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+  const root = await mkdtemp(join(tmpdir(), "brain-document-rust-"));
+  const worker = new DocumentWorkerProcess({
+    appDirectory: process.cwd(),
+    acquireRustCore: async (binding) => ({
+      request: async (input) => {
+        requests.push(input as unknown as Record<string, unknown>);
+        return {
+          protocol_version: "1", request_id: input.request_id, status: "completed", error_code: "", artifacts: [],
+          result: { protocol_version: "2", request_id: input.request_id, status: "completed", error_code: "", format: "markdown", text: "正文", anchors: [{ anchorId: "markdown:line:1", objectId: "markdown:line:1", format: "markdown", locator: { kind: "text-range", startLine: 1, endLine: 1, startCharacter: 0, endCharacter: 2 }, selectedText: "正文" }], warnings: [] }
+        };
+      }
+    })
+  });
+  try {
+    await writeFile(join(root, "notes.md"), "正文", "utf8");
+    const result = await worker.ingest({ requestId: "rust-document-1", projectRoot: root, relativePath: "notes.md", maxBytes: 1024 });
+    assert.equal(result.text, "正文");
+    assert.equal(requests[0]?.operation, "document.ingest");
+    assert.equal(requests[0]?.approval_token, "");
+    assert.doesNotMatch(JSON.stringify(requests[0]), /api.?key|authorization|credential|secret/iu);
+  } finally {
+    await worker.shutdown();
+    await rm(root, { recursive: true, force: true });
+  }
+});

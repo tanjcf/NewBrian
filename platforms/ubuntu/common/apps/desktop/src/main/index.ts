@@ -252,6 +252,8 @@ function getRustCoreService() {
   if (rustCoreService) return rustCoreService;
   rustCoreService = new RustCoreService({
     binaryPath: resolveUnixRustCoreBinary({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appDirectory }),
+    documentWorkerRuntimePath: process.execPath,
+    documentWorkerPath: app.isPackaged ? join(process.resourcesPath, "document-worker.js") : join(appDirectory, "document-worker.js"),
     processManager: rustCoreProcessManager,
     createClient: (child) => {
       if (!child.stdin || !child.stdout || !child.stderr) throw new Error("BRAIN_CORE_PIPE_REQUIRED");

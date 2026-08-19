@@ -178,7 +178,13 @@ function decodeXml(value) {
   return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 
-createInterface({ input: process.stdin }).on("line", (line) => {
-  try { void ingest(JSON.parse(line)); }
+const runOnce = process.argv.includes("--once");
+const lines = createInterface({ input: process.stdin });
+lines.on("line", async (line) => {
+  try { await ingest(JSON.parse(line)); }
   catch { response("unknown", { status: "failed", error_code: "DOCUMENT_WORKER_BAD_JSON" }); }
+  if (runOnce) {
+    lines.close();
+    process.stdin.destroy();
+  }
 });

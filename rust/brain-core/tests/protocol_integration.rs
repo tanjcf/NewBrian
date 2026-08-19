@@ -15,9 +15,23 @@ struct CoreProcess {
 
 impl CoreProcess {
     fn start(project_root: &PathBuf) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_brain-core"))
-            .arg("--project-root")
-            .arg(project_root)
+        Self::start_with_document(project_root, None)
+    }
+
+    fn start_with_document(
+        project_root: &PathBuf,
+        document: Option<(&std::path::Path, &std::path::Path)>,
+    ) -> Self {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_brain-core"));
+        command.arg("--project-root").arg(project_root);
+        if let Some((runtime, worker)) = document {
+            command
+                .arg("--document-worker-runtime")
+                .arg(runtime)
+                .arg("--document-worker")
+                .arg(worker);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -102,6 +116,30 @@ impl CoreProcess {
     }
 }
 
+fn node_runtime() -> PathBuf {
+    #[cfg(windows)]
+    let output = Command::new("where.exe")
+        .arg("node.exe")
+        .output()
+        .expect("locate node runtime");
+    #[cfg(not(windows))]
+    let output = Command::new("which")
+        .arg("node")
+        .output()
+        .expect("locate node runtime");
+    assert!(
+        output.status.success(),
+        "node runtime is required for document integration test"
+    );
+    PathBuf::from(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .next()
+            .expect("node path")
+            .trim(),
+    )
+}
+
 #[cfg(windows)]
 fn command(script: &str) -> Value {
     json!({ "executable": "cmd.exe", "args": ["/D", "/S", "/C", script], "cwd": "." })
@@ -131,6 +169,43 @@ fn temporary_project() -> PathBuf {
     fs::create_dir_all(root.join("nested")).expect("project root");
     fs::write(root.join("nested/input.txt"), b"input").expect("input fixture");
     root
+}
+
+#[test]
+fn supervises_the_trusted_document_worker_without_an_approval_token() {
+    let root = temporary_project();
+    fs::write(root.join("nested/notes.md"), "第一行\n第二行").expect("document fixture");
+    let runtime = node_runtime();
+    let worker = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../shared/apps/desktop/src/main/document-worker.js")
+        .canonicalize()
+        .expect("document worker source");
+    let mut core = CoreProcess::start_with_document(&root, Some((&runtime, &worker)));
+    let response = core.request_with_limits(
+        "document-1",
+        "document.ingest",
+        "",
+        json!({ "relative_path": "nested/notes.md", "max_bytes": 1024 }),
+        5_000,
+        64 * 1024,
+    );
+    assert_eq!(response["status"], "completed", "response: {response}");
+    assert_eq!(response["result"]["status"], "completed");
+    assert_eq!(response["result"]["format"], "markdown");
+    assert_eq!(
+        response["result"]["anchors"][1]["objectId"],
+        "markdown:line:2"
+    );
+
+    let escaped = core.request(
+        "document-escape",
+        "document.ingest",
+        "",
+        json!({ "relative_path": "../outside.md", "max_bytes": 1024 }),
+    );
+    assert_eq!(escaped["error_code"], "BRAIN_CORE_PATH_ESCAPE");
+    drop(core);
+    fs::remove_dir_all(root).expect("cleanup");
 }
 
 fn git(project_root: &PathBuf, args: &[&str]) {

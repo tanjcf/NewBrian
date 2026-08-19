@@ -33,6 +33,8 @@ test("spawns one sanitized Rust Core per authorized project and performs a healt
   let clientIndex = 0;
   const service = new RustCoreService({
     binaryPath: "C:/Program Files/BRAIN/resources/brain-core.exe",
+    documentWorkerRuntimePath: "C:/Program Files/BRAIN/BRAIN.exe",
+    documentWorkerPath: "C:/Program Files/BRAIN/resources/document-worker.js",
     spawnProcess: (executable, args, options) => {
       spawned.push({ executable, args, options: options as Record<string, unknown> });
       return children[spawned.length - 1]!;
@@ -64,7 +66,11 @@ test("spawns one sanitized Rust Core per authorized project and performs a healt
   const reused = await service.acquire({ projectId: "project-1", projectRoot: "C:/work/one", workspaceType: "software" });
   assert.equal(first, reused);
   assert.equal(spawned.length, 1);
-  assert.deepEqual(spawned[0]?.args, ["--project-root", normalize("C:/work/one")]);
+  assert.deepEqual(spawned[0]?.args, [
+    "--project-root", normalize("C:/work/one"),
+    "--document-worker-runtime", normalize("C:/Program Files/BRAIN/BRAIN.exe"),
+    "--document-worker", normalize("C:/Program Files/BRAIN/resources/document-worker.js")
+  ]);
   assert.deepEqual(spawned[0]?.options.env, { PATH: "C:/Windows/System32", SystemRoot: "C:/Windows" });
   assert.equal(requests[0]?.operation, "health.check");
 

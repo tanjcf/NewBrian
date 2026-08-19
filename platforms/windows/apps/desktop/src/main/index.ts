@@ -420,7 +420,8 @@ import {
 const appDirectory = dirname(fileURLToPath(import.meta.url));
 const documentWorkerProcess = new DocumentWorkerProcess({
   appDirectory,
-  resourcesPath: process.resourcesPath
+  resourcesPath: process.resourcesPath,
+  acquireRustCore: (binding) => getRustCoreService().acquire(binding)
 });
 protocol.registerSchemesAsPrivileged([
   { scheme: "codecn-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
@@ -810,6 +811,8 @@ function getRustCoreService() {
       resourcesPath: process.resourcesPath,
       appDirectory
     }),
+    documentWorkerRuntimePath: process.execPath,
+    documentWorkerPath: app.isPackaged ? join(process.resourcesPath, "document-worker.js") : join(appDirectory, "document-worker.js"),
     processManager: rustCoreProcessManager,
     createClient: (child) => {
       if (!child.stdin || !child.stdout || !child.stderr) {

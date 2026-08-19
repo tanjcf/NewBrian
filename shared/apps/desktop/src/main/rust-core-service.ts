@@ -33,6 +33,8 @@ interface RustCoreProcessManager {
 
 interface RustCoreServiceOptions {
   binaryPath: string;
+  documentWorkerRuntimePath?: string;
+  documentWorkerPath?: string;
   environment?: NodeJS.ProcessEnv;
   spawnProcess?: (executable: string, args: string[], options: SpawnOptions) => RustCoreChild;
   processManager: RustCoreProcessManager;
@@ -61,6 +63,11 @@ export class RustCoreService {
 
   constructor(options: RustCoreServiceOptions) {
     if (!isAbsolute(options.binaryPath)) throw new Error("BRAIN_CORE_BINARY_PATH_REQUIRED: binary path must be absolute.");
+    if (Boolean(options.documentWorkerRuntimePath) !== Boolean(options.documentWorkerPath)
+      || (options.documentWorkerRuntimePath && !isAbsolute(options.documentWorkerRuntimePath))
+      || (options.documentWorkerPath && !isAbsolute(options.documentWorkerPath))) {
+      throw new Error("BRAIN_CORE_DOCUMENT_WORKER_PATH_REQUIRED: runtime and worker paths must both be absolute.");
+    }
     this.options = options;
     this.spawnProcess = options.spawnProcess
       ?? ((executable, args, spawnOptions) => spawn(executable, args, spawnOptions));
@@ -93,9 +100,13 @@ export class RustCoreService {
     if (this.active?.key === key) return this.active.client;
     await this.stopActive();
 
+    const args = ["--project-root", projectRoot];
+    if (this.options.documentWorkerRuntimePath && this.options.documentWorkerPath) {
+      args.push("--document-worker-runtime", normalize(this.options.documentWorkerRuntimePath), "--document-worker", normalize(this.options.documentWorkerPath));
+    }
     const child = this.options.processManager.track(this.spawnProcess(
       this.options.binaryPath,
-      ["--project-root", projectRoot],
+      args,
       {
         cwd: projectRoot,
         env: rustCoreChildEnvironment(this.options.environment ?? process.env),

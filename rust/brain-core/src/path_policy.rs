@@ -8,6 +8,9 @@ pub struct ProjectBoundary {
 }
 
 impl ProjectBoundary {
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
     pub fn bind(root: &Path) -> io::Result<Self> {
         let root = fs::canonicalize(root)?;
         if !root.is_dir() {

@@ -8,7 +8,8 @@
     "./session-machine": "./dist/session-machine.js",
     "./rust-core": "./dist/rust-core.js",
     "./quant-types": "./dist/quant-types.js",
-    "./document-anchor": "./dist/document-anchor.js"
+    "./document-anchor": "./dist/document-anchor.js",
+    "./document-worker": "./dist/document-worker.js"
   },
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
