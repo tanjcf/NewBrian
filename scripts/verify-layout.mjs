@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { validateMaterializedApplicationEntries } from "./verify-layout-policy.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const layers = [
@@ -45,6 +46,13 @@ for (const [arch, overlay] of [["arm64", macosArm64], ["x64", macosX64]]) {
 for (const [arch, overlay] of [["arm64", ubuntuArm64], ["x64", ubuntuX64]]) {
   if (!overlay.includes("codecn.arch.json")) throw new Error(`Missing codecn.arch.json for Ubuntu ${arch}`);
 }
+
+const mergeLayers = (...sourceLayers) => [...new Set(sourceLayers.flat())];
+validateMaterializedApplicationEntries("macos-arm64", mergeLayers(shared, macosCommon, macosArm64));
+validateMaterializedApplicationEntries("macos-x64", mergeLayers(shared, macosCommon, macosX64));
+validateMaterializedApplicationEntries("ubuntu-arm64", mergeLayers(shared, ubuntuCommon, ubuntuArm64));
+validateMaterializedApplicationEntries("ubuntu-x64", mergeLayers(shared, ubuntuCommon, ubuntuX64));
+validateMaterializedApplicationEntries("windows", mergeLayers(shared, windows));
 
 console.log(JSON.stringify({
   shared: shared.length,

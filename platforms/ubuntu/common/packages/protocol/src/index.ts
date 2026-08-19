@@ -1261,7 +1261,10 @@ export interface TerminalSessionSnapshot {
 export interface ModelConfig {
   provider: string;
   baseUrl: string;
+  /** Write-only renderer input. Main process always returns this field empty. */
   apiKey: string;
+  /** Safe status flag; never contains credential material. */
+  apiKeyConfigured?: boolean;
   wireApi: "responses" | "chat.completions";
   model: string;
   reviewModel: string;

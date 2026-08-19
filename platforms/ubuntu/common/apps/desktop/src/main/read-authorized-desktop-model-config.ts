@@ -1,4 +1,3 @@
-import { app } from "electron";
 import { dirname } from "node:path";
 import { promises as fs } from "node:fs";
 import type { ModelConfig } from "@codex-forge/protocol";
@@ -15,6 +14,7 @@ export interface ReadAuthorizedDesktopModelConfigDependencies {
   readDesktopAuthState: () => Promise<{
     access_token?: string;
   } | null>;
+  readPrivateModelCredential: () => Promise<string>;
   readGatewayOrigin: () => Promise<string>;
   createDesktopAuthHeaders: (input: { accessToken: string; device: unknown }) => Record<string, string>;
   collectDesktopDeviceFingerprint: () => unknown;
@@ -27,6 +27,7 @@ export interface ReadAuthorizedDesktopModelConfigDependencies {
   configuredGatewayBaseUrlEnv: string;
   productionGatewayBaseUrl: string;
   defaultGatewayBaseUrl: string;
+  isPackaged: boolean;
   setCachedAuthorizedModels: (models: AuthorizedModel[]) => void;
 }
 
@@ -40,11 +41,11 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
       configuredBaseUrl: effectiveConfig.baseUrl,
       bundledBaseUrl: bundledConfig?.llm?.baseUrl || deps.defaultGatewayBaseUrl,
       envBaseUrl: deps.configuredGatewayBaseUrlEnv,
-      isPackaged: app.isPackaged,
+      isPackaged: deps.isPackaged,
       productionBaseUrl: deps.productionGatewayBaseUrl
     }) || await deps.readGatewayOrigin();
     const modelsUrl = `${new URL(gatewayBaseUrl).origin}/v1/models`;
-    const apiKeyCredential = effectiveConfig.apiKey?.trim() || "";
+    const apiKeyCredential = effectiveConfig.apiKey?.trim() || await deps.readPrivateModelCredential();
     const accessTokenCredential = authState?.access_token?.trim() || "";
     const device = deps.collectDesktopDeviceFingerprint();
     const credentials = [
@@ -150,12 +151,14 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
     return {
       ...deps.normalizeModelConfig({
         ...effectiveConfig,
+        apiKey: "",
         provider: selected?.provider ?? "",
         baseUrl: gatewayBaseUrl,
         wireApi: "responses",
         model: requestedAuto ? "auto" : (selected?.model ?? ""),
         reviewModel: selectedReview?.model ?? selected?.model ?? ""
       }),
+      apiKey: "",
       availableModels
     };
   };
