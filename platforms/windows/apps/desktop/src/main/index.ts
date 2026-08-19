@@ -6743,6 +6743,7 @@ async function callModelApi(input: {
         || message.attachments?.length
         || message.toolCalls?.length
         || message.reasoningSummary?.trim()
+        || message.providerReasoningContent?.trim()
         || message.role === "tool"
       )
       .map(async (message) => ({
