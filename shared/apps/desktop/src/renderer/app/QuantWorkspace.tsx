@@ -20,6 +20,11 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [orderStatus, setOrderStatus] = useState("");
   const [portfolio, setPortfolio] = useState<any>({ cash: 100_000, marketValue: 0, totalValue: 100_000, totalReturnPercent: 0, positions: [] });
   const [status, setStatus] = useState("本地演示数据");
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [skillId, setSkillId] = useState("trend-following");
+  const [scheduleTime, setScheduleTime] = useState("15:10");
+  const [scheduleExchange, setScheduleExchange] = useState<"SSE" | "SZSE" | "BSE">("SSE");
+  const [scheduleStatus, setScheduleStatus] = useState("");
 
   useEffect(() => {
     if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
@@ -38,6 +43,13 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
     return () => { active = false; };
   }, [projectId, symbol, interval, adjustment, startDate, endDate, queryVersion]);
 
+  useEffect(() => {
+    if (!projectId || !window.codecn?.listQuantStrategySchedules) { setSchedules([]); return; }
+    void window.codecn.listQuantStrategySchedules({ projectId })
+      .then((items: any[]) => setSchedules(Array.isArray(items) ? items : []))
+      .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划读取失败"));
+  }, [projectId]);
+
   const latest = bars.at(-1)!;
   const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [bars, latest.close]);
   const chart = useMemo(() => {
@@ -54,6 +66,13 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
       .then(() => window.codecn.getQuantSnapshot?.({ projectId, prices: { [symbol]: latest.close } }))
       .then((snapshot: any) => { if (snapshot) setPortfolio(snapshot); setOrderStatus(`已模拟${side === "buy" ? "买入" : "卖出"} ${symbol} ${quantity} 股`); })
       .catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
+  };
+
+  const createSchedule = () => {
+    if (!projectId || !window.codecn?.createQuantStrategySchedule) { setScheduleStatus("模拟项目尚未连接"); return; }
+    void window.codecn.createQuantStrategySchedule({ projectId, skillId, exchange: scheduleExchange, runAt: scheduleTime })
+      .then((created: any) => { setSchedules((items) => [...items, created]); setScheduleStatus("策略计划已保存，仅进入模拟任务队列"); })
+      .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划保存失败"));
   };
 
   return <main className="brain-quant-module">
@@ -78,6 +97,15 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
         {orderStatus ? <small className="brain-quant-order-status">{orderStatus}</small> : null}
       </aside>
     </section>
-    <section className="brain-quant-skills"><header><h3>Skill 模拟表现</h3><span>每个 Skill 使用独立的同额初始资金</span></header><div className="brain-quant-empty">尚未运行量化 Skill。创建并运行策略后，这里将显示真实收益率、最大回撤、波动率、风险调整收益、交易次数和胜率。</div></section>
+    <section className="brain-quant-skills"><header><h3>Skill 自动模拟</h3><span>每个 Skill 使用独立的同额初始资金，不连接真实券商</span></header>
+      <div className="brain-quant-schedule-form">
+        <label>Skill 标识<input value={skillId} onChange={(event) => setSkillId(event.target.value)} /></label>
+        <label>交易所<select value={scheduleExchange} onChange={(event) => setScheduleExchange(event.target.value as "SSE" | "SZSE" | "BSE")}><option value="SSE">上交所</option><option value="SZSE">深交所</option><option value="BSE">北交所</option></select></label>
+        <label>交易日执行时间<input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} /></label>
+        <button type="button" disabled={!skillId.trim()} onClick={createSchedule}>创建模拟计划</button>
+      </div>
+      {schedules.length ? <div className="brain-quant-schedule-list">{schedules.map((item) => <article key={item.id}><strong>{item.skillId}</strong><span>{item.exchange} · 交易日 {item.runAt} · Asia/Shanghai</span><em>{item.enabled ? "已启用" : "已停用"}</em></article>)}</div> : <div className="brain-quant-empty">尚未创建量化 Skill 计划。计划只会生成模拟任务，并以“计划 + 交易日期”防止重复运行。</div>}
+      {scheduleStatus ? <small className="brain-quant-order-status">{scheduleStatus}</small> : null}
+    </section>
   </main>;
 }

@@ -17543,8 +17543,15 @@ textarea {
 .brain-quant-position-list li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; font-size: 12px; }
 .brain-quant-position-list em, .negative { color: #c4584f; font-style: normal; }
 .brain-quant-empty { padding: 18px 0 4px; color: var(--text-secondary, #777); font-size: 13px; line-height: 1.6; }
+.brain-quant-schedule-form { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 180px auto; gap: 10px; align-items: end; }
+.brain-quant-schedule-form label { display: grid; gap: 5px; color: var(--text-secondary, #777); font-size: 12px; }
+.brain-quant-schedule-form input, .brain-quant-schedule-form select { min-height: 34px; border: 1px solid var(--border-subtle, #ddd); border-radius: 8px; background: var(--surface-raised, #fff); color: var(--text-primary, #222); padding: 0 9px; }
+.brain-quant-schedule-form button { min-height: 34px; }
+.brain-quant-schedule-list { display: grid; gap: 8px; margin-top: 12px; }
+.brain-quant-schedule-list article { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(230px, 2fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border-subtle, #ddd); border-radius: 9px; }
+.brain-quant-schedule-list span, .brain-quant-schedule-list em { color: var(--text-secondary, #777); font-size: 12px; font-style: normal; }
 .brain-quant-skills { margin: 0 28px; padding: 16px; } .brain-quant-skills header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; } .brain-quant-skills table { width: 100%; border-collapse: collapse; font-size: 13px; } .brain-quant-skills th, .brain-quant-skills td { padding: 10px 8px; text-align: left; border-top: 1px solid #e8e8e8; } .brain-quant-skills th { color: #777; font-size: 12px; font-weight: 500; }
-@media (max-width: 800px) { .brain-quant-grid { grid-template-columns: 1fr; padding: 16px; } .brain-quant-header, .brain-quant-toolbar { padding-left: 16px; padding-right: 16px; } .brain-quant-skills { margin: 0 16px; overflow-x: auto; } .brain-quant-skills table { min-width: 560px; } }
+@media (max-width: 800px) { .brain-quant-grid { grid-template-columns: 1fr; padding: 16px; } .brain-quant-header, .brain-quant-toolbar { padding-left: 16px; padding-right: 16px; } .brain-quant-skills { margin: 0 16px; overflow-x: auto; } .brain-quant-skills table { min-width: 560px; } .brain-quant-schedule-form { grid-template-columns: 1fr 1fr; } }
 
 @media (max-width: 640px) {
   .usage-exception-feedback-overlay { padding: 12px; align-items: end; }

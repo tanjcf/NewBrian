@@ -103,6 +103,7 @@ import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
+import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import {
   resolveEffectiveGatewayBaseUrl,
@@ -581,6 +582,11 @@ const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARK
   load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
   save: (projectId, stateJson) => brainWorkspaceStorage.saveQuantState(projectId, stateJson)
 });
+const quantStrategyScheduler = new QuantStrategyScheduler({
+  store: brainWorkspaceStorage.quantStrategyScheduleStore(),
+  execute: async (input) => { brainWorkspaceStorage.enqueueQuantStrategyExecution(input); }
+});
+let quantStrategyTimer: NodeJS.Timeout | null = null;
 const governmentWritingSpecificationService = new GovernmentWritingSpecificationService(codexStorage);
 const workspaceWorktreeService = new WorkspaceWorktreeService({
   bindingsPath: desktopWorktreeBindingsPath,
@@ -8328,6 +8334,9 @@ app.whenReady().then(async () => {
   setupAppMenu(mainWindow);
   await applyDesktopPreferences(await getActiveDesktopPreferences());
   automationTimerService.start();
+  void quantStrategyScheduler.tick();
+  quantStrategyTimer = setInterval(() => { void quantStrategyScheduler.tick(); }, 60_000);
+  quantStrategyTimer.unref();
   void scheduleAutomaticUserKnowledgeSync({
     projectWorkspacePath: initialWorkspace?.path,
     projectKey: initialWorkspace?.name || initialWorkspace?.id,
@@ -8360,6 +8369,8 @@ app.on("will-quit", () => {
   void documentWorkerProcess.shutdown();
   desktopErrorCollector.stop();
   automationTimerService.stop();
+  if (quantStrategyTimer) clearInterval(quantStrategyTimer);
+  quantStrategyTimer = null;
   desktopControlPlaneHeartbeat.stop();
   if (holonOutboxTimer) clearInterval(holonOutboxTimer);
   holonOutboxTimer = null;

@@ -8,6 +8,7 @@ import {
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
 import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
+import type { ChinaExchange, QuantStrategyExecution, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
 
 export { brainWorkspaceKeys } from "@codex-forge/protocol";
 export type { BrainWorkspaceKey } from "@codex-forge/protocol";
@@ -96,7 +97,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 4;
+const latestMigrationVersion = 5;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -352,6 +353,36 @@ function migrationFourSql() {
   `;
 }
 
+function migrationFiveSql() {
+  return `
+    CREATE TABLE brain_quant_strategy_schedule (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE,
+      skill_id TEXT NOT NULL,
+      exchange TEXT NOT NULL CHECK(exchange IN ('SSE', 'SZSE', 'BSE')),
+      timezone TEXT NOT NULL CHECK(timezone = 'Asia/Shanghai'),
+      run_at TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(project_id, skill_id, exchange, run_at)
+    );
+    CREATE INDEX idx_brain_quant_schedule_enabled ON brain_quant_strategy_schedule(enabled, project_id);
+    CREATE TABLE brain_quant_strategy_run (
+      schedule_id TEXT NOT NULL REFERENCES brain_quant_strategy_schedule(id) ON DELETE CASCADE,
+      trading_date TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL CHECK(status IN ('RUNNING', 'SUCCEEDED', 'FAILED')),
+      attempt INTEGER NOT NULL DEFAULT 1,
+      error_code TEXT NOT NULL DEFAULT '',
+      error_detail TEXT NOT NULL DEFAULT '',
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      PRIMARY KEY(schedule_id, trading_date)
+    );
+  `;
+}
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -471,6 +502,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 2, "Structured immutable document annotations", migrationTwoSql());
       applyMigration(this.database, 3, "Bind BRAIN projects to authorized local workspaces", migrationThreeSql());
       applyMigration(this.database, 4, "Persist isolated quantitative simulation ledgers", migrationFourSql());
+      applyMigration(this.database, 5, "Schedule idempotent quantitative strategy simulations", migrationFiveSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -958,6 +990,87 @@ export class BrainWorkspaceStorage {
       INSERT INTO brain_quant_state(project_id, state_json, updated_at) VALUES (?, ?, ?)
       ON CONFLICT(project_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
     `).run(normalizedProjectId, normalizedState, nowIso());
+  }
+
+  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; exchange: ChinaExchange; runAt: string }): QuantStrategySchedule {
+    this.getProject(input.ownerId, input.projectId);
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(input.runAt)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "runAt must use HH:mm");
+    if (!(["SSE", "SZSE", "BSE"] as const).includes(input.exchange)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "exchange is invalid");
+    const skillId = requireText(input.skillId, "skillId");
+    const existing = this.database.prepare(`SELECT * FROM brain_quant_strategy_schedule
+      WHERE project_id = ? AND skill_id = ? AND exchange = ? AND run_at = ?`)
+      .get(input.projectId, skillId, input.exchange, input.runAt) as Record<string, unknown> | undefined;
+    if (existing) return {
+      id: String(existing.id), projectId: String(existing.project_id), skillId: String(existing.skill_id),
+      exchange: String(existing.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(existing.run_at), enabled: Number(existing.enabled) === 1
+    };
+    const timestamp = nowIso();
+    const record: QuantStrategySchedule = {
+      id: `quant_schedule_${randomUUID()}`, projectId: input.projectId, skillId,
+      exchange: input.exchange, timezone: "Asia/Shanghai", runAt: input.runAt, enabled: true
+    };
+    this.database.prepare(`
+      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, exchange, timezone, run_at, enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(record.id, record.projectId, record.skillId, record.exchange, record.timezone, record.runAt, timestamp, timestamp);
+    return record;
+  }
+
+  listQuantStrategySchedules(ownerId: string, projectId: string): QuantStrategySchedule[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT * FROM brain_quant_strategy_schedule WHERE project_id = ? ORDER BY created_at, id")
+      .all(projectId) as Record<string, unknown>[]).map((row) => ({
+        id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
+        exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: Number(row.enabled) === 1
+      }));
+  }
+
+  quantStrategyScheduleStore(): QuantStrategyScheduleStore {
+    return {
+      listEnabled: () => (this.database.prepare("SELECT * FROM brain_quant_strategy_schedule WHERE enabled = 1 ORDER BY id")
+        .all() as Record<string, unknown>[]).map((row) => ({
+          id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
+          exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: true
+        })),
+      claim: (scheduleId, tradingDate, idempotencyKey) => {
+        const timestamp = nowIso();
+        const inserted = this.database.prepare(`
+          INSERT OR IGNORE INTO brain_quant_strategy_run(schedule_id, trading_date, idempotency_key, status, started_at)
+          VALUES (?, ?, ?, 'RUNNING', ?)
+        `).run(scheduleId, tradingDate, idempotencyKey, timestamp);
+        if (Number(inserted.changes) === 1) return true;
+        const retried = this.database.prepare(`
+          UPDATE brain_quant_strategy_run SET status = 'RUNNING', attempt = attempt + 1, error_code = '', error_detail = '', started_at = ?, finished_at = NULL
+          WHERE schedule_id = ? AND trading_date = ? AND idempotency_key = ? AND status = 'FAILED'
+        `).run(timestamp, scheduleId, tradingDate, idempotencyKey);
+        return Number(retried.changes) === 1;
+      },
+      complete: (scheduleId, tradingDate, idempotencyKey) => {
+        this.database.prepare(`UPDATE brain_quant_strategy_run SET status = 'SUCCEEDED', finished_at = ?
+          WHERE schedule_id = ? AND trading_date = ? AND idempotency_key = ? AND status = 'RUNNING'`)
+          .run(nowIso(), scheduleId, tradingDate, idempotencyKey);
+      },
+      fail: (scheduleId, tradingDate, idempotencyKey, errorCode, errorDetail) => {
+        this.database.prepare(`UPDATE brain_quant_strategy_run SET status = 'FAILED', error_code = ?, error_detail = ?, finished_at = ?
+          WHERE schedule_id = ? AND trading_date = ? AND idempotency_key = ? AND status = 'RUNNING'`)
+          .run(errorCode.slice(0, 120), errorDetail.slice(0, 2_000), nowIso(), scheduleId, tradingDate, idempotencyKey);
+      }
+    };
+  }
+
+  enqueueQuantStrategyExecution(input: QuantStrategyExecution): BrainTaskRecord {
+    const project = this.database.prepare("SELECT owner_id FROM brain_project WHERE id = ?").get(input.projectId) as { owner_id: string } | undefined;
+    if (!project) throw new BrainStorageError("BRAIN_PROJECT_NOT_FOUND", "Project not found");
+    return this.createTask({
+      ownerId: project.owner_id,
+      projectId: input.projectId,
+      workspaceKey: "quant",
+      taskType: `quant.strategy.${input.skillId}`,
+      requestId: input.idempotencyKey,
+      idempotencyKey: input.idempotencyKey,
+      maxAttempts: 3,
+      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, simulationOnly: true })
+    });
   }
 
   private seedWorkspaces() {

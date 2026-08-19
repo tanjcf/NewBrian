@@ -29,6 +29,7 @@ import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
+import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
@@ -190,6 +191,11 @@ const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARK
   load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
   save: (projectId, stateJson) => brainWorkspaceStorage.saveQuantState(projectId, stateJson)
 });
+const quantStrategyScheduler = new QuantStrategyScheduler({
+  store: brainWorkspaceStorage.quantStrategyScheduleStore(),
+  execute: async (input) => { brainWorkspaceStorage.enqueueQuantStrategyExecution(input); }
+});
+let quantStrategyTimer: NodeJS.Timeout | null = null;
 
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.
@@ -10538,6 +10544,9 @@ app.whenReady().then(async () => {
   const mainWindow = createMainWindow();
   setupAppMenu(mainWindow);
   await applyDesktopPreferences(await getActiveDesktopPreferences());
+  void quantStrategyScheduler.tick();
+  quantStrategyTimer = setInterval(() => { void quantStrategyScheduler.tick(); }, 60_000);
+  quantStrategyTimer.unref();
   const authStatus = await resolveDesktopAuthStatus();
   if (authStatus.authenticated) {
     void startDesktopBootstrapAfterAuth().catch((error) => {
@@ -10566,6 +10575,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  if (quantStrategyTimer) clearInterval(quantStrategyTimer);
+  quantStrategyTimer = null;
   if (registeredPopupShortcut) {
     try { globalShortcut.unregister(registeredPopupShortcut); } catch { /* shortcut already released */ }
     registeredPopupShortcut = "";

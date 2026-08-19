@@ -242,6 +242,8 @@ export const brainWorkspaceIpcChannels = {
   quantOrderExecute: "brain:quant:order-execute",
   quantSnapshot: "brain:quant:snapshot",
   quantSkillPerformance: "brain:quant:skill-performance",
+  quantScheduleList: "brain:quant:schedule-list",
+  quantScheduleCreate: "brain:quant:schedule-create",
   annotationList: "brain:annotation:list",
   annotationCreate: "brain:annotation:create",
   changeSetList: "brain:change-set:list",

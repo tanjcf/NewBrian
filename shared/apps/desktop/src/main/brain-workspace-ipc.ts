@@ -371,5 +371,18 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       const input = requireRecord(value, "Quant performance");
       return dependencies.quant!.performance(await authorizeQuantProject(input), requireString(input.skillId, "skillId"));
     });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantScheduleList, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant schedule list");
+      return dependencies.storage.listQuantStrategySchedules(await ownerId(), requireString(input.projectId, "projectId"));
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantScheduleCreate, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant schedule create");
+      const exchange = requireString(input.exchange, "exchange");
+      if (exchange !== "SSE" && exchange !== "SZSE" && exchange !== "BSE") throw new TypeError("exchange is invalid");
+      return dependencies.storage.createQuantStrategySchedule({
+        ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"),
+        skillId: requireString(input.skillId, "skillId"), exchange, runAt: requireString(input.runAt, "runAt")
+      });
+    });
   }
 }
