@@ -31,6 +31,7 @@ import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
+import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
@@ -188,9 +189,14 @@ const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARK
   load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
   save: (projectId, stateJson) => brainWorkspaceStorage.saveQuantState(projectId, stateJson)
 });
+const marketCalendarService = new ChinaMarketCalendarService({
+  remoteUrl: process.env.BRAIN_MARKET_CALENDAR_URL,
+  holidays: parseConfiguredMarketHolidays(process.env.BRAIN_MARKET_HOLIDAYS)
+});
 const quantStrategyScheduler = new QuantStrategyScheduler({
   store: brainWorkspaceStorage.quantStrategyScheduleStore(),
   resolveOwnerId: resolveBrainLocalOwnerId,
+  isTradingDay: (exchange, date) => marketCalendarService.isTradingDay(exchange, date),
   execute: async (input) => { brainWorkspaceStorage.enqueueQuantStrategyExecution(input); }
 });
 const quantStrategyTaskRunner = new QuantStrategyTaskRunner({ store: brainWorkspaceStorage, simulation: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });

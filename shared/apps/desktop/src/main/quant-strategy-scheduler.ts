@@ -54,17 +54,20 @@ export class QuantStrategyScheduler {
   private readonly execute: (input: QuantStrategyExecution) => Promise<void>;
   private readonly holidays: ReadonlySet<string>;
   private readonly resolveOwnerId: () => Promise<string> | string;
+  private readonly resolveTradingDay?: (exchange: ChinaExchange, date: string) => Promise<boolean> | boolean;
 
   constructor(options: {
     store: QuantStrategyScheduleStore;
     execute: (input: QuantStrategyExecution) => Promise<void>;
     resolveOwnerId: () => Promise<string> | string;
     holidays?: ReadonlySet<string>;
+    isTradingDay?: (exchange: ChinaExchange, date: string) => Promise<boolean> | boolean;
   }) {
     this.store = options.store;
     this.execute = options.execute;
     this.resolveOwnerId = options.resolveOwnerId;
     this.holidays = options.holidays ?? new Set();
+    this.resolveTradingDay = options.isTradingDay;
   }
 
   async tick(now = new Date()): Promise<void> {
@@ -73,7 +76,9 @@ export class QuantStrategyScheduler {
     for (const schedule of this.store.listEnabled(ownerId)) {
       if (!schedule.enabled) continue;
       const clock = localClock(now, schedule.timezone);
-      if (clock.weekday === "Sat" || clock.weekday === "Sun" || this.holidays.has(clock.date)) continue;
+      const defaultTradingDay = clock.weekday !== "Sat" && clock.weekday !== "Sun" && !this.holidays.has(clock.date);
+      const tradingDay = this.resolveTradingDay ? await this.resolveTradingDay(schedule.exchange, clock.date) : defaultTradingDay;
+      if (!tradingDay) continue;
       if (clock.time < validRunAt(schedule.runAt)) continue;
       const idempotencyKey = `quant-strategy:${schedule.id}:${clock.date}`;
       if (!this.store.claim(schedule.id, clock.date, idempotencyKey)) continue;

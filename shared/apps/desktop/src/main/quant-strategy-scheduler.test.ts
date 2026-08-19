@@ -71,3 +71,16 @@ test("does not inspect or execute schedules for another local owner", async () =
   await scheduler.tick(new Date("2026-08-20T07:11:00.000Z"));
   assert.equal(calls, 0);
 });
+
+test("uses the exchange calendar decision before claiming a due run", async () => {
+  const store = memoryStore([schedule()]);
+  const decisions: string[] = []; let calls = 0;
+  const scheduler = new QuantStrategyScheduler({
+    store, resolveOwnerId: () => "owner-a",
+    isTradingDay: async (exchange, date) => { decisions.push(`${exchange}:${date}`); return false; },
+    execute: async () => { calls += 1; }
+  });
+  await scheduler.tick(new Date("2026-08-20T07:11:00.000Z"));
+  assert.deepEqual(decisions, ["SSE:2026-08-20"]);
+  assert.equal(calls, 0);
+});
