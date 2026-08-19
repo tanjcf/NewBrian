@@ -27,11 +27,17 @@ test("reopens and extracts representative image PDF DOCX PPTX XLSX and text fixt
     ] as const;
     for (const [relativePath, format, locatorKind, text] of expected) {
       const result = await worker.ingest({ requestId: `fixture-${format}`, projectRoot: root, relativePath, maxBytes: 2 * 1024 * 1024 });
+      const reopened = await worker.ingest({ requestId: `fixture-${format}-reopen`, projectRoot: root, relativePath, maxBytes: 2 * 1024 * 1024 });
       assert.equal(result.format, format);
       assert.ok(result.anchors?.length, `${format} should expose anchors`);
       assert.equal(result.anchors?.[0]?.locator.kind, locatorKind);
       if (text) assert.match(result.text ?? "", new RegExp(text));
       for (const anchor of result.anchors ?? []) validateDocumentAnchor(anchor);
+      assert.deepEqual(
+        reopened.anchors?.map(({ anchorId, objectId }) => ({ anchorId, objectId })),
+        result.anchors?.map(({ anchorId, objectId }) => ({ anchorId, objectId })),
+        `${format} object identities must remain stable after reopening`
+      );
     }
 
     const Excel = new ExcelJS.Workbook();

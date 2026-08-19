@@ -9,6 +9,8 @@ export interface DocumentCoordinateTransform {
   scale: number;
 }
 
+export interface DocumentViewport { width: number; height: number; }
+
 interface DocumentAnchorBase<TFormat extends DocumentFormat, TLocator> {
   anchorId: string;
   objectId: string;
@@ -96,6 +98,54 @@ export function validateDocumentAnchor(anchor: DocumentAnchor): void {
   }
 }
 
+export function normalizeDocumentRect(rect: DocumentRect, transform: DocumentCoordinateTransform): DocumentRect {
+  validateRect(rect);
+  validateTransform(transform);
+  if (rect.x + rect.width > transform.basisWidth || rect.y + rect.height > transform.basisHeight) {
+    throw new RangeError("anchor rect exceeds its coordinate basis");
+  }
+  return {
+    x: rect.x / transform.basisWidth,
+    y: rect.y / transform.basisHeight,
+    width: rect.width / transform.basisWidth,
+    height: rect.height / transform.basisHeight
+  };
+}
+
+export function projectDocumentRect(
+  rect: DocumentRect,
+  transform: DocumentCoordinateTransform,
+  viewport: DocumentViewport
+): DocumentRect {
+  validateViewport(viewport);
+  const normalized = normalizeDocumentRect(rect, transform);
+  return {
+    x: normalized.x * viewport.width,
+    y: normalized.y * viewport.height,
+    width: normalized.width * viewport.width,
+    height: normalized.height * viewport.height
+  };
+}
+
+export function unprojectDocumentRect(
+  rect: DocumentRect,
+  transform: DocumentCoordinateTransform,
+  viewport: DocumentViewport
+): DocumentRect {
+  validateRect(rect);
+  validateTransform(transform);
+  validateViewport(viewport);
+  if (rect.x + rect.width > viewport.width || rect.y + rect.height > viewport.height) {
+    throw new RangeError("projected rect exceeds its viewport");
+  }
+  return {
+    x: stableNumber((rect.x / viewport.width) * transform.basisWidth),
+    y: stableNumber((rect.y / viewport.height) * transform.basisHeight),
+    width: stableNumber((rect.width / viewport.width) * transform.basisWidth),
+    height: stableNumber((rect.height / viewport.height) * transform.basisHeight)
+  };
+}
+
 function validateRect(rect: DocumentRect | undefined) {
   if (!rect) return;
   if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) throw new RangeError("anchor rect must be finite");
@@ -104,6 +154,12 @@ function validateRect(rect: DocumentRect | undefined) {
 function validateTransform(transform: DocumentCoordinateTransform | undefined) {
   if (transform && (!(transform.basisWidth > 0) || !(transform.basisHeight > 0) || !(transform.scale > 0))) throw new RangeError("anchor transform basis and scale must be positive");
 }
+function validateViewport(viewport: DocumentViewport) {
+  if (!viewport || !(viewport.width > 0) || !(viewport.height > 0) || !Number.isFinite(viewport.width) || !Number.isFinite(viewport.height)) {
+    throw new RangeError("document viewport must have finite positive dimensions");
+  }
+}
+function stableNumber(value: number) { return Number(value.toFixed(6)); }
 function validateTextRange(range: DocumentTextRange | undefined) {
   if (range && (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end < range.start)) throw new RangeError("anchor text range is invalid");
 }

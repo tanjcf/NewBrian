@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateDocumentAnchor, type DocumentAnchor } from "./document-anchor.ts";
+import {
+  normalizeDocumentRect,
+  projectDocumentRect,
+  unprojectDocumentRect,
+  validateDocumentAnchor,
+  type DocumentAnchor
+} from "./document-anchor.ts";
 
 const anchors: DocumentAnchor[] = [
   { anchorId: "image:region:0", objectId: "image", format: "image", locator: { kind: "image-region", regionIndex: 0 }, rect: { x: 0, y: 0, width: 640, height: 480 }, transform: { coordinateSpace: "pixels", basisWidth: 640, basisHeight: 480, scale: 1 } },
@@ -19,4 +25,29 @@ test("rejects cross-format locators and invalid geometry", () => {
   assert.throws(() => validateDocumentAnchor({ ...anchors[0], rect: { x: 0, y: 0, width: -1, height: 2 } } as DocumentAnchor), /negative/);
   assert.throws(() => validateDocumentAnchor({ ...anchors[1], page: 3 } as DocumentAnchor), /does not match/);
   assert.throws(() => validateDocumentAnchor({ ...anchors[4], sheet: "Other" } as DocumentAnchor), /does not match/);
+});
+
+test("projects source coordinates into a viewport and reverses them without drift", () => {
+  for (const anchor of anchors.filter((item) => item.rect && item.transform)) {
+    const rect = anchor.rect!;
+    const transform = anchor.transform!;
+    const projected = projectDocumentRect(rect, transform, { width: 960, height: 540 });
+    const restored = unprojectDocumentRect(projected, transform, { width: 960, height: 540 });
+    assert.deepEqual(restored, rect);
+    const normalized = normalizeDocumentRect(rect, transform);
+    assert.ok(normalized.x >= 0 && normalized.x <= 1);
+    assert.ok(normalized.y >= 0 && normalized.y <= 1);
+    assert.ok(normalized.width >= 0 && normalized.width <= 1);
+    assert.ok(normalized.height >= 0 && normalized.height <= 1);
+  }
+});
+
+test("rejects rectangles outside their declared coordinate basis", () => {
+  assert.throws(
+    () => normalizeDocumentRect(
+      { x: 600, y: 0, width: 1, height: 1 },
+      { coordinateSpace: "pdf-points", basisWidth: 595, basisHeight: 842, scale: 1 }
+    ),
+    /coordinate basis/
+  );
 });
