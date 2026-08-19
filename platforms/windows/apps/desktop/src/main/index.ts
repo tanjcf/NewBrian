@@ -101,6 +101,7 @@ import {
 import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
+import { QuantSimulationService } from "./quant-simulation-service.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import {
   resolveEffectiveGatewayBaseUrl,
@@ -565,6 +566,7 @@ if (!singleInstanceLockAcquired) {
 }
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
+const quantSimulationService = new QuantSimulationService();
 const governmentWritingSpecificationService = new GovernmentWritingSpecificationService(codexStorage);
 const workspaceWorktreeService = new WorkspaceWorktreeService({
   bindingsPath: desktopWorktreeBindingsPath,
@@ -7192,7 +7194,7 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
-  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, resolveOwnerId: resolveBrainLocalOwnerId });
+  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, quant: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });
   registerPluginRepositoryHandlers();
   const controlWindow = (action: WindowControlAction) => controlDesktopWindow(mainWindowRef, action);
   const appMenuService = new AppMenuService({

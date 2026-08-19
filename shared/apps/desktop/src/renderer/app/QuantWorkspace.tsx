@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const bars = [
   { date: "08-15", open: 1682, high: 1708, low: 1674, close: 1698, volume: "2.1M" },
@@ -8,14 +8,23 @@ const bars = [
   { date: "08-19", open: 1738, high: 1752, low: 1728, close: 1746, volume: "2.3M" }
 ];
 
-export function QuantWorkspace() {
+export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [symbol, setSymbol] = useState("600519");
   const [interval, setInterval] = useState("日线");
   const [adjustment, setAdjustment] = useState("前复权");
+  const [status, setStatus] = useState("本地演示数据");
+  useEffect(() => {
+    if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
+    let active = true;
+    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 }).then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: "1d", adjustment: "forward" } })).then((result: any[]) => {
+      if (active) setStatus(result.length ? `已加载 ${result.length} 条行情` : "暂无已同步行情，显示演示数据");
+    }).catch(() => { if (active) setStatus("行情服务暂不可用，显示演示数据"); });
+    return () => { active = false; };
+  }, [projectId, symbol]);
   const latest = bars.at(-1)!;
   const returnPercent = useMemo(() => ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2), [latest.close]);
   return <main className="brain-quant-module">
-    <header className="brain-quant-header"><div><span>量化交易</span><strong>行情与模拟盘</strong></div><small>本地模拟 · 不连接真实券商</small></header>
+    <header className="brain-quant-header"><div><span>量化交易</span><strong>行情与模拟盘</strong></div><small>{status} · 不连接真实券商</small></header>
     <section className="brain-quant-toolbar">
       <label>代码<input value={symbol} onChange={(e) => setSymbol(e.target.value)} /></label>
       <label>周期<select value={interval} onChange={(e) => setInterval(e.target.value)}><option>日线</option><option>周线</option><option>月线</option></select></label>

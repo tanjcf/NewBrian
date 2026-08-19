@@ -7358,7 +7358,7 @@ function renderWorkspaceModules() {
     }
 
     const mainModule = isBrainConversationSelection
-      ? selectedBrainWorkspaceKey === "quant" ? <QuantWorkspace /> : renderBrainChatModule()
+      ? selectedBrainWorkspaceKey === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} /> : renderBrainChatModule()
       : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection

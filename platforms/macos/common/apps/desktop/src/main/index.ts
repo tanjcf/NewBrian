@@ -28,6 +28,7 @@ import { createLocalRuntime } from "../../../agentd/src/runtime.js";
 import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
+import { QuantSimulationService } from "./quant-simulation-service.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
 import { decodeMcpMessages, encodeMcpMessage } from "./mcp-framing.js";
@@ -170,6 +171,7 @@ const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
+const quantSimulationService = new QuantSimulationService();
 
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.
@@ -9333,7 +9335,7 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
-  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, resolveOwnerId: resolveBrainLocalOwnerId });
+  registerBrainWorkspaceIpcHandlers({ storage: brainWorkspaceStorage, quant: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });
   ipcMain.handle(
     "phase1:show-app-menu",
     async (
