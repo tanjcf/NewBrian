@@ -17610,6 +17610,32 @@ textarea {
 .brain-quant-module.compact .brain-quant-skills table { min-width: 520px; }
 .brain-quant-module.compact .brain-quant-schedule-form { grid-template-columns: 1fr; }
 .brain-quant-module.compact .brain-quant-schedule-list article { grid-template-columns: 1fr; gap: 5px; }
+.brain-game-plugin { min-height: 100%; padding-bottom: 20px; background: #fbfcfd; color: var(--text-primary, #202020); }
+.brain-game-plugin > header { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border-subtle, #e2e5e9); }
+.brain-game-plugin > header div { display: grid; gap: 3px; min-width: 0; }
+.brain-game-plugin > header span { color: var(--text-secondary, #777); font-size: 11px; }
+.brain-game-plugin > header strong { overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.brain-game-plugin button { min-height: 32px; border: 1px solid var(--border-subtle, #d7dce2); border-radius: 7px; padding: 0 10px; background: var(--surface-raised, #fff); color: inherit; cursor: pointer; }
+.brain-game-plugin button:disabled { cursor: default; opacity: .55; }
+.brain-game-summary { display: grid; gap: 8px; margin: 0; padding: 14px; border-bottom: 1px solid var(--border-subtle, #e2e5e9); }
+.brain-game-summary div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px; font-size: 12px; }
+.brain-game-summary dt { color: var(--text-secondary, #777); }
+.brain-game-summary dd { margin: 0; overflow-wrap: anywhere; }
+.brain-game-assets, .brain-game-preview, .brain-game-warnings { margin: 12px; padding: 13px; border: 1px solid var(--border-subtle, #e0e4e8); border-radius: 8px; background: var(--surface-raised, #fff); }
+.brain-game-assets h3, .brain-game-preview h3, .brain-game-warnings h3 { margin: 0 0 11px; font-size: 14px; }
+.brain-game-assets > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.brain-game-assets article { display: grid; gap: 2px; padding: 9px 5px; border-radius: 7px; background: var(--surface-muted, #f4f6f8); text-align: center; }
+.brain-game-assets article strong { font-size: 16px; }
+.brain-game-assets article span { color: var(--text-secondary, #777); font-size: 10px; }
+.brain-game-preview { display: grid; gap: 9px; }
+.brain-game-preview code { padding: 10px; overflow-x: auto; border-radius: 6px; background: #19212a; color: #e8edf2; font-size: 12px; white-space: nowrap; }
+.brain-game-preview small, .brain-game-preview p, .brain-game-warnings p { margin: 0; color: var(--text-secondary, #777); font-size: 11px; line-height: 1.55; }
+.brain-game-preview button { border-color: #2867df; background: #2867df; color: #fff; }
+.brain-game-warnings p + p { margin-top: 6px; }
+.brain-workspace-plugin-empty { min-height: 320px; display: grid; place-content: center; gap: 8px; padding: 24px; text-align: center; }
+.brain-workspace-plugin-empty strong { font-size: 14px; }
+.brain-workspace-plugin-empty span { max-width: 320px; color: var(--text-secondary, #777); font-size: 12px; line-height: 1.6; }
+.brain-workspace-plugin-empty.error strong { color: #b54747; }
 @media (max-width: 800px) { .brain-quant-grid { grid-template-columns: 1fr; padding: 16px; } .brain-quant-header, .brain-quant-toolbar { padding-left: 16px; padding-right: 16px; } .brain-quant-skills { margin: 0 16px; overflow-x: auto; } .brain-quant-skills table { min-width: 560px; } .brain-quant-schedule-form { grid-template-columns: 1fr 1fr; } }
 
 @media (max-width: 640px) {

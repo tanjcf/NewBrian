@@ -22,6 +22,7 @@ import {
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
+import { inspectGameProject } from "./game-project-inspector.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
@@ -301,6 +302,15 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.artifactRegister, async (_event, value: unknown) =>
     dependencies.storage.registerArtifact({ ownerId: await ownerId(), ...parseArtifactRegister(value) }));
+  ipcMain.handle(brainWorkspaceIpcChannels.gameProjectInspect, async (_event, value: unknown) => {
+    const input = parseProjectGet(value);
+    const owner = await ownerId();
+    const project = dependencies.storage.getProject(owner, input.projectId);
+    const gameProjects = dependencies.storage.listProjects({ ownerId: owner, workspaceKey: "game", includeArchived: false });
+    if (!gameProjects.some((candidate) => candidate.id === project.id)) throw new Error("BRAIN_GAME_WORKSPACE_REQUIRED");
+    if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
+    return inspectGameProject(await dependencies.resolveWorkspaceRoot(project.localWorkspaceId));
+  });
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
     return dependencies.storage.listAnnotations(await ownerId(), input.projectId);

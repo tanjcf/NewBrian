@@ -61,6 +61,21 @@ export interface BrainProjectCreateInput {
 
 export interface BrainProjectGetInput { projectId: string }
 
+export type BrainGameEngine = "web" | "godot" | "unity" | "unreal" | "unknown";
+
+export interface BrainGameProjectInspection {
+  schemaVersion: 1;
+  engine: BrainGameEngine;
+  displayName: string;
+  markers: string[];
+  assets: { scripts: number; scenes: number; images: number; audio: number; video: number; models: number; other: number };
+  preview: { supported: boolean; command?: string; args?: string[]; requiresApproval: true };
+  warnings: string[];
+  scannedEntries: number;
+  skippedEntries: number;
+  truncated: boolean;
+}
+
 export interface BrainProjectUpdateInput extends BrainProjectGetInput {
   name?: string;
   status?: "ACTIVE" | "ARCHIVED";
@@ -239,6 +254,7 @@ export const brainWorkspaceIpcChannels = {
   taskUpdate: "brain:task:update",
   artifactList: "brain:artifact:list",
   artifactRegister: "brain:artifact:register",
+  gameProjectInspect: "brain:game:project-inspect",
   quantSessionCreate: "brain:quant:session-create",
   quantBarsQuery: "brain:quant:bars-query",
   quantOrderExecute: "brain:quant:order-execute",

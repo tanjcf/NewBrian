@@ -129,6 +129,9 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [ ] Deliver software and automation using the existing local tool and approval runtime.
 - [ ] Deliver data and decision with datasets, tables, charts, analysis artifacts, and reproducible calculations.
 - [ ] Deliver game creation with project files, asset inspection, runnable preview, and playtest evidence.
+  - [x] Inspect authorized Web, Godot, Unity, and Unreal projects with bounded, non-symlink-following asset counts.
+  - [x] Surface verified preview scripts as approval-gated conversation requests without direct renderer execution.
+  - [ ] Supervise preview start, readiness, cancellation, logs, and playtest evidence through the execution boundary.
 - [ ] Deliver video creation with timeline, media assets, render jobs, cancellation, and output verification.
 - [ ] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
 - [ ] Keep files as a shared project capability and avoid duplicating file browsers per workspace.

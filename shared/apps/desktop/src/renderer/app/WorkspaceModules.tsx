@@ -36,6 +36,7 @@ import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
 import { buildAnnotationChatReference, createTextLineAnchor } from "./document-annotation-policy";
 import { QuantWorkspace } from "./QuantWorkspace";
+import { GameWorkspace } from "./GameWorkspace";
 import {
   brainWorkspaceModes,
   type BrainWorkspaceKey
@@ -450,7 +451,7 @@ export function WorkspaceModules(ctx: any) {
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
   const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
-  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant">("files");
+  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant" | "game">("files");
   const brainResourcePanelRef = useRef<HTMLElement | null>(null);
   const [brainResourceWidth, setBrainResourceWidth] = useState(() => {
     try {
@@ -475,7 +476,11 @@ export function WorkspaceModules(ctx: any) {
   const [brainWorkspaceAvailability, setBrainWorkspaceAvailability] = useState<"loading" | "ready" | "unavailable">("loading");
   const brainWorkspaceMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    setBrainResourceTab((current) => selectedBrainWorkspaceKey === "quant" ? (current === "quant" ? current : "quant") : (current === "quant" ? "files" : current));
+    setBrainResourceTab((current) => {
+      if (selectedBrainWorkspaceKey === "quant") return current === "quant" ? current : "quant";
+      if (selectedBrainWorkspaceKey === "game") return current === "game" ? current : "game";
+      return current === "quant" || current === "game" ? "files" : current;
+    });
   }, [selectedBrainWorkspaceKey]);
   useEffect(() => {
     const frame = brainResourcePanelRef.current?.closest<HTMLElement>(".workspace-frame");
@@ -4360,9 +4365,11 @@ function renderSidebarModule() {
           <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => setBrainResourceTab("artifacts")}>产物 <em>{brainArtifacts.length}</em></button>
           <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => setBrainResourceTab("tasks")}>任务 <em>{brainTasks.length}</em></button>
           {selectedBrainWorkspaceKey === "quant" ? <button type="button" className={brainResourceTab === "quant" ? "active" : ""} onClick={() => setBrainResourceTab("quant")}>行情</button> : null}
+          {selectedBrainWorkspaceKey === "game" ? <button type="button" className={brainResourceTab === "game" ? "active" : ""} onClick={() => setBrainResourceTab("game")}>游戏</button> : null}
         </nav>
-        <div className={`brain-resource-list${brainResourceTab === "quant" ? " quant-plugin" : ""}`}>
+        <div className={`brain-resource-list${brainResourceTab === "quant" || brainResourceTab === "game" ? " quant-plugin" : ""}`}>
           {brainResourceTab === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} compact /> : null}
+          {brainResourceTab === "game" ? <GameWorkspace projectId={selectedBrainProject?.id} onRequestPreview={(request) => { setBrainDraft(request); setChatStatus("试玩请求已放入对话输入框，请确认后发送。"); }} /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
             <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
               setActiveBrainDocumentFileId(file.id);
