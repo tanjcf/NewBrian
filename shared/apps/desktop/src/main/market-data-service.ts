@@ -4,7 +4,15 @@ export class MarketDataService {
   private readonly fixtures: QuantBar[];
   private readonly remoteUrl?: string;
 
-  constructor(fixtures: QuantBar[] = [], remoteUrl?: string) { this.fixtures = fixtures; this.remoteUrl = remoteUrl?.trim() || undefined; }
+  constructor(fixtures: QuantBar[] = [], remoteUrl?: string) {
+    this.fixtures = fixtures;
+    const value = remoteUrl?.trim();
+    if (value) {
+      const parsed = new URL(value);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new TypeError("market data URL must use HTTP or HTTPS");
+      this.remoteUrl = parsed.toString();
+    }
+  }
 
   query(input: MarketDataQuery): QuantBar[] {
     if (!input.symbol.trim()) throw new TypeError("symbol is required");

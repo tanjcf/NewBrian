@@ -19,3 +19,7 @@ test("market data service normalizes a configured remote response", async () => 
     assert.equal(bars[0].close, 3);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("market data service rejects non-http URLs", () => {
+  assert.throws(() => new MarketDataService([], "file:///etc/passwd"), /HTTP or HTTPS/);
+});
