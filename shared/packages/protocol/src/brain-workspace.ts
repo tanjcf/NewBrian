@@ -193,6 +193,7 @@ export interface BrainAnnotationCreateInput extends BrainProjectGetInput {
 }
 
 export interface BrainChangeSetDto { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }
+export interface BrainChangeSetUpdateInput { projectId: string; changeSetId: string; status: "ACCEPTED" | "REJECTED" | "REVERTED"; resultFileVersion?: number; }
 
 export const brainWorkspaceIpcChannels = {
   workspaceList: "brain:workspace:list",

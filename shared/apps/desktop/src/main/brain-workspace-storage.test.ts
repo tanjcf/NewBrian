@@ -125,6 +125,14 @@ test("persists annotations and enforces file project ownership", () => {
     const change = storage.createChangeSet({ ownerId: "owner-a", projectId: project.id, annotationId: annotation.id, baseFileVersion: 1, changeSummary: "替换标注文本", diffJson: JSON.stringify({ replace: "新内容" }) });
     assert.equal(storage.listChangeSets("owner-a", project.id)[0]?.status, "PROPOSED");
     assert.equal(change.annotationId, annotation.id);
+    const accepted = storage.updateChangeSet({ ownerId: "owner-a", projectId: project.id, changeSetId: change.id, status: "ACCEPTED", resultFileVersion: 2 });
+    assert.equal(accepted.status, "ACCEPTED");
+    assert.equal(accepted.resultFileVersion, 2);
+    assert.ok(accepted.reviewedAt);
+    assert.throws(
+      () => storage.updateChangeSet({ ownerId: "owner-b", projectId: project.id, changeSetId: change.id, status: "REJECTED" }),
+      (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN"
+    );
     assert.throws(() => storage.createAnnotation({ ownerId: "owner-b", projectId: project.id, fileId: file.id, fileVersion: 1, annotationType: "text-range" }), (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN");
   });
 });

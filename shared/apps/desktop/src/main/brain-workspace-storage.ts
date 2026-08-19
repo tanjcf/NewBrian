@@ -746,6 +746,15 @@ export class BrainWorkspaceStorage {
     return (this.database.prepare("SELECT c.* FROM brain_change_set c JOIN brain_annotation a ON a.id = c.annotation_id JOIN brain_file f ON f.id = a.file_id WHERE f.project_id = ? AND f.owner_id = ? ORDER BY c.created_at DESC, c.id DESC").all(projectId, ownerId) as Record<string, unknown>[]).map(mapChangeSet);
   }
 
+  updateChangeSet(input: { ownerId: string; projectId: string; changeSetId: string; status: "ACCEPTED" | "REJECTED" | "REVERTED"; resultFileVersion?: number }): BrainChangeSetRecord {
+    this.getProject(input.ownerId, input.projectId);
+    const row = this.database.prepare("SELECT c.* FROM brain_change_set c JOIN brain_annotation a ON a.id = c.annotation_id JOIN brain_file f ON f.id = a.file_id WHERE c.id = ? AND f.project_id = ? AND f.owner_id = ?").get(input.changeSetId, input.projectId, input.ownerId) as Record<string, unknown> | undefined;
+    if (!row) throw new BrainStorageError("BRAIN_CHANGE_SET_NOT_FOUND", "Change set does not belong to project");
+    const reviewedAt = nowIso();
+    this.database.prepare("UPDATE brain_change_set SET status = ?, result_file_version = ?, reviewed_at = ? WHERE id = ?").run(input.status, input.resultFileVersion ?? null, reviewedAt, input.changeSetId);
+    return mapChangeSet({ ...row, status: input.status, result_file_version: input.resultFileVersion ?? null, reviewed_at: reviewedAt });
+  }
+
   createTask(input: {
     ownerId: string; projectId: string; conversationId?: string; workspaceKey: string; taskType: string;
     requestId?: string; idempotencyKey: string; maxAttempts?: number; resourceLimitsJson?: string;

@@ -287,6 +287,12 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       changeSummary: requireString(input.changeSummary, "changeSummary"), diffJson: typeof input.diffJson === "string" ? input.diffJson : "{}"
     });
   });
+  ipcMain.handle(brainWorkspaceIpcChannels.changeSetUpdate, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Change set update");
+    const status = input.status;
+    if (status !== "ACCEPTED" && status !== "REJECTED" && status !== "REVERTED") throw new TypeError("status is invalid");
+    return dependencies.storage.updateChangeSet({ ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), changeSetId: requireString(input.changeSetId, "changeSetId"), status, resultFileVersion: input.resultFileVersion === undefined ? undefined : Number(input.resultFileVersion) });
+  });
   if (dependencies.quant) {
     ipcMain.handle(brainWorkspaceIpcChannels.quantSessionCreate, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant session");
