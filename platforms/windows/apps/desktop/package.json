@@ -122,6 +122,10 @@
       {
         "from": "../../../../shared/apps/desktop/src/main/document-worker.js",
         "to": "document-worker.js"
+      },
+      {
+        "from": "build/rust-core/brain-core.exe",
+        "to": "brain-core/brain-core.exe"
       }
     ],
     "msiProjectCreated": "build/msi-project-created.cjs",

@@ -42,6 +42,9 @@ $packageResourcesDir = Join-Path $desktopRoot "build\\package-resources"
 $packageConfigPath = Join-Path $packageResourcesDir "codecn.config.json"
 $packageFeatureConfigPath = Join-Path $packageResourcesDir "codecn.features.json"
 $iconPath = Join-Path $desktopRoot "build\icon.ico"
+$rustCoreBuildScript = Join-Path $repoRoot "scripts\build-rust-core.ps1"
+$rustCorePackagePath = Join-Path $desktopRoot "build\rust-core\brain-core.exe"
+$sourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $repoRoot } else { $env:CODECN_SOURCE_ROOT }
 $gatewayBaseUrl = if ($isProduction) { $env:CODECN_PRODUCTION_GATEWAY_BASE_URL } else { $env:CODECN_TEST_GATEWAY_BASE_URL }
 $previewUrl = if ($isProduction) { $env:CODECN_PRODUCTION_PREVIEW_URL } else { $env:CODECN_TEST_PREVIEW_URL }
 if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
@@ -63,7 +66,6 @@ foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
 }
 
 if ($isProduction) {
-  $sourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $repoRoot } else { $env:CODECN_SOURCE_ROOT }
   $gitStatus = @(& git -C $sourceRoot status --porcelain)
   if ($LASTEXITCODE -ne 0) { throw "Unable to verify Git status for the production release." }
   if ($gitStatus.Count -gt 0) { throw "Production release requires a clean Git worktree." }
@@ -122,6 +124,13 @@ if ($danglingRemoved -gt 0) {
 }
 
 if (-not $SkipBuild) {
+  if (-not (Test-Path -LiteralPath $rustCoreBuildScript -PathType Leaf)) {
+    throw "Missing Rust Core build script: $rustCoreBuildScript"
+  }
+  & $rustCoreBuildScript -SourceRoot $sourceRoot -OutputPath $rustCorePackagePath
+  if ($LASTEXITCODE -ne 0) {
+    throw "Rust Core build script failed with exit code $LASTEXITCODE"
+  }
   Write-Host "Building desktop (electron-vite)..." -ForegroundColor Green
   Push-Location $desktopRoot
   try {
@@ -134,6 +143,9 @@ if (-not $SkipBuild) {
   }
 } else {
   Write-Host "Skip build: using existing out/*" -ForegroundColor Yellow
+}
+if (-not (Test-Path -LiteralPath $rustCorePackagePath -PathType Leaf)) {
+  throw "Missing staged Rust Core binary: $rustCorePackagePath"
 }
 
 $desktopMainBundle = Join-Path $desktopRoot "out\main\index.js"
@@ -244,6 +256,7 @@ try {
       }
     )
     automations = @()
+    runtime = [ordered]@{ rustCoreTools = "disabled" }
   }
   $featureConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $packageFeatureConfigPath -Encoding UTF8
   Write-Host "Sanitized packaged features: wrote portable builtin feature config" -ForegroundColor DarkGray
@@ -294,9 +307,12 @@ try {
         $unpackedExe = Join-Path $unpackedRoot "$productName.exe"
         $packagedIcon = Join-Path $unpackedRoot "resources\\codecn.ico"
         $packagedAsar = Join-Path $unpackedRoot "resources\\app.asar"
+        $packagedRustCore = Join-Path $unpackedRoot "resources\\brain-core\\brain-core.exe"
         if (-not (Test-Path -LiteralPath $unpackedExe)) { throw "Missing unpacked executable: $unpackedExe" }
         if (-not (Test-Path -LiteralPath $packagedIcon)) { throw "Missing packaged taskbar icon: $packagedIcon" }
         if (-not (Test-Path -LiteralPath $packagedAsar)) { throw "Missing packaged application archive: $packagedAsar" }
+        if (-not (Test-Path -LiteralPath $packagedRustCore)) { throw "Missing packaged Rust Core binary: $packagedRustCore" }
+        if ((Get-Item -LiteralPath $packagedRustCore).Length -le 0) { throw "Packaged Rust Core binary is empty: $packagedRustCore" }
         $longestPackagedPath = Get-ChildItem -LiteralPath $unpackedRoot -File -Recurse |
           Sort-Object { $_.FullName.Length } -Descending |
           Select-Object -First 1
