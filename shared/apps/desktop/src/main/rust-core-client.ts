@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { randomBytes } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import {
   parseRustCoreRequest,
@@ -23,6 +24,7 @@ interface RustCoreClientOptions {
 }
 
 type RustCoreRequestInput = Omit<RustCoreRequest, "protocol_version">;
+type RustCoreApprovedRequestInput = Omit<RustCoreRequestInput, "approval_token">;
 
 const allowedEnvironmentKeys = new Set([
   "PATH", "Path", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP",
@@ -81,6 +83,30 @@ export class RustCoreClient {
       this.pending.set(request.request_id, { resolve, reject, timer });
       this.writeFrame(request);
     });
+  }
+
+  async requestWithApproval(input: RustCoreApprovedRequestInput): Promise<RustCoreResponse> {
+    const token = randomBytes(32).toString("base64url");
+    const registration = await this.request({
+      request_id: `${input.request_id}:approval`,
+      project_id: input.project_id,
+      workspace_type: input.workspace_type,
+      operation: "approval.register",
+      approval_token: "",
+      resource_limits: {
+        timeout_ms: Math.min(input.resource_limits.timeout_ms, 300_000),
+        max_output_bytes: 1024
+      },
+      payload: {
+        token,
+        operation: input.operation,
+        ttl_ms: Math.min(input.resource_limits.timeout_ms, 300_000)
+      }
+    });
+    if (registration.status !== "completed") {
+      throw new Error(`${registration.error_code || "BRAIN_CORE_APPROVAL_FAILED"}: approval registration failed.`);
+    }
+    return this.request({ ...input, approval_token: token });
   }
 
   async shutdown() {
