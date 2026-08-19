@@ -192,6 +192,8 @@ export interface BrainAnnotationCreateInput extends BrainProjectGetInput {
   geometryJson?: string; structuralAnchorJson?: string; selectedText?: string;
 }
 
+export interface BrainChangeSetDto { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }
+
 export const brainWorkspaceIpcChannels = {
   workspaceList: "brain:workspace:list",
   projectList: "brain:project:list",
@@ -219,5 +221,8 @@ export const brainWorkspaceIpcChannels = {
   quantSnapshot: "brain:quant:snapshot",
   quantSkillPerformance: "brain:quant:skill-performance",
   annotationList: "brain:annotation:list",
-  annotationCreate: "brain:annotation:create"
+  annotationCreate: "brain:annotation:create",
+  changeSetList: "brain:change-set:list",
+  changeSetCreate: "brain:change-set:create",
+  changeSetUpdate: "brain:change-set:update"
 } as const;

@@ -56,6 +56,7 @@ export interface BrainAnnotationRecord {
   id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
   geometryJson: string; structuralAnchorJson: string; selectedText: string; createdBy: string; createdAt: string;
 }
+export interface BrainChangeSetRecord { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }
 
 export interface BrainMessageRecord {
   id: string;
@@ -346,6 +347,7 @@ function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
 function mapAnnotation(row: Record<string, unknown>): BrainAnnotationRecord {
   return { id: String(row.id), fileId: String(row.file_id), fileVersion: Number(row.file_version), pageOrSheet: String(row.page_or_sheet), annotationType: String(row.annotation_type), geometryJson: String(row.geometry_json), structuralAnchorJson: String(row.structural_anchor_json), selectedText: String(row.selected_text), createdBy: String(row.created_by), createdAt: String(row.created_at) };
 }
+function mapChangeSet(row: Record<string, unknown>): BrainChangeSetRecord { return { id: String(row.id), annotationId: String(row.annotation_id), taskId: String(row.task_id || ""), baseFileVersion: Number(row.base_file_version), resultFileVersion: Number(row.result_file_version || 0), changeSummary: String(row.change_summary), diffJson: String(row.diff_json), status: String(row.status) as BrainChangeSetRecord["status"], createdAt: String(row.created_at), reviewedAt: String(row.reviewed_at || "") }; }
 
 function mapProject(row: Record<string, unknown>): BrainProjectRecord {
   return {
@@ -728,6 +730,20 @@ export class BrainWorkspaceStorage {
   listAnnotations(ownerId: string, projectId: string): BrainAnnotationRecord[] {
     this.getProject(ownerId, projectId);
     return (this.database.prepare("SELECT a.* FROM brain_annotation a JOIN brain_file f ON f.id = a.file_id WHERE f.project_id = ? AND f.owner_id = ? ORDER BY a.created_at DESC, a.id DESC").all(projectId, ownerId) as Record<string, unknown>[]).map(mapAnnotation);
+  }
+
+  createChangeSet(input: { ownerId: string; projectId: string; annotationId: string; taskId?: string; baseFileVersion: number; changeSummary: string; diffJson?: string }): BrainChangeSetRecord {
+    this.getProject(input.ownerId, input.projectId);
+    const valid = this.database.prepare("SELECT a.id FROM brain_annotation a JOIN brain_file f ON f.id = a.file_id WHERE a.id = ? AND f.project_id = ? AND f.owner_id = ?").get(input.annotationId, input.projectId, input.ownerId);
+    if (!valid) throw new BrainStorageError("BRAIN_ANNOTATION_NOT_FOUND", "Change set annotation does not belong to project");
+    const record: BrainChangeSetRecord = { id: `change_${randomUUID()}`, annotationId: input.annotationId, taskId: input.taskId || "", baseFileVersion: input.baseFileVersion, resultFileVersion: 0, changeSummary: requireText(input.changeSummary, "changeSummary"), diffJson: input.diffJson || "{}", status: "PROPOSED", createdAt: nowIso(), reviewedAt: "" };
+    this.database.prepare("INSERT INTO brain_change_set(id, annotation_id, task_id, base_file_version, result_file_version, change_summary, diff_json, status, created_at, reviewed_at) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)").run(record.id, record.annotationId, record.taskId || null, record.baseFileVersion, record.changeSummary, record.diffJson, record.status, record.createdAt);
+    return record;
+  }
+
+  listChangeSets(ownerId: string, projectId: string): BrainChangeSetRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT c.* FROM brain_change_set c JOIN brain_annotation a ON a.id = c.annotation_id JOIN brain_file f ON f.id = a.file_id WHERE f.project_id = ? AND f.owner_id = ? ORDER BY c.created_at DESC, c.id DESC").all(projectId, ownerId) as Record<string, unknown>[]).map(mapChangeSet);
   }
 
   createTask(input: {
