@@ -2,18 +2,14 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSyn
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import {
+  brainWorkspaceKeys,
+  brainWorkspaceModes,
+  type BrainWorkspaceKey
+} from "@codex-forge/protocol";
 
-export const brainWorkspaceKeys = [
-  "quant",
-  "game",
-  "video",
-  "music",
-  "data",
-  "software",
-  "document"
-] as const;
-
-export type BrainWorkspaceKey = (typeof brainWorkspaceKeys)[number];
+export { brainWorkspaceKeys } from "@codex-forge/protocol";
+export type { BrainWorkspaceKey } from "@codex-forge/protocol";
 export type BrainProjectStatus = "ACTIVE" | "ARCHIVED";
 export type BrainConversationStatus = "ACTIVE" | "ARCHIVED";
 
@@ -98,15 +94,8 @@ export class BrainStorageError extends Error {
 }
 
 const latestMigrationVersion = 1;
-const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> = [
-  ["quant", "量化交易", 10],
-  ["game", "游戏制作", 20],
-  ["video", "视频制作", 30],
-  ["music", "音乐创作", 40],
-  ["data", "数据与决策", 50],
-  ["software", "软件与自动化", 60],
-  ["document", "文档创作", 70]
-];
+const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
+  brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
 function nowIso() {
   return new Date().toISOString();

@@ -34,26 +34,22 @@ import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { QuantWorkspace } from "./QuantWorkspace";
+import {
+  brainWorkspaceModes,
+  type BrainWorkspaceKey
+} from "@codex-forge/protocol";
+import {
+  BRAIN_WORKSPACE_SELECTION_KEY,
+  LEGACY_BRAIN_WORKSPACE_SELECTION_KEY,
+  rememberBrainWorkspaceCatalog,
+  restoreBrainWorkspaceSelection,
+  selectBrainWorkspace
+} from "./workspace-selection";
 
-const fallbackBrainWorkspaces = [
-  { workspaceKey: "quant", displayName: "量化交易", enabled: true },
-  { workspaceKey: "game", displayName: "游戏制作", enabled: true },
-  { workspaceKey: "video", displayName: "视频制作", enabled: true },
-  { workspaceKey: "music", displayName: "音乐创作", enabled: true },
-  { workspaceKey: "data", displayName: "数据与决策", enabled: true },
-  { workspaceKey: "software", displayName: "软件与自动化", enabled: true },
-  { workspaceKey: "document", displayName: "文档创作", enabled: true }
-];
+const fallbackBrainWorkspaces = brainWorkspaceModes.map((workspace) => ({ ...workspace, enabled: true }));
 
-const brainWorkspaceIcon = (workspaceKey: string) => ({
-  quant: "workspace-quant",
-  game: "workspace-game",
-  video: "workspace-video",
-  music: "workspace-music",
-  data: "workspace-data",
-  software: "workspace-software",
-  document: "workspace-document"
-}[workspaceKey] || "folder");
+const brainWorkspaceIcon = (workspaceKey: string) =>
+  brainWorkspaceModes.find((workspace) => workspace.workspaceKey === workspaceKey)?.icon || "folder";
 import { WorkspaceHtmlViewer } from "./workspace-html-viewer";
 import { LocalFileContextMenu, positionLocalFileMenu, type LocalFileMenuState } from "./LocalFileContextMenu";
 import {
@@ -444,18 +440,26 @@ export function WorkspaceModules(ctx: any) {
   const [brainTasks, setBrainTasks] = useState<any[]>([]);
   const [brainArtifacts, setBrainArtifacts] = useState<any[]>([]);
   const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks">("files");
-  const [selectedBrainProjectId, setSelectedBrainProjectId] = useState("");
-  const [selectedBrainConversationId, setSelectedBrainConversationId] = useState("");
+  const initialBrainWorkspaceSelection = useRef(restoreBrainWorkspaceSelection({
+    serialized: (() => { try { return localStorage.getItem(BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
+    legacyWorkspaceKey: (() => { try { return localStorage.getItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })()
+  }));
+  const [brainWorkspaceSelection, setBrainWorkspaceSelection] = useState(initialBrainWorkspaceSelection.current.selection);
+  const [brainWorkspaceMigrated, setBrainWorkspaceMigrated] = useState(initialBrainWorkspaceSelection.current.migrated);
+  const selectedBrainWorkspaceKey = brainWorkspaceSelection.selectedWorkspaceKey;
+  const initialBrainCatalog = brainWorkspaceSelection.catalogs[selectedBrainWorkspaceKey];
+  const [selectedBrainProjectId, setSelectedBrainProjectId] = useState(initialBrainCatalog?.projectId || "");
+  const [selectedBrainConversationId, setSelectedBrainConversationId] = useState(initialBrainCatalog?.conversationId || "");
   const [brainWorkspaceMenuOpen, setBrainWorkspaceMenuOpen] = useState(false);
   const [brainWorkspaceBusy, setBrainWorkspaceBusy] = useState(false);
+  const [brainWorkspaceAvailability, setBrainWorkspaceAvailability] = useState<"loading" | "ready" | "unavailable">("loading");
   const brainWorkspaceMenuRef = useRef<HTMLDivElement | null>(null);
-  const [selectedBrainWorkspaceKey, setSelectedBrainWorkspaceKey] = useState(() => {
-    try {
-      return localStorage.getItem("brain.selectedWorkspace.v1") || "software";
-    } catch {
-      return "software";
-    }
-  });
+  const switchBrainWorkspace = useCallback((workspaceKey: BrainWorkspaceKey) => {
+    setBrainWorkspaceSelection((current) => selectBrainWorkspace(current, workspaceKey));
+    const catalog = brainWorkspaceSelection.catalogs[workspaceKey];
+    setSelectedBrainProjectId(catalog?.projectId || "");
+    setSelectedBrainConversationId(catalog?.conversationId || "");
+  }, [brainWorkspaceSelection.catalogs]);
   const refreshBrainProjects = useCallback(async (workspaceKey = selectedBrainWorkspaceKey) => {
     if (!window.codecn?.listBrainProjects) return;
     const projects = await window.codecn.listBrainProjects({ workspaceKey, includeArchived: false });
@@ -481,28 +485,47 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     let disposed = false;
     void (async () => {
-      if (!window.codecn?.listBrainWorkspaces) return;
+      if (!window.codecn?.listBrainWorkspaces) {
+        setBrainWorkspaceAvailability("unavailable");
+        return;
+      }
       try {
         const workspaces = await window.codecn.listBrainWorkspaces();
         if (disposed) return;
         const enabled = (Array.isArray(workspaces) ? workspaces : []).filter((item) => item?.enabled);
         setBrainWorkspaces(enabled);
+        setBrainWorkspaceAvailability(enabled.length ? "ready" : "unavailable");
         const selectedExists = enabled.some((item) => item.workspaceKey === selectedBrainWorkspaceKey);
         const nextKey = selectedExists ? selectedBrainWorkspaceKey : (enabled[0]?.workspaceKey || "software");
-        if (nextKey !== selectedBrainWorkspaceKey) setSelectedBrainWorkspaceKey(nextKey);
+        if (nextKey !== selectedBrainWorkspaceKey) switchBrainWorkspace(nextKey);
       } catch (error) {
-        if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
+        if (!disposed) {
+          setBrainWorkspaceAvailability("unavailable");
+          setErrorMessage(error instanceof Error ? error.message : String(error));
+        }
       }
     })();
     return () => { disposed = true; };
   }, []);
   useEffect(() => {
-    try { localStorage.setItem("brain.selectedWorkspace.v1", selectedBrainWorkspaceKey); } catch { /* session-only fallback */ }
+    try {
+      localStorage.setItem(BRAIN_WORKSPACE_SELECTION_KEY, JSON.stringify(brainWorkspaceSelection));
+      localStorage.removeItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY);
+      if (brainWorkspaceMigrated) setBrainWorkspaceMigrated(false);
+    } catch { /* session-only fallback */ }
+  }, [brainWorkspaceSelection, brainWorkspaceMigrated]);
+  useEffect(() => {
     setBrainWorkspaceBusy(true);
     void refreshBrainProjects(selectedBrainWorkspaceKey)
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
       .finally(() => setBrainWorkspaceBusy(false));
   }, [selectedBrainWorkspaceKey, refreshBrainProjects]);
+  useEffect(() => {
+    setBrainWorkspaceSelection((current) => rememberBrainWorkspaceCatalog(current, selectedBrainWorkspaceKey, {
+      projectId: selectedBrainProjectId,
+      conversationId: selectedBrainConversationId
+    }));
+  }, [selectedBrainWorkspaceKey, selectedBrainProjectId, selectedBrainConversationId]);
   useEffect(() => {
     void refreshBrainConversations(selectedBrainProjectId)
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)));
@@ -3291,10 +3314,8 @@ function renderSidebarModule() {
                       aria-checked={workspace.workspaceKey === selectedBrainWorkspaceKey}
                       className={workspace.workspaceKey === selectedBrainWorkspaceKey ? "active" : ""}
                       onClick={() => {
-                        setSelectedBrainWorkspaceKey(workspace.workspaceKey);
+                        switchBrainWorkspace(workspace.workspaceKey);
                         setBrainWorkspaceMenuOpen(false);
-                        setSelectedBrainProjectId("");
-                        setSelectedBrainConversationId("");
                         setSelectedSidebarRow(null);
                       }}
                     >
@@ -3377,9 +3398,12 @@ function renderSidebarModule() {
               >+</button>
             </div>
             <div className="brain-project-list" aria-busy={brainWorkspaceBusy}>
+              {brainWorkspaceAvailability === "loading" ? <div className="brain-project-empty">正在初始化工作台目录…</div> : null}
+              {brainWorkspaceAvailability === "unavailable" ? <div className="brain-project-empty">工作台目录暂不可用，请稍后重试</div> : null}
+              {brainWorkspaceMigrated ? <div className="brain-project-empty">正在迁移上次工作台位置…</div> : null}
               {brainWorkspaceBusy ? <div className="brain-project-empty">正在读取本地项目…</div> : null}
-              {!brainWorkspaceBusy && !brainProjects.length ? <div className="brain-project-empty">还没有项目，点击 + 创建</div> : null}
-              {!brainWorkspaceBusy && brainProjects.map((project) => (
+              {brainWorkspaceAvailability === "ready" && !brainWorkspaceBusy && !brainProjects.length ? <div className="brain-project-empty">还没有项目，点击 + 创建</div> : null}
+              {brainWorkspaceAvailability === "ready" && !brainWorkspaceBusy && brainProjects.map((project) => (
                 <button
                   key={project.id}
                   type="button"

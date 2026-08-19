@@ -1,14 +1,6 @@
-export const brainWorkspaceKeys = [
-  "quant",
-  "game",
-  "video",
-  "music",
-  "data",
-  "software",
-  "document"
-] as const;
-
-export type BrainWorkspaceKey = (typeof brainWorkspaceKeys)[number];
+import type { BrainWorkspaceKey } from "./workspace-types.js";
+export { brainWorkspaceKeys } from "./workspace-types.js";
+export type { BrainWorkspaceKey } from "./workspace-types.js";
 
 export interface BrainWorkspaceDto {
   workspaceKey: BrainWorkspaceKey;

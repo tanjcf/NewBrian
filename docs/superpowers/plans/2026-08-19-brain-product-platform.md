@@ -80,11 +80,11 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Modify: platform `src/renderer/ui.tsx` overlays
 - Test: `shared/apps/desktop/src/renderer/app/workspace-selection.test.ts`
 
-- [ ] Define the six workspace families and media submodes as protocol data.
-- [ ] Test that the switcher is at the top of the left navigation and does not replace conversation content.
-- [ ] Scope projects and threads by workspace while retaining shared project files.
-- [ ] Persist the selected workspace and restore it without moving a conversation to another catalog.
-- [ ] Add empty, loading, unavailable, and migration states.
+- [x] Define the six workspace families and media submodes as protocol data.
+- [x] Test that the switcher is at the top of the left navigation and does not replace conversation content.
+- [x] Scope projects and threads by workspace while retaining shared project files.
+- [x] Persist the selected workspace and restore it without moving a conversation to another catalog.
+- [x] Add empty, loading, unavailable, and migration states.
 
 ### Task 5: Document ingestion and structural anchors
 

@@ -1606,3 +1606,4 @@ export interface PhaseOneSnapshot {
   automations?: AutomationSpec[];
 }
 export * from "./brain-workspace.js";
+export * from "./workspace-types.js";
