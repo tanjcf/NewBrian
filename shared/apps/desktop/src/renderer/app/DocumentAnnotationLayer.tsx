@@ -1,10 +1,12 @@
-import type { BrainAnnotationDto, BrainFileDto } from "@codex-forge/protocol";
+import type { BrainAnnotationDto, BrainChangeSetDto, BrainChangeSetPreviewResult, BrainFileDto } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import { currentDocumentAnnotations } from "./document-annotation-policy";
 
 export function DocumentAnnotationLayer(props: {
   file: BrainFileDto | null;
   annotations: BrainAnnotationDto[];
+  changeSets: BrainChangeSetDto[];
+  preview: BrainChangeSetPreviewResult | null;
   active: boolean;
   candidate: DocumentAnchor | null;
   instruction: string;
@@ -13,6 +15,9 @@ export function DocumentAnnotationLayer(props: {
   onInstructionChange: (value: string) => void;
   onSave: () => void;
   onSendToChat: (annotation: BrainAnnotationDto) => void;
+  onPreviewChangeSet: (changeSet: BrainChangeSetDto) => void;
+  onReviewChangeSet: (changeSet: BrainChangeSetDto, status: "ACCEPTED" | "REJECTED") => void;
+  onExportChangeSet: (changeSet: BrainChangeSetDto) => void;
 }) {
   if (!props.file) return null;
   const current = currentDocumentAnnotations(props.annotations.filter((item) => item.fileId === props.file?.id));
@@ -40,6 +45,32 @@ export function DocumentAnnotationLayer(props: {
             </article>
           ))}
         </div>
+      ) : null}
+      {props.changeSets.length ? (
+        <div className="document-change-set-list" aria-label="修改方案">
+          <strong>修改方案</strong>
+          {props.changeSets.map((changeSet) => (
+            <article key={changeSet.id} data-status={changeSet.status.toLowerCase()}>
+              <span><b>{changeSet.changeSummary}</b><small>{changeSet.status === "PROPOSED" ? "等待确认" : changeSet.status === "ACCEPTED" ? (changeSet.resultFileVersion ? `已导出 v${changeSet.resultFileVersion}` : "已接受") : "已拒绝"}</small></span>
+              <div>
+                <button type="button" disabled={props.busy} onClick={() => props.onPreviewChangeSet(changeSet)}>预览</button>
+                {changeSet.status === "PROPOSED" ? <>
+                  <button type="button" disabled={props.busy} onClick={() => props.onReviewChangeSet(changeSet, "REJECTED")}>拒绝</button>
+                  <button type="button" disabled={props.busy} onClick={() => props.onReviewChangeSet(changeSet, "ACCEPTED")}>接受</button>
+                </> : null}
+                {changeSet.status === "ACCEPTED" && !changeSet.resultFileVersion ? (
+                  <button type="button" disabled={props.busy} onClick={() => props.onExportChangeSet(changeSet)}>导出新版本</button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {props.preview ? (
+        <section className="document-change-preview" aria-label="修改预览">
+          <header><strong>修改前后对比</strong><small>{props.preview.relativePath} · v{props.preview.fileVersion}</small></header>
+          <div><pre>{props.preview.before}</pre><pre>{props.preview.after}</pre></div>
+        </section>
       ) : null}
     </section>
   );

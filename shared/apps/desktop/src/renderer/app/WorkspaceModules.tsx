@@ -442,6 +442,8 @@ export function WorkspaceModules(ctx: any) {
   const [brainTasks, setBrainTasks] = useState<any[]>([]);
   const [brainArtifacts, setBrainArtifacts] = useState<any[]>([]);
   const [brainAnnotations, setBrainAnnotations] = useState<any[]>([]);
+  const [brainChangeSets, setBrainChangeSets] = useState<any[]>([]);
+  const [brainChangeSetPreview, setBrainChangeSetPreview] = useState<any>(null);
   const [documentAnnotationActive, setDocumentAnnotationActive] = useState(false);
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
@@ -570,20 +572,23 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     let disposed = false;
     if (!selectedBrainProjectId) {
-      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]); setBrainAnnotations([]);
+      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]); setBrainAnnotations([]); setBrainChangeSets([]); setBrainChangeSetPreview(null);
       return () => { disposed = true; };
     }
     void Promise.all([
       window.codecn?.listBrainFiles?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
       window.codecn?.listBrainTasks?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
       window.codecn?.listBrainArtifacts?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
-      window.codecn?.listBrainAnnotations?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
-    ]).then(([files, tasks, artifacts, annotations]) => {
+      window.codecn?.listBrainAnnotations?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.codecn?.listBrainChangeSets?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
+    ]).then(([files, tasks, artifacts, annotations, changeSets]) => {
       if (disposed) return;
       setBrainFiles(Array.isArray(files) ? files : []);
       setBrainTasks(Array.isArray(tasks) ? tasks : []);
       setBrainArtifacts(Array.isArray(artifacts) ? artifacts : []);
       setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
+      setBrainChangeSets(Array.isArray(changeSets) ? changeSets : []);
+      setBrainChangeSetPreview(null);
     }).catch((error) => {
       if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
     });
@@ -5868,6 +5873,44 @@ function renderChatModule() {
     setBrainDraft((current) => [current.trim(), reference].filter(Boolean).join("\n\n"));
     setChatStatus(`标注 ${annotation.id} 已加入 BRAIN 对话。`);
   };
+  const previewDocumentChangeSet = async (changeSet: any) => {
+    if (!selectedBrainProjectId || !window.codecn?.previewBrainChangeSet) return;
+    setDocumentAnnotationBusy(true);
+    try {
+      setBrainChangeSetPreview(await window.codecn.previewBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDocumentAnnotationBusy(false);
+    }
+  };
+  const reviewDocumentChangeSet = async (changeSet: any, status: "ACCEPTED" | "REJECTED") => {
+    if (!selectedBrainProjectId || !window.codecn?.updateBrainChangeSet) return;
+    setDocumentAnnotationBusy(true);
+    try {
+      const updated = await window.codecn.updateBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id, status });
+      setBrainChangeSets((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setChatStatus(status === "ACCEPTED" ? "修改方案已接受，可导出为新版本。" : "修改方案已拒绝，原文件未改变。");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDocumentAnnotationBusy(false);
+    }
+  };
+  const exportDocumentChangeSet = async (changeSet: any) => {
+    if (!selectedBrainProjectId || !window.codecn?.exportBrainChangeSet) return;
+    setDocumentAnnotationBusy(true);
+    try {
+      const result = await window.codecn.exportBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id });
+      setBrainChangeSets((current) => current.map((item) => item.id === result.changeSet.id ? result.changeSet : item));
+      setBrainFiles((current) => [result.file, ...current.filter((item) => item.id !== result.file.id)]);
+      setChatStatus(`新版本已导出：${result.relativePath}`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDocumentAnnotationBusy(false);
+    }
+  };
 
 function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "center">) {
     const isCenter = placement === "center";
@@ -5988,6 +6031,8 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             <DocumentAnnotationLayer
               file={activeBrainFile}
               annotations={brainAnnotations}
+              changeSets={brainChangeSets.filter((changeSet) => brainAnnotations.some((annotation) => annotation.fileId === activeBrainFile?.id && annotation.id === changeSet.annotationId))}
+              preview={brainChangeSetPreview}
               active={documentAnnotationActive}
               candidate={documentAnnotationCandidate}
               instruction={documentAnnotationInstruction}
@@ -6000,6 +6045,9 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               onInstructionChange={setDocumentAnnotationInstruction}
               onSave={() => void saveDocumentAnnotation()}
               onSendToChat={sendDocumentAnnotationToChat}
+              onPreviewChangeSet={(changeSet) => void previewDocumentChangeSet(changeSet)}
+              onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
+              onExportChangeSet={(changeSet) => void exportDocumentChangeSet(changeSet)}
             />
             {searchFilePreview.loading ? (
               <div className="search-file-preview-state">正在读取文件...</div>

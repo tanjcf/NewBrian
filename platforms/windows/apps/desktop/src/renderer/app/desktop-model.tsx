@@ -12,6 +12,8 @@ import type {
   BrainChangeSetExportResult,
   BrainChangeSetPreviewInput,
   BrainChangeSetPreviewResult,
+  BrainChangeSetDto,
+  BrainChangeSetUpdateInput,
   BrainDraftSaveInput,
   BrainFileDto,
   BrainFileRegisterInput,
@@ -280,6 +282,8 @@ declare global {
       registerBrainFile: (input: BrainFileRegisterInput) => Promise<BrainFileDto>;
       listBrainAnnotations: (input: BrainProjectGetInput) => Promise<BrainAnnotationDto[]>;
       createBrainAnnotation: (input: BrainAnnotationCreateInput) => Promise<BrainAnnotationDto>;
+      listBrainChangeSets: (input: BrainProjectGetInput) => Promise<BrainChangeSetDto[]>;
+      updateBrainChangeSet: (input: BrainChangeSetUpdateInput) => Promise<BrainChangeSetDto>;
       previewBrainChangeSet: (input: BrainChangeSetPreviewInput) => Promise<BrainChangeSetPreviewResult>;
       exportBrainChangeSet: (input: BrainChangeSetPreviewInput) => Promise<BrainChangeSetExportResult>;
       listBrainTasks: (input: BrainProjectGetInput) => Promise<BrainTaskDto[]>;
