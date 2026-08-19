@@ -14,6 +14,7 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
   const [adjustment, setAdjustment] = useState("前复权");
   const [bars, setBars] = useState(fallbackBars);
   const [orderStatus, setOrderStatus] = useState("");
+  const [portfolio, setPortfolio] = useState({ cash: 84986.2, marketValue: 17500, totalValue: 102486.2, totalReturnPercent: 2.49 });
   const [status, setStatus] = useState("本地演示数据");
   useEffect(() => {
     if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
@@ -38,10 +39,11 @@ export function QuantWorkspace({ projectId }: { projectId?: string }) {
     </section>
     <section className="brain-quant-grid">
       <div className="brain-quant-chart"><div className="brain-quant-chart-head"><strong>{symbol} 贵州茅台</strong><span>{interval} · {adjustment}</span></div><div className="brain-quant-candles" aria-label="K线图">{bars.map((bar) => <div className="brain-quant-candle" key={bar.date}><i style={{ height: `${Math.max(18, bar.high - bar.low)}px`, marginTop: `${Math.max(4, 70 - bar.high + 1720)}px` }} /><b className={bar.close >= bar.open ? "up" : "down"} style={{ height: `${Math.max(8, Math.abs(bar.close - bar.open))}px` }} /><small>{bar.date}</small></div>)}</div><div className="brain-quant-volume">{bars.map((bar) => <i key={bar.date} style={{ height: `${20 + Number.parseFloat(bar.volume) * 8}px` }} />)}</div></div>
-      <aside className="brain-quant-side"><h3>模拟持仓</h3><div className="brain-quant-total"><small>总资产</small><strong>¥102,486.20</strong><em>+{returnPercent}%</em></div><dl><div><dt>可用现金</dt><dd>¥84,986.20</dd></div><div><dt>持仓市值</dt><dd>¥17,500.00</dd></div><div><dt>累计收益</dt><dd className="positive">+¥2,486.20</dd></div></dl><button type="button" className="primary" onClick={() => {
+      <aside className="brain-quant-side"><h3>模拟持仓</h3><div className="brain-quant-total"><small>总资产</small><strong>¥{portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong><em>+{portfolio.totalReturnPercent.toFixed(2)}%</em></div><dl><div><dt>可用现金</dt><dd>¥{portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>持仓市值</dt><dd>¥{portfolio.marketValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>累计收益</dt><dd className="positive">+¥{(portfolio.totalValue - 100000).toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div></dl><button type="button" className="primary" onClick={() => {
         if (!projectId || !window.codecn?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
         void window.codecn.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side: "buy", quantity: 100, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
-          .then(() => setOrderStatus(`已模拟买入 ${symbol} 100 股`)).catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
+          .then(() => window.codecn.getQuantSnapshot?.({ projectId, prices: { [symbol]: latest.close } }))
+          .then((snapshot: any) => { if (snapshot) setPortfolio(snapshot); setOrderStatus(`已模拟买入 ${symbol} 100 股`); }).catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
       }}>模拟买入 100 股</button>{orderStatus ? <small className="brain-quant-order-status">{orderStatus}</small> : null}</aside>
     </section>
     <section className="brain-quant-skills"><header><h3>Skill 模拟表现</h3><span>按同一初始资金比较</span></header><table><thead><tr><th>Skill</th><th>收益率</th><th>最大回撤</th><th>交易次数</th><th>胜率</th></tr></thead><tbody><tr><td>趋势跟踪</td><td className="positive">+12.40%</td><td>-4.81%</td><td>28</td><td>57.1%</td></tr><tr><td>均值回归</td><td className="positive">+8.16%</td><td>-6.20%</td><td>41</td><td>53.7%</td></tr></tbody></table></section>
