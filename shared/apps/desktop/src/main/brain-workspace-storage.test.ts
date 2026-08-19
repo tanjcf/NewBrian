@@ -79,6 +79,8 @@ test("persists owner-scoped strategy schedules and claims one run per trading da
     assert.equal(storage.listQuantStrategySchedules("owner-a", project.id)[0]?.id, schedule.id);
     assert.throws(() => storage.listQuantStrategySchedules("owner-b", project.id), /Project belongs to another local owner/);
     const runs = storage.quantStrategyScheduleStore();
+    assert.equal(runs.listEnabled("owner-b").length, 0);
+    assert.equal(runs.listEnabled("owner-a").length, 1);
     const key = `quant-strategy:${schedule.id}:2026-08-20`;
     const queued = storage.enqueueQuantStrategyExecution({ scheduleId: schedule.id, projectId: project.id, skillId: "trend", exchange: "SSE", tradingDate: "2026-08-20", idempotencyKey: key });
     assert.equal(queued.idempotencyKey, key);

@@ -1027,8 +1027,10 @@ export class BrainWorkspaceStorage {
 
   quantStrategyScheduleStore(): QuantStrategyScheduleStore {
     return {
-      listEnabled: () => (this.database.prepare("SELECT * FROM brain_quant_strategy_schedule WHERE enabled = 1 ORDER BY id")
-        .all() as Record<string, unknown>[]).map((row) => ({
+      listEnabled: (ownerId) => (this.database.prepare(`SELECT schedule.* FROM brain_quant_strategy_schedule schedule
+          JOIN brain_project project ON project.id = schedule.project_id
+          WHERE schedule.enabled = 1 AND project.owner_id = ? ORDER BY schedule.id`)
+        .all(requireText(ownerId, "ownerId")) as Record<string, unknown>[]).map((row) => ({
           id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
           exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: true
         })),

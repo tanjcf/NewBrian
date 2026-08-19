@@ -14,7 +14,7 @@ function memoryStore(items: QuantStrategySchedule[]): QuantStrategyScheduleStore
   const completed: string[] = [];
   return {
     completed,
-    listEnabled: () => items,
+    listEnabled: (ownerId) => ownerId === "owner-a" ? items : [],
     claim: (_scheduleId, tradingDate, idempotencyKey) => {
       const key = `${tradingDate}:${idempotencyKey}`;
       if (claimed.has(key)) return false;
@@ -29,7 +29,7 @@ function memoryStore(items: QuantStrategySchedule[]): QuantStrategyScheduleStore
 test("runs a due strategy once with a stable trading-date idempotency key", async () => {
   const store = memoryStore([schedule()]);
   const calls: Array<Record<string, string>> = [];
-  const scheduler = new QuantStrategyScheduler({ store, execute: async (input) => { calls.push(input); } });
+  const scheduler = new QuantStrategyScheduler({ store, resolveOwnerId: () => "owner-a", execute: async (input) => { calls.push(input); } });
   const now = new Date("2026-08-20T07:11:00.000Z"); // Thursday 15:11 Asia/Shanghai
   await scheduler.tick(now);
   await scheduler.tick(now);
@@ -43,6 +43,7 @@ test("does not run before the due time, on weekends, or on configured holidays",
   let calls = 0;
   const scheduler = new QuantStrategyScheduler({
     store,
+    resolveOwnerId: () => "owner-a",
     holidays: new Set(["2026-08-21"]),
     execute: async () => { calls += 1; }
   });
@@ -56,8 +57,16 @@ test("records failure without marking a strategy run complete", async () => {
   const failures: string[] = [];
   const store = memoryStore([schedule()]);
   store.fail = (_scheduleId, _date, _key, errorCode) => { failures.push(errorCode); };
-  const scheduler = new QuantStrategyScheduler({ store, execute: async () => { throw new Error("provider unavailable"); } });
+  const scheduler = new QuantStrategyScheduler({ store, resolveOwnerId: () => "owner-a", execute: async () => { throw new Error("provider unavailable"); } });
   await scheduler.tick(new Date("2026-08-20T07:11:00.000Z"));
   assert.deepEqual(store.completed, []);
   assert.deepEqual(failures, ["QUANT_STRATEGY_EXECUTION_FAILED"]);
+});
+
+test("does not inspect or execute schedules for another local owner", async () => {
+  const store = memoryStore([schedule()]);
+  let calls = 0;
+  const scheduler = new QuantStrategyScheduler({ store, resolveOwnerId: () => "owner-b", execute: async () => { calls += 1; } });
+  await scheduler.tick(new Date("2026-08-20T07:11:00.000Z"));
+  assert.equal(calls, 0);
 });

@@ -20,7 +20,7 @@ export interface QuantStrategyExecution {
 }
 
 export interface QuantStrategyScheduleStore {
-  listEnabled(): QuantStrategySchedule[];
+  listEnabled(ownerId: string): QuantStrategySchedule[];
   claim(scheduleId: string, tradingDate: string, idempotencyKey: string): boolean;
   complete(scheduleId: string, tradingDate: string, idempotencyKey: string): void;
   fail(scheduleId: string, tradingDate: string, idempotencyKey: string, errorCode: string, errorDetail: string): void;
@@ -49,19 +49,24 @@ export class QuantStrategyScheduler {
   private readonly store: QuantStrategyScheduleStore;
   private readonly execute: (input: QuantStrategyExecution) => Promise<void>;
   private readonly holidays: ReadonlySet<string>;
+  private readonly resolveOwnerId: () => Promise<string> | string;
 
   constructor(options: {
     store: QuantStrategyScheduleStore;
     execute: (input: QuantStrategyExecution) => Promise<void>;
+    resolveOwnerId: () => Promise<string> | string;
     holidays?: ReadonlySet<string>;
   }) {
     this.store = options.store;
     this.execute = options.execute;
+    this.resolveOwnerId = options.resolveOwnerId;
     this.holidays = options.holidays ?? new Set();
   }
 
   async tick(now = new Date()): Promise<void> {
-    for (const schedule of this.store.listEnabled()) {
+    const ownerId = (await this.resolveOwnerId()).trim();
+    if (!ownerId) return;
+    for (const schedule of this.store.listEnabled(ownerId)) {
       if (!schedule.enabled) continue;
       const clock = localClock(now, schedule.timezone);
       if (clock.weekday === "Sat" || clock.weekday === "Sun" || this.holidays.has(clock.date)) continue;

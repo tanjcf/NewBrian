@@ -193,6 +193,7 @@ const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARK
 });
 const quantStrategyScheduler = new QuantStrategyScheduler({
   store: brainWorkspaceStorage.quantStrategyScheduleStore(),
+  resolveOwnerId: resolveBrainLocalOwnerId,
   execute: async (input) => { brainWorkspaceStorage.enqueueQuantStrategyExecution(input); }
 });
 let quantStrategyTimer: NodeJS.Timeout | null = null;
