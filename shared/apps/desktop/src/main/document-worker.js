@@ -68,7 +68,8 @@ async function extractText(filePath, format) {
     return slides.join("\n");
   }
   if (format === "xlsx") {
-    const ExcelJS = await import("exceljs");
+    const excelModule = await import("exceljs");
+    const ExcelJS = excelModule.default ?? excelModule;
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
     const chunks = [];

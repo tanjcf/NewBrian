@@ -6,9 +6,9 @@
   "author": "codeCN",
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @codex-forge/protocol build",
+    "predev": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
     "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
-    "prebuild": "pnpm --filter @codex-forge/protocol build",
+    "prebuild": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "package:win-msi": "node node_modules/electron-builder/cli.js --win msi",
     "package:mac": "node node_modules/electron-builder/cli.js --mac dmg zip",
