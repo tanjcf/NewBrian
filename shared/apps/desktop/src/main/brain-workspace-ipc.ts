@@ -19,10 +19,12 @@ import {
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import type { QuantSimulationService } from "./quant-simulation-service.ts";
 
 interface BrainWorkspaceIpcDependencies {
   storage: BrainWorkspaceStorage;
   resolveOwnerId: () => Promise<string> | string;
+  quant?: QuantSimulationService;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -260,4 +262,27 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.artifactRegister, async (_event, value: unknown) =>
     dependencies.storage.registerArtifact({ ownerId: await ownerId(), ...parseArtifactRegister(value) }));
+  if (dependencies.quant) {
+    ipcMain.handle(brainWorkspaceIpcChannels.quantSessionCreate, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant session");
+      dependencies.quant!.createSession(requireString(input.projectId, "projectId"), typeof input.initialCash === "number" ? input.initialCash : 100_000);
+      return { ok: true };
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantBarsQuery, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant bars");
+      return dependencies.quant!.queryBars(requireString(input.projectId, "projectId"), input.query as any);
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantOrderExecute, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant order");
+      return dependencies.quant!.executeOrder(requireString(input.projectId, "projectId"), input.order as any);
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantSnapshot, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant snapshot");
+      return dependencies.quant!.snapshot(requireString(input.projectId, "projectId"), (input.prices || {}) as Record<string, number>);
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantSkillPerformance, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant performance");
+      return dependencies.quant!.performance(requireString(input.projectId, "projectId"), requireString(input.skillId, "skillId"));
+    });
+  }
 }
