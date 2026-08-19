@@ -29,6 +29,7 @@ import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
+import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
 import { decodeMcpMessages, encodeMcpMessage } from "./mcp-framing.js";
@@ -84,6 +85,11 @@ import { NovelTtsService } from "./novel-tts-service.js";
 import { registerSystemIpcHandlers } from "./system-ipc.js";
 
 const appDirectory = dirname(fileURLToPath(import.meta.url));
+const documentWorkerProcess = new DocumentWorkerProcess({
+  appDirectory,
+  resourcesPath: process.resourcesPath,
+  acquireRustCore: (binding) => getRustCoreService().acquire(binding)
+});
 protocol.registerSchemesAsPrivileged([
   { scheme: "codecn-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ]);
@@ -253,7 +259,7 @@ function getRustCoreService() {
   rustCoreService = new RustCoreService({
     binaryPath: resolveUnixRustCoreBinary({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appDirectory }),
     documentWorkerRuntimePath: process.execPath,
-    documentWorkerPath: app.isPackaged ? join(process.resourcesPath, "document-worker.js") : join(appDirectory, "document-worker.js"),
+    documentWorkerPath: app.isPackaged ? join(process.resourcesPath, "document-worker.js") : join(appDirectory, "../../document-worker.js"),
     processManager: rustCoreProcessManager,
     createClient: (child) => {
       if (!child.stdin || !child.stdout || !child.stderr) throw new Error("BRAIN_CORE_PIPE_REQUIRED");
@@ -9406,6 +9412,7 @@ function registerIpc() {
   registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
+    ingestDocument: (input) => documentWorkerProcess.ingest(input),
     resolveOwnerId: resolveBrainLocalOwnerId,
     resolveWorkspaceRoot: async (workspaceId) => {
       const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
@@ -10465,7 +10472,7 @@ function setupAppMenu(window: BrowserWindow) {
 
 const processQuitCoordinator = createAgentHostQuitCoordinator({
   shutdown: async () => {
-    await Promise.all([agentHostClient.shutdown(), rustCoreService?.shutdown()]);
+    await Promise.all([agentHostClient.shutdown(), rustCoreService?.shutdown(), documentWorkerProcess.shutdown()]);
   },
   quit: () => app.quit(),
   onError: (error) => console.error("BRAIN process shutdown failed", error)

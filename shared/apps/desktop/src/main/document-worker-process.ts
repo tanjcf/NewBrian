@@ -84,6 +84,7 @@ export class DocumentWorkerProcess {
     const candidates = [
       this.options.workerSourcePath,
       this.options.resourcesPath ? join(this.options.resourcesPath, "document-worker.js") : "",
+      join(this.options.appDirectory, "../../document-worker.js"),
       join(this.options.appDirectory, "document-worker.js"),
       join(this.options.appDirectory, "../../../../shared/apps/desktop/src/main/document-worker.js")
     ].filter(Boolean) as string[];

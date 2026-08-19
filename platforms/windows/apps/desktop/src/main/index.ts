@@ -812,7 +812,7 @@ function getRustCoreService() {
       appDirectory
     }),
     documentWorkerRuntimePath: process.execPath,
-    documentWorkerPath: app.isPackaged ? join(process.resourcesPath, "document-worker.js") : join(appDirectory, "document-worker.js"),
+    documentWorkerPath: app.isPackaged ? join(process.resourcesPath, "document-worker.js") : join(appDirectory, "../../document-worker.js"),
     processManager: rustCoreProcessManager,
     createClient: (child) => {
       if (!child.stdin || !child.stdout || !child.stderr) {
@@ -7282,6 +7282,7 @@ function registerIpc() {
   registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
+    ingestDocument: (input) => documentWorkerProcess.ingest(input),
     resolveOwnerId: resolveBrainLocalOwnerId,
     resolveWorkspaceRoot: async (workspaceId) => {
       const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);

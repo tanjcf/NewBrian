@@ -120,6 +120,18 @@ export interface BrainFileRegisterInput extends BrainProjectGetInput {
   versionNo?: number;
 }
 
+export interface BrainDocumentIngestInput extends BrainProjectGetInput {
+  fileId: string;
+  maxBytes?: number;
+}
+
+export interface BrainDocumentIngestResult {
+  format: import("./document-anchor.js").DocumentFormat;
+  text: string;
+  anchors: DocumentAnchor[];
+  warnings: string[];
+}
+
 export interface BrainTaskDto {
   id: string;
   projectId: string;
@@ -219,6 +231,7 @@ export const brainWorkspaceIpcChannels = {
   draftSave: "brain:draft:save",
   fileList: "brain:file:list",
   fileRegister: "brain:file:register",
+  fileIngest: "brain:file:ingest",
   taskList: "brain:task:list",
   taskCreate: "brain:task:create",
   taskUpdate: "brain:task:update",

@@ -442,6 +442,8 @@ export function WorkspaceModules(ctx: any) {
   const [brainTasks, setBrainTasks] = useState<any[]>([]);
   const [brainArtifacts, setBrainArtifacts] = useState<any[]>([]);
   const [brainAnnotations, setBrainAnnotations] = useState<any[]>([]);
+  const [brainDocumentAnchors, setBrainDocumentAnchors] = useState<any[]>([]);
+  const [activeBrainDocumentFileId, setActiveBrainDocumentFileId] = useState("");
   const [brainChangeSets, setBrainChangeSets] = useState<any[]>([]);
   const [brainChangeSetPreview, setBrainChangeSetPreview] = useState<any>(null);
   const [documentAnnotationActive, setDocumentAnnotationActive] = useState(false);
@@ -572,7 +574,8 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     let disposed = false;
     if (!selectedBrainProjectId) {
-      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]); setBrainAnnotations([]); setBrainChangeSets([]); setBrainChangeSetPreview(null);
+      setBrainFiles([]); setBrainTasks([]); setBrainArtifacts([]); setBrainAnnotations([]); setBrainDocumentAnchors([]); setBrainChangeSets([]); setBrainChangeSetPreview(null);
+      setActiveBrainDocumentFileId("");
       return () => { disposed = true; };
     }
     void Promise.all([
@@ -598,7 +601,7 @@ export function WorkspaceModules(ctx: any) {
     setDocumentAnnotationActive(false);
     setDocumentAnnotationCandidate(null);
     setDocumentAnnotationInstruction("");
-  }, [selectedBrainProjectId, searchFilePreview?.tabPath, searchFilePreview?.path]);
+  }, [selectedBrainProjectId, activeBrainDocumentFileId]);
   const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
   const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
   useEffect(() => {
@@ -4308,7 +4311,19 @@ function renderSidebarModule() {
         </nav>
         <div className="brain-resource-list">
           {brainResourceTab === "files" ? brainFiles.map((file) => (
-            <button key={file.id} type="button" className="brain-resource-row" onClick={() => openLocalFilePreview(file.storageKey)}>
+            <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
+              setActiveBrainDocumentFileId(file.id);
+              setDocumentAnnotationActive(false);
+              setDocumentAnnotationCandidate(null);
+              setDocumentAnnotationInstruction("");
+              openLocalFilePreview(file.storageKey);
+              setBrainDocumentAnchors([]);
+              if (selectedBrainProjectId && window.codecn?.ingestBrainFile) {
+                void window.codecn.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: file.id })
+                  .then((result) => { setBrainDocumentAnchors(result.anchors || []); if (result.warnings?.length) setChatStatus(result.warnings.join(" ")); })
+                  .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解析失败"));
+              }
+            }}>
               <SidebarIcon name="file" />
               <span><strong>{file.logicalName}</strong><small>版本 {file.versionNo} · {(file.sizeBytes / 1024).toFixed(file.sizeBytes >= 1024 ? 1 : 0)} KB</small></span>
               <em>{file.validationStatus}</em>
@@ -5833,7 +5848,7 @@ function renderChatModule() {
   }
 
   const normalizeDocumentPath = (value: unknown) => String(value || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-  const activeBrainFile = searchFilePreview ? brainFiles.find((file) => {
+  const activeBrainFile = searchFilePreview ? brainFiles.find((file) => file.id === activeBrainDocumentFileId) ?? brainFiles.find((file) => {
     const previewPath = normalizeDocumentPath(searchFilePreview.tabPath || searchFilePreview.path || searchFilePreview.name);
     const storageKey = normalizeDocumentPath(file.storageKey);
     const logicalName = normalizeDocumentPath(file.logicalName);
@@ -6035,6 +6050,7 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               preview={brainChangeSetPreview}
               active={documentAnnotationActive}
               candidate={documentAnnotationCandidate}
+              availableAnchors={brainDocumentAnchors}
               instruction={documentAnnotationInstruction}
               busy={documentAnnotationBusy}
               onToggle={() => {
@@ -6042,6 +6058,7 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 setDocumentAnnotationCandidate(null);
                 setDocumentAnnotationInstruction("");
               }}
+              onSelectAnchor={setDocumentAnnotationCandidate}
               onInstructionChange={setDocumentAnnotationInstruction}
               onSave={() => void saveDocumentAnnotation()}
               onSendToChat={sendDocumentAnnotationToChat}

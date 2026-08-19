@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,24 @@ test("document worker process performs a bounded text ingestion round trip", asy
     assert.equal(result.format, "markdown");
     assert.equal(result.text, "第一行\r\n第二行");
     assert.deepEqual(result.anchors?.[1]?.locator, { kind: "text-range", startLine: 2, endLine: 2, startCharacter: 0, endCharacter: 3 });
+  } finally {
+    await worker.shutdown();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("resolves the synchronized worker from the built development layout", async () => {
+  const root = await mkdtemp(join(tmpdir(), "brain-document-layout-"));
+  const appRoot = join(root, "apps", "desktop");
+  const appDirectory = join(appRoot, "out", "main");
+  await mkdir(appDirectory, { recursive: true });
+  await copyFile(fileURLToPath(new URL("./document-worker.js", import.meta.url)), join(appRoot, "document-worker.js"));
+  const worker = new DocumentWorkerProcess({ appDirectory });
+  try {
+    await writeFile(join(root, "notes.md"), "正文", "utf8");
+    const result = await worker.ingest({ requestId: "development-layout-1", projectRoot: root, relativePath: "notes.md", maxBytes: 1024 });
+    assert.equal(result.status, "completed");
+    assert.equal(result.anchors?.[0]?.anchorId, "markdown:line:1");
   } finally {
     await worker.shutdown();
     await rm(root, { recursive: true, force: true });

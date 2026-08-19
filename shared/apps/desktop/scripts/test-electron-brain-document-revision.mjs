@@ -79,7 +79,7 @@ const seeded = JSON.parse(await evaluate(`(async () => {
   if (!change) change = await window.codecn.createBrainChangeSet({ projectId: project.id, annotationId: annotation.id, baseFileVersion: 1, changeSummary: "替换标注正文", diffJson: JSON.stringify({ operations: [{ start: 3, end: 10, replacement: ${JSON.stringify(replacement)} }] }) });
   localStorage.setItem("codecn.lastSelectedWorkspaceId.v1", workspace.id);
   localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({ version: 2, selectedWorkspaceKey: "document", catalogs: { document: { projectId: project.id, conversationId: conversation.id } } }));
-  return JSON.stringify({ workspaceId: workspace.id, projectId: project.id, conversationId: conversation.id, changeSetId: change.id });
+  return JSON.stringify({ workspaceId: workspace.id, projectId: project.id, conversationId: conversation.id, fileId: file.id, changeSetId: change.id });
 })()`));
 
 await evaluate(`location.reload()`);
@@ -97,8 +97,22 @@ await evaluate(`(() => {
   return Boolean(conversation);
 })()`);
 await waitFor("BRAIN file resource", `Boolean([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.md')))`);
+const ingestProbe = JSON.parse(await evaluate(`(async () => {
+  try {
+    return JSON.stringify({ ok: true, result: await window.codecn.ingestBrainFile({ projectId: ${JSON.stringify(seeded.projectId)}, fileId: ${JSON.stringify(seeded.fileId)} }) });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) });
+  }
+})()`));
+assert.equal(ingestProbe.ok, true, `Document ingest IPC failed: ${ingestProbe.error || "unknown error"}`);
+assert.ok(ingestProbe.result.anchors.some((anchor) => anchor.anchorId === "markdown:line:2"), "Document ingest did not return the expected structural anchor.");
 await evaluate(`([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.md')))?.click()`);
 await waitFor("document revision controls", `document.body?.innerText?.includes("替换标注正文")`);
+await waitFor("document preview content", `document.querySelector('.search-file-preview')?.textContent?.includes("需要修改的正文")`);
+await evaluate(`([...document.querySelectorAll('.document-annotation-toolbar button')].find((item) => item.textContent?.includes('画笔标注')))?.click()`);
+await waitFor("annotation mode", `document.querySelector('.document-annotation-toolbar button')?.textContent?.includes('结束标注')`);
+await waitFor("Rust-supervised structural anchors", `document.querySelector('.document-anchor-picker')?.textContent?.includes('markdown:line:2')`);
+await evaluate(`([...document.querySelectorAll('.document-annotation-toolbar button')].find((item) => item.textContent?.includes('结束标注')))?.click()`);
 
 await evaluate(`([...document.querySelectorAll('.document-change-set-list button')].find((item) => item.textContent?.trim() === '预览'))?.click()`);
 await waitFor("before/after preview", `document.querySelector('.document-change-preview')?.textContent?.includes(${JSON.stringify(replacement)})`);

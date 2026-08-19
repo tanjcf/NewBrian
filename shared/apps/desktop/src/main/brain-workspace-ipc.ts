@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { randomUUID } from "node:crypto";
 import {
   brainWorkspaceIpcChannels,
   brainWorkspaceKeys,
@@ -22,12 +23,14 @@ import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
+import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
   storage: BrainWorkspaceStorage;
   resolveOwnerId: () => Promise<string> | string;
   resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
+  ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -265,6 +268,25 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.fileRegister, async (_event, value: unknown) =>
     withoutOwner(dependencies.storage.registerFile({ ownerId: await ownerId(), ...parseFileRegister(value) })));
+  if (dependencies.ingestDocument) {
+    ipcMain.handle(brainWorkspaceIpcChannels.fileIngest, async (_event, value: unknown) => {
+      const input = requireRecord(value, "File ingest");
+      const projectId = requireString(input.projectId, "projectId");
+      const fileId = requireString(input.fileId, "fileId");
+      const owner = await ownerId();
+      const project = dependencies.storage.getProject(owner, projectId);
+      if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
+      const file = dependencies.storage.getFile(owner, projectId, fileId);
+      const projectRoot = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId);
+      const requestedMax = input.maxBytes === undefined ? 5 * 1024 * 1024 : requireFiniteNumber(input.maxBytes, "maxBytes");
+      const maxBytes = Math.min(Math.max(Math.floor(requestedMax), 1), 20 * 1024 * 1024);
+      const result = await dependencies.ingestDocument({ requestId: `brain-document-${randomUUID()}`, projectRoot, relativePath: file.storageKey, maxBytes });
+      if (result.status !== "completed" || !result.format || result.text === undefined || !result.anchors || !result.warnings) {
+        throw new Error(result.error_code || "BRAIN_DOCUMENT_INGEST_FAILED");
+      }
+      return { format: result.format, text: result.text, anchors: result.anchors, warnings: result.warnings };
+    });
+  }
   ipcMain.handle(brainWorkspaceIpcChannels.taskList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
     return dependencies.storage.listTasks(await ownerId(), input.projectId);

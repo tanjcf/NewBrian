@@ -21,7 +21,9 @@ export function resolveUnixRustCoreBinary(options: UnixRustCoreBinaryOptions) {
   let current = resolve(options.appDirectory);
   while (true) {
     if (exists(join(current, "rust", "brain-core", "Cargo.toml"))) {
-      for (const profile of ["release", "debug"]) {
+      // Development builds are produced by plain `cargo build`; prefer them so a
+      // stale release artifact cannot silently run an older protocol.
+      for (const profile of ["debug", "release"]) {
         const candidate = join(current, "rust", "brain-core", "target", profile, "brain-core");
         if (exists(candidate)) return candidate;
       }
@@ -32,4 +34,3 @@ export function resolveUnixRustCoreBinary(options: UnixRustCoreBinaryOptions) {
   }
   throw new Error("BRAIN_CORE_BINARY_MISSING: build rust/brain-core before starting the desktop runtime.");
 }
-

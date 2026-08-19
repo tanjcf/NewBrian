@@ -22,7 +22,9 @@ export function resolveWindowsRustCoreBinary(options: WindowsRustCoreBinaryOptio
   while (true) {
     const manifest = join(current, "rust", "brain-core", "Cargo.toml");
     if (exists(manifest)) {
-      for (const profile of ["release", "debug"]) {
+      // Development builds are produced by plain `cargo build`; prefer them so a
+      // stale release artifact cannot silently run an older protocol.
+      for (const profile of ["debug", "release"]) {
         const candidate = join(current, "rust", "brain-core", "target", profile, "brain-core.exe");
         if (exists(candidate)) return candidate;
       }

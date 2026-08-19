@@ -16,6 +16,8 @@ import type {
   BrainDraftSaveInput,
   BrainFileDto,
   BrainFileRegisterInput,
+  BrainDocumentIngestInput,
+  BrainDocumentIngestResult,
   BrainMessageAppendInput,
   BrainMessageDto,
   BrainProjectCreateInput,
@@ -426,6 +428,7 @@ declare global {
       saveBrainDraft: (input: BrainDraftSaveInput) => Promise<{ ok: boolean }>;
       listBrainFiles: (input: BrainProjectGetInput) => Promise<BrainFileDto[]>;
       registerBrainFile: (input: BrainFileRegisterInput) => Promise<BrainFileDto>;
+      ingestBrainFile: (input: BrainDocumentIngestInput) => Promise<BrainDocumentIngestResult>;
       listBrainAnnotations: (input: BrainProjectGetInput) => Promise<BrainAnnotationDto[]>;
       createBrainAnnotation: (input: BrainAnnotationCreateInput) => Promise<BrainAnnotationDto>;
       listBrainChangeSets: (input: BrainProjectGetInput) => Promise<BrainChangeSetDto[]>;

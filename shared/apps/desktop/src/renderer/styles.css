@@ -17743,6 +17743,11 @@ textarea {
   background: var(--surface-muted, #f7f8fa);
   white-space: pre-wrap;
 }
+.document-anchor-picker { display: grid; gap: 6px; max-height: 220px; padding: 8px; overflow: auto; border-top: 1px solid var(--border-subtle, #ddd); }
+.document-anchor-picker > button { display: grid; gap: 3px; width: 100%; padding: 8px 10px; border: 1px solid var(--border-subtle, #ddd); border-radius: 7px; background: var(--surface-raised, #fff); color: inherit; text-align: left; cursor: pointer; }
+.document-anchor-picker > button:hover { border-color: var(--accent, #5f7f73); background: var(--surface-hover, #f5f7f6); }
+.document-anchor-picker strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.document-anchor-picker small { overflow: hidden; color: var(--text-secondary, #777); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 
 .preview-line.annotation-candidate {
   outline: 1px solid #e28a22;

@@ -9,9 +9,11 @@ export function DocumentAnnotationLayer(props: {
   preview: BrainChangeSetPreviewResult | null;
   active: boolean;
   candidate: DocumentAnchor | null;
+  availableAnchors: DocumentAnchor[];
   instruction: string;
   busy: boolean;
   onToggle: () => void;
+  onSelectAnchor: (anchor: DocumentAnchor) => void;
   onInstructionChange: (value: string) => void;
   onSave: () => void;
   onSendToChat: (annotation: BrainAnnotationDto) => void;
@@ -34,6 +36,16 @@ export function DocumentAnnotationLayer(props: {
           <label>修改要求<input value={props.instruction} autoFocus onChange={(event) => props.onInstructionChange(event.target.value)} placeholder="例如：改得更简洁，并保留关键数字" /></label>
           <button type="submit" disabled={props.busy || !props.instruction.trim()}>{props.busy ? "保存中…" : "保存标注"}</button>
         </form>
+      ) : null}
+      {props.active && !props.candidate && props.availableAnchors.length ? (
+        <div className="document-anchor-picker" aria-label="可标注文档对象">
+          {props.availableAnchors.slice(0, 100).map((anchor) => (
+            <button type="button" key={anchor.anchorId} onClick={() => props.onSelectAnchor(anchor)}>
+              <strong>{anchor.selectedText?.trim() || anchor.objectId}</strong><small>{anchor.anchorId}</small>
+            </button>
+          ))}
+          {props.availableAnchors.length > 100 ? <small>当前显示前 100 个对象，请缩小页码、工作表或内容范围。</small> : null}
+        </div>
       ) : null}
       {current.length ? (
         <div className="document-annotation-list">
