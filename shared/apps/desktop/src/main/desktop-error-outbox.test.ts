@@ -63,6 +63,47 @@ test("persists oversized renderer context without throwing", async () => {
   }
 });
 
+test("keeps structured feedback fields and diagnostic tail when context exceeds the budget", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
+  try {
+    const outbox = new DesktopErrorOutbox(root);
+    const record = await outbox.capture({
+      kind: "user_reported_usage_exception",
+      message: "文件解压失败，运行自动中断",
+      context: {
+        feedbackSchemaVersion: 1,
+        category: "file_operation",
+        stableFeatures: ["archive_extract", "automatic_run_interrupted"],
+        symptomSummary: "文件解压失败后自动运行中断。",
+        possibleCause: "附件解压或工作区边界处理失败。",
+        contextSummary: "用户要求继续完成附件项目分析。",
+        recentConversation: Array.from({ length: 12 }, (_, index) => ({
+          id: `message-${index}`,
+          role: index % 2 ? "assistant" : "user",
+          content: `${index === 11 ? "LATEST-CONVERSATION" : "older"}-${"c".repeat(2_000)}`
+        })),
+        diagnostics: `${"old-log\n".repeat(2_000)}DIAGNOSTIC-TAIL`,
+        accessToken: "must-not-survive"
+      }
+    });
+
+    const context = record.context as Record<string, unknown>;
+    assert.equal(context.feedbackSchemaVersion, 1);
+    assert.equal(context.category, "file_operation");
+    assert.deepEqual(context.stableFeatures, ["archive_extract", "automatic_run_interrupted"]);
+    assert.match(String(context.symptomSummary), /文件解压失败/);
+    assert.match(JSON.stringify(context.recentConversation), /LATEST-CONVERSATION/);
+    assert.match(String(context.diagnostics), /DIAGNOSTIC-TAIL$/);
+    assert.equal((context.truncation as Record<string, unknown>)?.applied, true);
+    assert.ok(Number((context.truncation as Record<string, unknown>)?.originalChars) > 16_000);
+    assert.ok(JSON.stringify(context).length <= 16_000);
+    assert.doesNotMatch(JSON.stringify(context), /must-not-survive/);
+    assert.equal("truncated" in context, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("fingerprints distinct terminal messages separately even with the same stack", async () => {
   const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
   try {
