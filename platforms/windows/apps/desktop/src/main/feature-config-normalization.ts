@@ -5,6 +5,9 @@ export interface FeatureConfigShape {
   skills: SkillSpec[];
   plugins: PluginSpec[];
   automations: AutomationSpec[];
+  runtime: {
+    rustCoreTools: "disabled" | "read" | "read-write";
+  };
 }
 
 export interface FeatureConfigNormalizationContext {
@@ -46,12 +49,16 @@ export function normalizeFeatureConfig(
     .filter((item) => item.id !== "skill-error-auto-remediation" && item.name !== "error-auto-remediation");
   const automations = (Array.isArray(parsed.automations) ? parsed.automations : context.defaults.automations)
     .filter((item) => item.id !== "automation-error-remediation" && item.action !== "error_remediation");
+  const rustCoreTools = parsed.runtime?.rustCoreTools === "read" || parsed.runtime?.rustCoreTools === "read-write"
+    ? parsed.runtime.rustCoreTools
+    : "disabled";
   return {
     skills: skills.map((skill) => ({
       ...skill,
       status: skill.status === "planned" || skill.status === "disabled" ? skill.status : "enabled"
     })),
     plugins,
-    automations
+    automations,
+    runtime: { rustCoreTools }
   };
 }

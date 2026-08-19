@@ -138,6 +138,10 @@ import { createAgentHostQuitCoordinator } from "./agent-host-quit-coordinator.js
 import { OfficialGovernmentWebService } from "./official-government-web-service.js";
 import { registerOfficialGovernmentWebTools } from "./official-government-web-tools.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
+import { RustCoreClient } from "./rust-core-client.js";
+import { RustCoreService } from "./rust-core-service.js";
+import { RustCoreToolRouter } from "./rust-core-tool-router.js";
+import { resolveWindowsRustCoreBinary } from "./rust-core-binary.js";
 import {
   resolveSystemToolCommand as resolveSystemToolCommandValue,
   resolveSystemTools
@@ -796,7 +800,50 @@ let previewWindowRef: BrowserWindow | null = null;
 let workspaceWatcher: FSWatcher | null = null;
 let workspaceWatchDebounce: NodeJS.Timeout | null = null;
 const agentHostProcessManager = new ManagedChildProcessManager({ gracefulTimeoutMs: 3_000 });
+const rustCoreProcessManager = new ManagedChildProcessManager({ gracefulTimeoutMs: 3_000 });
+let rustCoreService: RustCoreService | null = null;
+function getRustCoreService() {
+  if (rustCoreService) return rustCoreService;
+  rustCoreService = new RustCoreService({
+    binaryPath: resolveWindowsRustCoreBinary({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appDirectory
+    }),
+    processManager: rustCoreProcessManager,
+    createClient: (child) => {
+      if (!child.stdin || !child.stdout || !child.stderr) {
+        throw new Error("BRAIN_CORE_PIPE_REQUIRED: Rust Core stdio pipes are unavailable.");
+      }
+      return new RustCoreClient({
+        child: {
+          stdin: child.stdin,
+          stdout: child.stdout,
+          stderr: child.stderr,
+          exitCode: child.exitCode,
+          kill: (signal) => child.kill(signal),
+          once: (event, listener) => child.once(event, listener)
+        }
+      });
+    }
+  });
+  return rustCoreService;
+}
 let agentHostLoopBridge: AgentHostLoopBridge;
+const rustCoreToolRouter = new RustCoreToolRouter({
+  mode: async () => (await readFeatureConfig()).runtime.rustCoreTools,
+  acquire: (binding) => getRustCoreService().acquire(binding),
+  shellCommand: (command) => ({
+    executable: "powershell.exe",
+    args: [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `[Console]::InputEncoding=[Console]::OutputEncoding=$OutputEncoding=[Text.UTF8Encoding]::new(); ${command}`
+    ]
+  })
+});
 const agentHostClient = new AgentHostClient({
   entryPath: join(appDirectory, "agent-host-entry.js"),
   cwd: workspacePath,
@@ -811,7 +858,10 @@ const agentHostClient = new AgentHostClient({
     mainWindowRef.webContents.send(desktopIpcChannels.terminal.update, event.payload as unknown as TerminalSessionSnapshot);
   }
 });
-agentHostLoopBridge = new AgentHostLoopBridge({ client: agentHostClient });
+agentHostLoopBridge = new AgentHostLoopBridge({
+  client: agentHostClient,
+  invokeTool: (input) => rustCoreToolRouter.invoke(input)
+});
 const agentHostAdapter = new AgentHostDesktopAdapter({
   client: agentHostClient,
   getTerminalConfig: () => ({
@@ -2244,6 +2294,9 @@ interface FeatureConfigFile {
   skills: SkillSpec[];
   plugins: PluginSpec[];
   automations: AutomationSpec[];
+  runtime: {
+    rustCoreTools: "disabled" | "read" | "read-write";
+  };
 }
 async function discoverWorkspaceSkillSpecs() {
   const discovered: SkillSpec[] = [];
@@ -2624,6 +2677,7 @@ function normalizeMcpServersWithBuiltins(input?: Partial<McpServerConfig>[]) {
 const defaultMcpServers: McpServerConfig[] = [];
 const shownCondaPromptKeys = new Set<string>();
 const defaultFeatureConfig: FeatureConfigFile = {
+  runtime: { rustCoreTools: "disabled" },
   skills: [
     {
       id: "skill-thread-fork",
@@ -3418,7 +3472,12 @@ async function writeFeatureConfig(nextConfig: FeatureConfigFile) {
   const payload: FeatureConfigFile = {
     skills: Array.isArray(nextConfig.skills) ? nextConfig.skills : [],
     plugins: Array.isArray(nextConfig.plugins) ? nextConfig.plugins : [],
-    automations: Array.isArray(nextConfig.automations) ? nextConfig.automations : []
+    automations: Array.isArray(nextConfig.automations) ? nextConfig.automations : [],
+    runtime: {
+      rustCoreTools: nextConfig.runtime?.rustCoreTools === "read" || nextConfig.runtime?.rustCoreTools === "read-write"
+        ? nextConfig.runtime.rustCoreTools
+        : "disabled"
+    }
   };
   await fs.writeFile(featureConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   return payload;
@@ -5301,7 +5360,8 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
       "Work only on the bounded delegated instruction. Use tools when evidence is needed, stay inside the attached workspace, and return a concise result with verifiable evidence."
     ].filter(Boolean).join("\n\n");
     const childRuntimeInput = {
-      runtimeId: `delegated-${currentTask.childThreadId}`, workspacePath: agentWorkspacePath,
+      runtimeId: `delegated-${currentTask.childThreadId}`, projectId: workspace.id,
+      workspacePath: agentWorkspacePath, workspaceType: "software",
       platformLabel, shellLabel, shellEnv: activeShellEnv, maxAgentConcurrency: 1
     };
     const localChildRuntime = await createLocalRuntime(childRuntimeInput);
@@ -8265,7 +8325,12 @@ app.on("window-all-closed", () => {
   // The tray owns application lifetime; active tasks continue without a visible window.
 });
 const agentHostQuitCoordinator = createAgentHostQuitCoordinator({
-  shutdown: () => agentHostClient.shutdown(),
+  shutdown: async () => {
+    await Promise.all([
+      agentHostClient.shutdown(),
+      rustCoreService?.shutdown()
+    ]);
+  },
   quit: () => app.quit(),
   onError: (error) => safeConsoleError("Agent host shutdown failed", error)
 });

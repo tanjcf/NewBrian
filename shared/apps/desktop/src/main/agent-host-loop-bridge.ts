@@ -39,11 +39,22 @@ interface LocalRuntime {
 
 interface AgentHostLoopBridgeOptions {
   client: AgentHostRequester;
+  invokeTool?: (input: {
+    runtimeId: string;
+    projectId: string;
+    projectRoot: string;
+    workspaceType: string;
+    toolName: string;
+    arguments: Record<string, unknown>;
+    fallback(): Promise<unknown>;
+  }) => Promise<unknown>;
 }
 
 interface RuntimeCreateInput {
   runtimeId: string;
   workspacePath: string;
+  projectId?: string;
+  workspaceType?: string;
   platformLabel: string;
   shellLabel: string;
 }
@@ -67,6 +78,9 @@ interface HostedLoopSnapshot {
 
 interface BridgeEntry {
   localRuntime: LocalRuntime;
+  projectId: string;
+  projectRoot: string;
+  workspaceType: string;
   modelCallback?: (input: unknown) => Promise<unknown>;
   activeLoopOperation?: Promise<HostedLoopSnapshot>;
   lastSnapshot: HostedLoopSnapshot | null;
@@ -125,12 +139,14 @@ function loopOptions(runtime: LocalRuntime, options: Record<string, unknown>) {
 
 export class AgentHostLoopBridge {
   private readonly client: AgentHostRequester;
+  private readonly invokeTool?: AgentHostLoopBridgeOptions["invokeTool"];
   private readonly entries = new Map<string, BridgeEntry>();
   private readonly runtimeIds = new WeakMap<object, string>();
   private activeModelProgress: (() => void) | null = null;
 
   constructor(options: AgentHostLoopBridgeOptions) {
     this.client = options.client;
+    this.invokeTool = options.invokeTool;
   }
 
   async createRuntime<T extends LocalRuntime>(
@@ -140,6 +156,9 @@ export class AgentHostLoopBridge {
     await this.client.request("agent.runtime.create", input);
     const entry: BridgeEntry = {
       localRuntime,
+      projectId: input.projectId?.trim() || input.runtimeId,
+      projectRoot: input.workspacePath,
+      workspaceType: input.workspaceType?.trim() || "software",
       lastSnapshot: null,
       startPromise: Promise.resolve(),
       loopGeneration: 0,
@@ -231,13 +250,23 @@ export class AgentHostLoopBridge {
       name: string;
       arguments: Record<string, unknown>;
     };
+    const fallback = () => entry.localRuntime.invokeTool(input.name, input.arguments, {
+      permissionMode: "full",
+      approved: true
+    });
     return withCallbackProgressHeartbeat(
       callback.reportProgress,
-      async () =>
-        entry.localRuntime.invokeTool(input.name, input.arguments, {
-          permissionMode: "full",
-          approved: true
-        }),
+      () => this.invokeTool
+        ? this.invokeTool({
+            runtimeId: callback.runtimeId,
+            projectId: entry.projectId,
+            projectRoot: entry.projectRoot,
+            workspaceType: entry.workspaceType,
+            toolName: input.name,
+            arguments: input.arguments,
+            fallback
+          })
+        : fallback(),
       callback.progressHeartbeatMs
     );
   }

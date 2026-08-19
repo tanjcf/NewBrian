@@ -5,7 +5,7 @@ import test from "node:test";
 const { normalizeFeatureConfig } = await import(new URL("./feature-config-normalization.ts", import.meta.url).href);
 const automationPolicy = await import(new URL("./automation-schedule-policy.ts", import.meta.url).href);
 
-const defaults = { skills: [], plugins: [], automations: [] };
+const defaults = { skills: [], plugins: [], automations: [], runtime: { rustCoreTools: "disabled" as const } };
 const context = { defaults, workspaceStateRoot: resolve("state"), workspacePath: resolve("workspace"), isPackaged: true };
 
 test("normalizes feature skill status", () => {
@@ -45,6 +45,13 @@ test("removes legacy Codex error-remediation features from codeCN configuration"
 
   assert.deepEqual(result.skills.map((item: { id: string }) => item.id), ["skill-keep"]);
   assert.deepEqual(result.automations.map((item: { id: string }) => item.id), ["automation-keep"]);
+});
+
+test("keeps Rust Core tools disabled unless an administrator selects a supported mode", () => {
+  assert.equal(normalizeFeatureConfig({}, context).runtime.rustCoreTools, "disabled");
+  assert.equal(normalizeFeatureConfig({ runtime: { rustCoreTools: "read" } }, context).runtime.rustCoreTools, "read");
+  assert.equal(normalizeFeatureConfig({ runtime: { rustCoreTools: "read-write" } }, context).runtime.rustCoreTools, "read-write");
+  assert.equal(normalizeFeatureConfig({ runtime: { rustCoreTools: "unsafe" as never } }, context).runtime.rustCoreTools, "disabled");
 });
 
 test("selects only due scheduled automation work", () => {

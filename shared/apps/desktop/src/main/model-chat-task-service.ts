@@ -45,6 +45,7 @@ export interface ModelChatTaskDependencies<TRuntime, TState, TPolicy> {
   removeTask: (requestId: string) => void;
   createRuntime: (input: {
     runtimeId: string;
+    projectId: string;
     workspacePath: string;
     shellEnv: Record<string, string>;
   }) => Promise<TRuntime>;
@@ -110,6 +111,7 @@ export class ModelChatTaskService<
     try {
       const runtime = await this.dependencies.createRuntime({
         runtimeId,
+        projectId: input.workspace.id,
         workspacePath: input.workspace.path,
         shellEnv: await this.dependencies.buildShellEnv(input.workspace)
       });
