@@ -323,6 +323,7 @@ import {
   buildApiEndpoint,
   buildModelRequestPayload,
   buildUpstreamModelMessages,
+  canContinueThinkingWithMessages,
   extractResponsesText,
   extractResponsesTextFromSse,
   resolveGatewayBaseUrl,
@@ -6760,13 +6761,15 @@ async function callModelApi(input: {
   const modelTools = formatToolDefinitions(input.tools ?? [], input.wireApi, {
     webSearch: supportsNativeWebSearch(input.provider, model, input.wireApi)
   });
+  const thinkingEnabled = /deepseek|qwen|doubao|ark|kimi|moonshot|minimax|thinking|reasoner/i.test(`${input.provider} ${model}`)
+    && canContinueThinkingWithMessages(encodedMessages);
   const requestBody = JSON.stringify(buildModelRequestPayload({
     wireApi: input.wireApi,
     model,
     upstreamMessages,
     disableResponseStorage: input.disableResponseStorage,
     reasoningEffort: input.reasoningEffort,
-    enableThinking: /deepseek|qwen|doubao|ark|kimi|moonshot|minimax|thinking|reasoner/i.test(`${input.provider} ${model}`),
+    enableThinking: thinkingEnabled,
     tools: modelTools
   }));
   const fetchModelResponse = () => fetchModelResponseWithHeadersTimeout(apiUrl, {

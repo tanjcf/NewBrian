@@ -64,6 +64,27 @@ export function buildModelRequestPayload(input: {
   };
 }
 
+/**
+ * Thinking-mode providers reject a continuation when an earlier assistant
+ * tool-call message has no provider-issued reasoning trace to echo back.
+ * Persisted thread history intentionally omits that opaque trace, so callers
+ * must fall back to a non-thinking request for that boundary.
+ */
+export function canContinueThinkingWithMessages(messages: unknown[]) {
+  return messages.every((message) => {
+    const item = record(message);
+    if (item?.role !== "assistant") return true;
+    const calls = Array.isArray(item.toolCalls)
+      ? item.toolCalls
+      : Array.isArray(item.tool_calls)
+        ? item.tool_calls
+        : [];
+    if (!calls.length) return true;
+    const reasoning = item.providerReasoningContent ?? item.reasoning_content;
+    return typeof reasoning === "string" && reasoning.trim().length > 0;
+  });
+}
+
 interface EncodedModelMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: unknown;

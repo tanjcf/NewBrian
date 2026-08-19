@@ -116,6 +116,19 @@ test("preserves provider reasoning_content only for an in-memory tool continuati
   assert.equal(responses[0].reasoning_content, "provider-issued-opaque-reasoning");
 });
 
+test("disables thinking continuation when persisted tool history has no provider trace", () => {
+  assert.equal(protocol.canContinueThinkingWithMessages([
+    { role: "user", content: "继续" },
+    { role: "assistant", content: "", toolCalls: [{ id: "call-1", name: "read", arguments: "{}" }] }
+  ]), false);
+  assert.equal(protocol.canContinueThinkingWithMessages([
+    { role: "assistant", content: "", toolCalls: [{ id: "call-1", name: "read", arguments: "{}" }], providerReasoningContent: "opaque" }
+  ]), true);
+  assert.equal(protocol.canContinueThinkingWithMessages([
+    { role: "assistant", content: "普通回答" }
+  ]), true);
+});
+
 test("streams response deltas through a terminal SSE event", async () => {
   const text: string[] = [];
   const reasoning: string[] = [];
