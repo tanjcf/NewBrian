@@ -96,7 +96,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 3;
+const latestMigrationVersion = 4;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -342,6 +342,16 @@ function migrationThreeSql() {
   `;
 }
 
+function migrationFourSql() {
+  return `
+    CREATE TABLE brain_quant_state (
+      project_id TEXT PRIMARY KEY REFERENCES brain_project(id) ON DELETE CASCADE,
+      state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `;
+}
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -460,6 +470,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 1, "BRAIN local-first workspace schema", migrationOneSql());
       applyMigration(this.database, 2, "Structured immutable document annotations", migrationTwoSql());
       applyMigration(this.database, 3, "Bind BRAIN projects to authorized local workspaces", migrationThreeSql());
+      applyMigration(this.database, 4, "Persist isolated quantitative simulation ledgers", migrationFourSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -930,6 +941,23 @@ export class BrainWorkspaceStorage {
     this.getProject(ownerId, projectId);
     return (this.database.prepare("SELECT * FROM brain_artifact WHERE project_id = ? ORDER BY created_at DESC, id DESC")
       .all(projectId) as Record<string, unknown>[]).map(mapArtifact);
+  }
+
+  loadQuantState(projectId: string): string | null {
+    const row = this.database.prepare("SELECT state_json FROM brain_quant_state WHERE project_id = ?")
+      .get(requireText(projectId, "projectId")) as { state_json: string } | undefined;
+    return row?.state_json ?? null;
+  }
+
+  saveQuantState(projectId: string, stateJson: string): void {
+    const normalizedProjectId = requireText(projectId, "projectId");
+    const normalizedState = requireText(stateJson, "stateJson");
+    const project = this.database.prepare("SELECT id FROM brain_project WHERE id = ?").get(normalizedProjectId);
+    if (!project) throw new BrainStorageError("BRAIN_PROJECT_NOT_FOUND", "Project not found");
+    this.database.prepare(`
+      INSERT INTO brain_quant_state(project_id, state_json, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
+    `).run(normalizedProjectId, normalizedState, nowIso());
   }
 
   private seedWorkspaces() {

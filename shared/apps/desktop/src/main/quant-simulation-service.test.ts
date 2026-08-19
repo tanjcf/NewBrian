@@ -22,3 +22,22 @@ test("strategy skills trade in isolated ledgers with the same starting capital",
   assert.equal(service.performance("project", "mean").totalReturnPercent, -2);
   assert.equal(service.snapshot("project", {}).positions.length, 0, "skill positions must not leak into the manual portfolio");
 });
+
+test("restores manual and per-skill ledgers from durable project state", () => {
+  const states = new Map<string, string>();
+  const persistence = {
+    load: (projectId: string) => states.get(projectId) ?? null,
+    save: (projectId: string, stateJson: string) => { states.set(projectId, stateJson); }
+  };
+  const first = new QuantSimulationService(undefined, persistence);
+  first.createSession("project", 1_000);
+  first.executeOrder("project", { id: "manual", symbol: "A", side: "buy", quantity: 10, price: 10, feeRate: 0, createdAt: "now" });
+  first.executeOrder("project", { id: "skill", skillId: "trend", symbol: "B", side: "buy", quantity: 20, price: 10, feeRate: 0, createdAt: "now" });
+  first.recordSkillSnapshot("project", "trend", { B: 11 });
+
+  const restarted = new QuantSimulationService(undefined, persistence);
+  restarted.createSession("project", 999_999);
+  assert.equal(restarted.snapshot("project", { A: 12 }).positions[0]?.quantity, 10);
+  assert.equal(restarted.performance("project", "trend").totalReturnPercent, 2);
+  assert.equal(restarted.executeOrder("project", { id: "manual", symbol: "A", side: "buy", quantity: 10, price: 999, feeRate: 0, createdAt: "later" }).price, 10);
+});

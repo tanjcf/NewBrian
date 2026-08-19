@@ -36,3 +36,12 @@ test("skill performance includes volatility and risk-adjusted return", () => {
   assert.ok(result.volatilityPercent > 0);
   assert.equal(Number.isFinite(result.riskAdjustedReturn), true);
 });
+
+test("ledger state survives restart without duplicating an idempotent order", () => {
+  const original = new SimulationLedger(1_000);
+  const order = { id: "restart-buy", symbol: "A", side: "buy" as const, quantity: 10, price: 10, feeRate: 0, createdAt: "2026-08-20T01:00:00.000Z" };
+  original.execute(order);
+  const restored = SimulationLedger.restore(original.exportState());
+  assert.deepEqual(restored.execute({ ...order, price: 999 }), original.execute(order));
+  assert.deepEqual(restored.snapshot({ A: 12 }), original.snapshot({ A: 12 }));
+});

@@ -44,6 +44,7 @@ test("persists projects conversations messages and drafts across restart", () =>
     requestId: "req-1"
   });
   storage.saveDraft({ ownerId: "owner-a", projectId: project.id, conversationId: conversation.id, content: "未发送草稿" });
+  storage.saveQuantState(project.id, '{"version":1,"ledger":"durable"}');
   storage.close();
 
   storage = new BrainWorkspaceStorage(root);
@@ -52,6 +53,7 @@ test("persists projects conversations messages and drafts across restart", () =>
     assert.equal(storage.getProject("owner-a", project.id).lastConversationId, conversation.id);
     assert.equal(storage.listMessages("owner-a", conversation.id)[0]?.content, "测试 2025 年策略");
     assert.equal(storage.readDraft("owner-a", conversation.id)?.content, "未发送草稿");
+    assert.equal(storage.loadQuantState(project.id), '{"version":1,"ledger":"durable"}');
   } finally {
     storage.close();
     rmSync(root, { recursive: true, force: true });
@@ -168,7 +170,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 3);
+      assert.equal(Number(migrations.count), 4);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);
@@ -198,7 +200,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v3.bak`;
+  const backupPath = `${databasePath}.v0-before-v4.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();

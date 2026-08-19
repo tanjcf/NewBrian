@@ -1,5 +1,12 @@
 import type { PortfolioSnapshot, PositionSnapshot, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
 
+export interface SimulationLedgerState {
+  version: 1;
+  initialCash: number;
+  fills: SimulatedFill[];
+  skillValues: Array<{ skillId: string; values: number[] }>;
+}
+
 export class SimulationLedger {
   private cash: number;
   private readonly initialCash: number;
@@ -12,6 +19,31 @@ export class SimulationLedger {
   constructor(initialCash: number) {
     if (!Number.isFinite(initialCash) || initialCash <= 0) throw new RangeError("initialCash must be positive");
     this.cash = this.initialCash = initialCash;
+  }
+
+  static restore(value: unknown): SimulationLedger {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("QUANT_LEDGER_STATE_INVALID");
+    const state = value as Partial<SimulationLedgerState>;
+    if (state.version !== 1 || !Number.isFinite(state.initialCash) || Number(state.initialCash) <= 0 || !Array.isArray(state.fills) || !Array.isArray(state.skillValues)) {
+      throw new TypeError("QUANT_LEDGER_STATE_INVALID");
+    }
+    const ledger = new SimulationLedger(Number(state.initialCash));
+    for (const fill of state.fills) ledger.execute(fill);
+    for (const entry of state.skillValues) {
+      if (!entry || typeof entry.skillId !== "string" || !entry.skillId.trim() || !Array.isArray(entry.values)
+        || entry.values.some((item) => !Number.isFinite(item) || item <= 0)) throw new TypeError("QUANT_LEDGER_STATE_INVALID");
+      ledger.skillValues.set(entry.skillId, [...entry.values]);
+    }
+    return ledger;
+  }
+
+  exportState(): SimulationLedgerState {
+    return {
+      version: 1,
+      initialCash: this.initialCash,
+      fills: this.fills.map((fill) => ({ ...fill })),
+      skillValues: [...this.skillValues].map(([skillId, values]) => ({ skillId, values: [...values] }))
+    };
   }
 
   execute(order: SimulatedOrder): SimulatedFill {
