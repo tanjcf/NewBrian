@@ -266,6 +266,8 @@ contextBridge.exposeInMainWorld("codecn", {
   registerBrainArtifact: (input: BrainArtifactRegisterInput): Promise<BrainArtifactDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.artifactRegister, input),
   listBrainAnnotations: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationList, input),
   createBrainAnnotation: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationCreate, input),
+  listBrainChangeSets: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.changeSetList, input),
+  createBrainChangeSet: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.changeSetCreate, input),
   createQuantSession: (input: { projectId: string; initialCash?: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSessionCreate, input),
   queryQuantBars: (input: { projectId: string; query: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantBarsQuery, input),
   executeQuantOrder: (input: { projectId: string; order: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantOrderExecute, input),

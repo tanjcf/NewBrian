@@ -275,6 +275,18 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       structuralAnchorJson: typeof input.structuralAnchorJson === "string" ? input.structuralAnchorJson : "{}", selectedText: typeof input.selectedText === "string" ? input.selectedText : ""
     });
   });
+  ipcMain.handle(brainWorkspaceIpcChannels.changeSetList, async (_event, value: unknown) => {
+    const input = parseProjectGet(value);
+    return dependencies.storage.listChangeSets(await ownerId(), input.projectId);
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.changeSetCreate, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Change set create");
+    return dependencies.storage.createChangeSet({
+      ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), annotationId: requireString(input.annotationId, "annotationId"),
+      taskId: typeof input.taskId === "string" ? input.taskId : undefined, baseFileVersion: Number(input.baseFileVersion),
+      changeSummary: requireString(input.changeSummary, "changeSummary"), diffJson: typeof input.diffJson === "string" ? input.diffJson : "{}"
+    });
+  });
   if (dependencies.quant) {
     ipcMain.handle(brainWorkspaceIpcChannels.quantSessionCreate, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant session");
