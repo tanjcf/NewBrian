@@ -116,6 +116,16 @@ test("persists owner-scoped files idempotent tasks and validated artifacts", () 
   });
 });
 
+test("persists annotations and enforces file project ownership", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "文档项目", primaryWorkspaceKey: "document" });
+    const file = storage.registerFile({ ownerId: "owner-a", projectId: project.id, logicalName: "说明.md", mimeType: "text/markdown", sizeBytes: 12, contentHash: "sha", storageKey: "files/readme.md" });
+    const annotation = storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1, pageOrSheet: "line:2", annotationType: "text-range", selectedText: "旧内容" });
+    assert.equal(storage.listAnnotations("owner-a", project.id)[0]?.id, annotation.id);
+    assert.throws(() => storage.createAnnotation({ ownerId: "owner-b", projectId: project.id, fileId: file.id, fileVersion: 1, annotationType: "text-range" }), (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN");
+  });
+});
+
 test("migration is idempotent and private model metadata has no secret columns", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-migration-"));
   let storage = new BrainWorkspaceStorage(root);
