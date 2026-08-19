@@ -262,6 +262,19 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.artifactRegister, async (_event, value: unknown) =>
     dependencies.storage.registerArtifact({ ownerId: await ownerId(), ...parseArtifactRegister(value) }));
+  ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
+    const input = parseProjectGet(value);
+    return dependencies.storage.listAnnotations(await ownerId(), input.projectId);
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.annotationCreate, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Annotation create");
+    return dependencies.storage.createAnnotation({
+      ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), fileId: requireString(input.fileId, "fileId"),
+      fileVersion: Number(input.fileVersion), pageOrSheet: typeof input.pageOrSheet === "string" ? input.pageOrSheet : "",
+      annotationType: requireString(input.annotationType, "annotationType"), geometryJson: typeof input.geometryJson === "string" ? input.geometryJson : "{}",
+      structuralAnchorJson: typeof input.structuralAnchorJson === "string" ? input.structuralAnchorJson : "{}", selectedText: typeof input.selectedText === "string" ? input.selectedText : ""
+    });
+  });
   if (dependencies.quant) {
     ipcMain.handle(brainWorkspaceIpcChannels.quantSessionCreate, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant session");

@@ -52,6 +52,11 @@ export interface BrainConversationRecord {
   lastMessageAt: string;
 }
 
+export interface BrainAnnotationRecord {
+  id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
+  geometryJson: string; structuralAnchorJson: string; selectedText: string; createdBy: string; createdAt: string;
+}
+
 export interface BrainMessageRecord {
   id: string;
   conversationId: string;
@@ -336,6 +341,10 @@ function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
+}
+
+function mapAnnotation(row: Record<string, unknown>): BrainAnnotationRecord {
+  return { id: String(row.id), fileId: String(row.file_id), fileVersion: Number(row.file_version), pageOrSheet: String(row.page_or_sheet), annotationType: String(row.annotation_type), geometryJson: String(row.geometry_json), structuralAnchorJson: String(row.structural_anchor_json), selectedText: String(row.selected_text), createdBy: String(row.created_by), createdAt: String(row.created_at) };
 }
 
 function mapProject(row: Record<string, unknown>): BrainProjectRecord {
@@ -704,6 +713,21 @@ export class BrainWorkspaceStorage {
     return (this.database.prepare(`
       SELECT * FROM brain_file WHERE project_id = ? AND owner_id = ? ORDER BY created_at DESC, id DESC
     `).all(projectId, ownerId) as Record<string, unknown>[]).map(mapFile);
+  }
+
+  createAnnotation(input: { ownerId: string; projectId: string; fileId: string; fileVersion: number; pageOrSheet?: string; annotationType: string; geometryJson?: string; structuralAnchorJson?: string; selectedText?: string }): BrainAnnotationRecord {
+    this.getProject(input.ownerId, input.projectId);
+    const file = this.database.prepare("SELECT id FROM brain_file WHERE id = ? AND project_id = ? AND owner_id = ?").get(input.fileId, input.projectId, input.ownerId);
+    if (!file) throw new BrainStorageError("BRAIN_FILE_NOT_FOUND", "Annotation file does not belong to project");
+    if (!Number.isSafeInteger(input.fileVersion) || input.fileVersion < 1) throw new BrainStorageError("BRAIN_INPUT_INVALID", "fileVersion must be positive");
+    const record: BrainAnnotationRecord = { id: `annotation_${randomUUID()}`, fileId: input.fileId, fileVersion: input.fileVersion, pageOrSheet: input.pageOrSheet || "", annotationType: requireText(input.annotationType, "annotationType"), geometryJson: input.geometryJson || "{}", structuralAnchorJson: input.structuralAnchorJson || "{}", selectedText: input.selectedText || "", createdBy: input.ownerId, createdAt: nowIso() };
+    this.database.prepare("INSERT INTO brain_annotation(id, file_id, file_version, page_or_sheet, annotation_type, geometry_json, structural_anchor_json, selected_text, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(record.id, record.fileId, record.fileVersion, record.pageOrSheet, record.annotationType, record.geometryJson, record.structuralAnchorJson, record.selectedText, record.createdBy, record.createdAt);
+    return record;
+  }
+
+  listAnnotations(ownerId: string, projectId: string): BrainAnnotationRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT a.* FROM brain_annotation a JOIN brain_file f ON f.id = a.file_id WHERE f.project_id = ? AND f.owner_id = ? ORDER BY a.created_at DESC, a.id DESC").all(projectId, ownerId) as Record<string, unknown>[]).map(mapAnnotation);
   }
 
   createTask(input: {

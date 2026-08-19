@@ -182,6 +182,16 @@ export interface BrainArtifactRegisterInput extends BrainProjectGetInput {
   validationStatus?: string;
 }
 
+export interface BrainAnnotationDto {
+  id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
+  geometryJson: string; structuralAnchorJson: string; selectedText: string; createdBy: string; createdAt: string;
+}
+
+export interface BrainAnnotationCreateInput extends BrainProjectGetInput {
+  fileId: string; fileVersion: number; pageOrSheet?: string; annotationType: string;
+  geometryJson?: string; structuralAnchorJson?: string; selectedText?: string;
+}
+
 export const brainWorkspaceIpcChannels = {
   workspaceList: "brain:workspace:list",
   projectList: "brain:project:list",
@@ -207,5 +217,7 @@ export const brainWorkspaceIpcChannels = {
   quantBarsQuery: "brain:quant:bars-query",
   quantOrderExecute: "brain:quant:order-execute",
   quantSnapshot: "brain:quant:snapshot",
-  quantSkillPerformance: "brain:quant:skill-performance"
+  quantSkillPerformance: "brain:quant:skill-performance",
+  annotationList: "brain:annotation:list",
+  annotationCreate: "brain:annotation:create"
 } as const;
