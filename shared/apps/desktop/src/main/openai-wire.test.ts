@@ -114,6 +114,34 @@ test("exposes DeepSeek reasoning_content as the model reasoning trace", async ()
   assert.equal(responsesCompat.toolCalls[0]?.name, "shell.exec");
 });
 
+test("preserves compatible thinking aliases for the next tool continuation", async () => {
+  const { extractChatEnvelopeFromSse } = await wire;
+  const envelope = extractChatEnvelopeFromSse([
+    'data: {"choices":[{"delta":{"reasoning":"检查工作区"}}]}',
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"workspace.read","arguments":"{\\"path\\":\\"README.md\\"}"}}]},"finish_reason":"tool_calls"}]}',
+    'data: [DONE]'
+  ].join("\n"));
+
+  assert.equal(envelope.reasoningSummary, "检查工作区");
+  assert.equal(envelope.toolCalls[0]?.name, "workspace.read");
+});
+
+test("preserves non-stream thinking aliases for the next tool continuation", async () => {
+  const { extractChatEnvelope } = await wire;
+  const envelope = extractChatEnvelope({
+    choices: [{
+      message: {
+        content: "",
+        thinking: "先检查文件",
+        tool_calls: [{ id: "call-1", function: { name: "workspace.read", arguments: "{}" } }]
+      }
+    }]
+  });
+
+  assert.equal(envelope.reasoningSummary, "先检查文件");
+  assert.equal(envelope.toolCalls[0]?.name, "workspace.read");
+});
+
 test("formats Chat Completions tool definitions", async () => {
   const { formatToolDefinitions } = await wire;
   const result = formatToolDefinitions([{ type: "function", name: "echo", description: "Echo", parameters: {}, strict: true }], "chat.completions");

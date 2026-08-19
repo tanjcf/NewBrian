@@ -84,11 +84,8 @@ export function extractChatEnvelope(payload: any): StructuredModelEnvelope {
   })).filter((call: StructuredToolCall) => call.name);
   return {
     content: typeof message.content === "string" ? message.content.trim() : "",
-    reasoningSummary: typeof message.reasoning_content === "string"
-      ? message.reasoning_content.trim()
-      : typeof message.reasoning_summary === "string"
-        ? message.reasoning_summary.trim()
-        : "",
+    reasoningSummary: chatDeltaReasoningText(message).trim()
+      || (typeof message.reasoning_summary === "string" ? message.reasoning_summary.trim() : ""),
     toolCalls,
     webSearchCalls: [],
     citations: [],
@@ -186,18 +183,19 @@ export function extractChatEnvelopeFromSse(rawText: string): StructuredModelEnve
   const reasoningParts: string[] = [];
   const calls = new Map<number, StructuredToolCall>();
   let usage: unknown;
-  for (const block of rawText.split(/\r?\n\r?\n/)) {
-    const dataText = block.split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trim())
-      .join("\n").trim();
+  // Parse each data line independently. Compatible gateways do not always
+  // emit the blank SSE separator required by the specification.
+  for (const line of rawText.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const dataText = line.slice(5).trim();
     if (!dataText || dataText === "[DONE]") continue;
     let event: any;
     try { event = JSON.parse(dataText); } catch { continue; }
     if (event.usage) usage = event.usage;
     const delta = event.choices?.[0]?.delta;
     if (typeof delta?.content === "string") textParts.push(delta.content);
-    if (typeof delta?.reasoning_content === "string") reasoningParts.push(delta.reasoning_content);
+    const reasoning = chatDeltaReasoningText(delta);
+    if (reasoning) reasoningParts.push(reasoning);
     for (const call of Array.isArray(delta?.tool_calls) ? delta.tool_calls : []) {
       const index = Number(call.index ?? 0);
       const current = calls.get(index) ?? { id: "", name: "", arguments: "" };
