@@ -6,7 +6,8 @@ test("ledger tracks cash, position and pnl", () => {
   const ledger = new SimulationLedger(10_000);
   ledger.execute({ id: "1", symbol: "600519", side: "buy", quantity: 100, price: 10, feeRate: 0, createdAt: "now" });
   assert.equal(ledger.snapshot({ "600519": 12 }).marketValue, 1200);
-  ledger.execute({ id: "2", symbol: "600519", side: "sell", quantity: 100, price: 12, feeRate: 0, createdAt: "now" });
+  const sell = ledger.execute({ id: "2", symbol: "600519", side: "sell", quantity: 100, price: 12, feeRate: 0, createdAt: "now" });
+  assert.equal(sell.realizedPnl, 200);
   assert.equal(ledger.snapshot({}).realizedPnl, 200);
 });
 

@@ -37,6 +37,7 @@ export interface SimulatedFill extends SimulatedOrder {
   fee: number;
   grossAmount: number;
   netCashChange: number;
+  realizedPnl: number;
 }
 
 export interface PositionSnapshot {

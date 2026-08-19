@@ -25,6 +25,7 @@ export class SimulationLedger {
     const grossAmount = order.quantity * order.price;
     const fee = grossAmount * feeRate;
     const current = this.positions.get(order.symbol) ?? { quantity: 0, averageCost: 0 };
+    let fillRealizedPnl = 0;
     if (order.side === "buy") {
       if (this.cash < grossAmount + fee) throw new Error("INSUFFICIENT_CASH");
       current.averageCost = (current.quantity * current.averageCost + grossAmount + fee) / (current.quantity + order.quantity);
@@ -33,12 +34,13 @@ export class SimulationLedger {
     } else {
       if (current.quantity < order.quantity) throw new Error("INSUFFICIENT_POSITION");
       this.cash += grossAmount - fee;
-      this.realizedPnl += (order.price - current.averageCost) * order.quantity - fee;
+      fillRealizedPnl = (order.price - current.averageCost) * order.quantity - fee;
+      this.realizedPnl += fillRealizedPnl;
       current.quantity -= order.quantity;
       if (current.quantity === 0) current.averageCost = 0;
     }
     this.positions.set(order.symbol, current);
-    const fill: SimulatedFill = { ...order, fee, grossAmount, netCashChange: order.side === "buy" ? -(grossAmount + fee) : grossAmount - fee };
+    const fill: SimulatedFill = { ...order, fee, grossAmount, netCashChange: order.side === "buy" ? -(grossAmount + fee) : grossAmount - fee, realizedPnl: fillRealizedPnl };
     this.fills.push(fill);
     this.fillsByOrderId.set(orderId, fill);
     return fill;
@@ -61,7 +63,8 @@ export class SimulationLedger {
     let peak = values[0]; let maxDrawdown = 0;
     for (const value of values) { peak = Math.max(peak, value); maxDrawdown = Math.max(maxDrawdown, (peak - value) / peak * 100); }
     const trades = this.fills.filter((fill) => fill.skillId === skillId);
-    const wins = trades.filter((fill) => fill.side === "sell" && fill.netCashChange > 0).length;
-    return { skillId, totalReturnPercent: ((values.at(-1)! - this.initialCash) / this.initialCash) * 100, maxDrawdownPercent: maxDrawdown, tradeCount: trades.length, winRatePercent: trades.length ? wins / trades.length * 100 : 0 };
+    const sells = trades.filter((fill) => fill.side === "sell");
+    const wins = sells.filter((fill) => fill.realizedPnl > 0).length;
+    return { skillId, totalReturnPercent: ((values.at(-1)! - this.initialCash) / this.initialCash) * 100, maxDrawdownPercent: maxDrawdown, tradeCount: trades.length, winRatePercent: sells.length ? wins / sells.length * 100 : 0 };
   }
 }
