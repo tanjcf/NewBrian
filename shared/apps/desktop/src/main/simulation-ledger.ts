@@ -6,6 +6,7 @@ export class SimulationLedger {
   private realizedPnl = 0;
   private readonly positions = new Map<string, { quantity: number; averageCost: number }>();
   private readonly fills: SimulatedFill[] = [];
+  private readonly fillsByOrderId = new Map<string, SimulatedFill>();
   private readonly skillValues = new Map<string, number[]>();
 
   constructor(initialCash: number) {
@@ -14,6 +15,10 @@ export class SimulationLedger {
   }
 
   execute(order: SimulatedOrder): SimulatedFill {
+    const orderId = order.id.trim();
+    if (!orderId) throw new TypeError("order id is required");
+    const previous = this.fillsByOrderId.get(orderId);
+    if (previous) return { ...previous };
     if (!Number.isInteger(order.quantity) || order.quantity <= 0) throw new RangeError("quantity must be a positive integer");
     if (!Number.isFinite(order.price) || order.price <= 0) throw new RangeError("price must be positive");
     const feeRate = order.feeRate ?? 0.0003;
@@ -35,6 +40,7 @@ export class SimulationLedger {
     this.positions.set(order.symbol, current);
     const fill: SimulatedFill = { ...order, fee, grossAmount, netCashChange: order.side === "buy" ? -(grossAmount + fee) : grossAmount - fee };
     this.fills.push(fill);
+    this.fillsByOrderId.set(orderId, fill);
     return fill;
   }
 

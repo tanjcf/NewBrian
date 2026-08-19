@@ -15,3 +15,13 @@ test("ledger rejects unsafe orders", () => {
   assert.throws(() => ledger.execute({ id: "1", symbol: "A", side: "buy", quantity: 20, price: 10, createdAt: "now" }), /INSUFFICIENT_CASH/);
   assert.throws(() => ledger.execute({ id: "2", symbol: "A", side: "sell", quantity: 1, price: 1, createdAt: "now" }), /INSUFFICIENT_POSITION/);
 });
+
+test("ledger makes repeated order ids idempotent", () => {
+  const ledger = new SimulationLedger(1_000);
+  const order = { id: "scheduled-skill-1", symbol: "A", side: "buy" as const, quantity: 10, price: 10, feeRate: 0, createdAt: "now" };
+  const first = ledger.execute(order);
+  const second = ledger.execute({ ...order, price: 99 });
+  assert.deepEqual(second, first);
+  assert.equal(ledger.snapshot({ A: 10 }).cash, 900);
+  assert.equal(ledger.snapshot({ A: 10 }).positions[0]?.quantity, 10);
+});
