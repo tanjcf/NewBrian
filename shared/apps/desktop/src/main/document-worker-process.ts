@@ -1,6 +1,7 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+// @ts-ignore Node's native TypeScript test runner loads the source extension directly.
 import { DocumentWorkerClient } from "./document-worker-client.ts";
 
 export interface DocumentWorkerProcessOptions {
@@ -12,7 +13,7 @@ export interface DocumentWorkerProcessOptions {
 /** Owns one bounded document worker for the lifetime of the Electron main process. */
 export class DocumentWorkerProcess {
   private client: DocumentWorkerClient | null = null;
-  private child: ChildProcessWithoutNullStreams | null = null;
+  private child: ChildProcessByStdio<import("node:stream").Writable, import("node:stream").Readable, null> | null = null;
   private readonly options: DocumentWorkerProcessOptions;
 
   constructor(options: DocumentWorkerProcessOptions) {
