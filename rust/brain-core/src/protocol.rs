@@ -76,8 +76,15 @@ fn contains_credential_key(value: &Value) -> bool {
         Value::Object(entries) => entries.iter().any(|(key, item)| {
             let normalized = key.to_ascii_lowercase().replace('-', "_");
             [
-                "api_key", "authorization", "bearer", "credential", "password",
-                "private_key", "secret", "access_token", "refresh_token",
+                "api_key",
+                "authorization",
+                "bearer",
+                "credential",
+                "password",
+                "private_key",
+                "secret",
+                "access_token",
+                "refresh_token",
             ]
             .iter()
             .any(|forbidden| normalized.contains(forbidden))
@@ -139,6 +146,9 @@ mod tests {
     fn rejects_credentials_in_payload() {
         let mut value = request();
         value.payload = json!({ "authorization": "Bearer secret" });
-        assert_eq!(validate_request(&value), Err("BRAIN_CORE_CREDENTIAL_FORBIDDEN"));
+        assert_eq!(
+            validate_request(&value),
+            Err("BRAIN_CORE_CREDENTIAL_FORBIDDEN")
+        );
     }
 }
