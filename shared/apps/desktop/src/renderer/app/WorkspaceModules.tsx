@@ -33,6 +33,7 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
+import { QuantWorkspace } from "./QuantWorkspace";
 
 const fallbackBrainWorkspaces = [
   { workspaceKey: "quant", displayName: "量化交易", enabled: true },
@@ -7357,7 +7358,7 @@ function renderWorkspaceModules() {
     }
 
     const mainModule = isBrainConversationSelection
-      ? renderBrainChatModule()
+      ? selectedBrainWorkspaceKey === "quant" ? <QuantWorkspace /> : renderBrainChatModule()
       : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection
