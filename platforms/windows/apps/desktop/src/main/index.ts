@@ -99,7 +99,7 @@ import {
   WorktreeManager
 } from "./agent-runtime-adapter.js";
 import { CodexStorage } from "./codex-storage.js";
-import { DocumentWorkerProcess } from "../../../../../../shared/apps/desktop/src/main/document-worker-process.js";
+import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";

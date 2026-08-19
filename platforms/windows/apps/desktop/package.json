@@ -120,7 +120,7 @@
         "to": "novel-tts"
       },
       {
-        "from": "../../../../shared/apps/desktop/src/main/document-worker.js",
+        "from": "document-worker.js",
         "to": "document-worker.js"
       },
       {
