@@ -57,6 +57,7 @@ import { AgentTurnControlPlaneService } from "./agent-turn-control-plane.js";
 import { composeAndRegisterModelChat } from "./compose-model-chat.js";
 import { DesktopErrorCollector } from "./desktop-error-collector.js";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.js";
+import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import { GovernmentWritingSpecificationService } from "./government-writing-specification-service.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import {
@@ -64,6 +65,11 @@ import {
 } from "./model-chat-runtime-setup.js";
 import { OfficialGovernmentWebService } from "./official-government-web-service.js";
 import { createReadAuthorizedDesktopModelConfig } from "./read-authorized-desktop-model-config.js";
+import {
+  resolveTrustedPrivateModelCredential,
+  separatePrivateModelCredential,
+  toRendererSafeModelConfig
+} from "./private-model-credential-policy.js";
 import type { AuthorizedModel } from "./authorized-model-catalog.js";
 import { scheduleUserKnowledgeSync } from "./user-knowledge-sync.js";
 import { selectModelRequestAuth } from "./model-request-auth-policy.js";
@@ -133,6 +139,8 @@ const builtinPluginsRoot = app.isPackaged
   : join(app.getAppPath(), "build", "plugins");
 const bootstrapConfigPath = join(workspacePath, "codecn.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".codecn");
+const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
+const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
 const desktopAuthStatePath = join(workspaceStateRoot, "desktop-auth.json");
@@ -2771,6 +2779,7 @@ function normalizeModelConfig(input?: Partial<ModelConfig>, fallback: ModelConfi
     provider: input?.provider?.trim() || fallback.provider,
     baseUrl: input?.baseUrl?.trim() || fallback.baseUrl,
     apiKey: typeof input?.apiKey === "string" ? input.apiKey.trim() : fallback.apiKey,
+    apiKeyConfigured: input?.apiKeyConfigured === true || fallback.apiKeyConfigured === true,
     wireApi: input?.wireApi === "chat.completions" ? "chat.completions" : "responses",
     model: input?.model?.trim() || fallback.model,
     reviewModel: input?.reviewModel?.trim() || fallback.reviewModel,
@@ -3281,9 +3290,18 @@ async function readRootConfig(): Promise<RootConfigFile> {
       throw new SyntaxError("empty root config");
     }
     const parsed = parseJsonText<Partial<RootConfigFile>>(raw);
+    const legacyPlaintextCredential = parsed.llm?.apiKey?.trim() || "";
+    if (legacyPlaintextCredential) {
+      await privateModelCredentialVault.replace(legacyPlaintextCredential);
+      parsed.llm = { ...parsed.llm, apiKey: "", apiKeyConfigured: true } as ModelConfig;
+    }
     const bundledConfig = await readBundledRootConfig();
     const normalized = normalizeRootConfig(parsed, bundledConfig);
-    if (shouldRepairRootConfig(parsed, normalized)) {
+    normalized.llm = toRendererSafeModelConfig(
+      normalized.llm,
+      await privateModelCredentialVault.isConfigured()
+    );
+    if (legacyPlaintextCredential || shouldRepairRootConfig(parsed, normalized)) {
       await ensureDirectory(dirname(modelConfigPath));
       await fs.writeFile(modelConfigPath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
     }
@@ -3301,6 +3319,10 @@ async function readRootConfig(): Promise<RootConfigFile> {
         preferences: defaultDesktopPreferences,
         mcpServers: defaultMcpServers
       };
+      initialConfig.llm = toRendererSafeModelConfig(
+        initialConfig.llm,
+        await privateModelCredentialVault.isConfigured()
+      );
       await fs.writeFile(modelConfigPath, `${JSON.stringify(initialConfig, null, 2)}\n`, "utf8");
       return initialConfig;
     }
@@ -3312,6 +3334,10 @@ async function readRootConfig(): Promise<RootConfigFile> {
         preferences: defaultDesktopPreferences,
         mcpServers: defaultMcpServers
       };
+      initialConfig.llm = toRendererSafeModelConfig(
+        initialConfig.llm,
+        await privateModelCredentialVault.isConfigured()
+      );
       await ensureDirectory(dirname(modelConfigPath));
       await fs.writeFile(modelConfigPath, `${JSON.stringify(initialConfig, null, 2)}\n`, "utf8");
       return initialConfig;
@@ -3346,7 +3372,11 @@ async function readBundledRootConfig(): Promise<RootConfigFile | null> {
   try {
     const raw = await fs.readFile(bundledModelConfigPath, "utf8");
     const parsed = parseJsonText<Partial<RootConfigFile>>(raw);
-    return normalizeRootConfig(parsed, null);
+    const normalized = normalizeRootConfig(parsed, null);
+    return {
+      ...normalized,
+      llm: toRendererSafeModelConfig(normalized.llm, false)
+    };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
@@ -3358,9 +3388,16 @@ async function readBundledRootConfig(): Promise<RootConfigFile | null> {
 
 async function writeRootConfig(nextConfig: ModelConfig) {
   const currentConfig = await readRootConfig();
+  const separated = separatePrivateModelCredential(normalizeModelConfig(nextConfig));
+  if (separated.credential) {
+    await privateModelCredentialVault.replace(separated.credential);
+  }
   const payload: RootConfigFile = {
     ...currentConfig,
-    llm: normalizeModelConfig(nextConfig),
+    llm: toRendererSafeModelConfig(
+      separated.config,
+      await privateModelCredentialVault.isConfigured()
+    ),
     preferences: normalizeDesktopPreferences(currentConfig.preferences)
   };
   await fs.writeFile(modelConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
@@ -8699,7 +8736,10 @@ async function callModelApi(input: {
   }>;
 }) {
   let baseUrl = input.baseUrl.trim();
-  const configuredApiKey = input.apiKey.trim();
+  const configuredApiKey = await resolveTrustedPrivateModelCredential(
+    input.apiKey,
+    () => privateModelCredentialVault.readForTrustedRequest()
+  );
   let bearerToken = "";
   let authSource: "desktop_access_token" | "configured_api_key" | "none" = "none";
   const model = input.model.trim();
@@ -9233,6 +9273,7 @@ const readAuthorizedDesktopModelConfig = createReadAuthorizedDesktopModelConfig(
   readRootConfig,
   readBundledRootConfig,
   readDesktopAuthState,
+  readPrivateModelCredential: () => privateModelCredentialVault.readForTrustedRequest(),
   readGatewayOrigin,
   createDesktopAuthHeaders,
   collectDesktopDeviceFingerprint,
@@ -9245,6 +9286,7 @@ const readAuthorizedDesktopModelConfig = createReadAuthorizedDesktopModelConfig(
   configuredGatewayBaseUrlEnv,
   productionGatewayBaseUrl,
   defaultGatewayBaseUrl,
+  isPackaged: app.isPackaged,
   setCachedAuthorizedModels: (models) => { cachedAuthorizedModels = models; }
 });
 

@@ -190,18 +190,18 @@ function renderFeaturePanel() {
                   <div className="settings-card-head">
                     <div>
                       <strong>登录状态</strong>
-                      <p>当前工作台默认使用 OmniRoute 登录会话访问模型；开发者 API Key 仅作为兼容入口。</p>
+                      <p>公司模型通过登录会话访问；你购买的私有模型密钥只写入本机系统安全凭证库。</p>
                     </div>
                     <span className={`settings-status-chip${isAuthenticated ? " connected" : ""}`}>
                       {isAuthenticated ? "已登录" : "未登录"}
                     </span>
                   </div>
                   <label className="settings-field">
-                    <span>开发者 API 密钥</span>
+                    <span>私有模型 API 密钥</span>
                     <input
                       value={modelConfig.apiKey}
                       onChange={(event) => setModelConfig((current) => ({ ...current, apiKey: event.target.value }))}
-                      placeholder="sk-..."
+                      placeholder={apiKeyConfigured ? "已安全保存；输入新密钥可替换" : "sk-..."}
                       type="password"
                     />
                   </label>
@@ -216,7 +216,7 @@ function renderFeaturePanel() {
                 </section>
                 <section className="settings-card muted">
                   <strong>当前模型鉴权</strong>
-                  <p>{isUsingLoginSession ? "正在使用登录 access token 访问模型。" : apiKeyConfigured ? "正在使用开发者 API Key 访问模型。" : "尚未登录，也未填写开发者 API Key。"}</p>
+                  <p>{isUsingLoginSession ? "正在使用登录会话访问公司模型。" : apiKeyConfigured ? "私有模型密钥已由系统安全保存。" : "尚未登录，也未配置私有模型密钥。"}</p>
                 </section>
               </>
             ) : null}
