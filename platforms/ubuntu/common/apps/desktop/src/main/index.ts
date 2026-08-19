@@ -175,7 +175,7 @@ const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
-const quantSimulationService = new QuantSimulationService();
+const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARKET_DATA_URL);
 
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.

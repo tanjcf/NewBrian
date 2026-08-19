@@ -6,11 +6,13 @@ type QuantSession = { ledger: SimulationLedger; market: MarketDataService };
 
 export class QuantSimulationService {
   private readonly sessions = new Map<string, QuantSession>();
+  private readonly remoteUrl?: string;
+  constructor(remoteUrl?: string) { this.remoteUrl = remoteUrl; }
 
   createSession(projectId: string, initialCash = 100_000, fixtures: QuantBar[] = []): void {
     if (!projectId.trim()) throw new TypeError("projectId is required");
     if (this.sessions.has(projectId)) return;
-    this.sessions.set(projectId, { ledger: new SimulationLedger(initialCash), market: new MarketDataService(fixtures) });
+    this.sessions.set(projectId, { ledger: new SimulationLedger(initialCash), market: new MarketDataService(fixtures, this.remoteUrl) });
   }
 
   private session(projectId: string): QuantSession {
@@ -20,6 +22,7 @@ export class QuantSimulationService {
   }
 
   queryBars(projectId: string, query: MarketDataQuery): QuantBar[] { return this.session(projectId).market.query(query); }
+  queryBarsAsync(projectId: string, query: MarketDataQuery): Promise<QuantBar[]> { return this.session(projectId).market.queryAsync(query); }
   executeOrder(projectId: string, order: SimulatedOrder): SimulatedFill { return this.session(projectId).ledger.execute(order); }
   snapshot(projectId: string, prices: Record<string, number>): PortfolioSnapshot { return this.session(projectId).ledger.snapshot(prices); }
   recordSkillSnapshot(projectId: string, skillId: string, prices: Record<string, number>): void { this.session(projectId).ledger.recordSkillSnapshot(skillId, prices); }

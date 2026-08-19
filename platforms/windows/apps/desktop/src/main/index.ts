@@ -566,7 +566,7 @@ if (!singleInstanceLockAcquired) {
 }
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
-const quantSimulationService = new QuantSimulationService();
+const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARKET_DATA_URL);
 const governmentWritingSpecificationService = new GovernmentWritingSpecificationService(codexStorage);
 const workspaceWorktreeService = new WorkspaceWorktreeService({
   bindingsPath: desktopWorktreeBindingsPath,

@@ -270,7 +270,7 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     });
     ipcMain.handle(brainWorkspaceIpcChannels.quantBarsQuery, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant bars");
-      return dependencies.quant!.queryBars(requireString(input.projectId, "projectId"), input.query as any);
+      return dependencies.quant!.queryBarsAsync(requireString(input.projectId, "projectId"), input.query as any);
     });
     ipcMain.handle(brainWorkspaceIpcChannels.quantOrderExecute, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant order");
