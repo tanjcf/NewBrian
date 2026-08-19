@@ -21,3 +21,8 @@ test("packages the isolated document worker and parser dependencies on every des
     }
   }
 });
+
+test("emits the dynamic document anchor dependency beside the desktop main bundle", () => {
+  const config = readFileSync(join(process.cwd(), "shared/apps/desktop/electron.vite.config.ts"), "utf8");
+  assert.match(config, /["']document-anchor["']\s*:\s*resolve\([^\n]+document-anchor\.ts/);
+});

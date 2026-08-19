@@ -7553,8 +7553,8 @@ function renderWorkspaceModules() {
         ) : null}
         {renderSidebarModule()}
         {mainModule}
-        {isBrainConversationSelection ? renderBrainResourcePanel() : null}
-        {previewPlacement === "side" && activeFeature === "new-chat" && !isBrainConversationSelection ? renderPreviewModule("side") : null}
+        {isBrainConversationSelection && !(previewPlacement === "side" && activeFeature === "new-chat") ? renderBrainResourcePanel() : null}
+        {previewPlacement === "side" && activeFeature === "new-chat" ? renderPreviewModule("side") : null}
         {renderSearchDialog()}
         {workspaceFileMenu && selectedWorkspace?.id ? <LocalFileContextMenu
           menu={workspaceFileMenu}
