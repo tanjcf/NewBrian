@@ -1,6 +1,6 @@
 import type { MarketDataQuery, PortfolioSnapshot, QuantBar, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
-import { MarketDataService } from "./market-data-service.js";
-import { SimulationLedger } from "./simulation-ledger.js";
+import { MarketDataService } from "./market-data-service.ts";
+import { SimulationLedger } from "./simulation-ledger.ts";
 
 type QuantSession = { ledger: SimulationLedger; market: MarketDataService };
 
