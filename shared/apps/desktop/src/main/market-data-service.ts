@@ -16,7 +16,7 @@ export class MarketDataService {
 
   async queryAsync(input: MarketDataQuery): Promise<QuantBar[]> {
     if (!this.remoteUrl) return this.query(input);
-    const response = await fetch(this.remoteUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+    const response = await fetch(this.remoteUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input), signal: AbortSignal.timeout(10_000) });
     if (!response.ok) throw new Error(`MARKET_DATA_HTTP_${response.status}`);
     const payload = await response.json() as { bars?: unknown };
     if (!Array.isArray(payload.bars)) throw new Error("MARKET_DATA_INVALID_RESPONSE");
