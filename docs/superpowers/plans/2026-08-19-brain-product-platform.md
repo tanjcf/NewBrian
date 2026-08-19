@@ -49,12 +49,12 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create: `shared/apps/desktop/src/main/rust-core-client.ts`
 - Test: `shared/apps/desktop/src/main/rust-core-client.test.ts`
 
-- [ ] Write a failing contract test for protocol version, request ID, project ID, operation, limits, status, error code, and artifacts.
+- [x] Write a failing contract test for protocol version, request ID, project ID, operation, limits, status, error code, and artifacts.
 - [ ] Implement framed JSON request/response types in Rust and TypeScript from the same checked schema fixture.
-- [ ] Add spawn handshake, version rejection, timeout, cancellation, crash detection, and bounded stdout/stderr.
-- [ ] Add a test proving credentials and arbitrary environment variables are absent from the child environment.
-- [ ] Add graceful shutdown and orphan cleanup tests.
-- [ ] Commit only after Rust unit tests, TypeScript contract tests, and desktop build pass.
+- [x] Add spawn handshake, version rejection, timeout, cancellation, crash detection, and bounded stdout/stderr.
+- [x] Add a test proving credentials and arbitrary environment variables are absent from the child environment.
+- [x] Add graceful shutdown and orphan cleanup tests.
+- [x] Commit only after Rust unit tests, TypeScript contract tests, and desktop build pass.
 
 ### Task 3: Restricted file and process operations
 
@@ -65,12 +65,12 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create: `rust/brain-core/src/git_ops.rs`
 - Modify: `shared/apps/desktop/src/main/runtime-command-service.ts`
 
-- [ ] Write traversal and symlink-escape tests using real temporary directories.
-- [ ] Implement canonical project-root binding and operation-specific path validation.
-- [ ] Implement atomic file reads/writes with byte limits and revision hashes.
-- [ ] Implement process groups, timeout, cancellation, output bounds, and cleanup.
-- [ ] Require an approval token for mutating operations and reject replayed tokens.
-- [ ] Route one existing file read and one shell execution through Rust behind a feature flag; verify fallback and rollback.
+- [x] Write traversal and symlink-escape tests using real temporary directories.
+- [x] Implement canonical project-root binding and operation-specific path validation.
+- [x] Implement atomic file reads/writes with byte limits and revision hashes.
+- [x] Implement process groups, timeout, cancellation, output bounds, and cleanup.
+- [x] Require an approval token for mutating operations and reject replayed tokens.
+- [x] Route one existing file read and one shell execution through Rust behind a feature flag; verify fallback and rollback.
 
 ### Task 4: Workspace shell and catalog scoping
 
