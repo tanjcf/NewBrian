@@ -9,7 +9,7 @@ import {
   type RustCoreResponse
 } from "@codex-forge/protocol/rust-core";
 
-interface RustCoreChild {
+export interface RustCoreChild {
   stdin: Writable;
   stdout: Readable;
   stderr: Readable;
