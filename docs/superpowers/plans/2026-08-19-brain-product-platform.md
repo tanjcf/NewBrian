@@ -98,7 +98,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [x] Write fixture tests that reopen and extract representative files of every format.
 - [ ] Render each format with stable object IDs and coordinate transforms.
 - [x] Store immutable annotations separately from originals.
-- [ ] Submit annotation IDs through chat and produce a bounded revision preview.
+- [x] Submit annotation IDs through chat and produce a bounded revision preview.
 - [ ] Export a new valid file revision and verify it by reparsing and visual rendering.
 - [ ] Run document workers outside Electron main and migrate their supervision to Rust Core.
 
@@ -152,11 +152,11 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Modify versioned local state services and error outbox under `shared/apps/desktop/src/main/`.
 - Create migration, corruption, concurrency, and restart tests.
 
-- [ ] Add schema-versioned migrations with backups and rollback behavior.
+- [x] Add schema-versioned migrations with backups and rollback behavior.
 - [ ] Bound project metadata, cache, artifacts, and diagnostic retention separately.
 - [ ] Restore active tasks, approvals, cancellations, and artifacts after process or device restart.
-- [ ] Preserve provider-required thinking context without exposing private reasoning in diagnostics.
-- [ ] Verify error reports retain structured fields and redact credentials recursively.
+- [x] Preserve provider-required thinking context without exposing private reasoning in diagnostics.
+- [x] Verify error reports retain structured fields and redact credentials recursively.
 
 ### Task 10: Release gates
 
