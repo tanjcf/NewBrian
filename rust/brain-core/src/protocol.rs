@@ -138,6 +138,27 @@ mod tests {
     }
 
     #[test]
+    fn rust_protocol_matches_the_checked_schema_fixture() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../shared/packages/protocol/schema/rust-core-protocol.schema.json"
+        ))
+        .expect("shared protocol schema");
+        assert_eq!(schema["protocol_version"], PROTOCOL_VERSION);
+        assert_eq!(
+            schema["request"]["resource_limits"]["timeout_ms"]["maximum"],
+            MAX_TIMEOUT_MS
+        );
+        assert_eq!(
+            schema["request"]["resource_limits"]["max_output_bytes"]["maximum"],
+            MAX_OUTPUT_BYTES
+        );
+        assert_eq!(
+            schema["response"]["status"],
+            json!(["accepted", "running", "completed", "failed", "cancelled"])
+        );
+    }
+
+    #[test]
     fn accepts_a_bounded_request() {
         assert_eq!(validate_request(&request()), Ok(()));
     }

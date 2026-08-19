@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parseRustCoreRequest, parseRustCoreResponse } from "./rust-core.ts";
+
+test("TypeScript protocol matches the checked Rust Core schema fixture", async () => {
+  const schema = JSON.parse(await readFile(
+    new URL("../schema/rust-core-protocol.schema.json", import.meta.url),
+    "utf8"
+  ));
+  assert.equal(schema.protocol_version, "1");
+  assert.deepEqual(schema.request.required, [
+    "protocol_version", "request_id", "project_id", "workspace_type", "operation",
+    "approval_token", "resource_limits", "payload"
+  ]);
+  assert.deepEqual(schema.response.required, [
+    "protocol_version", "request_id", "status", "error_code", "artifacts"
+  ]);
+  assert.equal(schema.request.resource_limits.timeout_ms.maximum, 600_000);
+  assert.equal(schema.request.resource_limits.max_output_bytes.maximum, 16_777_216);
+});
 
 test("accepts a bounded versioned Rust Core request", () => {
   const request = parseRustCoreRequest({

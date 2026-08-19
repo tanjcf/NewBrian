@@ -50,7 +50,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Test: `shared/apps/desktop/src/main/rust-core-client.test.ts`
 
 - [x] Write a failing contract test for protocol version, request ID, project ID, operation, limits, status, error code, and artifacts.
-- [ ] Implement framed JSON request/response types in Rust and TypeScript from the same checked schema fixture.
+- [x] Implement framed JSON request/response types in Rust and TypeScript from the same checked schema fixture.
 - [x] Add spawn handshake, version rejection, timeout, cancellation, crash detection, and bounded stdout/stderr.
 - [x] Add a test proving credentials and arbitrary environment variables are absent from the child environment.
 - [x] Add graceful shutdown and orphan cleanup tests.
