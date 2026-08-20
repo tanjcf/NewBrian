@@ -93,6 +93,29 @@ export interface BrainGamePreviewState {
   output: string;
 }
 
+export type BrainVideoTrackType = "video" | "audio" | "subtitle";
+export interface BrainVideoClip {
+  id: string;
+  trackType: BrainVideoTrackType;
+  sourceFileId: string;
+  startMs: number;
+  durationMs: number;
+  sourceInMs: number;
+  volume: number;
+  text: string;
+}
+export interface BrainVideoTimeline {
+  schemaVersion: 1;
+  projectId: string;
+  title: string;
+  width: number;
+  height: number;
+  fps: number;
+  durationMs: number;
+  clips: BrainVideoClip[];
+  updatedAt: string;
+}
+
 export interface BrainProjectUpdateInput extends BrainProjectGetInput {
   name?: string;
   status?: "ACTIVE" | "ARCHIVED";
@@ -289,4 +312,7 @@ export const brainWorkspaceIpcChannels = {
   changeSetUpdate: "brain:change-set:update",
   changeSetPreview: "brain:change-set:preview",
   changeSetExport: "brain:change-set:export"
+  ,videoTimelineGet: "brain:video:timeline-get"
+  ,videoTimelineSave: "brain:video:timeline-save"
+  ,videoClipAdd: "brain:video:clip-add"
 } as const;

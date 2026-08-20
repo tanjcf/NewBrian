@@ -9,6 +9,7 @@ import {
 } from "@codex-forge/protocol";
 import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { ChinaExchange, QuantStrategyExecution, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
+import type { BrainVideoClip, BrainVideoTimeline } from "@codex-forge/protocol";
 
 export { brainWorkspaceKeys } from "@codex-forge/protocol";
 export type { BrainWorkspaceKey } from "@codex-forge/protocol";
@@ -98,7 +99,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 6;
+const latestMigrationVersion = 7;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -392,6 +393,31 @@ function migrationSixSql() {
   `;
 }
 
+function migrationSevenSql() {
+  return `
+    CREATE TABLE brain_video_timeline (
+      project_id TEXT PRIMARY KEY REFERENCES brain_project(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      width INTEGER NOT NULL CHECK(width > 0),
+      height INTEGER NOT NULL CHECK(height > 0),
+      fps REAL NOT NULL CHECK(fps > 0),
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE brain_video_clip (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE,
+      track_type TEXT NOT NULL CHECK(track_type IN ('video', 'audio', 'subtitle')),
+      source_file_id TEXT NOT NULL,
+      start_ms INTEGER NOT NULL CHECK(start_ms >= 0),
+      duration_ms INTEGER NOT NULL CHECK(duration_ms > 0),
+      source_in_ms INTEGER NOT NULL CHECK(source_in_ms >= 0),
+      volume REAL NOT NULL DEFAULT 1 CHECK(volume >= 0 AND volume <= 2),
+      text TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX idx_brain_video_clip_project_start ON brain_video_clip(project_id, start_ms, id);
+  `;
+}
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -515,11 +541,43 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 4, "Persist isolated quantitative simulation ledgers", migrationFourSql());
       applyMigration(this.database, 5, "Schedule idempotent quantitative strategy simulations", migrationFiveSql());
       applyMigration(this.database, 6, "Bind quantitative schedules to symbols and target quantities", migrationSixSql());
+      applyMigration(this.database, 7, "Persist video timelines and clips", migrationSevenSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
       throw error;
     }
+  }
+
+  getVideoTimeline(ownerId: string, projectId: string): BrainVideoTimeline | null {
+    const project = this.getProject(ownerId, projectId);
+    if (project.primaryWorkspaceKey !== "video") throw new BrainStorageError("BRAIN_VIDEO_WORKSPACE_REQUIRED", "Project is not a video workspace");
+    const row = this.database.prepare("SELECT * FROM brain_video_timeline WHERE project_id = ?").get(projectId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const clips = this.database.prepare("SELECT * FROM brain_video_clip WHERE project_id = ? ORDER BY start_ms, id").all(projectId) as Record<string, unknown>[];
+    return {
+      schemaVersion: 1, projectId, title: String(row.title), width: Number(row.width), height: Number(row.height), fps: Number(row.fps),
+      durationMs: clips.reduce((max, clip) => Math.max(max, Number(clip.start_ms) + Number(clip.duration_ms)), 0),
+      clips: clips.map((clip) => ({ id: String(clip.id), trackType: String(clip.track_type) as BrainVideoClip["trackType"], sourceFileId: String(clip.source_file_id), startMs: Number(clip.start_ms), durationMs: Number(clip.duration_ms), sourceInMs: Number(clip.source_in_ms), volume: Number(clip.volume), text: String(clip.text || "") })),
+      updatedAt: String(row.updated_at)
+    };
+  }
+
+  saveVideoTimeline(input: { ownerId: string; projectId: string; title: string; width: number; height: number; fps: number }): BrainVideoTimeline {
+    const project = this.getProject(input.ownerId, input.projectId);
+    if (project.primaryWorkspaceKey !== "video") throw new BrainStorageError("BRAIN_VIDEO_WORKSPACE_REQUIRED", "Project is not a video workspace");
+    if (!input.title.trim() || !Number.isInteger(input.width) || input.width < 1 || !Number.isInteger(input.height) || input.height < 1 || !Number.isFinite(input.fps) || input.fps <= 0) throw new BrainStorageError("BRAIN_VIDEO_TIMELINE_INVALID", "Video timeline settings are invalid");
+    const timestamp = nowIso();
+    this.database.prepare(`INSERT INTO brain_video_timeline(project_id, title, width, height, fps, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET title=excluded.title, width=excluded.width, height=excluded.height, fps=excluded.fps, updated_at=excluded.updated_at`).run(input.projectId, input.title.trim(), input.width, input.height, input.fps, timestamp);
+    return this.getVideoTimeline(input.ownerId, input.projectId)!;
+  }
+
+  addVideoClip(input: { ownerId: string; projectId: string; clip: BrainVideoClip }): BrainVideoTimeline {
+    this.getProject(input.ownerId, input.projectId);
+    const clip = input.clip;
+    if (!/^video$|^audio$|^subtitle$/.test(clip.trackType) || !clip.sourceFileId.trim() || !Number.isInteger(clip.startMs) || clip.startMs < 0 || !Number.isInteger(clip.durationMs) || clip.durationMs <= 0 || !Number.isInteger(clip.sourceInMs) || clip.sourceInMs < 0 || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) throw new BrainStorageError("BRAIN_VIDEO_CLIP_INVALID", "Video clip values are invalid");
+    this.database.prepare("INSERT INTO brain_video_clip(id, project_id, track_type, source_file_id, start_ms, duration_ms, source_in_ms, volume, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(clip.id, input.projectId, clip.trackType, clip.sourceFileId.trim(), clip.startMs, clip.durationMs, clip.sourceInMs, clip.volume, clip.text || "");
+    return this.getVideoTimeline(input.ownerId, input.projectId)!;
   }
 
   close() {

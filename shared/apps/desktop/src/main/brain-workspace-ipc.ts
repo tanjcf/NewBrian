@@ -25,6 +25,7 @@ import { BrainDocumentRevisionService } from "./brain-document-revision-service.
 import { inspectGameProject } from "./game-project-inspector.js";
 import { GamePreviewService, type GamePreviewRustClient } from "./game-preview-service.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
+import type { VideoTimelineService } from "./video-timeline-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
@@ -32,6 +33,7 @@ interface BrainWorkspaceIpcDependencies {
   resolveOwnerId: () => Promise<string> | string;
   resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
+  video?: VideoTimelineService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
   acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" }) => Promise<GamePreviewRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
@@ -75,6 +77,39 @@ function parseGamePreviewProject(value: unknown) {
   const input = requireRecord(value, "Game preview");
   rejectUnexpectedKeys(input, ["projectId"], "Game preview");
   return { projectId: requireString(input.projectId, "projectId") };
+}
+
+function parseVideoTimelineProject(value: unknown) {
+  const input = requireRecord(value, "Video timeline");
+  rejectUnexpectedKeys(input, ["projectId"], "Video timeline");
+  return { projectId: requireString(input.projectId, "projectId") };
+}
+
+function parseVideoTimelineSave(value: unknown) {
+  const input = requireRecord(value, "Video timeline save");
+  rejectUnexpectedKeys(input, ["projectId", "title", "width", "height", "fps"], "Video timeline save");
+  return {
+    projectId: requireString(input.projectId, "projectId"),
+    title: requireString(input.title, "title"),
+    width: requireFiniteNumber(input.width, "width"),
+    height: requireFiniteNumber(input.height, "height"),
+    fps: requireFiniteNumber(input.fps, "fps")
+  };
+}
+
+function parseVideoClipAdd(value: unknown) {
+  const input = requireRecord(value, "Video clip add");
+  rejectUnexpectedKeys(input, ["projectId", "trackType", "sourceFileId", "startMs", "durationMs", "sourceInMs", "volume", "text"], "Video clip add");
+  return {
+    projectId: requireString(input.projectId, "projectId"),
+    trackType: input.trackType,
+    sourceFileId: requireString(input.sourceFileId, "sourceFileId"),
+    startMs: requireFiniteNumber(input.startMs, "startMs"),
+    durationMs: requireFiniteNumber(input.durationMs, "durationMs"),
+    sourceInMs: requireFiniteNumber(input.sourceInMs, "sourceInMs"),
+    volume: input.volume === undefined ? undefined : requireFiniteNumber(input.volume, "volume"),
+    text: input.text === undefined ? undefined : requireString(input.text, "text")
+  };
 }
 
 function requireWorkspaceKey(value: unknown): BrainWorkspaceKey {
@@ -353,6 +388,33 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       gamePreviews.status(await ownerId(), parseGamePreviewProject(value).projectId));
     ipcMain.handle(brainWorkspaceIpcChannels.gamePreviewStop, async (_event, value: unknown) =>
       gamePreviews.stop(await ownerId(), parseGamePreviewProject(value).projectId));
+  }
+  if (dependencies.video) {
+    ipcMain.handle(brainWorkspaceIpcChannels.videoTimelineGet, async (_event, value: unknown) => {
+      const input = parseVideoTimelineProject(value);
+      return dependencies.video!.getTimeline(await ownerId(), input.projectId);
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.videoTimelineSave, async (_event, value: unknown) => {
+      const input = parseVideoTimelineSave(value);
+      return dependencies.video!.ensureTimeline(await ownerId(), input.projectId, {
+        title: input.title, width: input.width, height: input.height, fps: input.fps
+      });
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.videoClipAdd, async (_event, value: unknown) => {
+      const input = parseVideoClipAdd(value);
+      if (input.trackType !== "video" && input.trackType !== "audio" && input.trackType !== "subtitle") {
+        throw new TypeError("trackType is unsupported.");
+      }
+      return dependencies.video!.addClip(await ownerId(), input.projectId, {
+        trackType: input.trackType,
+        sourceFileId: input.sourceFileId,
+        startMs: input.startMs,
+        durationMs: input.durationMs,
+        sourceInMs: input.sourceInMs,
+        volume: input.volume,
+        text: input.text
+      });
+    });
   }
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
