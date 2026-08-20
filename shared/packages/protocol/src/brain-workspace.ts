@@ -116,6 +116,21 @@ export interface BrainVideoTimeline {
   updatedAt: string;
 }
 
+export type BrainVideoRenderStatus = "STARTING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+export interface BrainVideoRenderState {
+  schemaVersion: 1;
+  renderId: string;
+  projectId: string;
+  taskId: string;
+  status: BrainVideoRenderStatus;
+  outputFileId: string;
+  outputPath: string;
+  errorCode: string;
+  output: string;
+  startedAt: string;
+  finishedAt: string;
+}
+
 export interface BrainProjectUpdateInput extends BrainProjectGetInput {
   name?: string;
   status?: "ACTIVE" | "ARCHIVED";
