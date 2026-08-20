@@ -133,6 +133,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
   - [x] Surface verified preview scripts as approval-gated conversation requests without direct renderer execution.
   - [x] Supervise preview start, readiness, cancellation, bounded logs, restart reconciliation, and screenshot playtest evidence through the execution boundary.
 - [ ] Deliver video creation with timeline, media assets, render jobs, cancellation, and output verification.
+  - [x] Define the FFmpeg/FFprobe runtime prerequisite and keep missing-tool behavior explicit; real encoding acceptance still requires a verified binary.
 - [ ] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
 - [ ] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
 
