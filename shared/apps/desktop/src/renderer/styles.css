@@ -17898,3 +17898,8 @@ textarea {
 .codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel) > .brain-resource-panel {
   grid-column: 2;
 }
+.brain-data-chart { display: grid; gap: 8px; min-height: 180px; padding: 12px; border: 1px solid var(--border-subtle, #d9dee8); background: var(--surface-raised, #fff); }
+.brain-data-chart header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.brain-data-chart svg { display: block; width: 100%; height: 150px; overflow: visible; }
+.brain-data-chart-axis { fill: none; stroke: var(--border-subtle, #d9dee8); stroke-width: .8; }
+.brain-data-chart-line { fill: none; stroke: var(--accent, #2563eb); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
