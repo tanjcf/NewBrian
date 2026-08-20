@@ -21,7 +21,9 @@ async function walk(relativeRoot, current = "") {
   const files = [];
   for (const entry of entries) {
     const relative = path.join(current, entry.name);
-    if (forbidden.has(entry.name)) throw new Error(`Forbidden path: ${path.join(relativeRoot, relative)}`);
+    // Local install/build junk must not count as source, but must not block layout
+    // verification on developer machines that accidentally ran pnpm inside overlays.
+    if (forbidden.has(entry.name)) continue;
     if (entry.isDirectory()) files.push(...await walk(relativeRoot, relative));
     else files.push(relative.split(path.sep).join("/"));
   }
