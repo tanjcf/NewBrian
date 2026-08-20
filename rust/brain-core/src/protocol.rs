@@ -105,8 +105,7 @@ pub fn validate_request(request: &Request) -> Result<(), &'static str> {
     {
         return Err("BRAIN_CORE_REQUIRED_FIELD");
     }
-    if request.resource_limits.timeout_ms == 0
-        || request.resource_limits.timeout_ms > MAX_TIMEOUT_MS
+    if request.resource_limits.timeout_ms > MAX_TIMEOUT_MS
         || request.resource_limits.max_output_bytes == 0
         || request.resource_limits.max_output_bytes > MAX_OUTPUT_BYTES
     {

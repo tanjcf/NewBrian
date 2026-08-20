@@ -132,12 +132,12 @@ pub fn run_process(
         child.stderr.take().ok_or("BRAIN_CORE_PROCESS_PIPE")?,
         max_output_bytes,
     );
-    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    let deadline = (timeout_ms > 0).then(|| Instant::now() + Duration::from_millis(timeout_ms));
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| "BRAIN_CORE_PROCESS_WAIT")? {
             break status;
         }
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             terminate_process_tree(&mut child);
             let _ = child.wait();
             let _ = stdout.join();

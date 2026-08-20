@@ -14,6 +14,15 @@ export class VideoTimelineService {
     return timeline;
   }
   addClip(ownerId: string, projectId: string, clip: Omit<BrainVideoClip, "id" | "text" | "volume"> & Partial<Pick<BrainVideoClip, "id" | "text" | "volume">>): BrainVideoTimeline {
-    return this.storage.addVideoClip({ ownerId, projectId, clip: { id: clip.id || `video-clip-${randomUUID()}`, text: clip.text || "", volume: clip.volume ?? 1, ...clip } });
+    return this.storage.addVideoClip({
+      ownerId,
+      projectId,
+      clip: {
+        ...clip,
+        id: clip.id || `video-clip-${randomUUID()}`,
+        text: clip.text || "",
+        volume: clip.volume ?? 1
+      }
+    });
   }
 }

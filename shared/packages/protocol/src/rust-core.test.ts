@@ -17,6 +17,7 @@ test("TypeScript protocol matches the checked Rust Core schema fixture", async (
     "protocol_version", "request_id", "status", "error_code", "artifacts"
   ]);
   assert.equal(schema.request.resource_limits.timeout_ms.maximum, 600_000);
+  assert.match(schema.request.resource_limits.timeout_ms.description, /no execution deadline/u);
   assert.equal(schema.request.resource_limits.max_output_bytes.maximum, 16_777_216);
 });
 
@@ -32,6 +33,14 @@ test("accepts a bounded versioned Rust Core request", () => {
     payload: { path: "report.docx" }
   });
   assert.equal(request.operation, "file.read");
+});
+
+test("accepts zero as the explicit no-deadline execution policy", () => {
+  const request = parseRustCoreRequest({
+    protocol_version: "1", request_id: "req-no-deadline", project_id: "project-1", workspace_type: "video",
+    operation: "process.run", approval_token: "approved", resource_limits: { timeout_ms: 0, max_output_bytes: 1_048_576 }, payload: {}
+  });
+  assert.equal(request.resource_limits.timeout_ms, 0);
 });
 
 test("rejects unknown versions, unbounded limits, and credential-shaped fields", () => {

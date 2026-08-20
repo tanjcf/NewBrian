@@ -83,6 +83,19 @@ test("times out a request and emits a cancellation frame", async () => {
   await client.shutdown();
 });
 
+test("keeps an explicitly unbounded request pending until an event arrives", async () => {
+  const child = fakeChild();
+  let written = "";
+  child.stdin.on("data", (chunk) => { written += chunk.toString(); });
+  const client = new RustCoreClient({ child, defaultTimeoutMs: 5 });
+  const pending = client.request({ request_id: "req-no-deadline", project_id: "project-1", workspace_type: "video", operation: "process.run", approval_token: "approved", resource_limits: { timeout_ms: 0, max_output_bytes: 1024 }, payload: {} });
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(written.includes('"operation":"request.cancel"'), false);
+  child.stdout.write(`${JSON.stringify({ protocol_version: "1", request_id: "req-no-deadline", status: "completed", error_code: "", artifacts: [], result: { success: true } })}\n`);
+  assert.equal((await pending).status, "completed");
+  await client.shutdown();
+});
+
 test("generates and consumes a main-process approval token for one mutating request", async () => {
   const child = fakeChild();
   const frames: Array<Record<string, unknown>> = [];

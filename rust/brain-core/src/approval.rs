@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 struct Grant {
     project_id: String,
     operation: String,
-    expires_at: Instant,
+    expires_at: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -24,7 +24,7 @@ impl ApprovalRegistry {
         if token.trim().len() < 32 || project_id.trim().is_empty() || operation.trim().is_empty() {
             return Err("BRAIN_CORE_APPROVAL_INVALID");
         }
-        if ttl.is_zero() || ttl > Duration::from_secs(300) {
+        if ttl > Duration::from_secs(300) {
             return Err("BRAIN_CORE_APPROVAL_TTL_INVALID");
         }
         self.grants.insert(
@@ -32,7 +32,7 @@ impl ApprovalRegistry {
             Grant {
                 project_id,
                 operation,
-                expires_at: Instant::now() + ttl,
+                expires_at: (!ttl.is_zero()).then(|| Instant::now() + ttl),
             },
         );
         Ok(())
@@ -48,7 +48,7 @@ impl ApprovalRegistry {
             .grants
             .remove(token)
             .ok_or("BRAIN_CORE_APPROVAL_REQUIRED")?;
-        if grant.expires_at < Instant::now() {
+        if grant.expires_at.is_some_and(|expires_at| expires_at < Instant::now()) {
             return Err("BRAIN_CORE_APPROVAL_EXPIRED");
         }
         if grant.project_id != project_id || grant.operation != operation {

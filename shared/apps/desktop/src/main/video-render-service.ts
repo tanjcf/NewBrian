@@ -1,6 +1,9 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
+import { basename, resolve } from "node:path";
 import type { BrainVideoRenderState, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { RustCoreRequest, RustCoreResponse } from "@codex-forge/protocol/rust-core";
+import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 
 type RustRequestInput = Omit<RustCoreRequest, "protocol_version">;
 export interface VideoRenderRustClient { request(input: RustRequestInput): Promise<RustCoreResponse> }
@@ -13,51 +16,234 @@ export interface VideoRenderOptions {
   mediaRelativePaths?: string[];
   acquireRustCore: (binding: { projectId: string; projectRoot: string; workspaceType: "video" }) => Promise<VideoRenderRustClient>;
   confirmRender: (input: { projectId: string; command: string; outputRelativePath: string }) => Promise<boolean>;
+  prepareOutput?: (projectRoot: string, outputRelativePath: string) => Promise<void>;
   validateOutput?: (projectRoot: string, outputRelativePath: string) => Promise<boolean>;
+  storage?: BrainWorkspaceStorage;
   platform?: NodeJS.Platform;
 }
-export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">;
+export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "platform" | "storage">;
+
+type Session = {
+  ownerId: string;
+  requestId: string;
+  client: VideoRenderRustClient;
+  state: BrainVideoRenderState;
+  abortController: AbortController;
+  generation: number;
+  projectRoot: string;
+};
 
 const MAX_OUTPUT = 64 * 1024;
 const now = () => new Date().toISOString();
 const record = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const decode = (value: unknown) => typeof value === "string" ? Buffer.from(value, "base64").toString("utf8") : "";
+const TERMINAL = new Set<BrainVideoRenderState["status"]>(["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"]);
+
+function safeRelativePath(value: string, code: string) {
+  const normalized = value.replaceAll("\\", "/");
+  const segments = normalized.split("/");
+  if (!normalized || normalized.startsWith("/") || /^[a-z]:\//iu.test(normalized) || segments.some((segment) => segment === "..")) throw new Error(code);
+  return normalized;
+}
+
+function mapProcessFailure(errorCode: string): { status: BrainVideoRenderState["status"]; errorCode: string } {
+  // Legacy Core binaries may still emit timeout; media path never treats timeout as a business terminal.
+  if (errorCode === "BRAIN_CORE_PROCESS_TIMEOUT") {
+    return { status: "FAILED", errorCode: "BRAIN_CORE_PROCESS_TIMEOUT" };
+  }
+  return { status: "FAILED", errorCode: errorCode || "BRAIN_VIDEO_RENDER_FAILED" };
+}
 
 export class VideoRenderService {
-  private readonly sessions = new Map<string, { ownerId: string; requestId: string; client: VideoRenderRustClient; state: BrainVideoRenderState }>();
-  private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">;
-  constructor(options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">) { this.options = options; }
+  private readonly sessions = new Map<string, Session>();
+  private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "storage" | "platform">;
+  private readonly platform: NodeJS.Platform;
+
+  constructor(options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "storage" | "platform">) {
+    this.options = options;
+    this.platform = options.platform ?? process.platform;
+  }
 
   async start(ownerId: string, input: VideoRenderInput): Promise<BrainVideoRenderState> {
     const renderId = `video-render-${randomUUID()}`;
     const requestId = `${renderId}:process`;
-    const executable = input.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-    const output = input.outputRelativePath.replaceAll("\\", "/");
-    if (!output || output.startsWith("/") || output.includes("..")) throw new Error("BRAIN_VIDEO_OUTPUT_PATH_INVALID");
-    const media = input.mediaRelativePaths?.[0];
-    if (!media || media.startsWith("/") || media.includes("..")) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
+    const executable = this.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+    const output = safeRelativePath(input.outputRelativePath, "BRAIN_VIDEO_OUTPUT_PATH_INVALID");
+    if (!/\.mp4$/iu.test(output)) throw new Error("BRAIN_VIDEO_OUTPUT_FORMAT_UNSUPPORTED");
+    const mediaInput = input.mediaRelativePaths?.[0];
+    if (!mediaInput) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
+    const media = safeRelativePath(mediaInput, "BRAIN_VIDEO_MEDIA_NOT_FOUND");
     const command = `${executable} -y -i ${media} -c:v libx264 -c:a aac ${output}`;
     if (!(await this.options.confirmRender({ projectId: input.projectId, command, outputRelativePath: output }))) throw new Error("BRAIN_VIDEO_RENDER_DECLINED");
+    await this.options.prepareOutput?.(input.projectRoot, output);
+
+    let taskId = `video-task-${randomUUID()}`;
+    if (this.options.storage) {
+      const task = this.options.storage.createTask({
+        ownerId,
+        projectId: input.projectId,
+        workspaceKey: "video",
+        taskType: "video_render",
+        requestId,
+        idempotencyKey: renderId,
+        maxAttempts: 1,
+        resourceLimitsJson: JSON.stringify({ timeoutMs: 0, maxOutputBytes: 1_048_576 })
+      });
+      taskId = task.id;
+    }
+
     const client = await this.options.acquireRustCore({ projectId: input.projectId, projectRoot: input.projectRoot, workspaceType: "video" });
-    const state: BrainVideoRenderState = { schemaVersion: 1, renderId, projectId: input.projectId, taskId: `video-task-${randomUUID()}`, status: "STARTING", outputFileId: "", outputPath: output, errorCode: "", output: "", startedAt: now(), finishedAt: "" };
-    const session = { ownerId, requestId, client, state };
+    const state: BrainVideoRenderState = {
+      schemaVersion: 1,
+      renderId,
+      projectId: input.projectId,
+      taskId,
+      status: "STARTING",
+      outputFileId: "",
+      outputPath: output,
+      errorCode: "",
+      output: "",
+      startedAt: now(),
+      finishedAt: ""
+    };
+    const session: Session = { ownerId, requestId, client, state, abortController: new AbortController(), generation: 0, projectRoot: input.projectRoot };
     this.sessions.set(renderId, session);
+    this.persistTask(session, "RUNNING", 0.1);
+
     const token = randomBytes(32).toString("base64url");
-    const registration = await client.request({ request_id: `${requestId}:approval`, project_id: input.projectId, workspace_type: "video", operation: "approval.register", approval_token: "", resource_limits: { timeout_ms: 5_000, max_output_bytes: 1_024 }, payload: { token, operation: "process.run", ttl_ms: 30_000 } });
+    const registration = await client.request({
+      request_id: `${requestId}:approval`,
+      project_id: input.projectId,
+      workspace_type: "video",
+      operation: "approval.register",
+      approval_token: "",
+      resource_limits: { timeout_ms: 0, max_output_bytes: 1_024 },
+      payload: { token, operation: "process.run", ttl_ms: 0 }
+    });
     if (registration.status !== "completed") return this.finish(session, "FAILED", registration.error_code || "BRAIN_CORE_APPROVAL_FAILED", "");
+
     state.status = "RUNNING";
+    this.persistTask(session, "RUNNING", 0.2);
+    const generation = session.generation;
     const args = ["-y", "-i", media, "-c:v", "libx264", "-c:a", "aac", output];
-    void client.request({ request_id: requestId, project_id: input.projectId, workspace_type: "video", operation: "process.run", approval_token: token, resource_limits: { timeout_ms: 1_800_000, max_output_bytes: 1_048_576 }, payload: { executable, args, cwd: "." } }).then(async (response) => {
-      const result = record(response.result); const text = `${decode(result.stdout_base64)}\n${decode(result.stderr_base64)}`.trim().slice(-MAX_OUTPUT);
-      if (response.status === "cancelled") this.finish(session, "CANCELLED", response.error_code || "BRAIN_CORE_CANCELLED", text);
-      else if (response.status !== "completed" || result.success === false) this.finish(session, response.error_code === "BRAIN_CORE_PROCESS_TIMEOUT" ? "TIMED_OUT" : "FAILED", response.error_code || "BRAIN_VIDEO_RENDER_FAILED", text);
-      else if (this.options.validateOutput && !(await this.options.validateOutput(input.projectRoot, output))) this.finish(session, "FAILED", "BRAIN_VIDEO_OUTPUT_INVALID", text);
-      else this.finish(session, "SUCCEEDED", "", text);
-    }).catch((error: unknown) => this.finish(session, "FAILED", "BRAIN_VIDEO_RENDER_FAILED", String(error)));
+    void client.request({
+      request_id: requestId,
+      project_id: input.projectId,
+      workspace_type: "video",
+      operation: "process.run",
+      approval_token: token,
+      resource_limits: { timeout_ms: 0, max_output_bytes: 1_048_576 },
+      payload: { executable, args, cwd: "." }
+    }).then(async (response) => {
+      if (this.isStale(session, generation)) return;
+      const result = record(response.result);
+      const text = `${decode(result.stdout_base64)}\n${decode(result.stderr_base64)}`.trim().slice(-MAX_OUTPUT);
+      if (response.status === "cancelled") {
+        this.finish(session, "CANCELLED", response.error_code || "BRAIN_CORE_CANCELLED", text);
+        return;
+      }
+      if (response.status !== "completed" || result.success === false) {
+        const mapped = mapProcessFailure(response.error_code || "");
+        this.finish(session, mapped.status, mapped.errorCode, text);
+        return;
+      }
+      if (this.options.validateOutput && !(await this.options.validateOutput(input.projectRoot, output))) {
+        if (this.isStale(session, generation)) return;
+        this.finish(session, "FAILED", "BRAIN_VIDEO_OUTPUT_INVALID", text);
+        return;
+      }
+      if (this.isStale(session, generation)) return;
+      await this.registerSuccessArtifact(session, output);
+      if (this.isStale(session, generation)) return;
+      this.finish(session, "SUCCEEDED", "", text);
+    }).catch((error: unknown) => {
+      if (!this.isStale(session, generation)) this.finish(session, "FAILED", "BRAIN_VIDEO_RENDER_FAILED", String(error));
+    });
     return { ...state };
   }
 
-  status(ownerId: string, renderId: string) { const session = this.sessions.get(renderId); if (!session || session.ownerId !== ownerId) throw new Error("BRAIN_VIDEO_RENDER_NOT_FOUND"); return { ...session.state }; }
-  async cancel(ownerId: string, renderId: string) { const session = this.sessions.get(renderId); if (!session || session.ownerId !== ownerId) throw new Error("BRAIN_VIDEO_RENDER_NOT_FOUND"); await session.client.request({ request_id: `${session.requestId}:cancel:${randomUUID()}`, project_id: session.state.projectId, workspace_type: "video", operation: "request.cancel", approval_token: "", resource_limits: { timeout_ms: 5_000, max_output_bytes: 1_024 }, payload: { target_request_id: session.requestId } }); return { ...session.state, status: "CANCELLED" as const }; }
-  private finish(session: { state: BrainVideoRenderState }, status: BrainVideoRenderState["status"], errorCode: string, output: string) { session.state.status = status; session.state.errorCode = errorCode; session.state.output = output.slice(-MAX_OUTPUT); session.state.finishedAt = now(); return { ...session.state }; }
+  status(ownerId: string, renderId: string) {
+    const session = this.sessions.get(renderId);
+    if (!session || session.ownerId !== ownerId) throw new Error("BRAIN_VIDEO_RENDER_NOT_FOUND");
+    return { ...session.state };
+  }
+
+  async cancel(ownerId: string, renderId: string) {
+    const session = this.sessions.get(renderId);
+    if (!session || session.ownerId !== ownerId) throw new Error("BRAIN_VIDEO_RENDER_NOT_FOUND");
+    if (TERMINAL.has(session.state.status)) return { ...session.state };
+    session.abortController.abort(new Error("USER_CANCELLED"));
+    session.generation += 1;
+    try {
+      const response = await session.client.request({
+        request_id: `${session.requestId}:cancel:${randomUUID()}`,
+        project_id: session.state.projectId,
+        workspace_type: "video",
+        operation: "request.cancel",
+        approval_token: "",
+        resource_limits: { timeout_ms: 0, max_output_bytes: 1_024 },
+        payload: { target_request_id: session.requestId }
+      });
+      if (response.status !== "completed") return this.finish(session, "FAILED", response.error_code || "BRAIN_VIDEO_CANCEL_FAILED", "");
+      return this.finish(session, "CANCELLED", "BRAIN_CORE_CANCELLED", "");
+    } catch (error) {
+      return this.finish(session, "FAILED", "BRAIN_VIDEO_CANCEL_FAILED", String(error));
+    }
+  }
+
+  private isStale(session: Session, generation: number) {
+    return session.abortController.signal.aborted || session.generation !== generation || TERMINAL.has(session.state.status);
+  }
+
+  private async registerSuccessArtifact(session: Session, output: string) {
+    if (!this.options.storage) return;
+    const absolute = resolve(session.projectRoot, output);
+    const [bytes, fileStat] = await Promise.all([readFile(absolute), stat(absolute)]);
+    const contentHash = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    const file = this.options.storage.registerFile({
+      ownerId: session.ownerId,
+      projectId: session.state.projectId,
+      logicalName: basename(output),
+      mimeType: "video/mp4",
+      sizeBytes: fileStat.size,
+      contentHash,
+      storageKey: output
+    });
+    this.options.storage.registerArtifact({
+      ownerId: session.ownerId,
+      projectId: session.state.projectId,
+      taskId: session.state.taskId,
+      sourceFileId: file.id,
+      artifactType: "video_render",
+      storageKey: output,
+      contentHash,
+      validationStatus: "VALID"
+    });
+    session.state.outputFileId = file.id;
+  }
+
+  private persistTask(session: Session, status: "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED", progress: number, errorCode = "", errorDetail = "") {
+    if (!this.options.storage) return;
+    this.options.storage.updateTask({
+      ownerId: session.ownerId,
+      taskId: session.state.taskId,
+      status,
+      progress,
+      errorCode,
+      errorDetail: errorDetail.slice(0, 4_096),
+      resultJson: JSON.stringify(session.state)
+    });
+  }
+
+  private finish(session: Session, status: BrainVideoRenderState["status"], errorCode: string, output: string) {
+    if (TERMINAL.has(session.state.status)) return { ...session.state };
+    session.state.status = status;
+    session.state.errorCode = errorCode;
+    session.state.output = output.slice(-MAX_OUTPUT);
+    session.state.finishedAt = now();
+    if (status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED") {
+      this.persistTask(session, status, status === "SUCCEEDED" ? 1 : 0.5, errorCode, session.state.output);
+    }
+    return { ...session.state };
+  }
 }

@@ -173,7 +173,7 @@ pub fn ingest(
         child.stderr.take().ok_or("BRAIN_CORE_DOCUMENT_PIPE")?,
         64 * 1024,
     );
-    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    let deadline = (timeout_ms > 0).then(|| Instant::now() + Duration::from_millis(timeout_ms));
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| "BRAIN_CORE_DOCUMENT_WAIT")? {
             break status;
@@ -185,7 +185,7 @@ pub fn ingest(
             let _ = stderr.join();
             return Err("BRAIN_CORE_CANCELLED");
         }
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             terminate_process_tree(&mut child);
             let _ = child.wait();
             let _ = stdout.join();
