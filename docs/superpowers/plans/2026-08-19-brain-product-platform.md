@@ -127,7 +127,9 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create isolated workers under `workers/`
 
 - [ ] Deliver software and automation using the existing local tool and approval runtime.
+  - [x] Discover only approved package scripts and execute them through Rust Core approval, bounded output, timeout, cancellation, and task status IPC; Windows production build verified.
 - [ ] Deliver data and decision with datasets, tables, charts, analysis artifacts, and reproducible calculations.
+  - [x] Import bounded CSV datasets, persist metadata, restore rows after restart through hash-checked project-bound IPC, and provide paginated/filterable table UI.
 - [x] Deliver game creation with project files, asset inspection, runnable preview, and playtest evidence.
   - [x] Inspect authorized Web, Godot, Unity, and Unreal projects with bounded, non-symlink-following asset counts.
   - [x] Surface verified preview scripts as approval-gated conversation requests without direct renderer execution.
@@ -135,6 +137,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [ ] Deliver video creation with timeline, media assets, render jobs, cancellation, and output verification.
   - [x] Define the FFmpeg/FFprobe runtime prerequisite and keep missing-tool behavior explicit; real encoding acceptance still requires a verified binary.
 - [ ] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
+  - [x] Persist timelines and clips, inspect WAV/MIDI metadata, expose bounded WAV waveform samples, pass authorized audio media into approved Rust Core render jobs, and verify output boundary; real FFmpeg encoding still requires a verified binary.
 - [ ] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
 
 ### Task 8: Search and model policy integration
