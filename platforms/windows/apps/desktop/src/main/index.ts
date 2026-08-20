@@ -105,6 +105,7 @@ import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
+import { DataImportService } from "./data-import-service.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -7326,11 +7327,19 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
+  const resolveBrainWorkspaceRoot = async (workspaceId: string) => {
+    const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
+    if (!workspace) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_AUTHORIZED");
+    const root = await fs.realpath(workspace.path);
+    if (!(await fs.stat(root)).isDirectory()) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_DIRECTORY");
+    return root;
+  };
   registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
     video: videoTimelineService,
     music: musicTimelineService,
+    dataImport: new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot),
     videoRender: videoRenderService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
@@ -7349,13 +7358,7 @@ function registerIpc() {
       return result.response === 0;
     },
     resolveOwnerId: resolveBrainLocalOwnerId,
-    resolveWorkspaceRoot: async (workspaceId) => {
-      const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
-      if (!workspace) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_AUTHORIZED");
-      const root = await fs.realpath(workspace.path);
-      if (!(await fs.stat(root)).isDirectory()) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_DIRECTORY");
-      return root;
-    }
+    resolveWorkspaceRoot: resolveBrainWorkspaceRoot
   });
   registerPluginRepositoryHandlers();
   const controlWindow = (action: WindowControlAction) => controlDesktopWindow(mainWindowRef, action);

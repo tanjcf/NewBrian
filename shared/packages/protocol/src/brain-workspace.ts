@@ -338,4 +338,5 @@ export const brainWorkspaceIpcChannels = {
   ,musicClipAdd: "brain:music:clip-add"
   ,dataDatasetList: "brain:data:dataset-list"
   ,dataDatasetSave: "brain:data:dataset-save"
+  ,dataDatasetImportCsv: "brain:data:dataset-import-csv"
 } as const;
