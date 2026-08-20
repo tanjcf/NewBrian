@@ -18,3 +18,10 @@ test("video render registers one-shot approval before process", async () => {
   assert.deepEqual(calls[1].payload.args.slice(-1), ["renders/out.mp4"]);
   assert.ok(calls[1].payload.args.includes("media/input.mp4"));
 });
+
+test("video render refuses a timeline without a media input", async () => {
+  let acquired = false;
+  const service = new VideoRenderService({ acquireRustCore: async () => { acquired = true; return { request: async () => ({ status: "completed", result: {} } as any) }; }, confirmRender: async () => true, platform: "win32" });
+  await assert.rejects(() => service.start("owner", { projectId: "p1", projectRoot: "C:/project", timeline, outputRelativePath: "renders/out.mp4" }), /BRAIN_VIDEO_MEDIA_NOT_FOUND/);
+  assert.equal(acquired, false);
+});
