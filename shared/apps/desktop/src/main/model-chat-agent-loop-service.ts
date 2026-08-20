@@ -32,6 +32,7 @@ import {
   applyPendingApprovalToSessionSnapshot,
   ensureApprovalSnapshotForPendingLoop
 } from "./approval-continuation-policy.ts";
+import { finalizeDesktopWebSearchAnswer } from "./desktop-web-search-policy.ts";
 // @ts-ignore Node's strip-types tests load the TypeScript domain module directly.
 import { extractGovernmentWritingSpecificationFromTexts, serializeGovernmentWritingSpecificationMarkdown } from "./government-writing-specification.ts";
 
@@ -1449,6 +1450,23 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         })).generatedContent;
       }
     }
+    const toolTexts = [
+      ...loopSnapshot.messages.filter((message) => message.role === "tool").map((message) => message.content),
+      ...input.runtime.sessionMachine.events
+        .filter((event: { type?: string }) => event?.type === "tool_result")
+        .map((event: { payload?: { result?: unknown; name?: string } }) => {
+          const name = String(event.payload?.name || "");
+          if (!name.includes("search") && !name.includes("news_search")) return "";
+          const result = event.payload?.result as { content?: Array<{ text?: string }>; details?: unknown; output?: string } | undefined;
+          if (result?.details) return JSON.stringify(result.details);
+          if (Array.isArray(result?.content) && result.content[0]?.text) return String(result.content[0].text);
+          return String(result?.output || "");
+        })
+    ].filter(Boolean);
+    generatedContent = finalizeDesktopWebSearchAnswer({
+      answer: generatedContent,
+      toolTexts
+    });
     const runtimeSnapshot = attachApprovalSnapshotForLoop(input.runtime, loopSnapshot) as TRuntimeSnapshot;
     const built = this.dependencies.buildResult({
       generatedContent,

@@ -149,7 +149,10 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [x] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
   - [x] Shared `ProjectFilePicker` + project-scoped `activeBrainDocumentFileId` bind Video/Music/Data; Files tab remains the single project file list.
   - [x] Verify versioned DOCX paragraph, XLSX cell, and PPTX shape-text writeback with owner-scoped change sets, output boundaries, SHA-256 registration, and focused Windows tests.
-  - [x] Add PDF page/rectangle annotation writeback with pdf-lib, versioned output and bounds validation; Windows unit tests and Electron production build pass. Non-WinAnsi annotation text currently uses a visible fallback until a CJK font asset is bundled.
+  - [x] Add PDF page/rectangle annotation writeback with pdf-lib, versioned output and bounds validation; Windows unit tests and Electron production build pass.
+  - [x] CJK annotation text embeds a system font via `@pdf-lib/fontkit` (`simhei` / Noto Sans SC / YaHei). `pdf-annotation-writer.test.ts` asserts `usedCjkFont=true` and unreplaced Chinese text; Electron case `test-electron-brain-pdf-annotation.mjs` exports annotated `note.v2.pdf`.
+  - [x] Codex document annotate → accept → export Electron E2E: `test-electron-brain-document-revision.mjs` (markdown structural anchors → `note.v2.md`).
+  - [x] OpenClaw image/video Auto-tools path E2E: `test-openclaw-media-gateway-e2e.mjs` proves `wait=false` invoke + `/auto/tools/jobs` poll for `image_generate` / `video_generate` against a local mock gateway (live vendor keys still optional when spring-app is reachable).
 
 ### Task 8: Search and model policy integration
 
@@ -157,14 +160,20 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Modify Spring control-plane search policy and BRAIN model tool contracts in their owning repositories.
 - Test server routing, desktop IPC redaction, citations, time stamping, and failure behavior.
 
-- [ ] Route free news search first for supported market-news requests.
-- [ ] Invoke paid web search only for time-sensitive or insufficient free-source queries.
-- [ ] Attach source URLs and search time to current-information answers.
-- [ ] Return an explicit unavailable result when search fails and prevent unsupported freshness claims.
-- [ ] Add administrator enable/disable, provider, budget, quota, and audit controls with zero ordinary-user setup.
-- [ ] Verify company keys remain server-side and user BYOK remains desktop-side only.
+- [x] Route free news search first for supported market-news requests.
+  - [x] spring-app `WebSearchOrchestrator` + `FreeNewsSearchService`; desktop tool `news_search_free` → `POST /api/desktop/v1/market-news-search`. `WebSearchOrchestratorTest` proves FREE_ONLY skips paid when free news is sufficient.
+- [x] Invoke paid web search only for time-sensitive or insufficient free-source queries.
+  - [x] Orchestrator upgrades at most once (`FREE_THEN_PAID`); paid path remains `web.search_paid` / Bocha gateway. Unit evidence: `WebSearchOrchestratorTest.callsPaidOnceWhenFreeNewsInsufficient`.
+- [x] Attach source URLs and search time to current-information answers.
+  - [x] Tool payloads include `searchedAt` + URLs/`citationBlock`; agent-loop `finalizeDesktopWebSearchAnswer` appends `来源（检索时间 …）` from tool evidence. Unit-tested in `desktop-web-search.test.ts` and `CitationValidationServiceTest`.
+- [x] Return an explicit unavailable result when search fails and prevent unsupported freshness claims.
+  - [x] `WEB_SEARCH_UNAVAILABLE` tool/status paths + `assertAnswerAllowsFreshnessClaims` / finalizer block freshness without evidence.
+- [x] Add administrator enable/disable, provider, budget, quota, and audit controls with zero ordinary-user setup.
+  - [x] Admin API `GET/PUT /api/admin/v1/web-search-policy`, `GET /api/admin/v1/web-search-audit`; Vue panel `WebSearchPolicySection` (provider shown as company Bocha). Defaults enable search with free-first so ordinary users need no setup.
+- [x] Verify company keys remain server-side and user BYOK remains desktop-side only.
+  - [x] Desktop client sends only session auth to Spring; company `app.web-search.token` stays on server. Desktop unit tests assert Authorization is the session bearer and no Bocha key is accepted from the client path.
 
-Desktop progress (not sufficient to check boxes): `web.search_paid` calls Spring `POST /api/desktop/v1/web-search` with session auth (company Bocha token stays server-side); tool returns `searchedAt` + URLs or `WEB_SEARCH_UNAVAILABLE`; freshness-claim guard helpers are unit-tested. Free-news-first orchestration, admin budget/quota/audit, and end-to-end citation binding still require spring-app plan work.
+Desktop progress: free-first orchestration + admin policy/audit + citation finalizer landed; live gateway E2E against AKShare/Bocha still depends on reachable search nodes.
 
 ### Task 9: Persistence, diagnostics, and recovery
 
