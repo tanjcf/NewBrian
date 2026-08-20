@@ -10,6 +10,7 @@ export interface VideoRenderOptions {
   projectRoot: string;
   timeline: BrainVideoTimeline;
   outputRelativePath: string;
+  mediaRelativePaths?: string[];
   acquireRustCore: (binding: { projectId: string; projectRoot: string; workspaceType: "video" }) => Promise<VideoRenderRustClient>;
   confirmRender: (input: { projectId: string; command: string; outputRelativePath: string }) => Promise<boolean>;
   validateOutput?: (projectRoot: string, outputRelativePath: string) => Promise<boolean>;
@@ -33,7 +34,9 @@ export class VideoRenderService {
     const executable = input.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
     const output = input.outputRelativePath.replaceAll("\\", "/");
     if (!output || output.startsWith("/") || output.includes("..")) throw new Error("BRAIN_VIDEO_OUTPUT_PATH_INVALID");
-    const command = `${executable} -y -i <approved-project-media> -c:v libx264 -c:a aac ${output}`;
+    const media = input.mediaRelativePaths?.[0];
+    if (!media || media.startsWith("/") || media.includes("..")) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
+    const command = `${executable} -y -i ${media} -c:v libx264 -c:a aac ${output}`;
     if (!(await this.options.confirmRender({ projectId: input.projectId, command, outputRelativePath: output }))) throw new Error("BRAIN_VIDEO_RENDER_DECLINED");
     const client = await this.options.acquireRustCore({ projectId: input.projectId, projectRoot: input.projectRoot, workspaceType: "video" });
     const state: BrainVideoRenderState = { schemaVersion: 1, renderId, projectId: input.projectId, taskId: `video-task-${randomUUID()}`, status: "STARTING", outputFileId: "", outputPath: output, errorCode: "", output: "", startedAt: now(), finishedAt: "" };
@@ -43,7 +46,7 @@ export class VideoRenderService {
     const registration = await client.request({ request_id: `${requestId}:approval`, project_id: input.projectId, workspace_type: "video", operation: "approval.register", approval_token: "", resource_limits: { timeout_ms: 5_000, max_output_bytes: 1_024 }, payload: { token, operation: "process.run", ttl_ms: 30_000 } });
     if (registration.status !== "completed") return this.finish(session, "FAILED", registration.error_code || "BRAIN_CORE_APPROVAL_FAILED", "");
     state.status = "RUNNING";
-    const args = ["-y", "-i", "<approved-project-media>", "-c:v", "libx264", "-c:a", "aac", output];
+    const args = ["-y", "-i", media, "-c:v", "libx264", "-c:a", "aac", output];
     void client.request({ request_id: requestId, project_id: input.projectId, workspace_type: "video", operation: "process.run", approval_token: token, resource_limits: { timeout_ms: 1_800_000, max_output_bytes: 1_048_576 }, payload: { executable, args, cwd: "." } }).then(async (response) => {
       const result = record(response.result); const text = `${decode(result.stdout_base64)}\n${decode(result.stderr_base64)}`.trim().slice(-MAX_OUTPUT);
       if (response.status === "cancelled") this.finish(session, "CANCELLED", response.error_code || "BRAIN_CORE_CANCELLED", text);

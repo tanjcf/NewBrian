@@ -433,7 +433,8 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
       const projectRoot = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId);
       const timeline = dependencies.video!.getTimeline(owner, input.projectId);
-      return dependencies.videoRender!.start(owner, { projectId: input.projectId, projectRoot, timeline, outputRelativePath: input.outputRelativePath });
+      const mediaRelativePaths = timeline.clips.filter((clip) => clip.trackType === "video").map((clip) => dependencies.storage.getFile(owner, input.projectId, clip.sourceFileId).storageKey);
+      return dependencies.videoRender!.start(owner, { projectId: input.projectId, projectRoot, timeline, outputRelativePath: input.outputRelativePath, mediaRelativePaths });
     });
     ipcMain.handle(brainWorkspaceIpcChannels.videoRenderStatus, async (_event, value: unknown) => {
       const input = requireRecord(value, "Video render status");
