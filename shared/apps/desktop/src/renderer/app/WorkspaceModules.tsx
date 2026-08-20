@@ -4378,7 +4378,7 @@ function renderSidebarModule() {
           {brainResourceTab === "game" ? <GameWorkspace projectId={selectedBrainProject?.id} conversationId={selectedBrainConversationId || undefined} /> : null}
           {brainResourceTab === "video" ? <VideoWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
           {brainResourceTab === "music" ? <MusicWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
-          {brainResourceTab === "data" ? <DataWorkspace projectId={selectedBrainProject?.id} /> : null}
+          {brainResourceTab === "data" ? <DataWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
             <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
               setActiveBrainDocumentFileId(file.id);
