@@ -594,7 +594,16 @@ const videoRenderService = new VideoRenderService({
     });
     return result.response === 0;
   },
-  validateOutput: async (root, output) => { try { const stat = await fs.stat(resolve(root, output)); return stat.isFile() && stat.size > 0; } catch { return false; } }
+  validateOutput: async (root, output) => {
+    try {
+      const rootReal = await fs.realpath(root);
+      const outputPath = resolve(rootReal, output);
+      const outputReal = await fs.realpath(outputPath);
+      const boundary = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`;
+      const stat = await fs.stat(outputReal);
+      return (outputReal === rootReal || outputReal.startsWith(boundary)) && stat.isFile() && stat.size > 0;
+    } catch { return false; }
+  }
 });
 const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARKET_DATA_URL, {
   load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
