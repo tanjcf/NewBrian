@@ -104,6 +104,7 @@ import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
+import { MusicTimelineService } from "./music-timeline-service.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -583,6 +584,7 @@ if (!singleInstanceLockAcquired) {
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
 const videoTimelineService = new VideoTimelineService(brainWorkspaceStorage);
+const musicTimelineService = new MusicTimelineService(brainWorkspaceStorage);
 const videoRenderService = new VideoRenderService({
   acquireRustCore: (binding) => getRustCoreService().acquire(binding),
   platform: process.platform,
@@ -7328,6 +7330,7 @@ function registerIpc() {
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
     video: videoTimelineService,
+    music: musicTimelineService,
     videoRender: videoRenderService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),

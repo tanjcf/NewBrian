@@ -27,6 +27,7 @@ import { GamePreviewService, type GamePreviewRustClient } from "./game-preview-s
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
 import type { VideoTimelineService } from "./video-timeline-service.ts";
 import type { VideoRenderService } from "./video-render-service.ts";
+import type { MusicTimelineService } from "./music-timeline-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
@@ -36,6 +37,7 @@ interface BrainWorkspaceIpcDependencies {
   quant?: QuantSimulationService;
   video?: VideoTimelineService;
   videoRender?: VideoRenderService;
+  music?: MusicTimelineService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
   acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" }) => Promise<GamePreviewRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
@@ -119,6 +121,9 @@ function parseVideoRenderStart(value: unknown) {
   rejectUnexpectedKeys(input, ["projectId", "outputRelativePath"], "Video render start");
   return { projectId: requireString(input.projectId, "projectId"), outputRelativePath: requireString(input.outputRelativePath, "outputRelativePath") };
 }
+function parseMusicProject(value: unknown) { const input = requireRecord(value, "Music timeline"); rejectUnexpectedKeys(input, ["projectId"], "Music timeline"); return { projectId: requireString(input.projectId, "projectId") }; }
+function parseMusicSave(value: unknown) { const input = requireRecord(value, "Music timeline save"); rejectUnexpectedKeys(input, ["projectId", "title", "sampleRate", "channels"], "Music timeline save"); if (input.channels !== 1 && input.channels !== 2) throw new TypeError("channels must be 1 or 2."); return { projectId: requireString(input.projectId, "projectId"), title: requireString(input.title, "title"), sampleRate: requireFiniteNumber(input.sampleRate, "sampleRate"), channels: input.channels as 1 | 2 }; }
+function parseMusicClip(value: unknown) { const input = requireRecord(value, "Music clip add"); rejectUnexpectedKeys(input, ["projectId", "trackType", "sourceFileId", "startMs", "durationMs", "sourceInMs", "gain", "pan"], "Music clip add"); return { projectId: requireString(input.projectId, "projectId"), trackType: input.trackType, sourceFileId: requireString(input.sourceFileId, "sourceFileId"), startMs: requireFiniteNumber(input.startMs, "startMs"), durationMs: requireFiniteNumber(input.durationMs, "durationMs"), sourceInMs: requireFiniteNumber(input.sourceInMs, "sourceInMs"), gain: requireFiniteNumber(input.gain, "gain"), pan: requireFiniteNumber(input.pan, "pan") }; }
 
 function requireWorkspaceKey(value: unknown): BrainWorkspaceKey {
   if (typeof value === "string" && (brainWorkspaceKeys as readonly string[]).includes(value)) return value as BrainWorkspaceKey;
@@ -446,6 +451,11 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       rejectUnexpectedKeys(input, ["renderId"], "Video render cancel");
       return dependencies.videoRender!.cancel(await ownerId(), requireString(input.renderId, "renderId"));
     });
+  }
+  if (dependencies.music) {
+    ipcMain.handle(brainWorkspaceIpcChannels.musicTimelineGet, async (_event, value: unknown) => { const input = parseMusicProject(value); return dependencies.music!.getTimeline(await ownerId(), input.projectId); });
+    ipcMain.handle(brainWorkspaceIpcChannels.musicTimelineSave, async (_event, value: unknown) => { const input = parseMusicSave(value); return dependencies.music!.ensureTimeline(await ownerId(), input.projectId, { title: input.title, sampleRate: input.sampleRate, channels: input.channels }); });
+    ipcMain.handle(brainWorkspaceIpcChannels.musicClipAdd, async (_event, value: unknown) => { const input = parseMusicClip(value); if (input.trackType !== "audio" && input.trackType !== "midi") throw new TypeError("trackType is unsupported."); return dependencies.music!.addClip(await ownerId(), input.projectId, input); });
   }
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
