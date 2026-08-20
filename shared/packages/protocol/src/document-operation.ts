@@ -11,5 +11,5 @@ export function validateDocumentOperation(value: unknown): asserts value is Docu
   if (input.format === "docx" && (input.kind !== "replace-paragraph-text" || !Number.isInteger(input.paragraphIndex) || Number(input.paragraphIndex) < 0)) throw new TypeError("docx operation is invalid");
   if (input.format === "xlsx" && (input.kind !== "replace-cell" || typeof input.sheet !== "string" || typeof input.cell !== "string")) throw new TypeError("xlsx operation is invalid");
   if (input.format === "pptx" && (input.kind !== "replace-shape-text" || !Number.isInteger(input.slide) || typeof input.shapeId !== "string")) throw new TypeError("pptx operation is invalid");
-  if (input.format === "pdf" && (input.kind !== "add-annotation" || !Number.isInteger(input.page) || input.page < 1)) throw new TypeError("pdf operation is invalid");
+  if (input.format === "pdf" && (input.kind !== "add-annotation" || !Number.isInteger(input.page) || Number(input.page) < 1)) throw new TypeError("pdf operation is invalid");
 }
