@@ -206,6 +206,8 @@ contextBridge.exposeInMainWorld("codecn", {
   getMusicTimeline: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicTimelineGet, input),
   saveMusicTimeline: (input: { projectId: string; title: string; sampleRate: number; channels: 1 | 2 }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicTimelineSave, input),
   addMusicClip: (input: { projectId: string; trackType: "audio" | "midi"; sourceFileId: string; startMs: number; durationMs: number; sourceInMs: number; gain: number; pan: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicClipAdd, input),
+  listDataDatasets: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetList, input),
+  saveDataDataset: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetSave, input),
   bootstrap: () => ipcRenderer.invoke(desktopIpcChannels.core.bootstrap),
   getSnapshot: () => ipcRenderer.invoke(desktopIpcChannels.core.getSnapshot),
   getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke(desktopIpcChannels.goal.get, input),

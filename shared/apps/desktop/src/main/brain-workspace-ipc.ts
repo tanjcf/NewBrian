@@ -28,6 +28,8 @@ import type { QuantSimulationService } from "./quant-simulation-service.ts";
 import type { VideoTimelineService } from "./video-timeline-service.ts";
 import type { VideoRenderService } from "./video-render-service.ts";
 import type { MusicTimelineService } from "./music-timeline-service.ts";
+import { normalizeDataset } from "./data-dataset-policy.ts";
+import type { BrainDataset } from "@codex-forge/protocol/data-types";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
@@ -124,6 +126,7 @@ function parseVideoRenderStart(value: unknown) {
 function parseMusicProject(value: unknown) { const input = requireRecord(value, "Music timeline"); rejectUnexpectedKeys(input, ["projectId"], "Music timeline"); return { projectId: requireString(input.projectId, "projectId") }; }
 function parseMusicSave(value: unknown) { const input = requireRecord(value, "Music timeline save"); rejectUnexpectedKeys(input, ["projectId", "title", "sampleRate", "channels"], "Music timeline save"); if (input.channels !== 1 && input.channels !== 2) throw new TypeError("channels must be 1 or 2."); return { projectId: requireString(input.projectId, "projectId"), title: requireString(input.title, "title"), sampleRate: requireFiniteNumber(input.sampleRate, "sampleRate"), channels: input.channels as 1 | 2 }; }
 function parseMusicClip(value: unknown) { const input = requireRecord(value, "Music clip add"); rejectUnexpectedKeys(input, ["projectId", "trackType", "sourceFileId", "startMs", "durationMs", "sourceInMs", "gain", "pan"], "Music clip add"); return { projectId: requireString(input.projectId, "projectId"), trackType: input.trackType, sourceFileId: requireString(input.sourceFileId, "sourceFileId"), startMs: requireFiniteNumber(input.startMs, "startMs"), durationMs: requireFiniteNumber(input.durationMs, "durationMs"), sourceInMs: requireFiniteNumber(input.sourceInMs, "sourceInMs"), gain: requireFiniteNumber(input.gain, "gain"), pan: requireFiniteNumber(input.pan, "pan") }; }
+function parseDataset(value: unknown): BrainDataset { const input = requireRecord(value, "Dataset save"); rejectUnexpectedKeys(input, ["id", "projectId", "name", "columns", "rowCount", "sourceFileId", "contentHash", "updatedAt"], "Dataset save"); return normalizeDataset({ id: requireString(input.id, "id"), projectId: requireString(input.projectId, "projectId"), name: requireString(input.name, "name"), columns: input.columns as BrainDataset["columns"], rowCount: requireFiniteNumber(input.rowCount, "rowCount"), sourceFileId: optionalString(input.sourceFileId, "sourceFileId"), contentHash: requireString(input.contentHash, "contentHash"), updatedAt: requireString(input.updatedAt, "updatedAt") }); }
 
 function requireWorkspaceKey(value: unknown): BrainWorkspaceKey {
   if (typeof value === "string" && (brainWorkspaceKeys as readonly string[]).includes(value)) return value as BrainWorkspaceKey;
@@ -457,6 +460,8 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     ipcMain.handle(brainWorkspaceIpcChannels.musicTimelineSave, async (_event, value: unknown) => { const input = parseMusicSave(value); return dependencies.music!.ensureTimeline(await ownerId(), input.projectId, { title: input.title, sampleRate: input.sampleRate, channels: input.channels }); });
     ipcMain.handle(brainWorkspaceIpcChannels.musicClipAdd, async (_event, value: unknown) => { const input = parseMusicClip(value); if (input.trackType !== "audio" && input.trackType !== "midi") throw new TypeError("trackType is unsupported."); return dependencies.music!.addClip(await ownerId(), input.projectId, input); });
   }
+  ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
+  ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
     return dependencies.storage.listAnnotations(await ownerId(), input.projectId);

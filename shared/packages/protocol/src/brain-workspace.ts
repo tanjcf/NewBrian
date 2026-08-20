@@ -336,4 +336,6 @@ export const brainWorkspaceIpcChannels = {
   ,musicTimelineGet: "brain:music:timeline-get"
   ,musicTimelineSave: "brain:music:timeline-save"
   ,musicClipAdd: "brain:music:clip-add"
+  ,dataDatasetList: "brain:data:dataset-list"
+  ,dataDatasetSave: "brain:data:dataset-save"
 } as const;
