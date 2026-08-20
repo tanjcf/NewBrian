@@ -221,7 +221,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 6);
+      assert.equal(Number(migrations.count), 10);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);

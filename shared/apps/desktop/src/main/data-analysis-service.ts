@@ -15,7 +15,9 @@ export function summarizeNumericColumns(input: { datasetId: string; contentHash:
 }
 
 export class DataAnalysisService {
-  constructor(private readonly storage: BrainWorkspaceStorage, private readonly imports: DataImportService) {}
+  private readonly storage: BrainWorkspaceStorage;
+  private readonly imports: DataImportService;
+  constructor(storage: BrainWorkspaceStorage, imports: DataImportService) { this.storage = storage; this.imports = imports; }
   async summarize(ownerId: string, projectId: string, datasetId: string) {
     const dataset = this.storage.listDatasets(ownerId, projectId).find((item) => item.id === datasetId);
     if (!dataset) throw new Error("BRAIN_DATASET_NOT_FOUND");
