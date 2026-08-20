@@ -10,6 +10,7 @@ import {
 import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { ChinaExchange, QuantStrategyExecution, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
 import type { BrainVideoClip, BrainVideoTimeline } from "@codex-forge/protocol";
+import type { BrainMusicClip, BrainMusicTimeline } from "@codex-forge/protocol/music-types";
 
 export { brainWorkspaceKeys } from "@codex-forge/protocol";
 export type { BrainWorkspaceKey } from "@codex-forge/protocol";
@@ -99,7 +100,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 7;
+const latestMigrationVersion = 8;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -417,6 +418,10 @@ function migrationSevenSql() {
     CREATE INDEX idx_brain_video_clip_project_start ON brain_video_clip(project_id, start_ms, id);
   `;
 }
+function migrationEightSql() { return `
+CREATE TABLE IF NOT EXISTS brain_music_timeline (project_id TEXT PRIMARY KEY REFERENCES brain_project(id) ON DELETE CASCADE, title TEXT NOT NULL, sample_rate INTEGER NOT NULL, channels INTEGER NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS brain_music_clip (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, track_type TEXT NOT NULL, source_file_id TEXT NOT NULL, start_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL, source_in_ms INTEGER NOT NULL, gain REAL NOT NULL, pan REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_brain_music_clip_project_start ON brain_music_clip(project_id, start_ms, id);` }
 
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
@@ -542,6 +547,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 5, "Schedule idempotent quantitative strategy simulations", migrationFiveSql());
       applyMigration(this.database, 6, "Bind quantitative schedules to symbols and target quantities", migrationSixSql());
       applyMigration(this.database, 7, "Persist video timelines and clips", migrationSevenSql());
+      applyMigration(this.database, 8, "Persist music timelines and clips", migrationEightSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -578,6 +584,31 @@ export class BrainWorkspaceStorage {
     if (!/^video$|^audio$|^subtitle$/.test(clip.trackType) || !clip.sourceFileId.trim() || !Number.isInteger(clip.startMs) || clip.startMs < 0 || !Number.isInteger(clip.durationMs) || clip.durationMs <= 0 || !Number.isInteger(clip.sourceInMs) || clip.sourceInMs < 0 || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) throw new BrainStorageError("BRAIN_VIDEO_CLIP_INVALID", "Video clip values are invalid");
     this.database.prepare("INSERT INTO brain_video_clip(id, project_id, track_type, source_file_id, start_ms, duration_ms, source_in_ms, volume, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(clip.id, input.projectId, clip.trackType, clip.sourceFileId.trim(), clip.startMs, clip.durationMs, clip.sourceInMs, clip.volume, clip.text || "");
     return this.getVideoTimeline(input.ownerId, input.projectId)!;
+  }
+
+  getMusicTimeline(ownerId: string, projectId: string): BrainMusicTimeline | null {
+    const project = this.getProject(ownerId, projectId);
+    if (project.primaryWorkspaceKey !== "music") throw new BrainStorageError("BRAIN_MUSIC_WORKSPACE_REQUIRED", "Project is not a music workspace");
+    const row = this.database.prepare("SELECT * FROM brain_music_timeline WHERE project_id = ?").get(projectId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const clips = this.database.prepare("SELECT * FROM brain_music_clip WHERE project_id = ? ORDER BY start_ms, id").all(projectId) as Record<string, unknown>[];
+    return { schemaVersion: 1, projectId, title: String(row.title), sampleRate: Number(row.sample_rate), channels: Number(row.channels) as 1 | 2, durationMs: clips.reduce((max, clip) => Math.max(max, Number(clip.start_ms) + Number(clip.duration_ms)), 0), clips: clips.map((clip) => ({ id: String(clip.id), trackType: String(clip.track_type) as BrainMusicClip["trackType"], sourceFileId: String(clip.source_file_id), startMs: Number(clip.start_ms), durationMs: Number(clip.duration_ms), sourceInMs: Number(clip.source_in_ms), gain: Number(clip.gain), pan: Number(clip.pan) })), updatedAt: String(row.updated_at) };
+  }
+
+  saveMusicTimeline(input: { ownerId: string; projectId: string; title: string; sampleRate: number; channels: 1 | 2 }): BrainMusicTimeline {
+    const project = this.getProject(input.ownerId, input.projectId);
+    if (project.primaryWorkspaceKey !== "music") throw new BrainStorageError("BRAIN_MUSIC_WORKSPACE_REQUIRED", "Project is not a music workspace");
+    if (!input.title.trim() || !Number.isInteger(input.sampleRate) || input.sampleRate < 8_000 || (input.channels !== 1 && input.channels !== 2)) throw new BrainStorageError("BRAIN_MUSIC_TIMELINE_INVALID", "Music timeline settings are invalid");
+    this.database.prepare("INSERT INTO brain_music_timeline(project_id, title, sample_rate, channels, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET title=excluded.title, sample_rate=excluded.sample_rate, channels=excluded.channels, updated_at=excluded.updated_at").run(input.projectId, input.title.trim(), input.sampleRate, input.channels, nowIso());
+    return this.getMusicTimeline(input.ownerId, input.projectId)!;
+  }
+
+  addMusicClip(input: { ownerId: string; projectId: string; clip: BrainMusicClip }): BrainMusicTimeline {
+    this.getProject(input.ownerId, input.projectId);
+    const clip = input.clip;
+    if (!/^audio$|^midi$/.test(clip.trackType) || !clip.sourceFileId.trim() || !Number.isInteger(clip.startMs) || clip.startMs < 0 || !Number.isInteger(clip.durationMs) || clip.durationMs <= 0 || !Number.isInteger(clip.sourceInMs) || clip.sourceInMs < 0 || !Number.isFinite(clip.gain) || !Number.isFinite(clip.pan) || clip.pan < -1 || clip.pan > 1) throw new BrainStorageError("BRAIN_MUSIC_CLIP_INVALID", "Music clip values are invalid");
+    this.database.prepare("INSERT INTO brain_music_clip(id, project_id, track_type, source_file_id, start_ms, duration_ms, source_in_ms, gain, pan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(clip.id, input.projectId, clip.trackType, clip.sourceFileId.trim(), clip.startMs, clip.durationMs, clip.sourceInMs, clip.gain, clip.pan);
+    return this.getMusicTimeline(input.ownerId, input.projectId)!;
   }
 
   close() {
