@@ -102,6 +102,8 @@ import { CodexStorage } from "./codex-storage.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
+import { VideoTimelineService } from "./video-timeline-service.js";
+import { VideoRenderService } from "./video-render-service.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -580,6 +582,20 @@ if (!singleInstanceLockAcquired) {
 }
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
+const videoTimelineService = new VideoTimelineService(brainWorkspaceStorage);
+const videoRenderService = new VideoRenderService({
+  acquireRustCore: (binding) => getRustCoreService().acquire(binding),
+  platform: process.platform,
+  confirmRender: async ({ projectId, command, outputRelativePath }) => {
+    const result = await dialog.showMessageBox(mainWindowRef ?? undefined, {
+      type: "warning", title: "渲染视频", message: `允许渲染项目 ${projectId} 吗？`,
+      detail: `输出：${outputRelativePath}\n命令：${command}\n\n渲染将消耗本机 CPU 和磁盘空间。`,
+      buttons: ["开始渲染", "取消"], defaultId: 1, cancelId: 1, noLink: true
+    });
+    return result.response === 0;
+  },
+  validateOutput: async (root, output) => { try { const stat = await fs.stat(resolve(root, output)); return stat.isFile() && stat.size > 0; } catch { return false; } }
+});
 const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARKET_DATA_URL, {
   load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
   save: (projectId, stateJson) => brainWorkspaceStorage.saveQuantState(projectId, stateJson)
@@ -7302,6 +7318,8 @@ function registerIpc() {
   registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
+    video: videoTimelineService,
+    videoRender: videoRenderService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
     platform: process.platform,

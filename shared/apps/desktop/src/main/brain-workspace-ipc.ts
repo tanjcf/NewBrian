@@ -37,7 +37,7 @@ interface BrainWorkspaceIpcDependencies {
   video?: VideoTimelineService;
   videoRender?: VideoRenderService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
-  acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" }) => Promise<GamePreviewRustClient>;
+  acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" }) => Promise<GamePreviewRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
   platform?: NodeJS.Platform;
 }
