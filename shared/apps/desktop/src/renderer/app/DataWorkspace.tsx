@@ -1,0 +1,7 @@
+import { useEffect, useState } from "react";
+
+export function DataWorkspace({ projectId }: { projectId?: string }) {
+  const [datasets, setDatasets] = useState<any[]>([]); const [status, setStatus] = useState("正在加载数据集");
+  useEffect(() => { if (!projectId || !window.codecn?.listDataDatasets) { setStatus("请选择数据项目"); return; } void window.codecn.listDataDatasets({ projectId }).then((items: any[]) => { setDatasets(Array.isArray(items) ? items : []); setStatus("数据集已加载"); }).catch(() => setStatus("数据集暂不可用")); }, [projectId]);
+  return <main className="brain-data-module"><header className="brain-video-header"><div><span>数据与决策</span><strong>数据集</strong></div><small>{status} · 分析结果可复现</small></header><section className="brain-data-summary"><span>数据集 {datasets.length}</span><span>表格、筛选、图表和分析产物</span></section><section className="brain-data-list">{datasets.map((dataset) => <article className="brain-data-card" key={dataset.id}><header><strong>{dataset.name}</strong><small>{dataset.rowCount.toLocaleString()} 行 · {dataset.columns.length} 列</small></header><div className="brain-data-columns">{dataset.columns.map((column: any) => <span key={column.key}>{column.label}<em>{column.type}</em></span>)}</div><footer><small>来源 {dataset.sourceFileId || "未绑定文件"}</small><small>哈希 {String(dataset.contentHash).slice(0, 12)}…</small></footer></article>)}{!datasets.length ? <div className="brain-resource-empty">还没有数据集，请先导入 CSV 或表格文件。</div> : null}</section></main>;
+}
