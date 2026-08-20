@@ -1,0 +1,6 @@
+import { useEffect, useState } from "react";
+export function SoftwareWorkspace({ projectId }: { projectId?: string }) {
+  const [scripts, setScripts] = useState<any[]>([]); const [status, setStatus] = useState("正在读取脚本");
+  useEffect(() => { if (!projectId || !window.codecn?.listSoftwareScripts) { setStatus("请选择软件项目"); return; } void window.codecn.listSoftwareScripts({ projectId }).then((items: any[]) => { setScripts(Array.isArray(items) ? items : []); setStatus("脚本已就绪"); }).catch(() => setStatus("脚本读取失败")); }, [projectId]);
+  return <main className="brain-software-module"><header className="brain-video-header"><div><span>软件与自动化</span><strong>受控工具</strong></div><small>{status} · 所有执行需要审批</small></header><section className="brain-software-list">{scripts.map((script) => <article className="brain-software-card" key={script.id}><div><strong>{script.label}</strong><small>{script.operation} · {script.source}</small></div><code>{script.executable} {script.args.join(" ")}</code><button type="button" disabled title="Rust Core 执行边界尚未接通">请求执行</button></article>)}{!scripts.length ? <div className="brain-resource-empty">未发现可审批脚本，请在项目 package.json 中配置 test、build、format 或 lint。</div> : null}</section></main>;
+}

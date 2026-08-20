@@ -40,6 +40,7 @@ import { GameWorkspace } from "./GameWorkspace";
 import { VideoWorkspace } from "./VideoWorkspace";
 import { MusicWorkspace } from "./MusicWorkspace";
 import { DataWorkspace } from "./DataWorkspace";
+import { SoftwareWorkspace } from "./SoftwareWorkspace";
 import {
   brainWorkspaceModes,
   type BrainWorkspaceKey
@@ -454,7 +455,7 @@ export function WorkspaceModules(ctx: any) {
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
   const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
-  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant" | "game" | "video" | "music" | "data">("files");
+  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant" | "game" | "video" | "music" | "data" | "software">("files");
   const brainResourcePanelRef = useRef<HTMLElement | null>(null);
   const [brainResourceWidth, setBrainResourceWidth] = useState(() => {
     try {
@@ -4372,6 +4373,7 @@ function renderSidebarModule() {
           {selectedBrainWorkspaceKey === "video" ? <button type="button" className={brainResourceTab === "video" ? "active" : ""} onClick={() => setBrainResourceTab("video")}>视频</button> : null}
           {selectedBrainWorkspaceKey === "music" ? <button type="button" className={brainResourceTab === "music" ? "active" : ""} onClick={() => setBrainResourceTab("music")}>音乐</button> : null}
           {selectedBrainWorkspaceKey === "data" ? <button type="button" className={brainResourceTab === "data" ? "active" : ""} onClick={() => setBrainResourceTab("data")}>数据</button> : null}
+          {selectedBrainWorkspaceKey === "software" ? <button type="button" className={brainResourceTab === "software" ? "active" : ""} onClick={() => setBrainResourceTab("software")}>软件</button> : null}
         </nav>
         <div className={`brain-resource-list${brainResourceTab === "quant" || brainResourceTab === "game" ? " quant-plugin" : ""}`}>
           {brainResourceTab === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} compact /> : null}
@@ -4379,6 +4381,7 @@ function renderSidebarModule() {
           {brainResourceTab === "video" ? <VideoWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
           {brainResourceTab === "music" ? <MusicWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
           {brainResourceTab === "data" ? <DataWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
+          {brainResourceTab === "software" ? <SoftwareWorkspace projectId={selectedBrainProject?.id} /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
             <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
               setActiveBrainDocumentFileId(file.id);
