@@ -139,6 +139,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [ ] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
   - [x] Persist timelines and clips, inspect WAV/MIDI metadata, expose bounded WAV waveform samples, pass authorized audio media into approved Rust Core render jobs, and verify output boundary; real FFmpeg encoding still requires a verified binary.
 - [ ] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
+  - [x] Verify versioned DOCX paragraph, XLSX cell, and PPTX shape-text writeback with owner-scoped change sets, output boundaries, SHA-256 registration, and focused Windows tests; PDF annotation writeback remains pending.
 
 ### Task 8: Search and model policy integration
 
