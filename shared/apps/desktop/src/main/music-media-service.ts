@@ -4,7 +4,9 @@ import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import type { BrainMusicMediaInfo } from "@codex-forge/protocol/music-types";
 
 export class MusicMediaService {
-  constructor(private readonly storage: BrainWorkspaceStorage, private readonly resolveWorkspaceRoot: (id: string) => Promise<string>) {}
+  private readonly storage: BrainWorkspaceStorage;
+  private readonly resolveWorkspaceRoot: (id: string) => Promise<string>;
+  constructor(storage: BrainWorkspaceStorage, resolveWorkspaceRoot: (id: string) => Promise<string>) { this.storage = storage; this.resolveWorkspaceRoot = resolveWorkspaceRoot; }
   async inspect(ownerId: string, projectId: string, sourceFileId: string): Promise<BrainMusicMediaInfo> {
     const project = this.storage.getProject(ownerId, projectId); if (project.primaryWorkspaceKey !== "music") throw new Error("BRAIN_MUSIC_WORKSPACE_REQUIRED"); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
     const file = this.storage.getFile(ownerId, projectId, sourceFileId); const root = await realpath(await this.resolveWorkspaceRoot(project.localWorkspaceId)); if (isAbsolute(file.storageKey)) throw new Error("BRAIN_MUSIC_PATH_OUTSIDE_PROJECT"); const path = await realpath(resolve(root, file.storageKey)); const rel = relative(root, path); if (!rel || rel.startsWith("..") || isAbsolute(rel) || !(await stat(path)).isFile()) throw new Error("BRAIN_MUSIC_PATH_OUTSIDE_PROJECT");
