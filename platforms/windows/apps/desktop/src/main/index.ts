@@ -7357,6 +7357,14 @@ function registerIpc() {
       });
       return result.response === 0;
     },
+    confirmSoftwareTask: async ({ projectId, projectRoot, script }) => {
+      const result = await dialog.showMessageBox(mainWindowRef ?? undefined, {
+        type: "warning", title: "执行软件任务", message: `允许在项目 ${projectId} 中执行“${script.label}”吗？`,
+        detail: `项目目录：${projectRoot}\n固定命令：${script.executable} ${script.args.join(" ")}\n\n任务将在 Rust Core 的权限、超时和输出限制下执行。`,
+        buttons: ["执行", "取消"], defaultId: 1, cancelId: 1, noLink: true
+      });
+      return result.response === 0;
+    },
     resolveOwnerId: resolveBrainLocalOwnerId,
     resolveWorkspaceRoot: resolveBrainWorkspaceRoot
   });

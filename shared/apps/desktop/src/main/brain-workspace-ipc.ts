@@ -31,6 +31,7 @@ import type { MusicTimelineService } from "./music-timeline-service.ts";
 import { normalizeDataset } from "./data-dataset-policy.ts";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
 import { discoverSoftwareScripts } from "./software-script-discovery.ts";
+import { SoftwareTaskService, type SoftwareTaskRustClient } from "./software-task-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
@@ -42,8 +43,9 @@ interface BrainWorkspaceIpcDependencies {
   videoRender?: VideoRenderService;
   music?: MusicTimelineService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
-  acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" }) => Promise<GamePreviewRustClient>;
+  acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" | "software" }) => Promise<GamePreviewRustClient | SoftwareTaskRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
+  confirmSoftwareTask?: (input: { projectId: string; script: import("@codex-forge/protocol/software-types").BrainSoftwareScript; projectRoot: string }) => Promise<boolean>;
   platform?: NodeJS.Platform;
 }
 
@@ -300,6 +302,9 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       platform: dependencies.platform
     })
     : null;
+  const softwareTasks = dependencies.acquireRustCore && dependencies.confirmSoftwareTask
+    ? new SoftwareTaskService({ storage: dependencies.storage, resolveWorkspaceRoot: dependencies.resolveWorkspaceRoot, acquireRustCore: dependencies.acquireRustCore as any, confirmRun: dependencies.confirmSoftwareTask, platform: dependencies.platform })
+    : null;
   if (gamePreviews) dependencies.storage.reconcileInterruptedGamePreviews();
   ipcMain.handle(brainWorkspaceIpcChannels.workspaceList, () => dependencies.storage.listWorkspaces());
   ipcMain.handle(brainWorkspaceIpcChannels.projectList, async (_event, value: unknown) =>
@@ -464,6 +469,11 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
   ipcMain.handle(brainWorkspaceIpcChannels.softwareScriptsList, async (_event, value: unknown) => { const input = parseProjectGet(value); const owner = await ownerId(); const project = dependencies.storage.getProject(owner, input.projectId); if (project.primaryWorkspaceKey !== "software") throw new Error("BRAIN_SOFTWARE_WORKSPACE_REQUIRED"); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED"); const root = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId); return discoverSoftwareScripts(root); });
+  if (softwareTasks) {
+    ipcMain.handle(brainWorkspaceIpcChannels.softwareTaskStart, async (_event, value: unknown) => { const input = requireRecord(value, "Software task start"); rejectUnexpectedKeys(input, ["projectId", "scriptId", "conversationId"], "Software task start"); return softwareTasks.start(await ownerId(), { projectId: requireString(input.projectId, "projectId"), scriptId: requireString(input.scriptId, "scriptId"), conversationId: optionalString(input.conversationId, "conversationId") }); });
+    ipcMain.handle(brainWorkspaceIpcChannels.softwareTaskStatus, async (_event, value: unknown) => { const input = requireRecord(value, "Software task status"); rejectUnexpectedKeys(input, ["taskId"], "Software task status"); return softwareTasks.status(await ownerId(), requireString(input.taskId, "taskId")); });
+    ipcMain.handle(brainWorkspaceIpcChannels.softwareTaskCancel, async (_event, value: unknown) => { const input = requireRecord(value, "Software task cancel"); rejectUnexpectedKeys(input, ["taskId"], "Software task cancel"); return softwareTasks.cancel(await ownerId(), requireString(input.taskId, "taskId")); });
+  }
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
     return dependencies.storage.listAnnotations(await ownerId(), input.projectId);
