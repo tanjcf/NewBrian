@@ -37,6 +37,7 @@ import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
 import { buildAnnotationChatReference, createTextLineAnchor } from "./document-annotation-policy";
 import { QuantWorkspace } from "./QuantWorkspace";
 import { GameWorkspace } from "./GameWorkspace";
+import { VideoWorkspace } from "./VideoWorkspace";
 import {
   brainWorkspaceModes,
   type BrainWorkspaceKey
@@ -451,7 +452,7 @@ export function WorkspaceModules(ctx: any) {
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
   const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
-  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant" | "game">("files");
+  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "quant" | "game" | "video">("files");
   const brainResourcePanelRef = useRef<HTMLElement | null>(null);
   const [brainResourceWidth, setBrainResourceWidth] = useState(() => {
     try {
@@ -4366,10 +4367,12 @@ function renderSidebarModule() {
           <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => setBrainResourceTab("tasks")}>任务 <em>{brainTasks.length}</em></button>
           {selectedBrainWorkspaceKey === "quant" ? <button type="button" className={brainResourceTab === "quant" ? "active" : ""} onClick={() => setBrainResourceTab("quant")}>行情</button> : null}
           {selectedBrainWorkspaceKey === "game" ? <button type="button" className={brainResourceTab === "game" ? "active" : ""} onClick={() => setBrainResourceTab("game")}>游戏</button> : null}
+          {selectedBrainWorkspaceKey === "video" ? <button type="button" className={brainResourceTab === "video" ? "active" : ""} onClick={() => setBrainResourceTab("video")}>视频</button> : null}
         </nav>
         <div className={`brain-resource-list${brainResourceTab === "quant" || brainResourceTab === "game" ? " quant-plugin" : ""}`}>
           {brainResourceTab === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} compact /> : null}
           {brainResourceTab === "game" ? <GameWorkspace projectId={selectedBrainProject?.id} conversationId={selectedBrainConversationId || undefined} /> : null}
+          {brainResourceTab === "video" ? <VideoWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
             <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
               setActiveBrainDocumentFileId(file.id);
