@@ -35,6 +35,7 @@ import type { BrainDataset } from "@codex-forge/protocol/data-types";
 import { discoverSoftwareScripts } from "./software-script-discovery.ts";
 import { SoftwareTaskService, type SoftwareTaskRustClient } from "./software-task-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
+import { validateDocumentOperation } from "@codex-forge/protocol/document-operation";
 
 interface BrainWorkspaceIpcDependencies {
   storage: BrainWorkspaceStorage;
@@ -507,10 +508,12 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.changeSetCreate, async (_event, value: unknown) => {
     const input = requireRecord(value, "Change set create");
+    const diffJson = typeof input.diffJson === "string" ? input.diffJson : "{}";
+    try { const parsed = JSON.parse(diffJson); if (parsed && typeof parsed === "object" && "format" in parsed) validateDocumentOperation(parsed); } catch (error) { throw new TypeError(error instanceof Error ? error.message : "document operation is invalid"); }
     return dependencies.storage.createChangeSet({
       ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), annotationId: requireString(input.annotationId, "annotationId"),
       taskId: typeof input.taskId === "string" ? input.taskId : undefined, baseFileVersion: Number(input.baseFileVersion),
-      changeSummary: requireString(input.changeSummary, "changeSummary"), diffJson: typeof input.diffJson === "string" ? input.diffJson : "{}"
+      changeSummary: requireString(input.changeSummary, "changeSummary"), diffJson
     });
   });
   ipcMain.handle(brainWorkspaceIpcChannels.changeSetUpdate, async (_event, value: unknown) => {
