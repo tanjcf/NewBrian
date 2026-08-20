@@ -11,6 +11,7 @@ import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protoc
 import type { ChinaExchange, QuantStrategyExecution, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
 import type { BrainVideoClip, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { BrainMusicClip, BrainMusicTimeline } from "@codex-forge/protocol/music-types";
+import type { BrainDataset } from "@codex-forge/protocol/data-types";
 
 export { brainWorkspaceKeys } from "@codex-forge/protocol";
 export type { BrainWorkspaceKey } from "@codex-forge/protocol";
@@ -100,7 +101,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 8;
+const latestMigrationVersion = 9;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -422,6 +423,7 @@ function migrationEightSql() { return `
 CREATE TABLE IF NOT EXISTS brain_music_timeline (project_id TEXT PRIMARY KEY REFERENCES brain_project(id) ON DELETE CASCADE, title TEXT NOT NULL, sample_rate INTEGER NOT NULL, channels INTEGER NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS brain_music_clip (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, track_type TEXT NOT NULL, source_file_id TEXT NOT NULL, start_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL, source_in_ms INTEGER NOT NULL, gain REAL NOT NULL, pan REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_brain_music_clip_project_start ON brain_music_clip(project_id, start_ms, id);` }
+function migrationNineSql() { return `CREATE TABLE IF NOT EXISTS brain_dataset (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, name TEXT NOT NULL, columns_json TEXT NOT NULL, row_count INTEGER NOT NULL, source_file_id TEXT, content_hash TEXT NOT NULL, updated_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS idx_brain_dataset_project ON brain_dataset(project_id, updated_at);`; }
 
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
@@ -548,6 +550,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 6, "Bind quantitative schedules to symbols and target quantities", migrationSixSql());
       applyMigration(this.database, 7, "Persist video timelines and clips", migrationSevenSql());
       applyMigration(this.database, 8, "Persist music timelines and clips", migrationEightSql());
+      applyMigration(this.database, 9, "Persist data decision datasets", migrationNineSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -609,6 +612,20 @@ export class BrainWorkspaceStorage {
     if (!/^audio$|^midi$/.test(clip.trackType) || !clip.sourceFileId.trim() || !Number.isInteger(clip.startMs) || clip.startMs < 0 || !Number.isInteger(clip.durationMs) || clip.durationMs <= 0 || !Number.isInteger(clip.sourceInMs) || clip.sourceInMs < 0 || !Number.isFinite(clip.gain) || !Number.isFinite(clip.pan) || clip.pan < -1 || clip.pan > 1) throw new BrainStorageError("BRAIN_MUSIC_CLIP_INVALID", "Music clip values are invalid");
     this.database.prepare("INSERT INTO brain_music_clip(id, project_id, track_type, source_file_id, start_ms, duration_ms, source_in_ms, gain, pan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(clip.id, input.projectId, clip.trackType, clip.sourceFileId.trim(), clip.startMs, clip.durationMs, clip.sourceInMs, clip.gain, clip.pan);
     return this.getMusicTimeline(input.ownerId, input.projectId)!;
+  }
+
+  saveDataset(input: { ownerId: string; dataset: BrainDataset }): BrainDataset {
+    const project = this.getProject(input.ownerId, input.dataset.projectId);
+    if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
+    this.database.prepare("INSERT INTO brain_dataset(id, project_id, name, columns_json, row_count, source_file_id, content_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, columns_json=excluded.columns_json, row_count=excluded.row_count, source_file_id=excluded.source_file_id, content_hash=excluded.content_hash, updated_at=excluded.updated_at").run(input.dataset.id, input.dataset.projectId, input.dataset.name, JSON.stringify(input.dataset.columns), input.dataset.rowCount, input.dataset.sourceFileId || null, input.dataset.contentHash, input.dataset.updatedAt);
+    return input.dataset;
+  }
+
+  listDatasets(ownerId: string, projectId: string): BrainDataset[] {
+    const project = this.getProject(ownerId, projectId);
+    if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
+    const rows = this.database.prepare("SELECT * FROM brain_dataset WHERE project_id = ? ORDER BY updated_at DESC, id").all(projectId) as Record<string, unknown>[];
+    return rows.map((row) => ({ schemaVersion: 1, id: String(row.id), projectId: String(row.project_id), name: String(row.name), columns: JSON.parse(String(row.columns_json)), rowCount: Number(row.row_count), sourceFileId: row.source_file_id ? String(row.source_file_id) : undefined, contentHash: String(row.content_hash), updatedAt: String(row.updated_at) }));
   }
 
   close() {
