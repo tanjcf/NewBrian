@@ -28,6 +28,8 @@ export type MediaGenerationTurnDeps = {
   onProgress?: (job: GenerationJobSnapshot) => void;
   onJobId?: (mediaJobId: string) => void;
   onCorrelationMismatch?: (message: string) => void;
+  pollIntervalMs?: number;
+  maxWaitMs?: number;
 };
 
 /**
@@ -125,6 +127,8 @@ export async function executeMediaGenerationTurn(
         imageUrl: input.imageUrl,
         idempotencyKey: `codecn-${input.requestId}`,
         wait: false,
+        pollIntervalMs: input.pollIntervalMs,
+        maxWaitMs: input.maxWaitMs,
         signal: input.signal,
         fetchImpl: input.fetchImpl,
         onProgress: input.onProgress,
@@ -156,6 +160,8 @@ export async function executeMediaGenerationTurn(
     prompt: input.prompt,
     imageUrl: input.imageUrl,
     idempotencyKey: `codecn-${input.requestId}`,
+    pollIntervalMs: input.pollIntervalMs,
+    maxWaitMs: input.maxWaitMs,
     signal: input.signal,
     fetchImpl: input.fetchImpl,
     onProgress: input.onProgress,
