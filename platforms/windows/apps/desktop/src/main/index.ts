@@ -7338,7 +7338,7 @@ function registerIpc() {
     return root;
   };
   const musicMediaService = new MusicMediaService(brainWorkspaceStorage, resolveBrainWorkspaceRoot);
-  const musicRenderService = new MusicRenderService({ acquireRustCore: (binding) => getRustCoreService().acquire(binding), platform: process.platform, confirmRender: async ({ projectId, command }) => { const result = await dialog.showMessageBox(mainWindowRef ?? undefined, { type: "warning", title: "渲染音乐", message: `允许渲染项目 ${projectId} 吗？`, detail: `固定命令：${command}`, buttons: ["开始渲染", "取消"], defaultId: 1, cancelId: 1, noLink: true }); return result.response === 0; } });
+  const musicRenderService = new MusicRenderService({ acquireRustCore: (binding) => getRustCoreService().acquire(binding), platform: process.platform, confirmRender: async ({ projectId, command }) => { const result = await dialog.showMessageBox(mainWindowRef ?? undefined, { type: "warning", title: "渲染音乐", message: `允许渲染项目 ${projectId} 吗？`, detail: `固定命令：${command}`, buttons: ["开始渲染", "取消"], defaultId: 1, cancelId: 1, noLink: true }); return result.response === 0; }, validateOutput: async (root, output) => { try { const rootReal = await fs.realpath(root); const target = resolve(rootReal, output); const targetReal = await fs.realpath(target); const boundary = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`; const file = await fs.stat(targetReal); return (targetReal === rootReal || targetReal.startsWith(boundary)) && file.isFile() && file.size > 0; } catch { return false; } } });
   registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
