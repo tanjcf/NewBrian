@@ -10,9 +10,11 @@ test("video render requires approval and rejects traversal output", async () => 
 });
 
 test("video render registers one-shot approval before process", async () => {
-  const calls: string[] = [];
-  const service = new VideoRenderService({ acquireRustCore: async () => ({ request: async (input: any) => { calls.push(input.operation); return { status: "completed", result: { success: true } } as any; } }), confirmRender: async () => true, platform: "win32" });
+  const calls: any[] = [];
+  const service = new VideoRenderService({ acquireRustCore: async () => ({ request: async (input: any) => { calls.push(input); return { status: "completed", result: { success: true } } as any; } }), confirmRender: async () => true, platform: "win32" });
   const state = await service.start("owner", { projectId: "p1", projectRoot: "C:/project", timeline, outputRelativePath: "renders/out.mp4", mediaRelativePaths: ["media/input.mp4"] });
   assert.equal(state.status, "RUNNING");
-  assert.deepEqual(calls, ["approval.register", "process.run"]);
+  assert.deepEqual(calls.map((call) => call.operation), ["approval.register", "process.run"]);
+  assert.deepEqual(calls[1].payload.args.slice(-1), ["renders/out.mp4"]);
+  assert.ok(calls[1].payload.args.includes("media/input.mp4"));
 });
