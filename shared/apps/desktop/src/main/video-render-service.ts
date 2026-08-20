@@ -24,7 +24,8 @@ const decode = (value: unknown) => typeof value === "string" ? Buffer.from(value
 
 export class VideoRenderService {
   private readonly sessions = new Map<string, { ownerId: string; requestId: string; client: VideoRenderRustClient; state: BrainVideoRenderState }>();
-  constructor(private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">) {}
+  private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">;
+  constructor(options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">) { this.options = options; }
 
   async start(ownerId: string, input: VideoRenderInput): Promise<BrainVideoRenderState> {
     const renderId = `video-render-${randomUUID()}`;
