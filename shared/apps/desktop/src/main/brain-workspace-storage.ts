@@ -12,6 +12,11 @@ import type { ChinaExchange, QuantStrategyExecution, QuantStrategySchedule, Quan
 import type { BrainVideoClip, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { BrainMusicClip, BrainMusicTimeline } from "@codex-forge/protocol/music-types";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
+import {
+  DEFAULT_BRAIN_RETENTION,
+  selectRetentionVictims,
+  type RetentionCandidate
+} from "./brain-retention-policy.ts";
 
 export { brainWorkspaceKeys } from "@codex-forge/protocol";
 export type { BrainWorkspaceKey } from "@codex-forge/protocol";
@@ -1078,6 +1083,23 @@ export class BrainWorkspaceStorage {
     return Number(result.changes);
   }
 
+  reconcileInterruptedMediaRenders(): number {
+    const timestamp = nowIso();
+    const resultJson = JSON.stringify({
+      schemaVersion: 1,
+      status: "FAILED",
+      errorCode: "BRAIN_MEDIA_RENDER_INTERRUPTED",
+      replayed: false,
+      recoveredAt: timestamp
+    });
+    const result = this.database.prepare(`UPDATE brain_task SET
+      status = 'FAILED', error_code = 'BRAIN_MEDIA_RENDER_INTERRUPTED',
+      error_detail = 'The desktop application stopped before the media render completed.',
+      result_json = ?, finished_at = ?, heartbeat_at = ?
+      WHERE task_type IN ('video_render', 'music_render') AND status IN ('QUEUED', 'RUNNING')`).run(resultJson, timestamp, timestamp);
+    return Number(result.changes);
+  }
+
   reconcileInterruptedSoftwareTasks(): number {
     const timestamp = nowIso();
     const tasks = this.database.prepare(`SELECT id, idempotency_key, project_id, request_id, task_type, result_json
@@ -1195,6 +1217,105 @@ export class BrainWorkspaceStorage {
     this.getProject(ownerId, projectId);
     return (this.database.prepare("SELECT * FROM brain_artifact WHERE project_id = ? ORDER BY created_at DESC, id DESC")
       .all(projectId) as Record<string, unknown>[]).map(mapArtifact);
+  }
+
+  pruneRetention(input: {
+    nowMs?: number;
+    budgets?: Partial<typeof DEFAULT_BRAIN_RETENTION>;
+  } = {}): { projectMetadata: number; cache: number; artifacts: number } {
+    const nowMs = input.nowMs ?? Date.now();
+    const budgets = { ...DEFAULT_BRAIN_RETENTION, ...input.budgets };
+    let projectMetadata = 0;
+    let cache = 0;
+    let artifacts = 0;
+
+    const terminalTasks = (this.database.prepare(`SELECT id, COALESCE(finished_at, started_at, '') AS created_at
+      FROM brain_task WHERE status IN ('SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT')`).all() as RetentionCandidate[]);
+    const taskVictims = selectRetentionVictims(terminalTasks, budgets.projectMetadata, nowMs);
+    if (taskVictims.length) {
+      const deleteTask = this.database.prepare("DELETE FROM brain_task WHERE id = ? AND status IN ('SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT')");
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        for (const id of taskVictims) projectMetadata += Number(deleteTask.run(id).changes);
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    }
+
+    const extracts = (this.database.prepare(`SELECT id, created_at AS created_at FROM brain_file_extract`).all() as RetentionCandidate[]);
+    const extractVictims = selectRetentionVictims(extracts, budgets.cache, nowMs);
+    if (extractVictims.length) {
+      const deleteExtract = this.database.prepare("DELETE FROM brain_file_extract WHERE id = ?");
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        for (const id of extractVictims) cache += Number(deleteExtract.run(id).changes);
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    }
+
+    const artifactRows = (this.database.prepare(`SELECT id, created_at AS created_at FROM brain_artifact`).all() as RetentionCandidate[]);
+    const artifactVictims = selectRetentionVictims(artifactRows, budgets.artifacts, nowMs);
+    if (artifactVictims.length) {
+      const deleteArtifact = this.database.prepare("DELETE FROM brain_artifact WHERE id = ?");
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        for (const id of artifactVictims) artifacts += Number(deleteArtifact.run(id).changes);
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    }
+
+    return { projectMetadata, cache, artifacts };
+  }
+
+  restoreWorkspaceAfterRestart(input?: {
+    resolveArtifactPath?: (projectId: string, storageKey: string) => string | null;
+  }): {
+    interruptedGamePreviews: number;
+    interruptedSoftwareTasks: number;
+    interruptedMediaRenders: number;
+    artifactsVerified: number;
+    artifactsInvalidated: number;
+    cancelledTasks: number;
+  } {
+    const interruptedGamePreviews = this.reconcileInterruptedGamePreviews();
+    const interruptedSoftwareTasks = this.reconcileInterruptedSoftwareTasks();
+    const interruptedMediaRenders = this.reconcileInterruptedMediaRenders();
+    const cancelledTasks = Number((this.database.prepare(`SELECT COUNT(*) AS count FROM brain_task WHERE status = 'CANCELLED'`).get() as { count: number }).count);
+    let artifactsVerified = 0;
+    let artifactsInvalidated = 0;
+    if (input?.resolveArtifactPath) {
+      const rows = this.database.prepare(`SELECT id, project_id, storage_key, validation_status FROM brain_artifact`).all() as Array<{
+        id: string; project_id: string; storage_key: string; validation_status: string;
+      }>;
+      const update = this.database.prepare(`UPDATE brain_artifact SET validation_status = ? WHERE id = ?`);
+      for (const row of rows) {
+        const resolved = input.resolveArtifactPath(String(row.project_id), String(row.storage_key));
+        const exists = Boolean(resolved && existsSync(resolved));
+        if (exists) {
+          if (row.validation_status !== "VALID") update.run("VALID", row.id);
+          artifactsVerified += 1;
+        } else {
+          if (row.validation_status !== "MISSING_AFTER_RESTART") update.run("MISSING_AFTER_RESTART", row.id);
+          artifactsInvalidated += 1;
+        }
+      }
+    }
+    return {
+      interruptedGamePreviews,
+      interruptedSoftwareTasks,
+      interruptedMediaRenders,
+      artifactsVerified,
+      artifactsInvalidated,
+      cancelledTasks
+    };
   }
 
   loadQuantState(projectId: string): string | null {

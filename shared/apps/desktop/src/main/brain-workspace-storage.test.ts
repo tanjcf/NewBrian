@@ -106,6 +106,38 @@ test("marks interrupted software tasks failed on restart without replaying side 
   });
 });
 
+test("marks interrupted media renders failed on restart without replaying them", () => {
+  withStorage((storage) => {
+    const videoProject = storage.createProject({ ownerId: "owner-a", name: "视频恢复", primaryWorkspaceKey: "video" });
+    const musicProject = storage.createProject({ ownerId: "owner-a", name: "音乐恢复", primaryWorkspaceKey: "music" });
+    const videoTask = storage.createTask({
+      ownerId: "owner-a",
+      projectId: videoProject.id,
+      workspaceKey: "video",
+      taskType: "video_render",
+      requestId: "video-request",
+      idempotencyKey: "video-session",
+      maxAttempts: 1
+    });
+    const musicTask = storage.createTask({
+      ownerId: "owner-a",
+      projectId: musicProject.id,
+      workspaceKey: "music",
+      taskType: "music_render",
+      requestId: "music-request",
+      idempotencyKey: "music-session",
+      maxAttempts: 1
+    });
+    storage.updateTask({ ownerId: "owner-a", taskId: videoTask.id, status: "RUNNING", progress: 0.2 });
+    storage.updateTask({ ownerId: "owner-a", taskId: musicTask.id, status: "QUEUED", progress: 0 });
+
+    assert.equal(storage.reconcileInterruptedMediaRenders(), 2);
+    assert.equal(storage.getTask("owner-a", videoTask.id).errorCode, "BRAIN_MEDIA_RENDER_INTERRUPTED");
+    assert.equal(storage.getTask("owner-a", musicTask.id).status, "FAILED");
+    assert.equal(storage.reconcileInterruptedMediaRenders(), 0);
+  });
+});
+
 test("enforces local owner boundaries", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "私有项目", primaryWorkspaceKey: "document" });
@@ -312,4 +344,65 @@ test("creates verified snapshots and restores the latest snapshot after database
     storage.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("prunes artifacts cache and terminal task metadata with separate retention budgets", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "保留策略", primaryWorkspaceKey: "document" });
+    const keep = storage.registerArtifact({
+      ownerId: "owner-a", projectId: project.id, artifactType: "preview", storageKey: "keep.bin", contentHash: "sha256:keep"
+    });
+    const drop = storage.registerArtifact({
+      ownerId: "owner-a", projectId: project.id, artifactType: "preview", storageKey: "drop.bin", contentHash: "sha256:drop"
+    });
+    const oldTask = storage.createTask({
+      ownerId: "owner-a", projectId: project.id, workspaceKey: "document", taskType: "document.export",
+      requestId: "old-task", idempotencyKey: "old-task", maxAttempts: 1
+    });
+    storage.updateTask({ ownerId: "owner-a", taskId: oldTask.id, status: "SUCCEEDED", progress: 1 });
+
+    const pruned = storage.pruneRetention({
+      nowMs: Date.parse("2026-08-20T00:00:00.000Z"),
+      budgets: {
+        projectMetadata: { maxCount: 0, maxAgeMs: Number.MAX_SAFE_INTEGER },
+        cache: { maxCount: 100, maxAgeMs: Number.MAX_SAFE_INTEGER },
+        artifacts: { maxCount: 1, maxAgeMs: Number.MAX_SAFE_INTEGER },
+        diagnostics: { maxCount: 100, maxAgeMs: Number.MAX_SAFE_INTEGER }
+      }
+    });
+    assert.equal(pruned.artifacts, 1);
+    assert.equal(pruned.projectMetadata, 1);
+    assert.equal(storage.listArtifacts("owner-a", project.id).map((item) => item.id).join(","), drop.id);
+    assert.equal(storage.listArtifacts("owner-a", project.id).some((item) => item.id === keep.id), false);
+  });
+});
+test("restores interrupted tasks and cancelled markers after restart without replaying", () => {
+  withStorage((storage, root) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "恢复", primaryWorkspaceKey: "video" });
+    const running = storage.createTask({
+      ownerId: "owner-a", projectId: project.id, workspaceKey: "video", taskType: "video_render",
+      requestId: "render-running", idempotencyKey: "render-running", maxAttempts: 1
+    });
+    storage.updateTask({ ownerId: "owner-a", taskId: running.id, status: "RUNNING", progress: 0.4 });
+    const cancelled = storage.createTask({
+      ownerId: "owner-a", projectId: project.id, workspaceKey: "video", taskType: "video_render",
+      requestId: "render-cancelled", idempotencyKey: "render-cancelled", maxAttempts: 1
+    });
+    storage.updateTask({ ownerId: "owner-a", taskId: cancelled.id, status: "CANCELLED", progress: 0.1 });
+    const missingPath = join(root, "missing-output.mp4");
+    const artifact = storage.registerArtifact({
+      ownerId: "owner-a", projectId: project.id, taskId: cancelled.id, artifactType: "video",
+      storageKey: "renders/missing-output.mp4", contentHash: "sha256:missing", validationStatus: "VALID"
+    });
+
+    const recovery = storage.restoreWorkspaceAfterRestart({
+      resolveArtifactPath: () => missingPath
+    });
+    assert.equal(recovery.interruptedMediaRenders, 1);
+    assert.equal(recovery.cancelledTasks, 1);
+    assert.equal(recovery.artifactsInvalidated, 1);
+    assert.equal(storage.getTask("owner-a", running.id).status, "FAILED");
+    assert.equal(storage.getTask("owner-a", cancelled.id).status, "CANCELLED");
+    assert.equal(storage.listArtifacts("owner-a", project.id).find((item) => item.id === artifact.id)?.validationStatus, "MISSING_AFTER_RESTART");
+  });
 });

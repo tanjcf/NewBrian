@@ -312,8 +312,10 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   const softwareTasks = dependencies.acquireRustCore && dependencies.confirmSoftwareTask
     ? new SoftwareTaskService({ storage: dependencies.storage, resolveWorkspaceRoot: dependencies.resolveWorkspaceRoot, acquireRustCore: dependencies.acquireRustCore as any, confirmRun: dependencies.confirmSoftwareTask, platform: dependencies.platform })
     : null;
-  if (gamePreviews) dependencies.storage.reconcileInterruptedGamePreviews();
-  if (softwareTasks) dependencies.storage.reconcileInterruptedSoftwareTasks();
+  if (gamePreviews || softwareTasks || dependencies.videoRender || dependencies.musicRender) {
+    dependencies.storage.restoreWorkspaceAfterRestart();
+  }
+  dependencies.storage.pruneRetention();
   ipcMain.handle(brainWorkspaceIpcChannels.workspaceList, () => dependencies.storage.listWorkspaces());
   ipcMain.handle(brainWorkspaceIpcChannels.projectList, async (_event, value: unknown) =>
     dependencies.storage.listProjects({ ownerId: await ownerId(), ...parseProjectList(value) }).map(withoutOwner));

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export interface DesktopFailureInput {
@@ -176,5 +176,38 @@ export class DesktopErrorOutbox {
       }
     }
     return { uploaded, failed };
+  }
+
+  async pruneSent(input: { maxCount?: number; maxAgeMs?: number; nowMs?: number } = {}): Promise<number> {
+    await this.ensureDirectories();
+    const maxCount = input.maxCount ?? 200;
+    const maxAgeMs = input.maxAgeMs ?? 30 * 24 * 60 * 60 * 1_000;
+    const nowMs = input.nowMs ?? Date.now();
+    const sentRoot = join(this.root, "sent");
+    const names = (await readdir(sentRoot)).filter((name) => name.endsWith(".json")).sort();
+    const candidates: Array<{ name: string; createdAt: string }> = [];
+    for (const name of names) {
+      try {
+        const record = JSON.parse(await readFile(join(sentRoot, name), "utf8")) as DesktopFailureRecord;
+        candidates.push({ name, createdAt: record.capturedAt || "1970-01-01T00:00:00.000Z" });
+      } catch {
+        candidates.push({ name, createdAt: "1970-01-01T00:00:00.000Z" });
+      }
+    }
+    const sorted = candidates.sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt));
+    const victims = sorted.filter((item, index) => {
+      const age = nowMs - Date.parse(item.createdAt);
+      return (Number.isFinite(age) && age > maxAgeMs) || index < Math.max(0, sorted.length - maxCount);
+    });
+    let removed = 0;
+    for (const victim of victims) {
+      try {
+        await unlink(join(sentRoot, victim.name));
+        removed += 1;
+      } catch {
+        /* Ignore races with concurrent flush. */
+      }
+    }
+    return removed;
   }
 }
