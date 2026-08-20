@@ -126,8 +126,9 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create protocol contracts under `shared/packages/protocol/src/workspaces/`
 - Create isolated workers under `workers/`
 
-- [ ] Deliver software and automation using the existing local tool and approval runtime.
-  - [x] Discover only approved package scripts and execute them through Rust Core approval, bounded output, timeout, cancellation, and task status IPC; Windows production build verified.
+- [x] Deliver software and automation using the existing local tool and approval runtime.
+  - [x] Discover only approved package scripts and execute them through Rust Core approval, true UTF-8 byte-bounded output, timeout, cancellation, and task status IPC.
+  - [x] Persist every terminal state in SQLite, reject execution before approval, ignore late completion after cancellation, and reconcile interrupted tasks as failed without replaying side effects; 21 focused Windows tests and the Electron production build pass.
 - [x] Deliver data and decision with datasets, tables, charts, analysis artifacts, and reproducible calculations.
   - [x] Import bounded CSV datasets, persist metadata, restore rows after restart through hash-checked project-bound IPC, and provide paginated/filterable table UI.
   - [x] Add deterministic numeric summary computation keyed by dataset source hash and persist it through IPC/SQLite.
@@ -141,7 +142,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [ ] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
   - [x] Persist timelines and clips, inspect WAV/MIDI metadata, expose bounded WAV waveform samples, pass authorized audio media into approved Rust Core render jobs, and verify output boundary; real FFmpeg encoding still requires a verified binary.
 - [ ] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
-  - [x] Verify versioned DOCX paragraph, XLSX cell, and PPTX shape-text writeback with owner-scoped change sets, output boundaries, SHA-256 registration, and focused Windows tests; PDF annotation writeback remains pending.
+  - [x] Verify versioned DOCX paragraph, XLSX cell, and PPTX shape-text writeback with owner-scoped change sets, output boundaries, SHA-256 registration, and focused Windows tests.
   - [x] Add PDF page/rectangle annotation writeback with pdf-lib, versioned output and bounds validation; Windows unit tests and Electron production build pass. Non-WinAnsi annotation text currently uses a visible fallback until a CJK font asset is bundled.
 
 ### Task 8: Search and model policy integration

@@ -83,6 +83,29 @@ test("marks interrupted game previews failed on restart without replaying them",
   });
 });
 
+test("marks interrupted software tasks failed on restart without replaying side effects", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "自动化恢复", primaryWorkspaceKey: "software" });
+    const task = storage.createTask({
+      ownerId: "owner-a",
+      projectId: project.id,
+      workspaceKey: "software",
+      taskType: "software.test",
+      requestId: "software-request",
+      idempotencyKey: "software-session",
+      maxAttempts: 1
+    });
+    storage.updateTask({ ownerId: "owner-a", taskId: task.id, status: "RUNNING", progress: 0.2 });
+
+    assert.equal(storage.reconcileInterruptedSoftwareTasks(), 1);
+    const recovered = storage.getTask("owner-a", task.id);
+    assert.equal(recovered.status, "FAILED");
+    assert.equal(recovered.errorCode, "BRAIN_SOFTWARE_TASK_INTERRUPTED");
+    assert.equal(JSON.parse(recovered.resultJson).replayed, false);
+    assert.equal(storage.reconcileInterruptedSoftwareTasks(), 0);
+  });
+});
+
 test("enforces local owner boundaries", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "私有项目", primaryWorkspaceKey: "document" });
@@ -264,7 +287,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v6.bak`;
+  const backupPath = `${databasePath}.v0-before-v10.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();

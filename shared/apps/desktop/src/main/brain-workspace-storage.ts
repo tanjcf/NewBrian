@@ -101,7 +101,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 9;
+const latestMigrationVersion = 10;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -1076,6 +1076,48 @@ export class BrainWorkspaceStorage {
       result_json = ?, finished_at = ?, heartbeat_at = ?
       WHERE task_type = 'game.preview' AND status IN ('QUEUED', 'RUNNING')`).run(resultJson, timestamp, timestamp);
     return Number(result.changes);
+  }
+
+  reconcileInterruptedSoftwareTasks(): number {
+    const timestamp = nowIso();
+    const tasks = this.database.prepare(`SELECT id, idempotency_key, project_id, request_id, task_type, result_json
+      FROM brain_task WHERE task_type LIKE 'software.%' AND status IN ('QUEUED', 'RUNNING')`).all() as Array<Record<string, unknown>>;
+    const update = this.database.prepare(`UPDATE brain_task SET
+      status = 'FAILED', progress = 0.5, error_code = 'BRAIN_SOFTWARE_TASK_INTERRUPTED',
+      error_detail = 'The desktop application stopped before the software task completed.',
+      result_json = ?, finished_at = ?, heartbeat_at = ?
+      WHERE id = ? AND status IN ('QUEUED', 'RUNNING')`);
+    let changed = 0;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const task of tasks) {
+        let previous: Record<string, unknown> = {};
+        try {
+          const parsed = JSON.parse(String(task.result_json || "{}"));
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) previous = parsed as Record<string, unknown>;
+        } catch { /* Corrupt task evidence must not prevent safe reconciliation. */ }
+        const resultJson = JSON.stringify({
+          ...previous,
+          schemaVersion: 1,
+          id: String(previous.id || task.idempotency_key),
+          projectId: String(previous.projectId || task.project_id),
+          operation: String(previous.operation || task.task_type).replace(/^software\./u, ""),
+          status: "FAILED",
+          requestId: String(previous.requestId || task.request_id),
+          finishedAt: timestamp,
+          errorCode: "BRAIN_SOFTWARE_TASK_INTERRUPTED",
+          replayed: false,
+          recoveredAt: timestamp
+        });
+        const result = update.run(resultJson, timestamp, timestamp, String(task.id));
+        changed += Number(result.changes);
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return changed;
   }
 
   updateTask(input: { ownerId: string; taskId: string; status: BrainTaskRecord["status"]; progress?: number; errorCode?: string; errorDetail?: string; resultJson?: string }): BrainTaskRecord {
