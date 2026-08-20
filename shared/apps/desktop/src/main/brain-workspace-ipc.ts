@@ -29,6 +29,7 @@ import type { VideoTimelineService } from "./video-timeline-service.ts";
 import type { VideoRenderService } from "./video-render-service.ts";
 import type { MusicTimelineService } from "./music-timeline-service.ts";
 import type { MusicMediaService } from "./music-media-service.ts";
+import type { MusicRenderService } from "./music-render-service.ts";
 import { normalizeDataset } from "./data-dataset-policy.ts";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
 import { discoverSoftwareScripts } from "./software-script-discovery.ts";
@@ -44,6 +45,7 @@ interface BrainWorkspaceIpcDependencies {
   videoRender?: VideoRenderService;
   music?: MusicTimelineService;
   musicMedia?: MusicMediaService;
+  musicRender?: MusicRenderService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
   acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" | "software" }) => Promise<GamePreviewRustClient | SoftwareTaskRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
@@ -468,6 +470,11 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     ipcMain.handle(brainWorkspaceIpcChannels.musicTimelineSave, async (_event, value: unknown) => { const input = parseMusicSave(value); return dependencies.music!.ensureTimeline(await ownerId(), input.projectId, { title: input.title, sampleRate: input.sampleRate, channels: input.channels }); });
     ipcMain.handle(brainWorkspaceIpcChannels.musicClipAdd, async (_event, value: unknown) => { const input = parseMusicClip(value); if (input.trackType !== "audio" && input.trackType !== "midi") throw new TypeError("trackType is unsupported."); return dependencies.music!.addClip(await ownerId(), input.projectId, input); });
     if (dependencies.musicMedia) ipcMain.handle(brainWorkspaceIpcChannels.musicMediaInspect, async (_event, value: unknown) => { const input = requireRecord(value, "Music media inspect"); rejectUnexpectedKeys(input, ["projectId", "sourceFileId"], "Music media inspect"); return dependencies.musicMedia!.inspect(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.sourceFileId, "sourceFileId")); });
+    if (dependencies.musicRender) {
+      ipcMain.handle(brainWorkspaceIpcChannels.musicRenderStart, async (_event, value: unknown) => { const input = requireRecord(value, "Music render start"); rejectUnexpectedKeys(input, ["projectId", "outputRelativePath"], "Music render start"); const owner = await ownerId(); const project = dependencies.storage.getProject(owner, requireString(input.projectId, "projectId")); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED"); return dependencies.musicRender!.start(owner, { projectId: project.id, outputRelativePath: requireString(input.outputRelativePath, "outputRelativePath"), artifactType: "mix", timeline: dependencies.music!.getTimeline(owner, project.id), projectRoot: await dependencies.resolveWorkspaceRoot(project.localWorkspaceId) }); });
+      ipcMain.handle(brainWorkspaceIpcChannels.musicRenderStatus, async (_event, value: unknown) => { const input = requireRecord(value, "Music render status"); return dependencies.musicRender!.status(await ownerId(), requireString(input.renderId, "renderId")); });
+      ipcMain.handle(brainWorkspaceIpcChannels.musicRenderCancel, async (_event, value: unknown) => { const input = requireRecord(value, "Music render cancel"); return dependencies.musicRender!.cancel(await ownerId(), requireString(input.renderId, "renderId")); });
+    }
   }
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });

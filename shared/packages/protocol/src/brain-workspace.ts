@@ -344,4 +344,7 @@ export const brainWorkspaceIpcChannels = {
   ,softwareTaskStatus: "brain:software:task-status"
   ,softwareTaskCancel: "brain:software:task-cancel"
   ,musicMediaInspect: "brain:music:media-inspect"
+  ,musicRenderStart: "brain:music:render-start"
+  ,musicRenderStatus: "brain:music:render-status"
+  ,musicRenderCancel: "brain:music:render-cancel"
 } as const;
