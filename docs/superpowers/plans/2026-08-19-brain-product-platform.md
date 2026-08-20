@@ -96,7 +96,8 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 
 - [x] Define discriminated anchors for image, PDF, DOCX, PPTX, XLSX, and text.
 - [x] Write fixture tests that reopen and extract representative files of every format.
-- [ ] Render each format with stable object IDs and coordinate transforms.
+- [x] Render each format with stable object IDs and coordinate transforms.
+  - [x] PDF/image/PPTX/XLSX overlays project `objectId` rects through `projectDocumentRect`; DOCX uses stable paragraph object hits; focused transform tests pass.
 - [x] Store immutable annotations separately from originals.
 - [x] Submit annotation IDs through chat and produce a bounded revision preview.
 - [x] Export a new valid file revision and verify it by reparsing and visual rendering.
@@ -137,11 +138,16 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
   - [x] Inspect authorized Web, Godot, Unity, and Unreal projects with bounded, non-symlink-following asset counts.
   - [x] Surface verified preview scripts as approval-gated conversation requests without direct renderer execution.
   - [x] Supervise preview start, readiness, cancellation, bounded logs, restart reconciliation, and screenshot playtest evidence through the execution boundary.
-- [ ] Deliver video creation with timeline, media assets, render jobs, cancellation, and output verification.
-  - [x] Define the FFmpeg/FFprobe runtime prerequisite and keep missing-tool behavior explicit; real encoding acceptance still requires a verified binary.
-- [ ] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
-  - [x] Persist timelines and clips, inspect WAV/MIDI metadata, expose bounded WAV waveform samples, pass authorized audio media into approved Rust Core render jobs, and verify output boundary; real FFmpeg encoding still requires a verified binary.
-- [ ] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
+- [x] Deliver video creation with timeline, media assets, render jobs, cancellation, and output verification.
+  - [x] Define the FFmpeg/FFprobe runtime prerequisite and keep missing-tool behavior explicit when binaries are absent.
+  - [x] Real FFmpeg encoding verified on Windows through `media-render-real-process.test.ts` + VideoRenderService + Rust Core (2026-08-20 re-run: 2/2 pass, ~1.8s). Evidence: FFprobe `format.duration > 0` on short MP4 output; event-driven cancel settles `CANCELLED`/`BRAIN_CORE_CANCELLED` without late success. Command: `node --experimental-strip-types --test src/main/media-render-real-process.test.ts` with `BRAIN_FFMPEG_BINARY` / `BRAIN_FFPROBE_BINARY` / `BRAIN_RUST_CORE_BINARY`.
+  - [x] Desktop UI click-through verified via `pnpm test:media-workspace-runtime` / `scripts/test-electron-media-workspace.mjs` (2026-08-20): file select → add clip → native approval → `SUCCEEDED` → preview ready + `outputFileId` (`file_62a38972-…`); screenshot `%TEMP%\brain-video-workspace-preview.png`.
+- [x] Deliver music creation with tracks, clips, waveform/MIDI artifacts, render jobs, and output verification.
+  - [x] Persist timelines and clips, inspect WAV/MIDI metadata, expose bounded WAV waveform samples, pass authorized audio media into approved Rust Core render jobs, and verify output boundary.
+  - [x] Real FFmpeg encoding verified on Windows through `media-render-real-process.test.ts` + MusicRenderService + Rust Core (same 2026-08-20 re-run). Evidence: FFprobe `format.duration > 0` on short WAV output; SQLite task/artifact persistence covered by related storage tests.
+  - [x] Desktop UI click-through verified via `test-electron-media-workspace.mjs` (2026-08-20): music workspace render → `SUCCEEDED` / preview ready; screenshot `%TEMP%\brain-music-workspace-preview.png`.
+- [x] Keep files as a shared project capability and avoid duplicating file browsers per workspace.
+  - [x] Shared `ProjectFilePicker` + project-scoped `activeBrainDocumentFileId` bind Video/Music/Data; Files tab remains the single project file list.
   - [x] Verify versioned DOCX paragraph, XLSX cell, and PPTX shape-text writeback with owner-scoped change sets, output boundaries, SHA-256 registration, and focused Windows tests.
   - [x] Add PDF page/rectangle annotation writeback with pdf-lib, versioned output and bounds validation; Windows unit tests and Electron production build pass. Non-WinAnsi annotation text currently uses a visible fallback until a CJK font asset is bundled.
 
@@ -158,6 +164,8 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [ ] Add administrator enable/disable, provider, budget, quota, and audit controls with zero ordinary-user setup.
 - [ ] Verify company keys remain server-side and user BYOK remains desktop-side only.
 
+Desktop progress (not sufficient to check boxes): `web.search_paid` calls Spring `POST /api/desktop/v1/web-search` with session auth (company Bocha token stays server-side); tool returns `searchedAt` + URLs or `WEB_SEARCH_UNAVAILABLE`; freshness-claim guard helpers are unit-tested. Free-news-first orchestration, admin budget/quota/audit, and end-to-end citation binding still require spring-app plan work.
+
 ### Task 9: Persistence, diagnostics, and recovery
 
 **Files:**
@@ -165,8 +173,10 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - Create migration, corruption, concurrency, and restart tests.
 
 - [x] Add schema-versioned migrations with backups and rollback behavior.
-- [ ] Bound project metadata, cache, artifacts, and diagnostic retention separately.
-- [ ] Restore active tasks, approvals, cancellations, and artifacts after process or device restart.
+- [x] Bound project metadata, cache, artifacts, and diagnostic retention separately.
+  - [x] `brain-retention-policy` + `pruneRetention` / `DesktopErrorOutbox.pruneSent` enforce separate count/age budgets; focused storage tests pass.
+- [x] Restore active tasks, approvals, cancellations, and artifacts after process or device restart.
+  - [x] Startup `restoreWorkspaceAfterRestart` fail-closes interrupted game/software/media tasks, preserves CANCELLED markers, and invalidates missing artifacts without replaying side effects. Main-thread model-chat approval resume remains delegated/Holon checkpoint based (unchanged).
 - [x] Preserve provider-required thinking context without exposing private reasoning in diagnostics.
 - [x] Verify error reports retain structured fields and redact credentials recursively.
 
