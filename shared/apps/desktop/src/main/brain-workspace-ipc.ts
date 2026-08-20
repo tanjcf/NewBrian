@@ -26,6 +26,7 @@ import { inspectGameProject } from "./game-project-inspector.js";
 import { GamePreviewService, type GamePreviewRustClient } from "./game-preview-service.js";
 import type { QuantSimulationService } from "./quant-simulation-service.ts";
 import type { VideoTimelineService } from "./video-timeline-service.ts";
+import type { VideoRenderService } from "./video-render-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
@@ -34,6 +35,7 @@ interface BrainWorkspaceIpcDependencies {
   resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
   video?: VideoTimelineService;
+  videoRender?: VideoRenderService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
   acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" }) => Promise<GamePreviewRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
@@ -110,6 +112,12 @@ function parseVideoClipAdd(value: unknown) {
     volume: input.volume === undefined ? undefined : requireFiniteNumber(input.volume, "volume"),
     text: input.text === undefined ? undefined : requireString(input.text, "text")
   };
+}
+
+function parseVideoRenderStart(value: unknown) {
+  const input = requireRecord(value, "Video render start");
+  rejectUnexpectedKeys(input, ["projectId", "outputRelativePath"], "Video render start");
+  return { projectId: requireString(input.projectId, "projectId"), outputRelativePath: requireString(input.outputRelativePath, "outputRelativePath") };
 }
 
 function requireWorkspaceKey(value: unknown): BrainWorkspaceKey {
@@ -414,6 +422,28 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
         volume: input.volume,
         text: input.text
       });
+    });
+  }
+  if (dependencies.videoRender && dependencies.video) {
+    ipcMain.handle(brainWorkspaceIpcChannels.videoRenderStart, async (_event, value: unknown) => {
+      const input = parseVideoRenderStart(value);
+      const owner = await ownerId();
+      const project = dependencies.storage.getProject(owner, input.projectId);
+      if (project.primaryWorkspaceKey !== "video") throw new Error("BRAIN_VIDEO_WORKSPACE_REQUIRED");
+      if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
+      const projectRoot = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId);
+      const timeline = dependencies.video!.getTimeline(owner, input.projectId);
+      return dependencies.videoRender!.start(owner, { projectId: input.projectId, projectRoot, timeline, outputRelativePath: input.outputRelativePath });
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.videoRenderStatus, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Video render status");
+      rejectUnexpectedKeys(input, ["renderId"], "Video render status");
+      return dependencies.videoRender!.status(await ownerId(), requireString(input.renderId, "renderId"));
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.videoRenderCancel, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Video render cancel");
+      rejectUnexpectedKeys(input, ["renderId"], "Video render cancel");
+      return dependencies.videoRender!.cancel(await ownerId(), requireString(input.renderId, "renderId"));
     });
   }
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {

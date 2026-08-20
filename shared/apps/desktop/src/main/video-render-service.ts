@@ -15,6 +15,7 @@ export interface VideoRenderOptions {
   validateOutput?: (projectRoot: string, outputRelativePath: string) => Promise<boolean>;
   platform?: NodeJS.Platform;
 }
+export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">;
 
 const MAX_OUTPUT = 64 * 1024;
 const now = () => new Date().toISOString();
@@ -25,7 +26,7 @@ export class VideoRenderService {
   private readonly sessions = new Map<string, { ownerId: string; requestId: string; client: VideoRenderRustClient; state: BrainVideoRenderState }>();
   constructor(private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "validateOutput" | "platform">) {}
 
-  async start(ownerId: string, input: VideoRenderOptions): Promise<BrainVideoRenderState> {
+  async start(ownerId: string, input: VideoRenderInput): Promise<BrainVideoRenderState> {
     const renderId = `video-render-${randomUUID()}`;
     const requestId = `${renderId}:process`;
     const executable = input.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";

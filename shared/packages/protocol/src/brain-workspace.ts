@@ -330,4 +330,7 @@ export const brainWorkspaceIpcChannels = {
   ,videoTimelineGet: "brain:video:timeline-get"
   ,videoTimelineSave: "brain:video:timeline-save"
   ,videoClipAdd: "brain:video:clip-add"
+  ,videoRenderStart: "brain:video:render-start"
+  ,videoRenderStatus: "brain:video:render-status"
+  ,videoRenderCancel: "brain:video:render-cancel"
 } as const;
