@@ -1,0 +1,2 @@
+import assert from "node:assert/strict"; import test from "node:test"; import { parseCsvDataset } from "./data-csv-parser.ts";
+test("parses bounded csv metadata and rows", () => { const result = parseCsvDataset({ id: "d", projectId: "p", name: "行情", content: Buffer.from("symbol,close\n600519,1500\n000001,12"), updatedAt: "now" }); assert.equal(result.rowCount, 2); assert.deepEqual(result.columns.map((column) => column.type), ["number", "number"]); assert.equal(result.contentHash.length, 64); });
