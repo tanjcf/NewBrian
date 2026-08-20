@@ -30,7 +30,6 @@ import type { VideoRenderService } from "./video-render-service.ts";
 import type { MusicTimelineService } from "./music-timeline-service.ts";
 import { normalizeDataset } from "./data-dataset-policy.ts";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
-import type { DataImportService } from "./data-import-service.ts";
 import { discoverSoftwareScripts } from "./software-script-discovery.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
@@ -42,7 +41,6 @@ interface BrainWorkspaceIpcDependencies {
   video?: VideoTimelineService;
   videoRender?: VideoRenderService;
   music?: MusicTimelineService;
-  dataImport?: DataImportService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
   acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" }) => Promise<GamePreviewRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;

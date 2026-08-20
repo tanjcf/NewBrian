@@ -106,6 +106,7 @@ import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { DataImportService } from "./data-import-service.js";
+import { registerDataImportIpc } from "../../../../../shared/apps/desktop/src/main/data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -7339,7 +7340,6 @@ function registerIpc() {
     quant: quantSimulationService,
     video: videoTimelineService,
     music: musicTimelineService,
-    dataImport: new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot),
     videoRender: videoRenderService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
@@ -7360,6 +7360,7 @@ function registerIpc() {
     resolveOwnerId: resolveBrainLocalOwnerId,
     resolveWorkspaceRoot: resolveBrainWorkspaceRoot
   });
+  registerDataImportIpc({ dataImport: new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot), resolveOwnerId: resolveBrainLocalOwnerId });
   registerPluginRepositoryHandlers();
   const controlWindow = (action: WindowControlAction) => controlDesktopWindow(mainWindowRef, action);
   const appMenuService = new AppMenuService({
