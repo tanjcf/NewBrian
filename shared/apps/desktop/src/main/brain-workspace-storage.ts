@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS brain_music_timeline (project_id TEXT PRIMARY KEY REF
 CREATE TABLE IF NOT EXISTS brain_music_clip (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, track_type TEXT NOT NULL, source_file_id TEXT NOT NULL, start_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL, source_in_ms INTEGER NOT NULL, gain REAL NOT NULL, pan REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_brain_music_clip_project_start ON brain_music_clip(project_id, start_ms, id);` }
 function migrationNineSql() { return `CREATE TABLE IF NOT EXISTS brain_dataset (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, name TEXT NOT NULL, columns_json TEXT NOT NULL, row_count INTEGER NOT NULL, source_file_id TEXT, content_hash TEXT NOT NULL, updated_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS idx_brain_dataset_project ON brain_dataset(project_id, updated_at);`; }
+function migrationTenSql() { return `CREATE TABLE IF NOT EXISTS brain_data_analysis (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, dataset_id TEXT NOT NULL REFERENCES brain_dataset(id) ON DELETE CASCADE, operation TEXT NOT NULL, input_hash TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(dataset_id, operation, input_hash)); CREATE INDEX IF NOT EXISTS idx_brain_data_analysis_dataset ON brain_data_analysis(dataset_id, created_at DESC);`; }
 
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
@@ -551,6 +552,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 7, "Persist video timelines and clips", migrationSevenSql());
       applyMigration(this.database, 8, "Persist music timelines and clips", migrationEightSql());
       applyMigration(this.database, 9, "Persist data decision datasets", migrationNineSql());
+      applyMigration(this.database, 10, "Persist reproducible data analysis artifacts", migrationTenSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -626,6 +628,23 @@ export class BrainWorkspaceStorage {
     if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
     const rows = this.database.prepare("SELECT * FROM brain_dataset WHERE project_id = ? ORDER BY updated_at DESC, id").all(projectId) as Record<string, unknown>[];
     return rows.map((row) => ({ schemaVersion: 1, id: String(row.id), projectId: String(row.project_id), name: String(row.name), columns: JSON.parse(String(row.columns_json)), rowCount: Number(row.row_count), sourceFileId: row.source_file_id ? String(row.source_file_id) : undefined, contentHash: String(row.content_hash), updatedAt: String(row.updated_at) }));
+  }
+
+  saveDataAnalysis(input: { ownerId: string; projectId: string; datasetId: string; operation: string; inputHash: string; result: unknown; createdAt: string }) {
+    const project = this.getProject(input.ownerId, input.projectId);
+    if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
+    if (!input.operation.trim() || !/^[a-f0-9]{64}$/u.test(input.inputHash)) throw new BrainStorageError("BRAIN_DATA_ANALYSIS_INVALID", "Analysis identity is invalid");
+    const dataset = this.database.prepare("SELECT id FROM brain_dataset WHERE id = ? AND project_id = ?").get(input.datasetId, input.projectId);
+    if (!dataset) throw new BrainStorageError("BRAIN_DATASET_NOT_FOUND", "Dataset does not belong to project");
+    const id = `analysis_${input.datasetId}_${input.operation}_${input.inputHash.slice(0, 16)}`;
+    this.database.prepare("INSERT INTO brain_data_analysis(id, project_id, dataset_id, operation, input_hash, result_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dataset_id, operation, input_hash) DO UPDATE SET result_json=excluded.result_json, created_at=excluded.created_at").run(id, input.projectId, input.datasetId, input.operation.trim(), input.inputHash, JSON.stringify(input.result), input.createdAt);
+    return { id, projectId: input.projectId, datasetId: input.datasetId, operation: input.operation.trim(), inputHash: input.inputHash, result: input.result, createdAt: input.createdAt };
+  }
+
+  listDataAnalyses(ownerId: string, projectId: string, datasetId: string) {
+    const project = this.getProject(ownerId, projectId);
+    if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
+    return (this.database.prepare("SELECT * FROM brain_data_analysis WHERE project_id = ? AND dataset_id = ? ORDER BY created_at DESC").all(projectId, datasetId) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), projectId: String(row.project_id), datasetId: String(row.dataset_id), operation: String(row.operation), inputHash: String(row.input_hash), result: JSON.parse(String(row.result_json)), createdAt: String(row.created_at) }));
   }
 
   close() {

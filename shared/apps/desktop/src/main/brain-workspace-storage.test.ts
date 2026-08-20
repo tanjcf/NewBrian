@@ -234,6 +234,19 @@ test("migration is idempotent and private model metadata has no secret columns",
   }
 });
 
+test("persists reproducible data analysis artifacts by source hash", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-analysis-"));
+  const storage = new BrainWorkspaceStorage(root);
+  try {
+    const project = storage.createProject({ ownerId: "owner-a", name: "数据", primaryWorkspaceKey: "data" });
+    storage.saveDataset({ ownerId: "owner-a", dataset: { schemaVersion: 1, id: "d1", projectId: project.id, name: "指标", columns: [{ key: "close", label: "收盘", type: "number" }], rowCount: 2, contentHash: "a".repeat(64), updatedAt: "2026-08-20T00:00:00Z" } });
+    const result = { datasetId: "d1", operation: "summary", inputHash: "b".repeat(64), columns: [{ key: "close", count: 2, min: 1, max: 2, mean: 1.5 }] };
+    storage.saveDataAnalysis({ ownerId: "owner-a", projectId: project.id, datasetId: "d1", operation: "summary", inputHash: result.inputHash, result, createdAt: "2026-08-20T00:00:00Z" });
+    storage.saveDataAnalysis({ ownerId: "owner-a", projectId: project.id, datasetId: "d1", operation: "summary", inputHash: result.inputHash, result, createdAt: "2026-08-20T00:01:00Z" });
+    assert.equal(storage.listDataAnalyses("owner-a", project.id, "d1").length, 1);
+  } finally { storage.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test("backs up an existing database before applying a newer migration", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-backup-"));
   const databasePath = join(root, "brain.db");
