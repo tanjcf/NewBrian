@@ -465,20 +465,6 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   }
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
-  if (dependencies.dataImport) {
-    const dataImport = dependencies.dataImport;
-    ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetImportCsv, async (_event, value: unknown) => {
-      const input = requireRecord(value, "Dataset import");
-      rejectUnexpectedKeys(input, ["projectId", "fileId", "datasetId", "name", "updatedAt"], "Dataset import");
-      return dataImport.importCsv(await ownerId(), {
-        projectId: requireString(input.projectId, "projectId"),
-        fileId: requireString(input.fileId, "fileId"),
-        datasetId: requireString(input.datasetId, "datasetId"),
-        name: requireString(input.name, "name"),
-        updatedAt: requireString(input.updatedAt, "updatedAt")
-      });
-    });
-  }
   ipcMain.handle(brainWorkspaceIpcChannels.softwareScriptsList, async (_event, value: unknown) => { const input = parseProjectGet(value); const owner = await ownerId(); const project = dependencies.storage.getProject(owner, input.projectId); if (project.primaryWorkspaceKey !== "software") throw new Error("BRAIN_SOFTWARE_WORKSPACE_REQUIRED"); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED"); const root = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId); return discoverSoftwareScripts(root); });
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
