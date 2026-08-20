@@ -10,4 +10,5 @@ export function registerDataImportIpc(input: { dataImport?: DataImportService; r
     for (const key of required) if (typeof value[key] !== "string" || !value[key].trim()) throw new TypeError(`${key} must be a non-empty string.`);
     return service.importCsv(await input.resolveOwnerId(), value);
   });
+  ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetRows, async (_event, value: any) => { if (!value || typeof value.projectId !== "string" || typeof value.datasetId !== "string") throw new TypeError("Dataset rows payload is invalid."); return service.readRows(await input.resolveOwnerId(), { projectId: value.projectId, datasetId: value.datasetId }); });
 }
