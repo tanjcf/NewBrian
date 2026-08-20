@@ -8,6 +8,7 @@ import { DocumentChangeSetService } from "./document-change-set-service.ts";
 import { replaceDocxParagraph } from "./docx-paragraph-rewriter.ts";
 import { replaceXlsxCell } from "./xlsx-cell-rewriter.ts";
 import { replacePptxShapeText } from "./pptx-shape-rewriter.ts";
+import { addPdfAnnotation } from "./pdf-annotation-writer.ts";
 
 interface RevisionDependencies {
   storage: BrainWorkspaceStorage;
@@ -84,6 +85,12 @@ export class BrainDocumentRevisionService {
         return { file, changeSet, relativePath: outputRelativePath };
       } catch (error) { await unlink(outputPath).catch(() => undefined); throw error; }
     }
+    if (operation?.format === "pdf") {
+      const source = await readFile(join(context.root, context.file.storageKey));
+      const bytes = await addPdfAnnotation({ bytes: source, page: operation.page, rect: operation.rect, text: operation.text });
+      const outputPath = join(context.root, outputRelativePath); await writeFile(outputPath, bytes, { flag: "wx" });
+      try { const fileStat = await stat(outputPath); const contentHash = `sha256:${createHash("sha256").update(bytes).digest("hex")}`; const file = this.dependencies.storage.registerFile({ ownerId, projectId, logicalName: basename(outputRelativePath), mimeType: context.file.mimeType, sizeBytes: fileStat.size, contentHash, storageKey: outputRelativePath, versionNo: context.file.versionNo + 1 }); const changeSet = this.dependencies.storage.updateChangeSet({ ownerId, projectId, changeSetId, status: "ACCEPTED", resultFileVersion: context.file.versionNo + 1 }); return { file, changeSet, relativePath: outputRelativePath }; } catch (error) { await unlink(outputPath).catch(() => undefined); throw error; }
+    }
     const result = await this.changeSets.exportTextRevision({
       projectRoot: context.root,
       relativePath: context.file.storageKey,
@@ -115,7 +122,7 @@ export class BrainDocumentRevisionService {
     if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
     const changeSet = this.dependencies.storage.getChangeSet(ownerId, projectId, changeSetId);
     const annotation = this.dependencies.storage.getAnnotation(ownerId, projectId, changeSet.annotationId);
-    if (annotation.anchor.format !== "txt" && annotation.anchor.format !== "markdown" && annotation.anchor.format !== "docx" && annotation.anchor.format !== "xlsx" && annotation.anchor.format !== "pptx") {
+    if (annotation.anchor.format !== "txt" && annotation.anchor.format !== "markdown" && annotation.anchor.format !== "docx" && annotation.anchor.format !== "xlsx" && annotation.anchor.format !== "pptx" && annotation.anchor.format !== "pdf") {
       throw new Error("DOCUMENT_CHANGE_SET_FORMAT_UNSUPPORTED");
     }
     const file = this.dependencies.storage.getFile(ownerId, projectId, annotation.fileId);
@@ -125,7 +132,7 @@ export class BrainDocumentRevisionService {
     return { project, changeSet, annotation, file, root: await this.dependencies.resolveWorkspaceRoot(project.localWorkspaceId) };
   }
 
-  private structuredOperation(diffJson: string) { try { const value = JSON.parse(diffJson); return value && typeof value === "object" && value.format ? value as { format: string; paragraphIndex: number; start: number; end: number; replacement: string; sheet: string; cell: string; value: string | number | boolean | null; slide: number; shapeId: string } : null; } catch { return null; } }
+  private structuredOperation(diffJson: string) { try { const value = JSON.parse(diffJson); return value && typeof value === "object" && value.format ? value as { format: string; paragraphIndex: number; start: number; end: number; replacement: string; sheet: string; cell: string; value: string | number | boolean | null; slide: number; shapeId: string; page: number; rect: { x: number; y: number; width: number; height: number }; text: string } : null; } catch { return null; } }
 }
 
 function revisionPath(storageKey: string, version: number) {
