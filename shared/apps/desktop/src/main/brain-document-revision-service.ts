@@ -50,7 +50,13 @@ export class BrainDocumentRevisionService {
       const source = await readFile(join(context.root, context.file.storageKey));
       const bytes = await replaceDocxParagraph({ bytes: source, paragraphIndex: operation.paragraphIndex, start: operation.start, end: operation.end, replacement: operation.replacement });
       const outputPath = join(context.root, outputRelativePath); await writeFile(outputPath, bytes, { flag: "wx" });
-      try { const fileStat = await stat(outputPath); const file = this.dependencies.storage.registerFile({ ownerId, projectId, logicalName: basename(outputRelativePath), mimeType: context.file.mimeType, sizeBytes: fileStat.size, contentHash: `sha256:${Buffer.from(bytes).toString("base64url")}`, storageKey: outputRelativePath, versionNo: context.file.versionNo + 1 }); const changeSet = this.dependencies.storage.updateChangeSet({ ownerId, projectId, changeSetId, status: "ACCEPTED", resultFileVersion: context.file.versionNo + 1 }); return { file, changeSet, relativePath: outputRelativePath }; } catch (error) { await unlink(outputPath).catch(() => undefined); throw error; }
+      try {
+        const fileStat = await stat(outputPath);
+        const contentHash = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+        const file = this.dependencies.storage.registerFile({ ownerId, projectId, logicalName: basename(outputRelativePath), mimeType: context.file.mimeType, sizeBytes: fileStat.size, contentHash, storageKey: outputRelativePath, versionNo: context.file.versionNo + 1 });
+        const changeSet = this.dependencies.storage.updateChangeSet({ ownerId, projectId, changeSetId, status: "ACCEPTED", resultFileVersion: context.file.versionNo + 1 });
+        return { file, changeSet, relativePath: outputRelativePath };
+      } catch (error) { await unlink(outputPath).catch(() => undefined); throw error; }
     }
     const result = await this.changeSets.exportTextRevision({
       projectRoot: context.root,

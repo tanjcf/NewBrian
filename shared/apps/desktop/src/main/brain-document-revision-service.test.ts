@@ -4,11 +4,18 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
+import JSZip from "jszip";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.ts";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.ts";
 
 function sha(content: string) {
   return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+}
+
+async function docxFixture() {
+  const zip = new JSZip();
+  zip.file("word/document.xml", '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>原始文本</w:t></w:r></w:p></w:body></w:document>');
+  return zip.generateAsync({ type: "nodebuffer" });
 }
 
 test("previews an annotation-bounded change and exports an accepted new version", async () => {
@@ -70,6 +77,32 @@ test("rejects unbound projects, foreign owners, stale hashes, and out-of-anchor 
     await assert.rejects(() => service.preview("owner-a", project.id, changeSet.id), /OUTSIDE_ANNOTATION/);
     storage.updateProject({ ownerId: "owner-a", projectId: project.id, localWorkspaceId: "" });
     await assert.rejects(() => service.preview("owner-a", project.id, changeSet.id), /LOCAL_WORKSPACE_REQUIRED/);
+  } finally {
+    storage.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("exports a structured DOCX paragraph change as a versioned file", async () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-docx-revision-"));
+  const workspace = join(root, "workspace");
+  mkdirSync(join(workspace, "files"), { recursive: true });
+  const source = await docxFixture();
+  writeFileSync(join(workspace, "files", "note.docx"), source);
+  const storage = new BrainWorkspaceStorage(join(root, "data"));
+  try {
+    const project = storage.createProject({ ownerId: "owner-a", name: "文档", primaryWorkspaceKey: "document", localWorkspaceId: "local-1" });
+    const file = storage.registerFile({ ownerId: "owner-a", projectId: project.id, logicalName: "note.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: source.byteLength, contentHash: `sha256:${createHash("sha256").update(source).digest("hex")}`, storageKey: "files/note.docx" });
+    const annotation = storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1, instruction: "替换段落", anchor: { anchorId: "p-0", objectId: "p-0", format: "docx", locator: { kind: "docx-object", objectType: "paragraph", paragraphIndex: 0, textRange: { start: 0, end: 4 } }, selectedText: "原始文本" } });
+    const changeSet = storage.createChangeSet({ ownerId: "owner-a", projectId: project.id, annotationId: annotation.id, baseFileVersion: 1, changeSummary: "替换段落", diffJson: JSON.stringify({ format: "docx", paragraphIndex: 0, start: 2, end: 4, replacement: "修改" }) });
+    const service = new BrainDocumentRevisionService({ storage, resolveWorkspaceRoot: async () => workspace });
+    const exported = await service.export("owner-a", project.id, changeSet.id);
+    assert.equal(exported.file.versionNo, 2);
+    assert.equal(exported.changeSet.status, "ACCEPTED");
+    const output = await JSZip.loadAsync(readFileSync(join(workspace, "files", "note.v2.docx")));
+    const xml = await output.file("word/document.xml")!.async("string");
+    assert.match(xml, /原始修改/);
+    assert.equal(exported.file.contentHash, `sha256:${createHash("sha256").update(readFileSync(join(workspace, "files", "note.v2.docx"))).digest("hex")}`);
   } finally {
     storage.close();
     rmSync(root, { recursive: true, force: true });
