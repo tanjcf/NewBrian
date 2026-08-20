@@ -196,7 +196,12 @@ Desktop progress: free-first orchestration + admin policy/audit + citation final
 - Create release evidence manifests under `docs/testing/releases/`.
 
 - [ ] Build signed Windows installer, signed/notarized macOS DMG/ZIP, and Ubuntu AppImage/DEB for both supported architectures.
+  - Partial (2026-08-21): **unsigned** Windows MSI package build succeeded from `.materialized/windows-build` via `pnpm package:win-msi`. Artifact `codeCN 1.3.0.msi` + SHA-256 recorded in `docs/testing/releases/2026-08-21-windows-msi.md`. Signing identity not configured; macOS/Ubuntu packages **not built**.
 - [ ] Test clean install, upgrade from previous release, restart recovery, uninstall, and rollback.
+  - Install/start **NOT RUN** on evidence host (documented in the same release note to avoid machine-wide install risk).
 - [ ] Run real credential-store tests on each OS.
+  - Still blocked / not run for release gate (no multi-OS credential-store evidence in this pass).
 - [ ] Run document matrix, quant simulation, workspace switching, model, search, cancellation, and crash-recovery flows.
+  - Not part of this packaging-only evidence pass; still open for release gate.
 - [ ] Publish hashes, signatures, known risks, and a truthful GO/NO-GO decision.
+  - Partial: Windows MSI hash published in `docs/testing/releases/2026-08-21-windows-msi.md`. Signature: none (unsigned). Multi-OS GO/NO-GO = **NO-GO** (macOS/Ubuntu/notarization/full matrix blocked). Conditional note only for unsigned Windows package-build success.
