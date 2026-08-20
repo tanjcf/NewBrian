@@ -106,7 +106,7 @@ import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { DataImportService } from "./data-import-service.js";
-import { registerDataImportIpc } from "../../../../../shared/apps/desktop/src/main/data-import-ipc.js";
+import { registerDataImportIpc } from "./data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
