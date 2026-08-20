@@ -128,10 +128,10 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 
 - [ ] Deliver software and automation using the existing local tool and approval runtime.
   - [x] Discover only approved package scripts and execute them through Rust Core approval, bounded output, timeout, cancellation, and task status IPC; Windows production build verified.
-- [ ] Deliver data and decision with datasets, tables, charts, analysis artifacts, and reproducible calculations.
+- [x] Deliver data and decision with datasets, tables, charts, analysis artifacts, and reproducible calculations.
   - [x] Import bounded CSV datasets, persist metadata, restore rows after restart through hash-checked project-bound IPC, and provide paginated/filterable table UI.
   - [x] Add deterministic numeric summary computation keyed by dataset source hash and persist it through IPC/SQLite.
-  - [x] Expose bounded numeric trend data and an SVG chart in the data workspace; cap samples at 256, preserve empty states, and verify the Windows Electron production build.
+  - [x] Expose bounded numeric trend data and an SVG chart in the data workspace; cap samples at 256, preserve empty states, persist hash-bound summaries, and verify the Windows Electron production build.
 - [x] Deliver game creation with project files, asset inspection, runnable preview, and playtest evidence.
   - [x] Inspect authorized Web, Godot, Unity, and Unreal projects with bounded, non-symlink-following asset counts.
   - [x] Surface verified preview scripts as approval-gated conversation requests without direct renderer execution.
