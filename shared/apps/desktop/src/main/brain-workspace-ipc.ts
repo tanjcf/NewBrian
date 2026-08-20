@@ -36,6 +36,7 @@ import { discoverSoftwareScripts } from "./software-script-discovery.ts";
 import { SoftwareTaskService, type SoftwareTaskRustClient } from "./software-task-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 import { validateDocumentOperation } from "@codex-forge/protocol/document-operation";
+import type { DataAnalysisService } from "./data-analysis-service.ts";
 
 interface BrainWorkspaceIpcDependencies {
   storage: BrainWorkspaceStorage;
@@ -52,6 +53,7 @@ interface BrainWorkspaceIpcDependencies {
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
   confirmSoftwareTask?: (input: { projectId: string; script: import("@codex-forge/protocol/software-types").BrainSoftwareScript; projectRoot: string }) => Promise<boolean>;
   platform?: NodeJS.Platform;
+  dataAnalysis?: DataAnalysisService;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -479,6 +481,10 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   }
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
+  if (dependencies.dataAnalysis) {
+    ipcMain.handle(brainWorkspaceIpcChannels.dataAnalysisSummarize, async (_event, value: unknown) => { const input = requireRecord(value, "Data analysis summarize"); rejectUnexpectedKeys(input, ["projectId", "datasetId"], "Data analysis summarize"); return dependencies.dataAnalysis!.summarize(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.datasetId, "datasetId")); });
+    ipcMain.handle(brainWorkspaceIpcChannels.dataAnalysisList, async (_event, value: unknown) => { const input = requireRecord(value, "Data analysis list"); rejectUnexpectedKeys(input, ["projectId", "datasetId"], "Data analysis list"); return dependencies.dataAnalysis!.list(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.datasetId, "datasetId")); });
+  }
   ipcMain.handle(brainWorkspaceIpcChannels.softwareScriptsList, async (_event, value: unknown) => { const input = parseProjectGet(value); const owner = await ownerId(); const project = dependencies.storage.getProject(owner, input.projectId); if (project.primaryWorkspaceKey !== "software") throw new Error("BRAIN_SOFTWARE_WORKSPACE_REQUIRED"); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED"); const root = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId); return discoverSoftwareScripts(root); });
   if (softwareTasks) {
     ipcMain.handle(brainWorkspaceIpcChannels.softwareTaskStart, async (_event, value: unknown) => { const input = requireRecord(value, "Software task start"); rejectUnexpectedKeys(input, ["projectId", "scriptId", "conversationId"], "Software task start"); return softwareTasks.start(await ownerId(), { projectId: requireString(input.projectId, "projectId"), scriptId: requireString(input.scriptId, "scriptId"), conversationId: optionalString(input.conversationId, "conversationId") }); });

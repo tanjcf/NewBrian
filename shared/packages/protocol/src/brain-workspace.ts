@@ -340,6 +340,8 @@ export const brainWorkspaceIpcChannels = {
   ,dataDatasetSave: "brain:data:dataset-save"
   ,dataDatasetImportCsv: "brain:data:dataset-import-csv"
   ,dataDatasetRows: "brain:data:dataset-rows"
+  ,dataAnalysisSummarize: "brain:data:analysis-summarize"
+  ,dataAnalysisList: "brain:data:analysis-list"
   ,softwareScriptsList: "brain:software:scripts-list"
   ,softwareTaskStart: "brain:software:task-start"
   ,softwareTaskStatus: "brain:software:task-status"
