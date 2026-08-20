@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import JSZip from "jszip";
+import ExcelJS from "exceljs";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.ts";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.ts";
 
@@ -16,6 +17,13 @@ async function docxFixture() {
   const zip = new JSZip();
   zip.file("word/document.xml", '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>原始文本</w:t></w:r></w:p></w:body></w:document>');
   return zip.generateAsync({ type: "nodebuffer" });
+}
+
+async function xlsxFixture() {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("数据");
+  sheet.getCell("B2").value = "旧值";
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 test("previews an annotation-bounded change and exports an accepted new version", async () => {
@@ -107,4 +115,25 @@ test("exports a structured DOCX paragraph change as a versioned file", async () 
     storage.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("exports a structured XLSX cell change as a versioned file", async () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-xlsx-revision-"));
+  const workspace = join(root, "workspace");
+  mkdirSync(join(workspace, "files"), { recursive: true });
+  const source = await xlsxFixture();
+  writeFileSync(join(workspace, "files", "sheet.xlsx"), source);
+  const storage = new BrainWorkspaceStorage(join(root, "data"));
+  try {
+    const project = storage.createProject({ ownerId: "owner-a", name: "数据", primaryWorkspaceKey: "data", localWorkspaceId: "local-1" });
+    const file = storage.registerFile({ ownerId: "owner-a", projectId: project.id, logicalName: "sheet.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sizeBytes: source.byteLength, contentHash: `sha256:${createHash("sha256").update(source).digest("hex")}`, storageKey: "files/sheet.xlsx" });
+    const annotation = storage.createAnnotation({ ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1, instruction: "替换单元格", anchor: { anchorId: "b2", objectId: "b2", format: "xlsx", sheet: "数据", range: "B2", locator: { kind: "xlsx-range", sheet: "数据", range: "B2" } } });
+    const changeSet = storage.createChangeSet({ ownerId: "owner-a", projectId: project.id, annotationId: annotation.id, baseFileVersion: 1, changeSummary: "替换单元格", diffJson: JSON.stringify({ format: "xlsx", kind: "replace-cell", sheet: "数据", cell: "B2", value: "新值" }) });
+    const service = new BrainDocumentRevisionService({ storage, resolveWorkspaceRoot: async () => workspace });
+    const exported = await service.export("owner-a", project.id, changeSet.id);
+    assert.equal(exported.file.versionNo, 2);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(join(workspace, "files", "sheet.v2.xlsx"));
+    assert.equal(workbook.getWorksheet("数据")!.getCell("B2").value, "新值");
+  } finally { storage.close(); rmSync(root, { recursive: true, force: true }); }
 });
