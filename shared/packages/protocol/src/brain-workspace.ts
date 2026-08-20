@@ -339,4 +339,5 @@ export const brainWorkspaceIpcChannels = {
   ,dataDatasetList: "brain:data:dataset-list"
   ,dataDatasetSave: "brain:data:dataset-save"
   ,dataDatasetImportCsv: "brain:data:dataset-import-csv"
+  ,softwareScriptsList: "brain:software:scripts-list"
 } as const;

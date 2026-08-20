@@ -209,6 +209,7 @@ contextBridge.exposeInMainWorld("codecn", {
   listDataDatasets: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetList, input),
   saveDataDataset: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetSave, input),
   importDataCsv: (input: { projectId: string; fileId: string; datasetId: string; name: string; updatedAt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetImportCsv, input),
+  listSoftwareScripts: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareScriptsList, input),
   bootstrap: () => ipcRenderer.invoke(desktopIpcChannels.core.bootstrap),
   getSnapshot: () => ipcRenderer.invoke(desktopIpcChannels.core.getSnapshot),
   getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke(desktopIpcChannels.goal.get, input),
