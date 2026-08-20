@@ -213,6 +213,7 @@ contextBridge.exposeInMainWorld("codecn", {
   startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStart, input),
   getSoftwareTaskStatus: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStatus, input),
   cancelSoftwareTask: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskCancel, input),
+  inspectMusicMedia: (input: { projectId: string; sourceFileId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicMediaInspect, input),
   bootstrap: () => ipcRenderer.invoke(desktopIpcChannels.core.bootstrap),
   getSnapshot: () => ipcRenderer.invoke(desktopIpcChannels.core.getSnapshot),
   getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke(desktopIpcChannels.goal.get, input),

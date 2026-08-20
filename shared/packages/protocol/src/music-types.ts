@@ -29,3 +29,4 @@ export interface BrainMusicRenderRequest {
   artifactType: BrainMusicArtifactType;
   timeline: BrainMusicTimeline;
 }
+export interface BrainMusicMediaInfo { sourceFileId: string; kind: BrainMusicTrackType; durationMs: number; sampleRate?: number; channels?: number; midiTracks?: number; midiTicks?: number; warnings: string[]; }

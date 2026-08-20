@@ -105,6 +105,7 @@ import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
+import { MusicMediaService } from "./music-media-service.js";
 import { DataImportService } from "./data-import-service.js";
 import { registerDataImportIpc } from "./data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
@@ -7335,11 +7336,13 @@ function registerIpc() {
     if (!(await fs.stat(root)).isDirectory()) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_DIRECTORY");
     return root;
   };
+  const musicMediaService = new MusicMediaService(brainWorkspaceStorage, resolveBrainWorkspaceRoot);
   registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
     quant: quantSimulationService,
     video: videoTimelineService,
     music: musicTimelineService,
+    musicMedia: musicMediaService,
     videoRender: videoRenderService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
