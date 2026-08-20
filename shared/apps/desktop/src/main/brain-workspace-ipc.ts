@@ -30,6 +30,7 @@ import type { VideoRenderService } from "./video-render-service.ts";
 import type { MusicTimelineService } from "./music-timeline-service.ts";
 import { normalizeDataset } from "./data-dataset-policy.ts";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
+import type { DataImportService } from "./data-import-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 
 interface BrainWorkspaceIpcDependencies {
@@ -40,6 +41,7 @@ interface BrainWorkspaceIpcDependencies {
   video?: VideoTimelineService;
   videoRender?: VideoRenderService;
   music?: MusicTimelineService;
+  dataImport?: DataImportService;
   ingestDocument?: (input: { requestId: string; projectRoot: string; relativePath: string; maxBytes: number }) => Promise<DocumentWorkerResponse>;
   acquireRustCore?: (binding: { projectId: string; projectRoot: string; workspaceType: "game" | "video" }) => Promise<GamePreviewRustClient>;
   confirmGamePreview?: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
@@ -462,6 +464,7 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   }
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
+  if (dependencies.dataImport) ipcMain.handle("brain:data:dataset-import-csv", async (_event, value: unknown) => { const input = requireRecord(value, "Dataset import"); rejectUnexpectedKeys(input, ["projectId", "fileId", "datasetId", "name", "updatedAt"], "Dataset import"); return dependencies.dataImport!.importCsv(await ownerId(), { projectId: requireString(input.projectId, "projectId"), fileId: requireString(input.fileId, "fileId"), datasetId: requireString(input.datasetId, "datasetId"), name: requireString(input.name, "name"), updatedAt: requireString(input.updatedAt, "updatedAt") }); });
   ipcMain.handle(brainWorkspaceIpcChannels.annotationList, async (_event, value: unknown) => {
     const input = parseProjectGet(value);
     return dependencies.storage.listAnnotations(await ownerId(), input.projectId);
