@@ -34,6 +34,7 @@ import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
+import { DocumentAnchorOverlay } from "./DocumentAnchorOverlay";
 import { buildAnnotationChatReference, createTextLineAnchor } from "./document-annotation-policy";
 import { QuantWorkspace } from "./QuantWorkspace";
 import { GameWorkspace } from "./GameWorkspace";
@@ -84,7 +85,15 @@ import {
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function PdfPage({ document, pageNumber, scale }: { document: any; pageNumber: number; scale: number }) {
+function PdfPage({ document, pageNumber, scale, anchors = [], annotationActive = false, selectedAnchorId = null, onSelectAnchor }: {
+  document: any;
+  pageNumber: number;
+  scale: number;
+  anchors?: any[];
+  annotationActive?: boolean;
+  selectedAnchorId?: string | null;
+  onSelectAnchor?: (anchor: any) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
@@ -119,10 +128,23 @@ function PdfPage({ document, pageNumber, scale }: { document: any; pageNumber: n
   return <div ref={pageRef} className="workspace-artifact-pdf-page-shell" data-page-number={pageNumber}>
     <canvas ref={canvasRef} className="workspace-artifact-pdf-page" />
     <div ref={textLayerRef} className="workspace-artifact-pdf-text-layer textLayer" />
+    <DocumentAnchorOverlay
+      anchors={anchors}
+      active={annotationActive}
+      selectedAnchorId={selectedAnchorId}
+      pageFilter={pageNumber}
+      onSelectAnchor={onSelectAnchor}
+    />
   </div>;
 }
 
-function WorkspacePdfViewer({ dataUrl }: { dataUrl: string }) {
+function WorkspacePdfViewer({ dataUrl, anchors = [], annotationActive = false, selectedAnchorId = null, onSelectAnchor }: {
+  dataUrl: string;
+  anchors?: any[];
+  annotationActive?: boolean;
+  selectedAnchorId?: string | null;
+  onSelectAnchor?: (anchor: any) => void;
+}) {
   const [document, setDocument] = useState<any>(null);
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -181,11 +203,28 @@ function WorkspacePdfViewer({ dataUrl }: { dataUrl: string }) {
         <button type="button" aria-label="放大" title="放大" disabled={scale >= 1.6} onClick={() => setScale((value) => Math.min(1.6, Number((value + 0.1).toFixed(1))))}>+</button>
       </div>
     </div>
-    <div className="workspace-artifact-pdf" ref={pagesRef}>{Array.from({ length: document.numPages }, (_, index) => <PdfPage key={index + 1} document={document} pageNumber={index + 1} scale={scale} />)}</div>
+    <div className="workspace-artifact-pdf" ref={pagesRef}>{Array.from({ length: document.numPages }, (_, index) => (
+      <PdfPage
+        key={index + 1}
+        document={document}
+        pageNumber={index + 1}
+        scale={scale}
+        anchors={anchors}
+        annotationActive={annotationActive}
+        selectedAnchorId={selectedAnchorId}
+        onSelectAnchor={onSelectAnchor}
+      />
+    ))}</div>
   </div>;
 }
 
-function WorkspacePptxViewer({ dataUrl }: { dataUrl: string }) {
+function WorkspacePptxViewer({ dataUrl, anchors = [], annotationActive = false, selectedAnchorId = null, onSelectAnchor }: {
+  dataUrl: string;
+  anchors?: any[];
+  annotationActive?: boolean;
+  selectedAnchorId?: string | null;
+  onSelectAnchor?: (anchor: any) => void;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PptxViewer | null>(null);
   const [state, setState] = useState<{ loading: boolean; error: string; slideCount: number; currentSlide: number }>({ loading: true, error: "", slideCount: 0, currentSlide: 0 });
@@ -231,7 +270,16 @@ function WorkspacePptxViewer({ dataUrl }: { dataUrl: string }) {
       <span>{state.currentSlide + 1}/{state.slideCount}</span>
       <button type="button" aria-label="下一页" title="下一页" disabled={state.currentSlide >= state.slideCount - 1} onClick={() => void viewerRef.current?.goToSlide(state.currentSlide + 1)}>›</button>
     </div> : null}
-    <div className="workspace-artifact-pptx-host" ref={hostRef} />
+    <div className="workspace-artifact-pptx-stage">
+      <div className="workspace-artifact-pptx-host" ref={hostRef} />
+      <DocumentAnchorOverlay
+        anchors={anchors}
+        active={annotationActive && !state.loading && !state.error}
+        selectedAnchorId={selectedAnchorId}
+        pageFilter={state.currentSlide + 1}
+        onSelectAnchor={onSelectAnchor}
+      />
+    </div>
   </div>;
 }
 
@@ -4378,12 +4426,12 @@ function renderSidebarModule() {
         <div className={`brain-resource-list${brainResourceTab === "quant" || brainResourceTab === "game" ? " quant-plugin" : ""}`}>
           {brainResourceTab === "quant" ? <QuantWorkspace projectId={selectedBrainProject?.id} compact /> : null}
           {brainResourceTab === "game" ? <GameWorkspace projectId={selectedBrainProject?.id} conversationId={selectedBrainConversationId || undefined} /> : null}
-          {brainResourceTab === "video" ? <VideoWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
-          {brainResourceTab === "music" ? <MusicWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
-          {brainResourceTab === "data" ? <DataWorkspace projectId={selectedBrainProject?.id} files={brainFiles} /> : null}
+          {brainResourceTab === "video" ? <VideoWorkspace projectId={selectedBrainProject?.id} files={brainFiles} selectedFileId={activeBrainDocumentFileId} onSelectFile={setActiveBrainDocumentFileId} /> : null}
+          {brainResourceTab === "music" ? <MusicWorkspace projectId={selectedBrainProject?.id} files={brainFiles} selectedFileId={activeBrainDocumentFileId} onSelectFile={setActiveBrainDocumentFileId} /> : null}
+          {brainResourceTab === "data" ? <DataWorkspace projectId={selectedBrainProject?.id} files={brainFiles} selectedFileId={activeBrainDocumentFileId} onSelectFile={setActiveBrainDocumentFileId} /> : null}
           {brainResourceTab === "software" ? <SoftwareWorkspace projectId={selectedBrainProject?.id} /> : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
-            <button key={file.id} type="button" className="brain-resource-row" onClick={() => {
+            <button key={file.id} type="button" className={`brain-resource-row${activeBrainDocumentFileId === file.id ? " selected" : ""}`} onClick={() => {
               setActiveBrainDocumentFileId(file.id);
               setDocumentAnnotationActive(false);
               setDocumentAnnotationCandidate(null);
@@ -6138,6 +6186,17 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
               onExportChangeSet={(changeSet) => void exportDocumentChangeSet(changeSet)}
             />
+            {documentAnnotationActive && brainDocumentAnchors.some((anchor) => anchor.format === "xlsx") ? (
+              <div className="workspace-artifact-xlsx-sheet" data-testid="document-xlsx-sheet">
+                <DocumentAnchorOverlay
+                  anchors={brainDocumentAnchors}
+                  active
+                  selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
+                  sheetFilter={documentAnnotationCandidate?.sheet || brainDocumentAnchors.find((anchor) => anchor.format === "xlsx")?.sheet}
+                  onSelectAnchor={setDocumentAnnotationCandidate}
+                />
+              </div>
+            ) : null}
             {searchFilePreview.loading ? (
               <div className="search-file-preview-state">正在读取文件...</div>
             ) : searchFilePreview.error || searchFilePreview.blankReason || (!searchFilePreview.binary && !searchFilePreview.kind && !String(searchFilePreview.content || "").length && !searchFilePreview.loading) ? (
@@ -6148,16 +6207,49 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 <button type="button" className="artifact-retry-button" onClick={() => openLocalFilePreview(searchFilePreview.tabPath || searchFilePreview.path, searchFilePreview.line ? { line: searchFilePreview.line, endLine: searchFilePreview.endLine } : undefined)}>重试预览</button>
               </div>
             ) : searchFilePreview.kind === "pdf" ? (
-              <WorkspacePdfViewer dataUrl={searchFilePreview.dataUrl} />
-            ) : searchFilePreview.kind === "docx" ? (
-              <iframe
-                className="workspace-artifact-docx"
-                title={searchFilePreview.name}
-                sandbox=""
-                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:32px 40px;background:#fff;color:#202124;font:15px/1.75 system-ui,sans-serif}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dce2;padding:6px 8px}h1,h2,h3{line-height:1.35}p{margin:0 0 12px}</style></head><body>${searchFilePreview.html || ""}</body></html>`}
+              <WorkspacePdfViewer
+                dataUrl={searchFilePreview.dataUrl}
+                anchors={brainDocumentAnchors}
+                annotationActive={documentAnnotationActive}
+                selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
+                onSelectAnchor={setDocumentAnnotationCandidate}
               />
+            ) : searchFilePreview.kind === "docx" ? (
+              <div className="workspace-artifact-docx-shell">
+                <iframe
+                  className="workspace-artifact-docx"
+                  title={searchFilePreview.name}
+                  sandbox=""
+                  srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:32px 40px;background:#fff;color:#202124;font:15px/1.75 system-ui,sans-serif}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dce2;padding:6px 8px}h1,h2,h3{line-height:1.35}p{margin:0 0 12px}[data-object-id].selected{outline:2px solid #d88621;background:#fff3df}</style></head><body>${searchFilePreview.html || ""}</body></html>`}
+                />
+                {documentAnnotationActive ? (
+                  <div className="document-anchor-docx-picker" data-testid="document-anchor-docx-picker">
+                    {brainDocumentAnchors.filter((anchor) => anchor.format === "docx").slice(0, 100).map((anchor) => (
+                      <button
+                        type="button"
+                        key={anchor.anchorId}
+                        data-testid="document-anchor-hit"
+                        data-object-id={anchor.objectId}
+                        className={documentAnnotationCandidate?.anchorId === anchor.anchorId ? "selected" : ""}
+                        onClick={() => setDocumentAnnotationCandidate(anchor)}
+                      >
+                        <strong>{anchor.selectedText?.trim() || anchor.objectId}</strong>
+                        <small>{anchor.objectId}</small>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ) : searchFilePreview.kind === "pptx" ? (
-              <WorkspaceArtifactViewerHost preview={searchFilePreview} />
+              <div className="workspace-artifact-pptx-shell">
+                <WorkspaceArtifactViewerHost preview={searchFilePreview} />
+                <DocumentAnchorOverlay
+                  anchors={brainDocumentAnchors}
+                  active={documentAnnotationActive}
+                  selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
+                  onSelectAnchor={setDocumentAnnotationCandidate}
+                />
+              </div>
             ) : searchFilePreview.kind === "html" ? (
               <WorkspaceHtmlViewer
                 name={searchFilePreview.name}
@@ -6168,6 +6260,12 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             ) : searchFilePreview.kind === "image" ? (
               <div className="workspace-artifact-image">
                 <img src={String(searchFilePreview.previewUrl || "")} alt={searchFilePreview.name || "image"} />
+                <DocumentAnchorOverlay
+                  anchors={brainDocumentAnchors}
+                  active={documentAnnotationActive}
+                  selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
+                  onSelectAnchor={setDocumentAnnotationCandidate}
+                />
               </div>
             ) : searchFilePreview.kind === "video" ? (
               <div className="workspace-artifact-video">

@@ -90,7 +90,9 @@ async function extractDocument(filePath, format) {
             locator: { kind: "xlsx-range", sheet: sheet.name, range, ...(formula ? { formula } : {}) },
             sheet: sheet.name,
             range,
-            selectedText: String(value ?? "")
+            selectedText: String(value ?? ""),
+            rect: sheetGridRect(range),
+            transform: { coordinateSpace: "sheet-grid", basisWidth: Math.max(sheet.columnCount || 1, 26), basisHeight: Math.max(sheet.rowCount || 1, 50), scale: 1 }
           });
         });
       });
@@ -176,6 +178,23 @@ function imageDimensions(data) {
 
 function decodeXml(value) {
   return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+
+function columnLettersToIndex(letters) {
+  let value = 0;
+  for (const character of letters.toUpperCase()) value = value * 26 + (character.charCodeAt(0) - 64);
+  return Math.max(0, value - 1);
+}
+
+function sheetGridRect(address) {
+  const match = /^([A-Z]+)(\d+)$/i.exec(String(address || "").trim());
+  if (!match) return { x: 0, y: 0, width: 1, height: 1 };
+  return {
+    x: columnLettersToIndex(match[1]),
+    y: Math.max(0, Number(match[2]) - 1),
+    width: 1,
+    height: 1
+  };
 }
 
 const runOnce = process.argv.includes("--once");

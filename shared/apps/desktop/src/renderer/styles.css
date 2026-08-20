@@ -17650,9 +17650,87 @@ textarea {
   .usage-exception-feedback-overlay { padding: 12px; align-items: end; }
   .usage-exception-feedback-dialog { max-height: calc(100vh - 24px); }
 }
-.document-annotation-layer {
-  border-bottom: 1px solid var(--border-subtle, #e2e5e9);
-  background: color-mix(in srgb, var(--panel-bg, #fff) 96%, #f4a340 4%);
+.document-anchor-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.document-anchor-overlay.active {
+  pointer-events: none;
+}
+
+.document-anchor-hit {
+  position: absolute;
+  pointer-events: auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, #d88621 70%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, #fff3df 45%, transparent);
+  color: #8a4d08;
+  font: 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.document-anchor-hit.selected,
+.document-anchor-docx-picker button.selected {
+  border-color: #d88621;
+  background: #fff3df;
+  box-shadow: inset 0 0 0 1px #d88621;
+}
+
+.document-anchor-hit span {
+  display: block;
+  padding: 2px 4px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.workspace-artifact-pdf-page-shell,
+.workspace-artifact-image,
+.workspace-artifact-pptx-shell,
+.workspace-artifact-pptx-stage,
+.workspace-artifact-docx-shell {
+  position: relative;
+}
+
+.document-anchor-docx-picker {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle, #e2e5e9);
+  background: color-mix(in srgb, var(--panel-bg, #fff) 94%, #f4a340 6%);
+}
+
+.document-anchor-docx-picker button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: 1px solid var(--border-subtle, #d9dde3);
+  border-radius: 7px;
+  background: var(--panel-bg, #fff);
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workspace-artifact-xlsx-sheet {
+  position: relative;
+  min-height: 220px;
+  margin: 8px 10px 12px;
+  border: 1px solid var(--border-subtle, #e2e5e9);
+  border-radius: 8px;
+  background:
+    linear-gradient(#eef1f5 1px, transparent 1px) 0 0 / 100% 28px,
+    linear-gradient(90deg, #eef1f5 1px, transparent 1px) 0 0 / 72px 100%,
+    #fff;
 }
 
 .document-annotation-toolbar {

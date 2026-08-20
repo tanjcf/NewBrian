@@ -1,13 +1,144 @@
 import { useEffect, useState } from "react";
 import { DataTrendChart } from "./DataTrendChart";
-function buildNumericChart(rows: string[][], columnIndex: number) { const values = rows.map((row, index) => ({ index, value: Number(row[columnIndex]) })).filter((item) => Number.isFinite(item.value)).slice(0, 256); if (!values.length) return []; const min = Math.min(...values.map((item) => item.value)); const span = Math.max(...values.map((item) => item.value)) - min || 1; return values.map((item, index) => ({ ...item, x: values.length < 2 ? 0 : index / (values.length - 1), y: 1 - (item.value - min) / span })); }
+import { ProjectFilePicker, type ProjectFileOption } from "./ProjectFilePicker";
 
-type DataFile = { id: string; originalName?: string; relativePath?: string };
-export function DataWorkspace({ projectId, files = [] }: { projectId?: string; files?: DataFile[] }) {
-  const [datasets, setDatasets] = useState<any[]>([]); const [rows, setRows] = useState<Record<string, string[][]>>({}); const [analysis, setAnalysis] = useState<any>(null); const [status, setStatus] = useState("正在加载数据集"); const [fileId, setFileId] = useState(files[0]?.id || ""); const [selectedId, setSelectedId] = useState(""); const [query, setQuery] = useState(""); const [page, setPage] = useState(0); const pageSize = 25;
-  useEffect(() => { if (!projectId || !window.codecn?.listDataDatasets) { setStatus("请选择数据项目"); return; } void window.codecn.listDataDatasets({ projectId }).then(async (items: any[]) => { const safe = Array.isArray(items) ? items : []; setDatasets(safe); if (window.codecn?.readDataRows) { const loaded = await Promise.all(safe.map(async (item) => [item.id, await window.codecn.readDataRows({ projectId, datasetId: item.id })] as const)); setRows(Object.fromEntries(loaded)); } setStatus("数据集已加载"); }).catch(() => setStatus("数据集暂不可用")); }, [projectId]);
-  const selected = datasets.find((item) => item.id === selectedId) || datasets[0]; const sourceRows = selected ? rows[selected.id] || [] : []; const filtered = sourceRows.filter((row) => !query || row.some((value) => String(value).toLowerCase().includes(query.toLowerCase()))); const visible = filtered.slice(page * pageSize, (page + 1) * pageSize); const numericIndex = selected?.columns.findIndex((column: any) => column.type === "number") ?? -1; const points = numericIndex >= 0 ? buildNumericChart(sourceRows, numericIndex) : [];
-  const importCsv = () => { if (!projectId || !fileId || !window.codecn?.importDataCsv) { setStatus("请选择已登记的 CSV 文件"); return; } void window.codecn.importDataCsv({ projectId, fileId, datasetId: `dataset-${Date.now()}`, name: files.find((file) => file.id === fileId)?.originalName || "CSV 数据集", updatedAt: new Date().toISOString() }).then((result: any) => { setDatasets((items) => [result.dataset, ...items]); setRows((items) => ({ ...items, [result.dataset.id]: result.rows || [] })); setSelectedId(result.dataset.id); setStatus(`已导入 ${result.rows?.length || 0} 行`); }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "CSV 导入失败")); };
-  const runAnalysis = () => { if (!projectId || !selected || !window.codecn?.summarizeData) return; setStatus("正在生成摘要"); void window.codecn.summarizeData({ projectId, datasetId: selected.id }).then((result: any) => { setAnalysis(result?.result || null); setStatus("分析结果已保存"); }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "分析失败")); };
-  return <main className="brain-data-module"><header className="brain-video-header"><div><span>数据与决策</span><strong>数据集</strong></div><small>{status} · 分析结果可复现</small></header><section className="brain-data-summary"><select value={fileId} onChange={(event) => setFileId(event.target.value)}><option value="">选择 CSV 文件</option>{files.map((file) => <option key={file.id} value={file.id}>{file.originalName || file.relativePath || file.id}</option>)}</select><button type="button" onClick={importCsv}>导入 CSV</button><select value={selected?.id || ""} onChange={(event) => { setSelectedId(event.target.value); setAnalysis(null); setPage(0); }}><option value="">选择数据集</option>{datasets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input aria-label="筛选数据" placeholder="筛选行内容" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} /><button type="button" disabled={!selected} onClick={runAnalysis}>运行摘要</button></section>{analysis?.columns?.length ? <section className="brain-data-summary"><strong>数值摘要</strong>{analysis.columns.map((item: any) => <span key={item.key}>{item.key} · {item.count} 个值 · 最小 {item.min} · 最大 {item.max} · 平均 {item.mean}</span>)}</section> : null}{selected && points.length ? <DataTrendChart points={points} label={selected.columns[numericIndex]?.label || selected.columns[numericIndex]?.key || "数值"} /> : null}<section className="brain-data-list">{datasets.map((dataset) => <article className={`brain-data-card${selected?.id === dataset.id ? " active" : ""}`} key={dataset.id} onClick={() => { setSelectedId(dataset.id); setAnalysis(null); setPage(0); }}><header><strong>{dataset.name}</strong><small>{dataset.rowCount.toLocaleString()} 行 · {dataset.columns.length} 列</small></header><div className="brain-data-columns">{dataset.columns.map((column: any) => <span key={column.key}>{column.label}<em>{column.type}</em></span>)}</div></article>)}{selected && visible.length ? <section className="brain-data-table-wrap"><table><thead><tr>{selected.columns.map((column: any) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{visible.map((row, index) => <tr key={`${page}-${index}`}>{selected.columns.map((column: any, columnIndex: number) => <td key={column.key}>{row[columnIndex] ?? ""}</td>)}</tr>)}</tbody></table><footer><span>显示 {page * pageSize + 1}-{Math.min((page + 1) * pageSize, filtered.length)} / {filtered.length}</span><button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>上一页</button><button type="button" disabled={(page + 1) * pageSize >= filtered.length} onClick={() => setPage((value) => value + 1)}>下一页</button></footer></section> : null}{!datasets.length ? <div className="brain-resource-empty">还没有数据集，请先导入 CSV。</div> : null}</section></main>;
+function buildNumericChart(rows: string[][], columnIndex: number) {
+  const values = rows.map((row, index) => ({ index, value: Number(row[columnIndex]) })).filter((item) => Number.isFinite(item.value)).slice(0, 256);
+  if (!values.length) return [];
+  const min = Math.min(...values.map((item) => item.value));
+  const span = Math.max(...values.map((item) => item.value)) - min || 1;
+  return values.map((item, index) => ({ ...item, x: values.length < 2 ? 0 : index / (values.length - 1), y: 1 - (item.value - min) / span }));
+}
+
+function isCsvFile(file: ProjectFileOption): boolean {
+  const name = `${file.logicalName || ""} ${file.originalName || ""} ${file.relativePath || ""} ${file.storageKey || ""}`.toLowerCase();
+  return name.includes(".csv");
+}
+
+export function DataWorkspace({
+  projectId,
+  files = [],
+  selectedFileId = "",
+  onSelectFile
+}: {
+  projectId?: string;
+  files?: ProjectFileOption[];
+  selectedFileId?: string;
+  onSelectFile?: (fileId: string) => void;
+}) {
+  const [datasets, setDatasets] = useState<any[]>([]);
+  const [rows, setRows] = useState<Record<string, string[][]>>({});
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [status, setStatus] = useState("正在加载数据集");
+  const [localFileId, setLocalFileId] = useState(selectedFileId || files.find(isCsvFile)?.id || files[0]?.id || "");
+  const [selectedId, setSelectedId] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const pageSize = 25;
+  const fileId = onSelectFile ? selectedFileId : localFileId;
+  const setFileId = (value: string) => {
+    if (onSelectFile) onSelectFile(value);
+    else setLocalFileId(value);
+  };
+
+  useEffect(() => {
+    if (!projectId || !window.codecn?.listDataDatasets) { setStatus("请选择数据项目"); return; }
+    void window.codecn.listDataDatasets({ projectId }).then(async (items: any[]) => {
+      const safe = Array.isArray(items) ? items : [];
+      setDatasets(safe);
+      if (window.codecn?.readDataRows) {
+        const loaded = await Promise.all(safe.map(async (item) => [item.id, await window.codecn.readDataRows({ projectId, datasetId: item.id })] as const));
+        setRows(Object.fromEntries(loaded));
+      }
+      setStatus("数据集已加载");
+    }).catch(() => setStatus("数据集暂不可用"));
+  }, [projectId]);
+  useEffect(() => {
+    if (onSelectFile) return;
+    if (!localFileId && (files.find(isCsvFile)?.id || files[0]?.id)) setLocalFileId(files.find(isCsvFile)?.id || files[0]?.id || "");
+  }, [files, localFileId, onSelectFile]);
+
+  const selected = datasets.find((item) => item.id === selectedId) || datasets[0];
+  const sourceRows = selected ? rows[selected.id] || [] : [];
+  const filtered = sourceRows.filter((row) => !query || row.some((value) => String(value).toLowerCase().includes(query.toLowerCase())));
+  const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
+  const numericIndex = selected?.columns.findIndex((column: any) => column.type === "number") ?? -1;
+  const points = numericIndex >= 0 ? buildNumericChart(sourceRows, numericIndex) : [];
+
+  const importCsv = () => {
+    if (!projectId || !fileId || !window.codecn?.importDataCsv) { setStatus("请选择已登记的 CSV 文件"); return; }
+    void window.codecn.importDataCsv({
+      projectId, fileId, datasetId: `dataset-${Date.now()}`,
+      name: files.find((file) => file.id === fileId)?.originalName || files.find((file) => file.id === fileId)?.logicalName || "CSV 数据集",
+      updatedAt: new Date().toISOString()
+    }).then((result: any) => {
+      setDatasets((items) => [result.dataset, ...items]);
+      setRows((items) => ({ ...items, [result.dataset.id]: result.rows || [] }));
+      setSelectedId(result.dataset.id);
+      setStatus(`已导入 ${result.rows?.length || 0} 行`);
+    }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "CSV 导入失败"));
+  };
+  const runAnalysis = () => {
+    if (!projectId || !selected || !window.codecn?.summarizeData) return;
+    setStatus("正在生成摘要");
+    void window.codecn.summarizeData({ projectId, datasetId: selected.id }).then((result: any) => {
+      setAnalysis(result?.result || null);
+      setStatus("分析结果已保存");
+    }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "分析失败"));
+  };
+
+  return (
+    <main className="brain-data-module">
+      <header className="brain-video-header">
+        <div><span>数据与决策</span><strong>数据集</strong></div>
+        <small>{status} · 分析结果可复现</small>
+      </header>
+      <section className="brain-data-summary">
+        <ProjectFilePicker
+          testId="brain-data-file-select"
+          files={files}
+          value={fileId}
+          onChange={setFileId}
+          emptyLabel="选择 CSV 文件"
+          accept={isCsvFile}
+        />
+        <button type="button" onClick={importCsv}>导入 CSV</button>
+        <select value={selected?.id || ""} onChange={(event) => { setSelectedId(event.target.value); setAnalysis(null); setPage(0); }}>
+          <option value="">选择数据集</option>
+          {datasets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+        <input aria-label="筛选数据" placeholder="筛选行内容" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} />
+        <button type="button" disabled={!selected} onClick={runAnalysis}>运行摘要</button>
+      </section>
+      {analysis?.columns?.length ? (
+        <section className="brain-data-summary">
+          <strong>数值摘要</strong>
+          {analysis.columns.map((item: any) => <span key={item.key}>{item.key} · {item.count} 个值 · 最小 {item.min} · 最大 {item.max} · 平均 {item.mean}</span>)}
+        </section>
+      ) : null}
+      {selected && points.length ? <DataTrendChart points={points} label={selected.columns[numericIndex]?.label || selected.columns[numericIndex]?.key || "数值"} /> : null}
+      <section className="brain-data-list">
+        {datasets.map((dataset) => (
+          <article className={`brain-data-card${selected?.id === dataset.id ? " active" : ""}`} key={dataset.id} onClick={() => { setSelectedId(dataset.id); setAnalysis(null); setPage(0); }}>
+            <header><strong>{dataset.name}</strong><small>{dataset.rowCount.toLocaleString()} 行 · {dataset.columns.length} 列</small></header>
+            <div className="brain-data-columns">{dataset.columns.map((column: any) => <span key={column.key}>{column.label}<em>{column.type}</em></span>)}</div>
+          </article>
+        ))}
+        {selected && visible.length ? (
+          <section className="brain-data-table-wrap">
+            <table>
+              <thead><tr>{selected.columns.map((column: any) => <th key={column.key}>{column.label}</th>)}</tr></thead>
+              <tbody>{visible.map((row, index) => <tr key={`${page}-${index}`}>{selected.columns.map((column: any, columnIndex: number) => <td key={column.key}>{row[columnIndex] ?? ""}</td>)}</tr>)}</tbody>
+            </table>
+            <footer>
+              <span>显示 {page * pageSize + 1}-{Math.min((page + 1) * pageSize, filtered.length)} / {filtered.length}</span>
+              <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>上一页</button>
+              <button type="button" disabled={(page + 1) * pageSize >= filtered.length} onClick={() => setPage((value) => value + 1)}>下一页</button>
+            </footer>
+          </section>
+        ) : null}
+        {!datasets.length ? <div className="brain-resource-empty">还没有数据集，请先导入 CSV。</div> : null}
+      </section>
+    </main>
+  );
 }
