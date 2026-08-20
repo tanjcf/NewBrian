@@ -27,6 +27,7 @@
     "test:artifact-side-panel-runtime": "node scripts/test-electron-artifact-side-panel.mjs",
     "test:composer-runtime": "node scripts/test-electron-composer-layout.mjs",
     "test:approval-runtime": "node scripts/test-electron-approval-flow.mjs",
+    "test:media-workspace-runtime": "node scripts/test-electron-media-workspace.mjs",
     "test:writing-format-matrix": "node --experimental-strip-types scripts/test-writing-format-matrix.mjs",
     "test:government-runtime": "node scripts/test-electron-government-flow.mjs",
     "test:government-multiturn-runtime": "node scripts/test-electron-government-multiturn.mjs",

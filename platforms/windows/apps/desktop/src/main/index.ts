@@ -148,6 +148,8 @@ import { AgentHostLoopBridge } from "./agent-host-loop-bridge.js";
 import { createAgentHostQuitCoordinator } from "./agent-host-quit-coordinator.js";
 import { OfficialGovernmentWebService } from "./official-government-web-service.js";
 import { registerOfficialGovernmentWebTools } from "./official-government-web-tools.js";
+import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
+import { registerDesktopWebSearchTools } from "./desktop-web-search-tools.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
 import { RustCoreService } from "./rust-core-service.js";
@@ -590,9 +592,26 @@ const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
 const videoTimelineService = new VideoTimelineService(brainWorkspaceStorage);
 const musicTimelineService = new MusicTimelineService(brainWorkspaceStorage);
+const prepareBrainRenderOutput = async (root: string, output: string) => {
+  const rootReal = await fs.realpath(root);
+  const target = resolve(rootReal, output);
+  const boundary = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`;
+  if (target === rootReal || !target.startsWith(boundary)) throw new Error("BRAIN_RENDER_OUTPUT_PATH_INVALID");
+  await fs.mkdir(dirname(target), { recursive: true });
+  const parentReal = await fs.realpath(dirname(target));
+  if (parentReal !== rootReal && !parentReal.startsWith(boundary)) throw new Error("BRAIN_RENDER_OUTPUT_PATH_INVALID");
+  try {
+    const existingReal = await fs.realpath(target);
+    if (existingReal === rootReal || !existingReal.startsWith(boundary)) throw new Error("BRAIN_RENDER_OUTPUT_PATH_INVALID");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+};
 const videoRenderService = new VideoRenderService({
   acquireRustCore: (binding) => getRustCoreService().acquire(binding),
+  storage: brainWorkspaceStorage,
   platform: process.platform,
+  prepareOutput: prepareBrainRenderOutput,
   confirmRender: async ({ projectId, command, outputRelativePath }) => {
     const result = await dialog.showMessageBox(mainWindowRef ?? undefined, {
       type: "warning", title: "渲染视频", message: `允许渲染项目 ${projectId} 吗？`,
@@ -726,6 +745,14 @@ if (process.platform === "win32") {
 }
 let runtime: Awaited<ReturnType<typeof createLocalRuntime>>;
 const officialGovernmentWebService = new OfficialGovernmentWebService();
+const desktopWebSearchClient = new DesktopWebSearchClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
+});
 let automationModelChatService: ModelChatService | null = null;
 type AgentModelCallback = Parameters<Awaited<ReturnType<typeof createLocalRuntime>>["advanceAgentLoop"]>[0];
 let activeAgentModelCallback: AgentModelCallback | null = null;
@@ -1106,6 +1133,8 @@ async function uploadPendingDesktopErrors() {
     if (!response.ok) throw new Error(`desktop error upload failed with HTTP ${response.status}`);
   });
   await appendDesktopDebugLog(`desktop error outbox flushed uploaded=${result.uploaded} failed=${result.failed}`);
+  const pruned = await desktopErrorOutbox.pruneSent();
+  if (pruned) await appendDesktopDebugLog(`desktop error outbox pruned sent=${pruned}`);
   return result;
 }
 const desktopErrorCollector = new DesktopErrorCollector({
@@ -7339,7 +7368,7 @@ function registerIpc() {
     return root;
   };
   const musicMediaService = new MusicMediaService(brainWorkspaceStorage, resolveBrainWorkspaceRoot);
-  const musicRenderService = new MusicRenderService({ acquireRustCore: (binding) => getRustCoreService().acquire(binding), platform: process.platform, confirmRender: async ({ projectId, command }) => { const result = await dialog.showMessageBox(mainWindowRef ?? undefined, { type: "warning", title: "渲染音乐", message: `允许渲染项目 ${projectId} 吗？`, detail: `固定命令：${command}`, buttons: ["开始渲染", "取消"], defaultId: 1, cancelId: 1, noLink: true }); return result.response === 0; }, validateOutput: async (root, output) => { try { const rootReal = await fs.realpath(root); const target = resolve(rootReal, output); const targetReal = await fs.realpath(target); const boundary = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`; const file = await fs.stat(targetReal); return (targetReal === rootReal || targetReal.startsWith(boundary)) && file.isFile() && file.size > 0; } catch { return false; } } });
+  const musicRenderService = new MusicRenderService({ acquireRustCore: (binding) => getRustCoreService().acquire(binding), storage: brainWorkspaceStorage, platform: process.platform, prepareOutput: prepareBrainRenderOutput, confirmRender: async ({ projectId, command }) => { const result = await dialog.showMessageBox(mainWindowRef ?? undefined, { type: "warning", title: "渲染音乐", message: `允许渲染项目 ${projectId} 吗？`, detail: `固定命令：${command}`, buttons: ["开始渲染", "取消"], defaultId: 1, cancelId: 1, noLink: true }); return result.response === 0; }, validateOutput: async (root, output) => { try { const rootReal = await fs.realpath(root); const target = resolve(rootReal, output); const targetReal = await fs.realpath(target); const boundary = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`; const file = await fs.stat(targetReal); return (targetReal === rootReal || targetReal.startsWith(boundary)) && file.isFile() && file.size > 0; } catch { return false; } } });
   const brainDataImport = new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot);
   const brainDataAnalysis = new DataAnalysisService(brainWorkspaceStorage, brainDataImport);
   registerBrainWorkspaceIpcHandlers({
@@ -8017,6 +8046,7 @@ function registerIpc() {
       // the official-evidence tools here as well as on the long-lived desktop
       // runtime, otherwise government-writing turns only see goal tools.
       registerOfficialGovernmentWebTools(targetRuntime, officialGovernmentWebService);
+      registerDesktopWebSearchTools(targetRuntime, desktopWebSearchClient);
       await applyApplicationSkillPolicy(targetRuntime);
     },
     readPolicyRules,
@@ -8357,6 +8387,7 @@ app.whenReady().then(async () => {
     registerBrowserAgentTools();
     registerWorkspaceMediaAgentTools();
     registerOfficialGovernmentWebTools(runtime, officialGovernmentWebService);
+    registerDesktopWebSearchTools(runtime, desktopWebSearchClient);
     await activateConfiguredPlugins();
     await syncMcpToolsToRuntime();
     const restoredDelegatedTasks = runtime.restoreDelegatedTasks(codexStorage.listDelegatedAgentTasks());
