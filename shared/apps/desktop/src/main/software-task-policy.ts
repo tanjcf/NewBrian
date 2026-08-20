@@ -1,0 +1,2 @@
+export function boundSoftwareOutput(stdout: string, stderr: string, maxBytes = 64 * 1024) { return `${stdout}\n${stderr}`.trim().slice(-maxBytes); }
+export function mapSoftwareResponse(status: string, success: unknown, errorCode = "") { if (status === "cancelled") return "CANCELLED" as const; if (status !== "completed" || success === false) return errorCode === "BRAIN_CORE_PROCESS_TIMEOUT" ? "TIMED_OUT" as const : "FAILED" as const; return "SUCCEEDED" as const; }
