@@ -466,10 +466,11 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetList, async (_event, value: unknown) => { const input = parseProjectGet(value); return dependencies.storage.listDatasets(await ownerId(), input.projectId); });
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
   if (dependencies.dataImport) {
+    const dataImport = dependencies.dataImport;
     ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetImportCsv, async (_event, value: unknown) => {
       const input = requireRecord(value, "Dataset import");
       rejectUnexpectedKeys(input, ["projectId", "fileId", "datasetId", "name", "updatedAt"], "Dataset import");
-      return dependencies.dataImport!.importCsv(await ownerId(), {
+      return dataImport.importCsv(await ownerId(), {
         projectId: requireString(input.projectId, "projectId"),
         fileId: requireString(input.fileId, "fileId"),
         datasetId: requireString(input.datasetId, "datasetId"),
