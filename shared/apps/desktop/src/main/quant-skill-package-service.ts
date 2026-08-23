@@ -16,6 +16,14 @@ type QuantSkillAsset = QuantSkillPackageInput & {
 };
 
 const validSkillId = (value: string) => /^[a-z0-9][a-z0-9_-]{1,63}$/.test(value);
+const isRecoverableQuantAsset = (asset: Record<string, unknown>, skillId: string): boolean => (
+  asset.managedBy === undefined
+  && asset.skillId === skillId
+  && asset.simulationOnly === true
+  && typeof asset.symbol === "string"
+  && /^[0-9A-Za-z._-]{1,32}$/.test(asset.symbol)
+  && (asset.strategyId === "trend-following" || asset.strategyId === "mean-reversion")
+);
 
 export class QuantSkillPackageService {
   private readonly workspacePath: string;
@@ -108,7 +116,11 @@ export class QuantSkillPackageService {
     }
     const managed = asset.managedBy === "codecn.quant";
     const migratableLegacy = asset.name === id && asset.type === "quant" && asset.simulationOnly === true;
-    if (!managed && !migratableLegacy) throw new Error(`Refusing to remove unmanaged Skill: ${id}`);
+    // Older/model-edited tool assets can lose only the ownership marker while
+    // retaining the full quantitative identity. Never migrate an explicit
+    // foreign owner or a generic user Skill.
+    const recoverableQuantAsset = isRecoverableQuantAsset(asset, id);
+    if (!managed && !migratableLegacy && !recoverableQuantAsset) throw new Error(`Refusing to remove unmanaged Skill: ${id}`);
     await rm(target, { recursive: true, force: false });
     return { removed: true, relativePath };
   }

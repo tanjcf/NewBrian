@@ -48,3 +48,23 @@ test("rejects path traversal and refuses to remove an unmanaged Skill directory"
     await rm(workspacePath, { recursive: true, force: true });
   }
 });
+
+test("removes a tool-created quantitative Skill whose ownership marker was lost during a model edit", async () => {
+  const workspacePath = await mkdtemp(join(tmpdir(), "codecn-quant-skill-"));
+  try {
+    const service = new QuantSkillPackageService(workspacePath);
+    const target = join(workspacePath, ".codecn", "skills", "sany-trend-e2e");
+    await mkdir(target, { recursive: true });
+    await writeFile(join(target, "asset.json"), JSON.stringify({
+      skillId: "sany-trend-e2e",
+      title: "三一重工趋势验收",
+      symbol: "600031",
+      strategyId: "trend-following",
+      simulationOnly: true
+    }), "utf8");
+
+    assert.equal((await service.remove("sany-trend-e2e")).removed, true);
+  } finally {
+    await rm(workspacePath, { recursive: true, force: true });
+  }
+});
