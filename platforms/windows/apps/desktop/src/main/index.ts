@@ -8361,7 +8361,11 @@ function registerIpc() {
       // only from the Quant workspace. Keep the read-only AKShare route
       // available everywhere so the model never falls back to web search for
       // ordinary stock quotes or historical bars.
-      registerQuantRuntimeTools(targetRuntime, workspace.id);
+      const quantProject = brainWorkspaceStorage.listProjects({
+        ownerId: await resolveBrainLocalOwnerId(),
+        workspaceKey: "quant"
+      }).find((project) => project.localWorkspaceId === workspace.id);
+      registerQuantRuntimeTools(targetRuntime, quantProject?.id || workspace.id);
       registerAgentCollaborationTools(targetRuntime, workspace, thread);
       // Model-chat requests run in their own Agent Host-backed runtime. Register
       // the official-evidence tools here as well as on the long-lived desktop
