@@ -162,7 +162,7 @@ export async function fetchKnowledgeSpace(input: KnowledgeGatewayAuth): Promise<
       Authorization: `Bearer ${input.bearerToken}`,
       Accept: "application/json"
     },
-    signal: input.signal ?? AbortSignal.timeout(20_000)
+    signal: input.signal
   });
   const payload = await readJson(response);
   if (!response.ok) {
@@ -194,7 +194,7 @@ export async function pullKnowledgeDocuments(input: KnowledgeGatewayAuth & {
       Authorization: `Bearer ${input.bearerToken}`,
       Accept: "application/json"
     },
-    signal: input.signal ?? AbortSignal.timeout(30_000)
+    signal: input.signal
   });
   const payload = await readJson(response);
   if (!response.ok) {
@@ -227,7 +227,7 @@ export async function pushKnowledgeDocuments(input: KnowledgeGatewayAuth & {
       Accept: "application/json",
       "Content-Type": "application/json"
     },
-    signal: input.signal ?? AbortSignal.timeout(30_000),
+    signal: input.signal,
     body: JSON.stringify({
       baseGeneration: input.baseGeneration,
       documents: input.documents.map((document) => ({

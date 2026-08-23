@@ -167,7 +167,7 @@ test("new chat with empty selection never enables government skill when autoSkil
   assert.equal(fixture.calls.created, 0);
 });
 
-test("product offline: autoSkill ON does not keyword auto-awaken government-research-writing", () => {
+test("autoSkill ON can keyword-awaken government-research-writing", () => {
   const fixture = createFixture();
   const session = fixture.service.start({
     modelInput: { selectedSkillNames: [] } as ModelChatInput,
@@ -178,12 +178,12 @@ test("product offline: autoSkill ON does not keyword auto-awaken government-rese
     autoSkillEnabled: true
   });
 
-  assert.equal(session.governmentSkillEnabled, false);
-  assert.ok(!session.centralSkillNames.includes("government-research-writing"));
-  assert.equal(fixture.calls.created, 0);
+  assert.equal(session.governmentSkillEnabled, true);
+  assert.ok(session.centralSkillNames.includes("government-research-writing"));
+  assert.equal(fixture.calls.created, 1);
 });
 
-test("product offline: explicit composer selection cannot enable government-research-writing", () => {
+test("explicit composer selection enables government-research-writing", () => {
   const fixture = createFixture();
   const session = fixture.service.start({
     modelInput: { selectedSkillNames: ["government-research-writing"] } as ModelChatInput,
@@ -194,10 +194,10 @@ test("product offline: explicit composer selection cannot enable government-rese
     autoSkillEnabled: false
   });
 
-  assert.equal(session.governmentSkillEnabled, false);
-  assert.deepEqual(session.centralSkillNames, []);
-  assert.equal(fixture.calls.created, 0);
-  assert.ok(!session.goalSnapshot?.runtime.selectedSkillNames?.includes("government-research-writing"));
+  assert.equal(session.governmentSkillEnabled, true);
+  assert.ok(session.centralSkillNames.includes("government-research-writing"));
+  assert.equal(fixture.calls.created, 1);
+  assert.ok(session.goalSnapshot?.runtime.selectedSkillNames?.includes("government-research-writing"));
 });
 
 test("does not keep government-research-writing from an active goal when composer selection is empty", () => {
@@ -218,7 +218,7 @@ test("does not keep government-research-writing from an active goal when compose
   assert.equal(fixture.calls.created, 0);
 });
 
-test("product offline: autoSkill ON does not keep government-research-writing from an active goal", () => {
+test("autoSkill ON keeps government-research-writing from an active goal", () => {
   const fixture = createFixture(snapshot(["government-research-writing", "sd-project-manager"]));
   const session = fixture.service.start({
     modelInput: { selectedSkillNames: [] } as ModelChatInput,
@@ -229,13 +229,12 @@ test("product offline: autoSkill ON does not keep government-research-writing fr
     autoSkillEnabled: true
   });
 
-  assert.equal(session.governmentSkillEnabled, false);
-  assert.ok(!session.centralSkillNames.includes("government-research-writing"));
-  assert.ok(!session.goalSnapshot?.runtime.selectedSkillNames?.includes("government-research-writing"));
-  assert.deepEqual(session.goalSnapshot?.runtime.selectedSkillNames, ["sd-project-manager"]);
+  assert.equal(session.governmentSkillEnabled, true);
+  assert.ok(session.centralSkillNames.includes("government-research-writing"));
+  assert.ok(session.goalSnapshot?.runtime.selectedSkillNames?.includes("government-research-writing"));
 });
 
-test("product offline: composer re-selection cannot re-enable government-research-writing on an active goal", () => {
+test("composer re-selection re-enables government-research-writing on an active goal", () => {
   const fixture = createFixture(snapshot(["sd-project-manager"]));
   const session = fixture.service.start({
     modelInput: { selectedSkillNames: ["government-research-writing"] } as ModelChatInput,
@@ -246,12 +245,12 @@ test("product offline: composer re-selection cannot re-enable government-researc
     autoSkillEnabled: false
   });
 
-  assert.equal(session.governmentSkillEnabled, false);
-  assert.deepEqual(session.centralSkillNames, []);
-  assert.deepEqual(session.goalSnapshot?.runtime.selectedSkillNames, ["sd-project-manager"]);
+  assert.equal(session.governmentSkillEnabled, true);
+  assert.ok(session.centralSkillNames.includes("government-research-writing"));
+  assert.ok(session.goalSnapshot?.runtime.selectedSkillNames?.includes("government-research-writing"));
 });
 
-test("product offline: does not create a government goal from explicit skill selection", () => {
+test("creates a government goal from explicit skill selection", () => {
   const fixture = createFixture();
   const session = fixture.service.start({
     modelInput: { selectedSkillNames: ["government-research-writing"] } as ModelChatInput,
@@ -261,12 +260,12 @@ test("product offline: does not create a government goal from explicit skill sel
     latestUserRequest: "write report"
   });
 
-  assert.equal(fixture.calls.created, 0);
-  assert.equal(session.governmentSkillEnabled, false);
-  assert.equal(session.goalSnapshot, null);
+  assert.equal(fixture.calls.created, 1);
+  assert.equal(session.governmentSkillEnabled, true);
+  assert.equal(session.goalSnapshot?.goal.status, "active");
 });
 
-test("product offline: revision-explanation turn does not revive government skill", () => {
+test("revision-explanation turn keeps the selected government skill without creating a new goal", () => {
   const completed = snapshot(["government-research-writing"]);
   completed.goal.status = "complete";
   completed.runtime.phase = "complete";
@@ -279,7 +278,7 @@ test("product offline: revision-explanation turn does not revive government skil
     latestUserRequest: "先在对话中给我修改说明，不要立即生成文件。"
   });
 
-  assert.equal(session.governmentSkillEnabled, false);
+  assert.equal(session.governmentSkillEnabled, true);
   assert.equal(fixture.calls.created, 0);
   assert.equal(session.goalSnapshot?.goal.status, "complete");
 });

@@ -21,8 +21,6 @@ interface AgentHostClientOptions {
   entryPath: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  requestTimeoutMs?: number;
-  agentLoopRequestTimeoutMs?: number;
   forkProcess?: ForkHost;
   processManager?: HostProcessManager;
   onEvent?: (event: AgentHostEvent) => void;
@@ -49,26 +47,12 @@ interface AgentHostClientOptions {
 interface PendingRequest {
   resolve(value: AgentHostData): void;
   reject(error: Error): void;
-  timer: NodeJS.Timeout | null;
-  /** Guards against a stale timer firing after renew/clear races. */
-  timerGeneration: number;
-  method: AgentHostMethod;
-  timeoutMs: number;
-  /** Loop ops span model + tools; renew on stream/callback activity instead of a hard wall clock. */
-  renewOnActivity: boolean;
 }
-
-/** Absolute inactivity budget for agent.loop.advance / resume-approval IPC waits. */
-export const DEFAULT_AGENT_LOOP_REQUEST_TIMEOUT_MS = 10 * 60_000;
 
 const directHostProcessManager: HostProcessManager = {
   track: (child) => child,
   stop: async (child) => { if (!child.killed) child.kill("SIGTERM"); }
 };
-
-function isLoopRequestMethod(method: AgentHostMethod) {
-  return method === "agent.loop.advance" || method === "agent.loop.resume-approval";
-}
 
 export class AgentHostClientError extends Error {
   readonly code: string;
@@ -127,67 +111,22 @@ export class AgentHostClient {
   private sendRequest(method: AgentHostMethod, payload: AgentHostData) {
     const child = this.ensureHost();
     const id = `host_${this.nextRequestId++}`;
-    const renewOnActivity = isLoopRequestMethod(method);
-    const timeoutMs = renewOnActivity
-      ? this.options.agentLoopRequestTimeoutMs ?? DEFAULT_AGENT_LOOP_REQUEST_TIMEOUT_MS
-      : this.options.requestTimeoutMs ?? 5_000;
     return new Promise<AgentHostData>((resolve, reject) => {
-      const pending: PendingRequest = {
-        resolve,
-        reject,
-        timer: null,
-        timerGeneration: 0,
-        method,
-        timeoutMs,
-        renewOnActivity
-      };
-      this.armPendingTimer(id, pending);
-      this.pending.set(id, pending);
+      this.pending.set(id, { resolve, reject });
       child.send?.({ version: agentHostProtocolVersion, kind: "request", id, method, payload }, (error) => {
         if (!error) return;
         const current = this.pending.get(id);
         if (!current) return;
-        clearTimeout(current.timer);
-        current.timerGeneration += 1;
         this.pending.delete(id);
         current.reject(new AgentHostClientError("host_send_failed", error.message));
       });
     });
   }
 
-  private armPendingTimer(id: string, pending: PendingRequest) {
-    if (pending.timer) clearTimeout(pending.timer);
-    const generation = pending.timerGeneration + 1;
-    pending.timerGeneration = generation;
-    pending.timer = setTimeout(() => {
-      // Ignore timers that were superseded by renew/clear while already queued.
-      if (this.pending.get(id) !== pending || pending.timerGeneration !== generation) return;
-      this.pending.delete(id);
-      pending.reject(new AgentHostClientError("host_request_timeout", `Agent host request timed out: ${pending.method}`));
-    }, pending.timeoutMs);
-    pending.timer.unref?.();
-  }
-
-  /** Renew advance/resume inactivity budgets while the loop is visibly making progress. */
-  private renewLoopRequestTimeouts() {
-    for (const [id, pending] of this.pending) {
-      if (!pending.renewOnActivity) continue;
-      this.armPendingTimer(id, pending);
-    }
-  }
-
   private handleMessage(value: unknown) {
     let message;
     try { message = parseAgentHostMessage(value); } catch { return; }
     if (message.kind === "event") {
-      if (
-        message.event === "agent.model.request"
-        || message.event === "agent.policy.request"
-        || message.event === "agent.tool.request"
-        || message.event === "agent.event"
-      ) {
-        this.renewLoopRequestTimeouts();
-      }
       if (message.event === "agent.model.request") {
         void this.handleAgentCallback(
           message,
@@ -221,7 +160,6 @@ export class AgentHostClient {
     if (message.kind !== "response") return;
     const pending = this.pending.get(message.id);
     if (!pending) return;
-    clearTimeout(pending.timer);
     this.pending.delete(message.id);
     if (message.ok) pending.resolve(message.result);
     else pending.reject(new AgentHostClientError(message.error.code, message.error.message));
@@ -248,13 +186,9 @@ export class AgentHostClient {
     ) {
       return;
     }
-    this.renewLoopRequestTimeouts();
     const reportProgress = resolveMethod === "agent.model.resolve"
       ? this.createModelProgressReporter(payload.callbackId)
-      : () => {
-          // Tool/policy work proves the loop is alive; renew the parent advance budget.
-          this.renewLoopRequestTimeouts();
-        };
+      : () => undefined;
     try {
       const result = await handler({
         runtimeId: payload.runtimeId,
@@ -262,13 +196,11 @@ export class AgentHostClient {
         input: payload.input,
         reportProgress
       });
-      this.renewLoopRequestTimeouts();
       await this.request(resolveMethod, {
         callbackId: payload.callbackId,
         result
       });
     } catch (error) {
-      this.renewLoopRequestTimeouts();
       await this.request(resolveMethod, {
         callbackId: payload.callbackId,
         result: null,
@@ -288,8 +220,6 @@ export class AgentHostClient {
     const send = () => {
       lastSentAt = Date.now();
       queued = false;
-      // Renew parent advance/resume wait even if the host progress RPC is coalesced.
-      this.renewLoopRequestTimeouts();
       inFlight = this.request("agent.model.progress", { callbackId })
         .catch(() => undefined)
         .finally(() => {
@@ -298,8 +228,6 @@ export class AgentHostClient {
         });
     };
     return () => {
-      // Local stream deltas must extend the IPC advance wait immediately.
-      this.renewLoopRequestTimeouts();
       const now = Date.now();
       if (inFlight) {
         queued = true;
@@ -326,7 +254,6 @@ export class AgentHostClient {
 
   private rejectPending(error: Error) {
     for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
       pending.reject(error);
     }
     this.pending.clear();

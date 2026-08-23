@@ -1,5 +1,14 @@
 import { basename, resolve } from "node:path";
-import type { WorkspaceCatalogItem, WorkspaceThreadRecord } from "@codex-forge/protocol";
+import {
+  isBrainWorkspaceKey,
+  type BrainWorkspaceKey,
+  type WorkspaceCatalogItem,
+  type WorkspaceThreadRecord
+} from "@codex-forge/protocol";
+
+export function resolveCatalogBrainWorkspaceKey(value: unknown): BrainWorkspaceKey {
+  return isBrainWorkspaceKey(value) ? value : "document";
+}
 
 export interface WorkspaceCondaConfig {
   source: "system" | "managed";
@@ -79,6 +88,7 @@ export function normalizeWorkspaceCatalogItem(item: Partial<WorkspaceCatalogItem
     id: workspaceId,
     name: item.name?.trim() || basename(resolvedPath) || "workspace",
     path: resolvedPath,
+    brainWorkspaceKey: resolveCatalogBrainWorkspaceKey(item.brainWorkspaceKey),
     threads: Array.isArray(item.threads) ? sortWorkspaceThreads(item.threads.map((thread) => normalizeWorkspaceThread(thread, context))) : [],
     conda: normalizeWorkspaceCondaConfig(workspaceId, item.conda as Partial<WorkspaceCondaConfig> | undefined, context)
   };

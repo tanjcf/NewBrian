@@ -92,7 +92,7 @@ export async function fetchSpringAppAutoRoute(
         Authorization: `Bearer ${input.bearerToken}`,
         Accept: "application/json"
       }, correlation),
-      signal: input.signal ?? AbortSignal.timeout(30_000),
+      signal: input.signal,
       body: JSON.stringify(body)
     });
   } catch (error) {

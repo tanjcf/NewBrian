@@ -9,7 +9,10 @@
     "./rust-core": "./dist/rust-core.js",
     "./quant-types": "./dist/quant-types.js",
     "./document-anchor": "./dist/document-anchor.js",
-    "./document-worker": "./dist/document-worker.js"
+    "./document-worker": "./dist/document-worker.js",
+    "./brain-video-runtime": "./dist/brain-video-runtime.js",
+    "./brain-music-runtime": "./dist/brain-music-runtime.js",
+    "./brain-data-runtime": "./dist/brain-data-runtime.js"
   },
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",

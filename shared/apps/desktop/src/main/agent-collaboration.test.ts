@@ -9,8 +9,8 @@ const {
   DELEGATE_REFUSED_AFTER_FAILURE,
   normalizeChildThreadIds,
   normalizeDelegationRequest,
-  WAIT_TIMEOUT,
-  waitWithTimeout
+  WAIT_UNAVAILABLE,
+  waitForAgentRun
 } = await import(new URL("./agent-collaboration.ts", import.meta.url).href) as typeof import("./agent-collaboration.js");
 
 test("normalizes bounded child delegation requests", () => {
@@ -58,19 +58,28 @@ test("enforces OC spawn depth and active child limits", () => {
   assert.equal(countActiveChildren([{ status: "running" }, { status: "failed" }, { status: "queued" }]).active, 2);
 });
 
-test("waitWithTimeout returns wait_timeout instead of hanging forever", async () => {
-  const hung = new Promise<{ status: string }>(() => undefined);
-  const started = Date.now();
-  const result = await waitWithTimeout(hung, { status: "running" }, 40);
-  assert.ok(Date.now() - started < 1_000);
-  assert.equal(result.ok, false);
-  if (!result.ok) assert.equal(result.code, WAIT_TIMEOUT);
+test("waitForAgentRun settles only through the child lifecycle and never creates a timeout result", async () => {
+  let settle!: (value: { status: string }) => void;
+  const active = new Promise<{ status: string }>((resolve) => { settle = resolve; });
+  const pending = waitForAgentRun(active, { status: "running" });
+  let observed = false;
+  void pending.then(() => { observed = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(observed, false);
+  settle({ status: "completed" });
+  const result = await pending;
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.value.status, "completed");
 
-  const terminal = await waitWithTimeout(undefined, { status: "failed" }, 40);
+  const terminal = await waitForAgentRun(undefined, { status: "failed" });
   assert.equal(terminal.ok, true);
   if (terminal.ok) assert.equal(terminal.value.status, "failed");
 
-  const settled = await waitWithTimeout(Promise.resolve({ status: "completed" }), undefined, 40);
+  const unavailable = await waitForAgentRun(undefined, { status: "running" });
+  assert.equal(unavailable.ok, false);
+  if (!unavailable.ok) assert.equal(unavailable.code, WAIT_UNAVAILABLE);
+
+  const settled = await waitForAgentRun(Promise.resolve({ status: "completed" }), undefined);
   assert.equal(settled.ok, true);
   if (settled.ok) assert.equal(settled.value.status, "completed");
 });

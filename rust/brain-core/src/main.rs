@@ -1,10 +1,16 @@
 mod approval;
+mod data;
 mod document_ops;
 mod file_ops;
+mod game;
 mod git_ops;
+mod music;
 mod path_policy;
 mod process_ops;
 mod protocol;
+mod quant;
+mod video;
+mod conversation;
 
 use approval::ApprovalRegistry;
 use document_ops::DocumentWorkerConfig;
@@ -24,11 +30,25 @@ fn handle(
     boundary: &ProjectBoundary,
     approvals: &mut ApprovalRegistry,
     cancelled: &mut HashSet<String>,
+    conversations: &mut conversation::Store,
 ) -> Response {
     if let Err(code) = validate_request(&request) {
         return Response::failed(request.request_id, code);
     }
     match request.operation.as_str() {
+        "conversation.thread.create" => {
+            let fallback_id = request.request_id.clone();
+            let id = request.payload.get("thread_id").and_then(Value::as_str).unwrap_or(fallback_id.as_str());
+            let title = request.payload.get("title").and_then(Value::as_str).unwrap_or("新线程");
+            Response::completed(request.request_id, conversations.create(id, &request.project_id, title))
+        }
+        "conversation.thread.get" => match conversations.get(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default()) { Some(v) => Response::completed(request.request_id, v), None => Response::failed(request.request_id, "BRAIN_THREAD_NOT_FOUND") },
+        "conversation.thread.activate" => conversation_result(request.clone(), conversations.activate(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default())),
+        "conversation.thread.archive" => conversation_result(request.clone(), conversations.archive(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default())),
+        "conversation.turn.begin" => conversation_result(request.clone(), conversations.begin(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default(), request.payload.get("turn_id").and_then(Value::as_str).unwrap_or_default())),
+        "conversation.turn.append_message" => conversation_result(request.clone(), conversations.append(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default(), request.payload.get("role").and_then(Value::as_str).unwrap_or_default(), request.payload.get("content").and_then(Value::as_str).unwrap_or_default())),
+        "conversation.turn.finish" => conversation_result(request.clone(), conversations.finish(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default())),
+        "conversation.turn.cancel" => conversation_result(request.clone(), conversations.cancel(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default())),
         "health.check" => Response::completed(
             request.request_id,
             json!({ "ready": true, "protocol_version": protocol::PROTOCOL_VERSION }),
@@ -128,6 +148,93 @@ fn handle(
                 Err(code) => Response::failed(request.request_id, code),
             }
         }
+        operation if game::is_game_operation(operation) => {
+            if game::game_operation_requires_approval(operation) {
+                if let Err(code) = approvals.consume(
+                    &request.approval_token,
+                    &request.project_id,
+                    operation,
+                ) {
+                    return Response::failed(request.request_id, code);
+                }
+            }
+            match game::handle(
+                operation,
+                boundary,
+                &request.payload,
+                &request.request_id,
+                request.resource_limits.max_output_bytes,
+            ) {
+                Ok(result) => Response::completed(request.request_id, result),
+                Err(code) => Response::failed(request.request_id, code),
+            }
+        }
+        operation if video::is_video_operation(operation) => {
+            if video::video_operation_requires_approval(operation) {
+                if let Err(code) = approvals.consume(
+                    &request.approval_token,
+                    &request.project_id,
+                    operation,
+                ) {
+                    return Response::failed(request.request_id, code);
+                }
+            }
+            match video::handle(
+                operation,
+                boundary,
+                &request.payload,
+                &request.request_id,
+            ) {
+                Ok(result) => Response::completed(request.request_id, result),
+                Err(code) => Response::failed(request.request_id, code),
+            }
+        }
+        operation if music::is_music_operation(operation) => {
+            if music::music_operation_requires_approval(operation) {
+                if let Err(code) = approvals.consume(
+                    &request.approval_token,
+                    &request.project_id,
+                    operation,
+                ) {
+                    return Response::failed(request.request_id, code);
+                }
+            }
+            match music::handle(
+                operation,
+                boundary,
+                &request.payload,
+                &request.request_id,
+            ) {
+                Ok(result) => Response::completed(request.request_id, result),
+                Err(code) => Response::failed(request.request_id, code),
+            }
+        }
+        operation if data::is_data_operation(operation) => {
+            if data::data_operation_requires_approval(operation) {
+                if let Err(code) = approvals.consume(
+                    &request.approval_token,
+                    &request.project_id,
+                    operation,
+                ) {
+                    return Response::failed(request.request_id, code);
+                }
+            }
+            match data::handle(
+                operation,
+                boundary,
+                &request.payload,
+                &request.request_id,
+            ) {
+                Ok(result) => Response::completed(request.request_id, result),
+                Err(code) => Response::failed(request.request_id, code),
+            }
+        }
+        operation if quant::is_quant_operation(operation) => {
+            match quant::handle(operation) {
+                Ok(result) => Response::completed(request.request_id, result),
+                Err(code) => Response::failed(request.request_id, code),
+            }
+        }
         _ if cancelled.remove(&request.request_id) => {
             let mut response = Response::failed(request.request_id, "BRAIN_CORE_CANCELLED");
             response.status = "cancelled";
@@ -135,6 +242,10 @@ fn handle(
         }
         _ => Response::failed(request.request_id, "BRAIN_CORE_OPERATION_UNSUPPORTED"),
     }
+}
+
+fn conversation_result(request: Request, result: Result<Value, &'static str>) -> Response {
+    match result { Ok(value) => Response::completed(request.request_id, value), Err(code) => Response::failed(request.request_id, code) }
 }
 
 fn write_response<W: Write>(writer: &Arc<Mutex<W>>, response: &Response) -> io::Result<()> {
@@ -191,7 +302,8 @@ fn main() -> io::Result<()> {
     let boundary = ProjectBoundary::bind(&project_root)?;
     let stdin = io::stdin();
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
-    let mut cancelled = HashSet::new();
+        let mut cancelled = HashSet::new();
+        let mut conversations = conversation::Store::default();
     let mut approvals = ApprovalRegistry::default();
     let active_processes = Arc::new(Mutex::new(HashMap::<String, Arc<AtomicBool>>::new()));
     let mut workers: Vec<thread::JoinHandle<()>> = Vec::new();
@@ -235,7 +347,7 @@ fn main() -> io::Result<()> {
             {
                 flag.store(true, Ordering::Release);
             }
-            let response = handle(request, &boundary, &mut approvals, &mut cancelled);
+            let response = handle(request, &boundary, &mut approvals, &mut cancelled, &mut conversations);
             write_response(&stdout, &response)?;
             continue;
         }
@@ -310,7 +422,7 @@ fn main() -> io::Result<()> {
             }));
             continue;
         }
-        let response = handle(request, &boundary, &mut approvals, &mut cancelled);
+        let response = handle(request, &boundary, &mut approvals, &mut cancelled, &mut conversations);
         write_response(&stdout, &response)?;
     }
     if let Ok(processes) = active_processes.lock() {

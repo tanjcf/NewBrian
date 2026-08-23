@@ -48,7 +48,7 @@ impl CoreProcess {
     }
 
     fn request(&mut self, request_id: &str, operation: &str, token: &str, payload: Value) -> Value {
-        self.request_with_limits(request_id, operation, token, payload, 1_000, 4_096)
+        self.request_with_limits(request_id, operation, token, payload, 0, 4_096)
     }
 
     fn request_with_limits(
@@ -186,7 +186,7 @@ fn supervises_the_trusted_document_worker_without_an_approval_token() {
         "document.ingest",
         "",
         json!({ "relative_path": "nested/notes.md", "max_bytes": 1024 }),
-        5_000,
+        0,
         64 * 1024,
     );
     assert_eq!(response["status"], "completed", "response: {response}");
@@ -294,7 +294,7 @@ fn enforces_project_boundary_approval_replay_and_cancellation_over_stdio() {
 }
 
 #[test]
-fn runs_an_approved_process_with_bounded_output_timeout_and_clean_environment() {
+fn runs_an_approved_process_with_bounded_output_and_clean_environment() {
     let root = temporary_project();
     let mut core = CoreProcess::start(&root);
     let token = "abcdef0123456789abcdef0123456789";
@@ -330,7 +330,7 @@ fn runs_an_approved_process_with_bounded_output_timeout_and_clean_environment() 
         "process.run",
         output_token,
         command("echo 123456789"),
-        1_000,
+        0,
         4,
     );
     assert_eq!(output_limit["error_code"], "BRAIN_CORE_OUTPUT_LIMIT");
@@ -351,64 +351,17 @@ fn runs_an_approved_process_with_bounded_output_timeout_and_clean_environment() 
         "process.run",
         combined_token,
         command(combined_output),
-        1_000,
+        0,
         4,
     );
     assert_eq!(combined_limit["error_code"], "BRAIN_CORE_OUTPUT_LIMIT");
-
-    let timeout_token = "00112233445566778899aabbccddeeff";
-    core.request(
-        "timeout-approval",
-        "approval.register",
-        "",
-        json!({ "token": timeout_token, "operation": "process.run", "ttl_ms": 30_000 }),
-    );
-    #[cfg(windows)]
-    let sleep = "ping 127.0.0.1 -n 6 > nul";
-    #[cfg(not(windows))]
-    let sleep = "sleep 5";
-    let timeout = core.request_with_limits(
-        "timeout",
-        "process.run",
-        timeout_token,
-        command(sleep),
-        100,
-        1_024,
-    );
-    assert_eq!(timeout["error_code"], "BRAIN_CORE_PROCESS_TIMEOUT");
-
-    let tree_token = "aabbccddeeff00112233445566778899";
-    core.request(
-        "tree-approval",
-        "approval.register",
-        "",
-        json!({ "token": tree_token, "operation": "process.run", "ttl_ms": 30_000 }),
-    );
-    #[cfg(windows)]
-    let process_tree = "start \"\" /B cmd /D /S /C \"ping 127.0.0.1 -n 4 > nul & echo orphan>nested\\orphan.txt\" & ping 127.0.0.1 -n 20 > nul";
-    #[cfg(not(windows))]
-    let process_tree = "(sleep 2; echo orphan > nested/orphan.txt) & sleep 20";
-    let tree_timeout = core.request_with_limits(
-        "tree-timeout",
-        "process.run",
-        tree_token,
-        command(process_tree),
-        100,
-        1_024,
-    );
-    assert_eq!(tree_timeout["error_code"], "BRAIN_CORE_PROCESS_TIMEOUT");
-    std::thread::sleep(std::time::Duration::from_secs(4));
-    assert!(
-        !root.join("nested/orphan.txt").exists(),
-        "timed-out child process survived its process group"
-    );
 
     drop(core);
     fs::remove_dir_all(root).expect("cleanup");
 }
 
 #[test]
-fn cancels_a_running_process_without_waiting_for_its_timeout() {
+fn cancels_a_running_process_on_an_explicit_event() {
     let root = temporary_project();
     let mut core = CoreProcess::start(&root);
     let token = "99887766554433221100ffeeddccbbaa";
@@ -422,20 +375,13 @@ fn cancels_a_running_process_without_waiting_for_its_timeout() {
     let sleep = "ping 127.0.0.1 -n 20 > nul";
     #[cfg(not(windows))]
     let sleep = "sleep 20";
-    core.send_with_limits(
-        "cancel-run",
-        "process.run",
-        token,
-        command(sleep),
-        30_000,
-        1_024,
-    );
+    core.send_with_limits("cancel-run", "process.run", token, command(sleep), 0, 1_024);
     core.send_with_limits(
         "cancel-command",
         "request.cancel",
         "",
         json!({ "target_request_id": "cancel-run" }),
-        1_000,
+        0,
         1_024,
     );
     let first = core.response();
@@ -492,7 +438,7 @@ fn rejects_caller_environment_and_stops_active_processes_on_core_shutdown() {
         "process.run",
         shutdown_token,
         command(sleep),
-        30_000,
+        0,
         1_024,
     );
     assert!(core.close_input_and_wait(std::time::Duration::from_secs(2)));
@@ -553,7 +499,7 @@ fn reads_bounded_git_status_and_diff_inside_the_project() {
         "git.diff",
         "",
         json!({ "repository": ".", "staged": false, "paths": ["tracked.txt"] }),
-        1_000,
+        0,
         4,
     );
     assert_eq!(limited["error_code"], "BRAIN_CORE_OUTPUT_LIMIT");

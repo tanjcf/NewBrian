@@ -61,6 +61,46 @@ export interface BrainProjectCreateInput {
 
 export interface BrainProjectGetInput { projectId: string }
 
+export interface BrainGameUnrealTemplateCreateInput extends BrainProjectGetInput {
+  projectName?: string;
+  engineAssociation?: string;
+}
+
+export interface BrainGameUnrealTemplateCreateResult {
+  engine: "unreal";
+  projectName: string;
+  uprojectPath: string;
+  engineAssociation: string;
+  docsRoot: string;
+}
+
+export interface BrainGameDesignExportResult {
+  docsRoot: string;
+  exportedFiles: string[];
+  manifestPath: string;
+}
+
+export interface BrainWorkspaceSectionDto {
+  schemaVersion: 1;
+  projectId: string;
+  workspaceKey: BrainWorkspaceKey;
+  sectionKey: string;
+  content: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrainWorkspaceSectionGetInput extends BrainProjectGetInput {
+  workspaceKey: BrainWorkspaceKey;
+  sectionKey: string;
+}
+
+export interface BrainWorkspaceSectionSaveInput extends BrainWorkspaceSectionGetInput {
+  content: string;
+  expectedRevision: number;
+}
+
 export type BrainGameEngine = "web" | "godot" | "unity" | "unreal" | "unknown";
 
 export interface BrainGameProjectInspection {
@@ -76,7 +116,7 @@ export interface BrainGameProjectInspection {
   truncated: boolean;
 }
 
-export type BrainGamePreviewStatus = "STARTING" | "RUNNING" | "READY" | "STOPPING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+export type BrainGamePreviewStatus = "STARTING" | "RUNNING" | "READY" | "STOPPING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 
 export interface BrainGamePreviewState {
   schemaVersion: 1;
@@ -116,7 +156,7 @@ export interface BrainVideoTimeline {
   updatedAt: string;
 }
 
-export type BrainVideoRenderStatus = "STARTING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+export type BrainVideoRenderStatus = "STARTING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 export interface BrainVideoRenderState {
   schemaVersion: 1;
   renderId: string;
@@ -208,7 +248,7 @@ export interface BrainTaskDto {
   conversationId: string;
   workspaceKey: BrainWorkspaceKey;
   taskType: string;
-  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
   progress: number;
   requestId: string;
   idempotencyKey: string;
@@ -246,6 +286,7 @@ export interface BrainArtifactDto {
   projectId: string;
   taskId: string;
   sourceFileId: string;
+  sourceWorkspaceKey: BrainWorkspaceKey | "";
   artifactType: string;
   storageKey: string;
   contentHash: string;
@@ -256,6 +297,7 @@ export interface BrainArtifactDto {
 export interface BrainArtifactRegisterInput extends BrainProjectGetInput {
   taskId?: string;
   sourceFileId?: string;
+  sourceWorkspaceKey?: BrainWorkspaceKey;
   artifactType: string;
   storageKey: string;
   contentHash: string;
@@ -287,6 +329,29 @@ export interface BrainChangeSetExportResult {
   relativePath: string;
 }
 
+export type BrainFlowConditionOperator = "truthy" | "equals" | "notEquals" | "exists" | "greaterThan" | "lessThan" | "contains";
+export type BrainFlowScalar = string | number | boolean | null;
+export type BrainFlowNode =
+  | { id: string; type: "start" | "end"; next?: string }
+  | { id: string; type: "tool"; tool: string; input?: unknown; next?: string; maxAttempts?: number }
+  | { id: string; type: "condition"; valueKey: string; operator?: BrainFlowConditionOperator; expected?: BrainFlowScalar; onTrue: string; onFalse: string }
+  | { id: string; type: "assign"; targetKey: string; valueKey?: string; value?: unknown; next?: string }
+  | { id: string; type: "aggregate"; targetKey: string; sources: Record<string, string>; next?: string }
+  | { id: string; type: "approval"; next: string };
+export interface BrainFlowDefinition { schemaVersion: 1; nodes: BrainFlowNode[]; maxSteps?: number }
+export interface BrainFlowSaveInput { projectId: string; id?: string; name: string; definition: BrainFlowDefinition }
+export interface BrainFlowStartInput { flowId: string; values?: Record<string, unknown> }
+export interface BrainFlowIdInput { flowId: string }
+export interface BrainFlowRunIdInput { runId: string }
+export interface BrainFlowScheduleCreateInput { projectId: string; flowId: string; timezone?: string; runAt: string; enabled?: boolean }
+export interface BrainFlowScheduleListInput { projectId: string }
+export interface BrainRustConversationInput {
+  projectId: string;
+  workspaceType: string;
+  operation: `conversation.${string}`;
+  payload: Record<string, unknown>;
+}
+
 export const brainWorkspaceIpcChannels = {
   workspaceList: "brain:workspace:list",
   projectList: "brain:project:list",
@@ -294,11 +359,14 @@ export const brainWorkspaceIpcChannels = {
   projectGet: "brain:project:get",
   projectUpdate: "brain:project:update",
   projectWorkspaceEnable: "brain:project:workspace-enable",
+  workspaceSectionGet: "brain:workspace-section:get",
+  workspaceSectionSave: "brain:workspace-section:save",
   conversationCreate: "brain:conversation:create",
   conversationList: "brain:conversation:list",
   conversationGet: "brain:conversation:get",
   messageList: "brain:message:list",
   messageAppend: "brain:message:append",
+  rustConversation: "brain:rust:conversation",
   draftGet: "brain:draft:get",
   draftSave: "brain:draft:save",
   fileList: "brain:file:list",
@@ -317,9 +385,14 @@ export const brainWorkspaceIpcChannels = {
   quantBarsQuery: "brain:quant:bars-query",
   quantOrderExecute: "brain:quant:order-execute",
   quantSnapshot: "brain:quant:snapshot",
+  quantActivity: "brain:quant:activity",
   quantSkillPerformance: "brain:quant:skill-performance",
+  quantSkillRunSimulation: "brain:quant:skill-run-simulation",
+  quantSkillActivity: "brain:quant:skill-activity",
   quantScheduleList: "brain:quant:schedule-list",
   quantScheduleCreate: "brain:quant:schedule-create",
+  quantScheduleSetEnabled: "brain:quant:schedule-set-enabled",
+  quantScheduleRunList: "brain:quant:schedule-run-list",
   annotationList: "brain:annotation:list",
   annotationCreate: "brain:annotation:create",
   changeSetList: "brain:change-set:list",
@@ -330,6 +403,8 @@ export const brainWorkspaceIpcChannels = {
   ,videoTimelineGet: "brain:video:timeline-get"
   ,videoTimelineSave: "brain:video:timeline-save"
   ,videoClipAdd: "brain:video:clip-add"
+  ,videoSubtitleImport: "brain:video:subtitle-import"
+  ,videoSubtitleExport: "brain:video:subtitle-export"
   ,videoRenderStart: "brain:video:render-start"
   ,videoRenderStatus: "brain:video:render-status"
   ,videoRenderCancel: "brain:video:render-cancel"
@@ -339,6 +414,8 @@ export const brainWorkspaceIpcChannels = {
   ,dataDatasetList: "brain:data:dataset-list"
   ,dataDatasetSave: "brain:data:dataset-save"
   ,dataDatasetImportCsv: "brain:data:dataset-import-csv"
+  ,dataDatasetImportXlsx: "brain:data:dataset-import-xlsx"
+  ,dataDatasetXlsxSheets: "brain:data:dataset-xlsx-sheets"
   ,dataDatasetRows: "brain:data:dataset-rows"
   ,dataAnalysisSummarize: "brain:data:analysis-summarize"
   ,dataAnalysisList: "brain:data:analysis-list"
@@ -346,8 +423,40 @@ export const brainWorkspaceIpcChannels = {
   ,softwareTaskStart: "brain:software:task-start"
   ,softwareTaskStatus: "brain:software:task-status"
   ,softwareTaskCancel: "brain:software:task-cancel"
+  ,softwareTerminalOpen: "brain:software:terminal-open"
+  ,flowSave: "brain:flow:save"
+  ,flowGet: "brain:flow:get"
+  ,flowList: "brain:flow:list"
+  ,flowRunLatest: "brain:flow:run-latest"
+  ,flowRunStart: "brain:flow:run-start"
+  ,flowRunGet: "brain:flow:run-get"
+  ,flowRunCancel: "brain:flow:run-cancel"
+  ,flowScheduleCreate: "brain:flow:schedule-create"
+  ,flowScheduleList: "brain:flow:schedule-list"
   ,musicMediaInspect: "brain:music:media-inspect"
   ,musicRenderStart: "brain:music:render-start"
   ,musicRenderStatus: "brain:music:render-status"
   ,musicRenderCancel: "brain:music:render-cancel"
+  ,environmentDiscover: "brain:environment:discover"
+  ,environmentEnsure: "brain:environment:ensure"
+  ,environmentEnsureScene: "brain:environment:ensure-scene"
+  ,filePreviewUrl: "brain:file:preview-url"
+  ,gameWebTemplateCreate: "brain:game:web-template-create"
+  ,gameUnrealTemplateCreate: "brain:game:unreal-template-create"
+  ,gameDesignExport: "brain:game:design-export"
+  ,gameLevelEditorGet: "brain:game:level-editor-get"
+  ,gameLevelEditorSave: "brain:game:level-editor-save"
+  ,gameSpawnActor: "brain:game:spawn-actor"
+  ,gameContentTree: "brain:game:content-tree"
+  ,videoPipelineGet: "brain:video:pipeline-get"
+  ,videoPipelineSave: "brain:video:pipeline-save"
+  ,videoMarkShot: "brain:video:mark-shot"
+  ,videoPipelineCook: "brain:video:pipeline-cook"
+  ,musicDawGet: "brain:music:daw-get"
+  ,musicDawSave: "brain:music:daw-save"
+  ,musicDawCook: "brain:music:daw-cook"
+  ,dataAnalysisGet: "brain:data:analysis-get"
+  ,dataAnalysisSave: "brain:data:analysis-save"
+  ,dataAnalysisCook: "brain:data:analysis-cook"
+  ,sceneMediaGenerate: "brain:media:scene-generate"
 } as const;

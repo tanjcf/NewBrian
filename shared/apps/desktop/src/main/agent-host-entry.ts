@@ -25,21 +25,16 @@ const mcp = new McpProcessService({ cwd: process.cwd(), processManager });
 const modelCallbacks = new AgentHostModelCallbacks({
   // Codex/OpenClaw-style: do NOT hard-kill model turns on a fragile 120s
   // no-heartbeat wall. Long coding / large-context TTFT, describe-bridge, and
-  // retries stay alive; hang detection is the parent agent.loop.advance
-  // inactivity budget (renewed by heartbeat + stream progress).
-  timeoutMs: 0,
+  // retries stay alive until completion, explicit cancellation, or host shutdown.
   publish: (payload) => sendEvent("agent.model.request", payload)
 });
 const policyCallbacks = new AgentHostModelCallbacks({
   // Approvals wait on the user; do not kill the loop on inactivity.
-  timeoutMs: 0,
   publish: (payload) => sendEvent("agent.policy.request", payload)
 });
 const toolCallbacks = new AgentHostModelCallbacks({
   // Long healthy tools (shell/build/browser) may exceed any fixed wall clock.
-  // Hang detection stays on the parent advance inactivity budget, which the
-  // desktop renews while the tool callback is still in flight.
-  timeoutMs: 0,
+  // Progress events remain observational and never shorten the callback lifetime.
   publish: (payload) => sendEvent("agent.tool.request", payload)
 });
 const agent = new AgentHostAgentService({

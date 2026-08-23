@@ -102,6 +102,11 @@ export class ModelChatContextService {
         content: message.content,
         createdAt: message.createdAt,
         reasoningSummary: message.reasoningSummary,
+        // Thinking-mode gateways (for example DeepSeek/Kimi) require the
+        // opaque provider reasoning token to be echoed on the next request.
+        // Keep it in the reconstructed thread context; the visible summary is
+        // intentionally not a substitute for this provider field.
+        providerReasoningContent: message.providerReasoningContent,
         attachments: message.attachments
       }));
     const latestMessage = input.messages.at(-1);

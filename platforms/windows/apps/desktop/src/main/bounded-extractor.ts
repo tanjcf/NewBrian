@@ -5,7 +5,7 @@ export function runBoundedExtractor(input: {
   extractorPath: string;
   filePath: string;
   env?: NodeJS.ProcessEnv;
-  timeoutMs?: number;
+  signal?: AbortSignal;
   maxOutputBytes: number;
 }) {
   return new Promise<string>((resolveText, rejectText) => {
@@ -19,6 +19,19 @@ export function runBoundedExtractor(input: {
     let stdoutBytes = 0;
     let stderrBytes = 0;
     let failure: Error | null = null;
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      input.signal?.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = () => {
+      failure = input.signal?.reason instanceof Error
+        ? input.signal.reason
+        : new Error("Attachment extraction cancelled.");
+      child.kill();
+    };
     const appendBounded = (chunks: Buffer[], chunk: Buffer, stream: "stdout" | "stderr") => {
       const nextSize = (stream === "stdout" ? stdoutBytes : stderrBytes) + chunk.length;
       if (nextSize > input.maxOutputBytes) {
@@ -30,28 +43,23 @@ export function runBoundedExtractor(input: {
       else stderrBytes = nextSize;
       chunks.push(chunk);
     };
-    const timeoutMs = input.timeoutMs ?? 30_000;
-    const timeout = setTimeout(() => {
-      failure = new Error(`Attachment extraction timed out after ${timeoutMs} milliseconds.`);
-      child.kill();
-    }, timeoutMs);
+    if (input.signal?.aborted) abort();
+    else input.signal?.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => appendBounded(stdout, chunk, "stdout"));
     child.stderr.on("data", (chunk: Buffer) => appendBounded(stderr, chunk, "stderr"));
     child.once("error", (error) => {
-      clearTimeout(timeout);
-      rejectText(error);
+      finish(() => rejectText(error));
     });
     child.once("close", (code) => {
-      clearTimeout(timeout);
       if (failure) {
-        rejectText(failure);
+        finish(() => rejectText(failure!));
         return;
       }
       if (code === 0) {
-        resolveText(Buffer.concat(stdout).toString("utf8"));
+        finish(() => resolveText(Buffer.concat(stdout).toString("utf8")));
         return;
       }
-      rejectText(new Error(Buffer.concat(stderr).toString("utf8").trim() || `Attachment extraction exited with code ${code}.`));
+      finish(() => rejectText(new Error(Buffer.concat(stderr).toString("utf8").trim() || `Attachment extraction exited with code ${code}.`)));
     });
   });
 }

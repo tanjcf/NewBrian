@@ -1,0 +1,1600 @@
+version: "2026-08-22"
+scene: document
+displayName: 文档创作
+totalOperations: 198
+layers:
+  L0: 84
+  L1: 82
+  L2: 12
+  L3: 20
+operations:
+  - opId: document.L0.NAV.001
+    title: "打开工作台场景切换菜单"
+    precondition: "应用已启动"
+    steps:
+      - "点击左上角工作台切换器"
+    expected: "弹出 7 个场景选项"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.002
+    title: "切换到「量化交易」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 quant"
+    expected: "selectedWorkspaceKey === \"quant\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.003
+    title: "切换到「游戏制作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 game"
+    expected: "selectedWorkspaceKey === \"game\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.004
+    title: "切换到「视频制作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 video"
+    expected: "selectedWorkspaceKey === \"video\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.005
+    title: "切换到「音乐创作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 music"
+    expected: "selectedWorkspaceKey === \"music\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.006
+    title: "切换到「数据与决策」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 data"
+    expected: "selectedWorkspaceKey === \"data\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.007
+    title: "切换到「软件与自动化」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 software"
+    expected: "selectedWorkspaceKey === \"software\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.008
+    title: "切换到「文档创作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 document"
+    expected: "selectedWorkspaceKey === \"document\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.009
+    title: "切回「文档创作」场景"
+    precondition: "当前在其他场景"
+    steps:
+      - "切换到 document"
+    expected: "selectedWorkspaceKey === \"document\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.010
+    title: "点击新对话"
+    precondition: "在 document"
+    steps:
+      - "点击新对话"
+    expected: "进入对话态"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.011
+    title: "打开全局搜索"
+    precondition: "在 document"
+    steps:
+      - "Ctrl+K"
+    expected: "搜索面板可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.012
+    title: "折叠项目分区"
+    precondition: "分区展开"
+    steps:
+      - "点击折叠"
+    expected: "项目列表隐藏"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.013
+    title: "展开项目分区"
+    precondition: "分区折叠"
+    steps:
+      - "再次点击"
+    expected: "项目列表可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.014
+    title: "折叠聊天分区"
+    precondition: "分区展开"
+    steps:
+      - "点击折叠"
+    expected: "聊天列表隐藏"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.015
+    title: "展开聊天分区"
+    precondition: "分区折叠"
+    steps:
+      - "再次点击"
+    expected: "聊天列表可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.016
+    title: "侧栏整理：project"
+    precondition: "organize 菜单"
+    steps:
+      - "选 project"
+    expected: "sidebarOrganizeMode === \"project\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.017
+    title: "侧栏整理：list"
+    precondition: "organize 菜单"
+    steps:
+      - "选 list"
+    expected: "sidebarOrganizeMode === \"list\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.018
+    title: "侧栏整理：priority"
+    precondition: "organize 菜单"
+    steps:
+      - "选 priority"
+    expected: "sidebarOrganizeMode === \"priority\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.019
+    title: "侧栏整理：updated"
+    precondition: "organize 菜单"
+    steps:
+      - "选 updated"
+    expected: "sidebarOrganizeMode === \"updated\""
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.020
+    title: "项目显示更多"
+    precondition: "项目>5"
+    steps:
+      - "点击显示更多"
+    expected: "全量展示"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.NAV.021
+    title: "项目显示更少"
+    precondition: "已展开"
+    steps:
+      - "点击显示更少"
+    expected: "仅前5项"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.001
+    title: "打开添加项目菜单"
+    precondition: "在 document"
+    steps:
+      - "点击+"
+    expected: "菜单可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.002
+    title: "打开新建空白项目对话框"
+    precondition: "菜单已开"
+    steps:
+      - "点新建空白"
+    expected: "dialog 可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.003
+    title: "新建：输入名称"
+    precondition: "dialog 开"
+    steps:
+      - "输入名称"
+    expected: "input 非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.004
+    title: "新建：提交"
+    precondition: "名称已填"
+    steps:
+      - "点保存"
+    expected: "primaryWorkspaceKey === \"document\""
+    automation: CDP
+    blocking: true
+  - opId: document.L0.PROJ.005
+    title: "新建：取消"
+    precondition: "dialog 开"
+    steps:
+      - "点取消"
+    expected: "dialog 关闭"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.006
+    title: "新建：空名禁用"
+    precondition: "dialog 开"
+    steps:
+      - "清空名称"
+    expected: "保存 disabled"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.007
+    title: "选 BRAIN 项目第一项"
+    precondition: "列表非空"
+    steps:
+      - "点击第一项"
+    expected: "selectedBrainProjectId 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.008
+    title: "选 BRAIN 对话第一项"
+    precondition: "对话非空"
+    steps:
+      - "点击第一项"
+    expected: "selectedBrainConversationId 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.009
+    title: "验证项目仅当前场景"
+    precondition: "刚创建"
+    steps:
+      - "listBrainProjects workspaceKey=document"
+    expected: "命中；其他场景不含"
+    automation: IPC
+    blocking: true
+  - opId: document.L0.PROJ.010
+    title: "使用现有文件夹"
+    precondition: "菜单已开"
+    steps:
+      - "点使用现有文件夹"
+    expected: "文件夹选择器"
+    automation: NATIVE
+    blocking: false
+  - opId: document.L0.PROJ.011
+    title: "跨场景最近可见"
+    precondition: "有其他场景项目"
+    steps:
+      - "查看最近"
+    expected: "不含当前场景项"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.012
+    title: "点击跨场景最近"
+    precondition: "最近非空"
+    steps:
+      - "点击一项"
+    expected: "跳转对应场景"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.013
+    title: "legacy 展开线程"
+    precondition: "有 legacy 项目"
+    steps:
+      - "点展开"
+    expected: "线程可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.014
+    title: "legacy 折叠线程"
+    precondition: "已展开"
+    steps:
+      - "点折叠"
+    expected: "线程隐藏"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.015
+    title: "选 legacy 项目"
+    precondition: "catalog 非空"
+    steps:
+      - "点击项目"
+    expected: "selectedWorkspaceId 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.PROJ.016
+    title: "BRAIN 项目空态"
+    precondition: "无项目"
+    steps:
+      - "查看空态"
+    expected: "当前场景还没有 BRAIN 项目"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.001
+    title: "对话空态"
+    precondition: "有项目无对话"
+    steps:
+      - "查看列表"
+    expected: "当前项目还没有对话"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.002
+    title: "切换对话第二项"
+    precondition: "对话≥2"
+    steps:
+      - "点第二项"
+    expected: "选中更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.003
+    title: "对话相对时间"
+    precondition: "有 updatedAt"
+    steps:
+      - "读 time"
+    expected: "非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.004
+    title: "对话 sidebar 同步"
+    precondition: "点对话"
+    steps:
+      - "查 row"
+    expected: "brain-conversation:id"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.005
+    title: "项目 sidebar 同步"
+    precondition: "点项目"
+    steps:
+      - "查 row"
+    expected: "brain-project:id"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.006
+    title: "选 chat 线程"
+    precondition: "有 chat 线程"
+    steps:
+      - "点击"
+    expected: "selectedThreadId 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.007
+    title: "pin 线程"
+    precondition: "hover"
+    steps:
+      - "pin"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.008
+    title: "archive 线程"
+    precondition: "hover"
+    steps:
+      - "archive"
+    expected: "archived"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.009
+    title: "新对话绑场景"
+    precondition: "在 document"
+    steps:
+      - "新对话"
+    expected: "绑定当前场景"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.CONV.010
+    title: "composer 可用"
+    precondition: "选 brain 对话"
+    steps:
+      - "查 input"
+    expected: "可输入"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.001
+    title: "全局资源 Tab files"
+    precondition: "右栏可见"
+    steps:
+      - "点 files"
+    expected: "active === files"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.002
+    title: "全局资源 Tab artifacts"
+    precondition: "右栏可见"
+    steps:
+      - "点 artifacts"
+    expected: "active === artifacts"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.003
+    title: "全局资源 Tab tasks"
+    precondition: "右栏可见"
+    steps:
+      - "点 tasks"
+    expected: "active === tasks"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.004
+    title: "场景 Tab files"
+    precondition: "在 document"
+    steps:
+      - "点 files"
+    expected: "workspaceSceneTab === files"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.005
+    title: "场景 Tab outline"
+    precondition: "在 document"
+    steps:
+      - "点 outline"
+    expected: "workspaceSceneTab === outline"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.006
+    title: "场景 Tab body"
+    precondition: "在 document"
+    steps:
+      - "点 body"
+    expected: "workspaceSceneTab === body"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.007
+    title: "场景 Tab citation"
+    precondition: "在 document"
+    steps:
+      - "点 citation"
+    expected: "workspaceSceneTab === citation"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.008
+    title: "场景 Tab slides"
+    precondition: "在 document"
+    steps:
+      - "点 slides"
+    expected: "workspaceSceneTab === slides"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.009
+    title: "场景 Tab review"
+    precondition: "在 document"
+    steps:
+      - "点 review"
+    expected: "workspaceSceneTab === review"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.010
+    title: "选文件行"
+    precondition: "files 有文件"
+    steps:
+      - "点击"
+    expected: "selectedFileId 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.011
+    title: "产物列表"
+    precondition: "artifacts Tab"
+    steps:
+      - "打开"
+    expected: "列表或空态"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.012
+    title: "任务列表"
+    precondition: "tasks Tab"
+    steps:
+      - "打开"
+    expected: "列表或空态"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.RES.013
+    title: "右栏标题含场景名"
+    precondition: "在 document"
+    steps:
+      - "读 header"
+    expected: "含 文档创作"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.001
+    title: "Composer 输入空文本"
+    precondition: "聚焦"
+    steps:
+      - "不输入"
+    expected: "send 拦截或 disabled"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.002
+    title: "Composer 输入短文本"
+    precondition: "聚焦"
+    steps:
+      - "输入测试"
+    expected: "value 正确"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.003
+    title: "Composer Enter 发送"
+    precondition: "有文本"
+    steps:
+      - "Enter"
+    expected: "消息发出"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.004
+    title: "Composer 点击发送"
+    precondition: "有文本"
+    steps:
+      - "点 send"
+    expected: "消息发出"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.005
+    title: "Composer 停止生成"
+    precondition: "回复中"
+    steps:
+      - "点停止"
+    expected: "取消 in-flight"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.006
+    title: "Composer 打开+菜单"
+    precondition: "可见"
+    steps:
+      - "点+"
+    expected: "菜单展开"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.007
+    title: "Composer 权限审批"
+    precondition: "可见"
+    steps:
+      - "选 approval"
+    expected: "mode=approval"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.008
+    title: "Composer 权限 Agent"
+    precondition: "可见"
+    steps:
+      - "选 agent"
+    expected: "mode=agent"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.009
+    title: "Composer 权限完全"
+    precondition: "可见"
+    steps:
+      - "选 full"
+    expected: "mode=full"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.010
+    title: "Composer Skill 打开"
+    precondition: "可见"
+    steps:
+      - "开 picker"
+    expected: "列表可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.011
+    title: "Composer Skill 清除"
+    precondition: "已选"
+    steps:
+      - "清除"
+    expected: "空"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.012
+    title: "Composer @上下文"
+    precondition: "可见"
+    steps:
+      - "toggle"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.013
+    title: "Composer 模型菜单"
+    precondition: "可见"
+    steps:
+      - "打开"
+    expected: "列表可见"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.014
+    title: "Composer 推理切换"
+    precondition: "菜单开"
+    steps:
+      - "切换"
+    expected: "变化"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.015
+    title: "Composer 速度切换"
+    precondition: "菜单开"
+    steps:
+      - "切换"
+    expected: "变化"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.016
+    title: "Composer 语音切换"
+    precondition: "可见"
+    steps:
+      - "点 voice"
+    expected: "dictation 切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.017
+    title: "Composer 附件移除"
+    precondition: "有附件"
+    steps:
+      - "移除"
+    expected: "减少"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.018
+    title: "Composer 队列编辑"
+    precondition: "有 draft"
+    steps:
+      - "edit"
+    expected: "可编辑"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.019
+    title: "Composer 队列 steer"
+    precondition: "有 draft"
+    steps:
+      - "steer"
+    expected: "生效"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.020
+    title: "Composer 队列 followup"
+    precondition: "有 draft"
+    steps:
+      - "followup"
+    expected: "排队"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.021
+    title: "Composer 队列 interrupt"
+    precondition: "有 draft"
+    steps:
+      - "interrupt"
+    expected: "生效"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.022
+    title: "Composer 队列清除"
+    precondition: "有 draft"
+    steps:
+      - "clear"
+    expected: "空"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.023
+    title: "Composer 回到底部"
+    precondition: "已滚动"
+    steps:
+      - "jump"
+    expected: "到底"
+    automation: CDP
+    blocking: false
+  - opId: document.L0.COMP.024
+    title: "Composer 添加文件"
+    precondition: "+菜单"
+    steps:
+      - "文件和图片"
+    expected: "系统对话框"
+    automation: NATIVE
+    blocking: false
+  - opId: document.L1.project.001
+    title: "进入项目与文件"
+    precondition: "已选项目"
+    steps:
+      - "files Tab"
+    expected: "brain-document-workspace"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.project.002
+    title: "文档数量"
+    precondition: "project Tab"
+    steps:
+      - "读 strong"
+    expected: "files.length"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.project.003
+    title: "锚点数量"
+    precondition: "project Tab"
+    steps:
+      - "读锚点"
+    expected: "availableAnchors.length"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.project.004
+    title: "待处理标注数"
+    precondition: "project Tab"
+    steps:
+      - "读标注"
+    expected: "OPEN 计数"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.project.005
+    title: "打开文件面板"
+    precondition: "project Tab"
+    steps:
+      - "点按钮"
+    expected: "files 全局 Tab"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.006
+    title: "导入 TXT"
+    precondition: "有文件"
+    steps:
+      - "ingest txt"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.007
+    title: "导入 MD"
+    precondition: "有文件"
+    steps:
+      - "ingest md"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.008
+    title: "导入 PNG"
+    precondition: "有文件"
+    steps:
+      - "ingest png"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.009
+    title: "导入 PDF"
+    precondition: "有文件"
+    steps:
+      - "ingest pdf"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.010
+    title: "导入 DOCX"
+    precondition: "有文件"
+    steps:
+      - "ingest docx"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.011
+    title: "导入 PPTX"
+    precondition: "有文件"
+    steps:
+      - "ingest pptx"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.ingest.012
+    title: "导入 XLSX"
+    precondition: "有文件"
+    steps:
+      - "ingest xlsx"
+    expected: "parseStatus OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.001
+    title: "进入 outline Tab"
+    precondition: "有文档"
+    steps:
+      - "outline Tab"
+    expected: "activeView=outline"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.002
+    title: "outline 选文档"
+    precondition: "多文档"
+    steps:
+      - "select 切换"
+    expected: "activeFile 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.003
+    title: "outline 画笔开关"
+    precondition: "有文档"
+    steps:
+      - "画笔标记"
+    expected: "annotationActive 切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.004
+    title: "outline 锚点 1"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 1"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.005
+    title: "outline 锚点 2"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 2"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.006
+    title: "outline 锚点 3"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 3"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.007
+    title: "outline 锚点 4"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 4"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.008
+    title: "outline 锚点 5"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 5"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.outline.009
+    title: "outline 无锚点空态"
+    precondition: "无锚点"
+    steps:
+      - "读 empty"
+    expected: "没有结构锚点"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.010
+    title: "进入 body Tab"
+    precondition: "有文档"
+    steps:
+      - "body Tab"
+    expected: "activeView=body"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.011
+    title: "body 选文档"
+    precondition: "多文档"
+    steps:
+      - "select 切换"
+    expected: "activeFile 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.012
+    title: "body 画笔开关"
+    precondition: "有文档"
+    steps:
+      - "画笔标记"
+    expected: "annotationActive 切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.013
+    title: "body 锚点 1"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 1"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.014
+    title: "body 锚点 2"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 2"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.015
+    title: "body 锚点 3"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 3"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.016
+    title: "body 锚点 4"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 4"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.017
+    title: "body 锚点 5"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 5"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.body.018
+    title: "body 无锚点空态"
+    precondition: "无锚点"
+    steps:
+      - "读 empty"
+    expected: "没有结构锚点"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.019
+    title: "进入 references Tab"
+    precondition: "有文档"
+    steps:
+      - "references Tab"
+    expected: "activeView=references"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.020
+    title: "references 选文档"
+    precondition: "多文档"
+    steps:
+      - "select 切换"
+    expected: "activeFile 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.021
+    title: "references 画笔开关"
+    precondition: "有文档"
+    steps:
+      - "画笔标记"
+    expected: "annotationActive 切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.022
+    title: "references 锚点 1"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 1"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.023
+    title: "references 锚点 2"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 2"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.024
+    title: "references 锚点 3"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 3"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.025
+    title: "references 锚点 4"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 4"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.026
+    title: "references 锚点 5"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 5"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.references.027
+    title: "references 无锚点空态"
+    precondition: "无锚点"
+    steps:
+      - "读 empty"
+    expected: "没有结构锚点"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.028
+    title: "进入 slides Tab"
+    precondition: "有文档"
+    steps:
+      - "slides Tab"
+    expected: "activeView=slides"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.029
+    title: "slides 选文档"
+    precondition: "多文档"
+    steps:
+      - "select 切换"
+    expected: "activeFile 更新"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.030
+    title: "slides 画笔开关"
+    precondition: "有文档"
+    steps:
+      - "画笔标记"
+    expected: "annotationActive 切换"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.031
+    title: "slides 锚点 1"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 1"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.032
+    title: "slides 锚点 2"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 2"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.033
+    title: "slides 锚点 3"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 3"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.034
+    title: "slides 锚点 4"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 4"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.035
+    title: "slides 锚点 5"
+    precondition: "有锚点"
+    steps:
+      - "点锚点 5"
+    expected: "onSelectAnchor 触发"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.slides.036
+    title: "slides 无锚点空态"
+    precondition: "无锚点"
+    steps:
+      - "读 empty"
+    expected: "没有结构锚点"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.001
+    title: "进入审校 Tab"
+    precondition: "有文档"
+    steps:
+      - "review Tab"
+    expected: "brain-document-review"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.002
+    title: "审校画笔"
+    precondition: "review Tab"
+    steps:
+      - "开始画笔"
+    expected: "annotationActive"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.003
+    title: "标注 1 加入对话"
+    precondition: "有 annotation"
+    steps:
+      - "加入对话"
+    expected: "onSendAnnotation"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.004
+    title: "标注 2 加入对话"
+    precondition: "有 annotation"
+    steps:
+      - "加入对话"
+    expected: "onSendAnnotation"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.005
+    title: "标注 3 加入对话"
+    precondition: "有 annotation"
+    steps:
+      - "加入对话"
+    expected: "onSendAnnotation"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.006
+    title: "标注 4 加入对话"
+    precondition: "有 annotation"
+    steps:
+      - "加入对话"
+    expected: "onSendAnnotation"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.007
+    title: "标注 5 加入对话"
+    precondition: "有 annotation"
+    steps:
+      - "加入对话"
+    expected: "onSendAnnotation"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.008
+    title: "change-set 1 预览"
+    precondition: "有 changeSet"
+    steps:
+      - "预览"
+    expected: "preview 非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.009
+    title: "change-set 1 接受"
+    precondition: "PROPOSED"
+    steps:
+      - "接受"
+    expected: "ACCEPTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.010
+    title: "change-set 1 拒绝"
+    precondition: "PROPOSED"
+    steps:
+      - "拒绝"
+    expected: "REJECTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.011
+    title: "change-set 2 预览"
+    precondition: "有 changeSet"
+    steps:
+      - "预览"
+    expected: "preview 非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.012
+    title: "change-set 2 接受"
+    precondition: "PROPOSED"
+    steps:
+      - "接受"
+    expected: "ACCEPTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.013
+    title: "change-set 2 拒绝"
+    precondition: "PROPOSED"
+    steps:
+      - "拒绝"
+    expected: "REJECTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.014
+    title: "change-set 3 预览"
+    precondition: "有 changeSet"
+    steps:
+      - "预览"
+    expected: "preview 非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.015
+    title: "change-set 3 接受"
+    precondition: "PROPOSED"
+    steps:
+      - "接受"
+    expected: "ACCEPTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.016
+    title: "change-set 3 拒绝"
+    precondition: "PROPOSED"
+    steps:
+      - "拒绝"
+    expected: "REJECTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.017
+    title: "change-set 4 预览"
+    precondition: "有 changeSet"
+    steps:
+      - "预览"
+    expected: "preview 非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.018
+    title: "change-set 4 接受"
+    precondition: "PROPOSED"
+    steps:
+      - "接受"
+    expected: "ACCEPTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.019
+    title: "change-set 4 拒绝"
+    precondition: "PROPOSED"
+    steps:
+      - "拒绝"
+    expected: "REJECTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.020
+    title: "change-set 5 预览"
+    precondition: "有 changeSet"
+    steps:
+      - "预览"
+    expected: "preview 非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.021
+    title: "change-set 5 接受"
+    precondition: "PROPOSED"
+    steps:
+      - "接受"
+    expected: "ACCEPTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.022
+    title: "change-set 5 拒绝"
+    precondition: "PROPOSED"
+    steps:
+      - "拒绝"
+    expected: "REJECTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.023
+    title: "导出新版本"
+    precondition: "ACCEPTED"
+    steps:
+      - "导出新版本"
+    expected: "versionNo+1"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.review.024
+    title: "审校空态"
+    precondition: "无标注"
+    steps:
+      - "读 empty"
+    expected: "还没有标注"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.001
+    title: "PDF 上一页"
+    precondition: "PDF 打开"
+    steps:
+      - "page prev"
+    expected: "页码减"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.002
+    title: "PDF 下一页"
+    precondition: "PDF 打开"
+    steps:
+      - "page next"
+    expected: "页码加"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.003
+    title: "PDF 放大"
+    precondition: "PDF 打开"
+    steps:
+      - "zoom in"
+    expected: "scale 增"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.004
+    title: "PDF 缩小"
+    precondition: "PDF 打开"
+    steps:
+      - "zoom out"
+    expected: "scale 减"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.005
+    title: "PPT 上一页"
+    precondition: "PPT 打开"
+    steps:
+      - "slide prev"
+    expected: "减"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.006
+    title: "PPT 下一页"
+    precondition: "PPT 打开"
+    steps:
+      - "slide next"
+    expected: "加"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.007
+    title: "HTML preview 模式"
+    precondition: "HTML 打开"
+    steps:
+      - "preview"
+    expected: "渲染"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.008
+    title: "HTML source 模式"
+    precondition: "HTML 打开"
+    steps:
+      - "source"
+    expected: "源码"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.009
+    title: "保存 PDF 标注"
+    precondition: "标注模式"
+    steps:
+      - "保存"
+    expected: "annotation 落库"
+    automation: CDP
+    blocking: false
+  - opId: document.L1.preview.010
+    title: "CJK 标注坐标"
+    precondition: "PDF CJK"
+    steps:
+      - "保存后重启"
+    expected: "坐标可读"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.001
+    title: "ingest→outline 跳转"
+    precondition: "document 项目就绪"
+    steps:
+      - "pdf"
+      - "锚点"
+    expected: "跳转"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.002
+    title: "annotate→preview"
+    precondition: "document 项目就绪"
+    steps:
+      - "标注"
+      - "预览"
+    expected: "preview"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.003
+    title: "accept→export v2"
+    precondition: "document 项目就绪"
+    steps:
+      - "接受"
+      - "导出"
+    expected: "version+1"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.004
+    title: "PDF CJK 链"
+    precondition: "document 项目就绪"
+    steps:
+      - "CJK 标注"
+      - "保存"
+    expected: "重启可读"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.005
+    title: "DOCX+PDF 并存"
+    precondition: "document 项目就绪"
+    steps:
+      - "两格式"
+    expected: "切换不串"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.006
+    title: "reject 链"
+    precondition: "document 项目就绪"
+    steps:
+      - "拒绝"
+    expected: "REJECTED"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.007
+    title: "slides 导航"
+    precondition: "document 项目就绪"
+    steps:
+      - "pptx"
+      - "prev/next"
+    expected: "幻灯片"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.008
+    title: "references 锚点"
+    precondition: "document 项目就绪"
+    steps:
+      - "引用锚点"
+    expected: "跳转"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.009
+    title: "body 全文锚点"
+    precondition: "document 项目就绪"
+    steps:
+      - "body"
+    expected: "anchors"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.010
+    title: "加入对话链"
+    precondition: "document 项目就绪"
+    steps:
+      - "标注"
+      - "对话"
+    expected: "消息"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.011
+    title: "六格式 ingest"
+    precondition: "document 项目就绪"
+    steps:
+      - "6格式"
+    expected: "均 OK"
+    automation: CDP
+    blocking: false
+  - opId: document.L2.chain.012
+    title: "审校空→有标注"
+    precondition: "document 项目就绪"
+    steps:
+      - "创建标注"
+    expected: "列表非空"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.001
+    title: "重启恢复 1"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 1 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.002
+    title: "重启恢复 2"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 2 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.003
+    title: "重启恢复 3"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 3 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.004
+    title: "重启恢复 4"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 4 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.005
+    title: "重启恢复 5"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 5 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.006
+    title: "重启恢复 6"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 6 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.007
+    title: "重启恢复 7"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 7 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.008
+    title: "重启恢复 8"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 8 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.009
+    title: "重启恢复 9"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 9 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.010
+    title: "重启恢复 10"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 10 持久化"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.011
+    title: "异常用例 1"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.012
+    title: "异常用例 2"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.013
+    title: "异常用例 3"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.014
+    title: "异常用例 4"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.015
+    title: "异常用例 5"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.016
+    title: "隔离：document 项目不在 quant"
+    precondition: "有项目"
+    steps:
+      - "切 quant"
+    expected: "列表不含"
+    automation: IPC
+    blocking: true
+  - opId: document.L3.017
+    title: "隔离：document 项目不在 game"
+    precondition: "有项目"
+    steps:
+      - "切 game"
+    expected: "列表不含"
+    automation: IPC
+    blocking: true
+  - opId: document.L3.018
+    title: "隔离：document 项目不在 video"
+    precondition: "有项目"
+    steps:
+      - "切 video"
+    expected: "列表不含"
+    automation: IPC
+    blocking: true
+  - opId: document.L3.019
+    title: "快速切场景 5 次"
+    precondition: "多场景"
+    steps:
+      - "连切 5 次"
+    expected: "UI 正常"
+    automation: CDP
+    blocking: false
+  - opId: document.L3.020
+    title: "快速切场景 10 次"
+    precondition: "多场景"
+    steps:
+      - "连切 10 次"
+    expected: "无 exit 70"
+    automation: CDP
+    blocking: false

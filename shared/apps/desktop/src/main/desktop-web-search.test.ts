@@ -17,6 +17,8 @@ test("formats explicit unavailable guidance without freshness invention", () => 
 
 test("blocks freshness claims without searchedAt and source URLs", () => {
   assert.equal(assertAnswerAllowsFreshnessClaims({ answer: "普通知识回答" }).ok, true);
+  assert.equal(assertAnswerAllowsFreshnessClaims({ answer: "你好！我现在可以帮你。" }).ok, true);
+  assert.equal(assertAnswerAllowsFreshnessClaims({ answer: "你好，当前项目是 ces。" }).ok, true);
   assert.equal(assertAnswerAllowsFreshnessClaims({
     answer: "最新股价已经上涨",
     searchedAt: "",
@@ -169,13 +171,17 @@ test("news_search_free prefers free-first pack and surfaces unavailable guidance
   assert.equal(result.isError, true);
 });
 
-test("finalizes assistant answers with search citations or blocks unsupported freshness", async () => {
+test("finalizes assistant answers by attaching citations only; never rewrites into WEB_SEARCH prompts", async () => {
   const { finalizeDesktopWebSearchAnswer } = await import("./desktop-web-search-policy.ts");
-  const blocked = finalizeDesktopWebSearchAnswer({
-    answer: "最新股价已经上涨",
-    toolTexts: []
-  });
-  assert.match(blocked, /WEB_SEARCH_UNAVAILABLE/);
+  // No search this turn — keep the model answer as-is (including casual 现在/当前).
+  assert.equal(
+    finalizeDesktopWebSearchAnswer({ answer: "你好！我现在可以帮你。", toolTexts: [] }),
+    "你好！我现在可以帮你。"
+  );
+  assert.equal(
+    finalizeDesktopWebSearchAnswer({ answer: "最新股价已经上涨", toolTexts: [] }),
+    "最新股价已经上涨"
+  );
 
   const cited = finalizeDesktopWebSearchAnswer({
     answer: "市场情绪偏暖。",
@@ -187,4 +193,10 @@ test("finalizes assistant answers with search citations or blocks unsupported fr
   });
   assert.match(cited, /来源（检索时间 2026-08-20T12:00:00.000Z）/);
   assert.match(cited, /https:\/\/example\.com\/a/);
+});
+
+test("does not treat local runtime handoff state as an external freshness claim", async () => {
+  const { finalizeDesktopWebSearchAnswer } = await import("./desktop-web-search-policy.ts");
+  const answer = "目标没有产生进度，可从当前持久化步骤继续。";
+  assert.equal(finalizeDesktopWebSearchAnswer({ answer, toolTexts: [] }), answer);
 });

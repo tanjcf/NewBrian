@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import type { BrainVideoRenderState, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { RustCoreRequest, RustCoreResponse } from "@codex-forge/protocol/rust-core";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
@@ -14,14 +14,36 @@ export interface VideoRenderOptions {
   timeline: BrainVideoTimeline;
   outputRelativePath: string;
   mediaRelativePaths?: string[];
+  /** When true and no media clips exist, synthesize a short black MP4 via lavfi. */
+  allowSyntheticMedia?: boolean;
   acquireRustCore: (binding: { projectId: string; projectRoot: string; workspaceType: "video" }) => Promise<VideoRenderRustClient>;
   confirmRender: (input: { projectId: string; command: string; outputRelativePath: string }) => Promise<boolean>;
   prepareOutput?: (projectRoot: string, outputRelativePath: string) => Promise<void>;
   validateOutput?: (projectRoot: string, outputRelativePath: string) => Promise<boolean>;
+  resolveFfmpegExecutable?: () => Promise<string>;
   storage?: BrainWorkspaceStorage;
   platform?: NodeJS.Platform;
 }
-export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "platform" | "storage">;
+export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "resolveFfmpegExecutable" | "platform" | "storage">;
+
+function buildVideoFfmpegArgs(media: string[], output: string, concatListRelative?: string): string[] {
+  if (!media.length) {
+    return [
+      "-y",
+      "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=2",
+      "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+      "-t", "2",
+      "-c:v", "libx264",
+      "-c:a", "aac",
+      "-shortest",
+      output
+    ];
+  }
+  if (media.length === 1) {
+    return ["-y", "-i", media[0]!, "-c:v", "libx264", "-c:a", "aac", output];
+  }
+  return ["-y", "-f", "concat", "-safe", "0", "-i", concatListRelative!, "-c:v", "libx264", "-c:a", "aac", output];
+}
 
 type Session = {
   ownerId: string;
@@ -37,7 +59,7 @@ const MAX_OUTPUT = 64 * 1024;
 const now = () => new Date().toISOString();
 const record = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const decode = (value: unknown) => typeof value === "string" ? Buffer.from(value, "base64").toString("utf8") : "";
-const TERMINAL = new Set<BrainVideoRenderState["status"]>(["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"]);
+const TERMINAL = new Set<BrainVideoRenderState["status"]>(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
 function safeRelativePath(value: string, code: string) {
   const normalized = value.replaceAll("\\", "/");
@@ -47,19 +69,15 @@ function safeRelativePath(value: string, code: string) {
 }
 
 function mapProcessFailure(errorCode: string): { status: BrainVideoRenderState["status"]; errorCode: string } {
-  // Legacy Core binaries may still emit timeout; media path never treats timeout as a business terminal.
-  if (errorCode === "BRAIN_CORE_PROCESS_TIMEOUT") {
-    return { status: "FAILED", errorCode: "BRAIN_CORE_PROCESS_TIMEOUT" };
-  }
   return { status: "FAILED", errorCode: errorCode || "BRAIN_VIDEO_RENDER_FAILED" };
 }
 
 export class VideoRenderService {
   private readonly sessions = new Map<string, Session>();
-  private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "storage" | "platform">;
+  private readonly options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "resolveFfmpegExecutable" | "storage" | "platform">;
   private readonly platform: NodeJS.Platform;
 
-  constructor(options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "storage" | "platform">) {
+  constructor(options: Pick<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "resolveFfmpegExecutable" | "storage" | "platform">) {
     this.options = options;
     this.platform = options.platform ?? process.platform;
   }
@@ -67,13 +85,23 @@ export class VideoRenderService {
   async start(ownerId: string, input: VideoRenderInput): Promise<BrainVideoRenderState> {
     const renderId = `video-render-${randomUUID()}`;
     const requestId = `${renderId}:process`;
-    const executable = this.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+    const executable = this.options.resolveFfmpegExecutable
+      ? await this.options.resolveFfmpegExecutable()
+      : (this.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
     const output = safeRelativePath(input.outputRelativePath, "BRAIN_VIDEO_OUTPUT_PATH_INVALID");
     if (!/\.mp4$/iu.test(output)) throw new Error("BRAIN_VIDEO_OUTPUT_FORMAT_UNSUPPORTED");
-    const mediaInput = input.mediaRelativePaths?.[0];
-    if (!mediaInput) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
-    const media = safeRelativePath(mediaInput, "BRAIN_VIDEO_MEDIA_NOT_FOUND");
-    const command = `${executable} -y -i ${media} -c:v libx264 -c:a aac ${output}`;
+    const media = (input.mediaRelativePaths || []).map((item) => safeRelativePath(item, "BRAIN_VIDEO_MEDIA_NOT_FOUND"));
+    if (!media.length && !input.allowSyntheticMedia) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
+    let concatListRelative: string | undefined;
+    if (media.length > 1) {
+      concatListRelative = `.brain-video/concat-${renderId}.txt`;
+      const listAbsolute = resolve(input.projectRoot, concatListRelative);
+      await mkdir(dirname(listAbsolute), { recursive: true });
+      const body = media.map((path) => `file '${path.replaceAll("'", "'\\''")}'`).join("\n");
+      await writeFile(listAbsolute, `${body}\n`, "utf8");
+    }
+    const args = buildVideoFfmpegArgs(media, output, concatListRelative);
+    const command = `${executable} ${args.join(" ")}`;
     if (!(await this.options.confirmRender({ projectId: input.projectId, command, outputRelativePath: output }))) throw new Error("BRAIN_VIDEO_RENDER_DECLINED");
     await this.options.prepareOutput?.(input.projectRoot, output);
 
@@ -125,7 +153,6 @@ export class VideoRenderService {
     state.status = "RUNNING";
     this.persistTask(session, "RUNNING", 0.2);
     const generation = session.generation;
-    const args = ["-y", "-i", media, "-c:v", "libx264", "-c:a", "aac", output];
     void client.request({
       request_id: requestId,
       project_id: input.projectId,

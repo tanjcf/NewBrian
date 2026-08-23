@@ -49,6 +49,16 @@ function listExistingDirs(candidates) {
   });
 }
 
+/** Prepends BRAIN managed engine bins (ffmpeg/node/godot) when present under user data. */
+export function discoverManagedEnginePathEntries(managedEnginesRoot = "") {
+  const root = String(managedEnginesRoot || "").trim();
+  if (!root) return [];
+  const ffmpegBin = join(root, "ffmpeg", "bin");
+  const nodeBin = process.platform === "win32" ? join(root, "node") : join(root, "node", "bin");
+  const godotDir = join(root, "godot");
+  return listExistingDirs([ffmpegBin, nodeBin, godotDir]);
+}
+
 function listWindowsPythonInstallDirs(localAppData) {
   if (!localAppData) return [];
   const root = join(localAppData, "Programs", "Python");
@@ -94,7 +104,9 @@ export function discoverHostToolPathEntries(env = process.env) {
 export function enrichShellEnvForTools(shellEnv = {}, options = {}) {
   const processEnv = options.processEnv ?? process.env ?? {};
   const merged = { ...processEnv, ...(shellEnv ?? {}) };
+  const managedRoot = String(options.managedEnginesRoot || merged.BRAIN_MANAGED_ENGINES_ROOT || processEnv.BRAIN_MANAGED_ENGINES_ROOT || "").trim();
   const combinedPath = mergePathEntries(
+    ...discoverManagedEnginePathEntries(managedRoot),
     ...(options.extraPathEntries ?? []),
     ...discoverHostToolPathEntries(merged),
     readPathFromEnv(shellEnv),

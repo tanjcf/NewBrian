@@ -15,6 +15,14 @@ import {
   type ComposerMode,
   type SkillDescriptor
 } from "./skill-selection.ts";
+import { classifyAutoTaskClass } from "./model-auto-router.ts";
+
+/** Simple chat (incl. greetings): no automatic skill injection in BRAIN. */
+export function isSimpleChatSkillExempt(latestUserRequest?: string): boolean {
+  const text = String(latestUserRequest || "").trim();
+  if (!text) return false;
+  return classifyAutoTaskClass({ text }) === "chat";
+}
 
 export interface ModelChatSkillSelectionInput {
   requestedSkillNames?: string[];
@@ -153,15 +161,22 @@ export function selectModelChatSkills(input: ModelChatSkillSelectionInput): Mode
     automaticSkillNames = [];
   }
 
+  // Simple chat (greetings + short casual turns): no automatic skill wrapping.
+  // Specialty / project skills only when the user picked them or the task is not chat.
+  if (isSimpleChatSkillExempt(input.latestUserRequest)) {
+    automaticSkillNames = [];
+  }
+
   const goalRuntimeRequested = composerModes.includes("goal") || shouldUseGoalRuntimeForSkills(explicitSkillNames);
+  const localNames = [...new Set([...explicitLocalSkillNames, ...automaticSkillNames])];
+  const selectedLocalSkillNames = isSimpleChatSkillExempt(input.latestUserRequest) && !explicitLocalSkillNames.length
+    ? []
+    : withAlwaysOnProjectManagerShadow(localNames, localSkillDescriptors);
   return {
     explicitSkillNames,
     composerModes,
     centralSkillNames,
-    selectedLocalSkillNames: withAlwaysOnProjectManagerShadow(
-      [...new Set([...explicitLocalSkillNames, ...automaticSkillNames])],
-      localSkillDescriptors
-    ),
+    selectedLocalSkillNames,
     governmentSkillEnabled: isGovernmentResearchWritingProductEnabled()
       && centralSkillNames.some((name) => isGovernmentResearchWritingSkill(name)),
     goalRuntimeRequested,

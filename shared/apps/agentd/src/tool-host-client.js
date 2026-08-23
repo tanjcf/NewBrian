@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_TIMEOUT_MS = 180_000;
 /** Hard cap on a single JSON response line from the worker (not shell stdout). */
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const RETRYABLE_HOST_FAILURES = new Set(["exit", "protocol"]);
@@ -10,8 +9,6 @@ const RETRYABLE_HOST_FAILURES = new Set(["exit", "protocol"]);
 export function formatToolHostFailure(hostFailure, detail = "") {
   const suffix = detail ? ` ${detail}`.trimEnd() : "";
   switch (hostFailure) {
-    case "timeout":
-      return `工具宿主执行超时，并非安全策略拦截。请缩小检索范围、改用 workspace.glob / workspace.grep，或拆分命令后重试。${suffix}`.trim();
     case "output_limit":
       return `工具宿主返回载荷过大已中止，并非安全策略拦截。请改用 workspace.glob / workspace.grep，或缩小 Select-String/递归检索范围后重试。${suffix}`.trim();
     case "exit":
@@ -35,7 +32,6 @@ function isRetryableHostFailure(result) {
 
 export class ToolHostClient {
   constructor(input = {}) {
-    this.timeoutMs = Math.max(100, input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     this.workerUrl = input.workerUrl ?? new URL("./tool-host-worker.js", import.meta.url);
     this.maxRetries = Math.max(0, input.maxRetries ?? 1);
   }
@@ -99,19 +95,10 @@ export class ToolHostClient {
       const finish = (result, forceTerminate = false) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
         context.abortSignal?.removeEventListener("abort", abort);
         if (forceTerminate) terminate();
         resolve(result);
       };
-      const timer = setTimeout(() => finish({
-        ok: false,
-        toolName: name,
-        exitCode: 1,
-        output: formatToolHostFailure("timeout", `（${this.timeoutMs}ms）`),
-        durationMs: this.timeoutMs,
-        hostFailure: "timeout"
-      }, true), this.timeoutMs);
       const output = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
       output.on("line", (line) => {
         responseBytes += Buffer.byteLength(line, "utf8");

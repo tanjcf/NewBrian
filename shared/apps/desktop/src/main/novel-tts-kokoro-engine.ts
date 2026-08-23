@@ -48,13 +48,11 @@ export class NovelTtsKokoroEngine {
   private spawning: Promise<ChildProcess> | null = null;
   private jobSerial = 0;
   private queue: PendingJob[] = [];
+  private activeJob: PendingJob | null = null;
   private draining = false;
   private waiters = new Map<
     string,
-    {
-      resolve: (result: NovelTtsKokoroSynthesizeResult) => void;
-      timer: NodeJS.Timeout;
-    }
+    { resolve: (result: NovelTtsKokoroSynthesizeResult) => void }
   >();
   private cachedGpuProbe: NovelTtsGpuProbeResult | null = null;
 
@@ -74,6 +72,7 @@ export class NovelTtsKokoroEngine {
    */
   cancel() {
     this.jobSerial += 1;
+    this.activeJob?.resolve({ ok: false, detail: "朗读已取消。" });
     const cancelled = this.queue.splice(0);
     for (const job of cancelled) {
       job.resolve({ ok: false, detail: "朗读已取消。" });
@@ -163,6 +162,7 @@ export class NovelTtsKokoroEngine {
           continue;
         }
         try {
+          this.activeJob = job;
           const result = await this.runJobOnWarmChild(job);
           if (job.jobId !== this.jobSerial) {
             job.resolve({ ok: false, detail: "朗读已取消。" });
@@ -175,6 +175,7 @@ export class NovelTtsKokoroEngine {
             detail: `Kokoro 子进程异常：${error instanceof Error ? error.message : String(error)}`
           });
         } finally {
+          if (this.activeJob === job) this.activeJob = null;
           this.bumpIdleTimer();
         }
       }
@@ -187,18 +188,8 @@ export class NovelTtsKokoroEngine {
   private async runJobOnWarmChild(job: PendingJob): Promise<NovelTtsKokoroSynthesizeResult> {
     const child = await this.ensureWarmChild();
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.waiters.delete(job.requestId);
-        void this.dependencies.appendDebugLog?.("novel tts kokoro child timeout");
-        // Stuck inference: recreate child once. Prefer soft cancel for voice switches.
-        this.killWarmChild(true);
-        resolve({ ok: false, detail: "Kokoro 合成超时，将尝试系统朗读。" });
-      }, 170_000);
-
       this.waiters.set(job.requestId, {
-        timer,
         resolve: (result) => {
-          clearTimeout(timer);
           this.waiters.delete(job.requestId);
           resolve(result);
         }
@@ -207,7 +198,6 @@ export class NovelTtsKokoroEngine {
       try {
         child.send(job.payload);
       } catch (error) {
-        clearTimeout(timer);
         this.waiters.delete(job.requestId);
         this.killWarmChild(true);
         resolve({
@@ -257,8 +247,6 @@ export class NovelTtsKokoroEngine {
         reject(new Error(detail));
       };
 
-      const readyTimer = setTimeout(() => fail("Kokoro 子进程启动超时。"), 30_000);
-
       child.stdout?.on("data", (chunk) => {
         void this.dependencies.appendDebugLog?.(
           `novel tts kokoro child stdout ${String(chunk).slice(0, 200)}`
@@ -274,7 +262,6 @@ export class NovelTtsKokoroEngine {
         if (message?.type === "ready") {
           if (ready) return;
           ready = true;
-          clearTimeout(readyTimer);
           this.warmChild = child;
           this.childReady = true;
           this.spawning = null;
@@ -298,7 +285,6 @@ export class NovelTtsKokoroEngine {
 
       child.on("error", (error) => {
         if (!ready) {
-          clearTimeout(readyTimer);
           fail(error instanceof Error ? error.message : String(error));
           return;
         }
@@ -308,7 +294,6 @@ export class NovelTtsKokoroEngine {
       child.on("exit", (code, signal) => {
         this.invalidateWarmChild(child);
         if (!ready) {
-          clearTimeout(readyTimer);
           fail(`Kokoro 子进程已退出（code=${code}, signal=${signal || "-"}）。`);
           return;
         }

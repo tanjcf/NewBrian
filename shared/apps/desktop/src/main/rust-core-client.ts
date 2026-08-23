@@ -21,7 +21,6 @@ export interface RustCoreChild {
 
 interface RustCoreClientOptions {
   child: RustCoreChild;
-  defaultTimeoutMs?: number;
 }
 
 type RustCoreRequestInput = Omit<RustCoreRequest, "protocol_version">;
@@ -29,18 +28,15 @@ type RustCoreApprovedRequestInput = Omit<RustCoreRequestInput, "approval_token">
 
 export class RustCoreClient {
   private readonly child: RustCoreChild;
-  private readonly defaultTimeoutMs: number;
   private readonly pending = new Map<string, {
     resolve: (response: RustCoreResponse) => void;
     reject: (error: Error) => void;
-    timer?: NodeJS.Timeout;
   }>();
   private readonly lines;
   private stopped = false;
 
   constructor(options: RustCoreClientOptions) {
     this.child = options.child;
-    this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.lines = createInterface({ input: this.child.stdout });
     this.lines.on("line", (line) => this.acceptLine(line));
     this.child.once("exit", () => this.failAll("BRAIN_CORE_EXITED", "Rust Core exited."));
@@ -53,24 +49,8 @@ export class RustCoreClient {
     if (this.pending.has(request.request_id)) {
       return Promise.reject(new Error(`BRAIN_CORE_DUPLICATE_REQUEST: ${request.request_id}`));
     }
-    const timeoutMs = request.resource_limits.timeout_ms === 0 ? 0 : Math.min(this.defaultTimeoutMs, request.resource_limits.timeout_ms);
     return new Promise((resolve, reject) => {
-      const timer = timeoutMs > 0 ? setTimeout(() => {
-        this.pending.delete(request.request_id);
-        this.writeFrame({
-          protocol_version: RUST_CORE_PROTOCOL_VERSION,
-          request_id: `${request.request_id}:cancel`,
-          project_id: request.project_id,
-          workspace_type: request.workspace_type,
-          operation: "request.cancel",
-          approval_token: request.approval_token,
-          resource_limits: { timeout_ms: 0, max_output_bytes: 1024 },
-          payload: { target_request_id: request.request_id }
-        });
-        reject(new Error(`BRAIN_CORE_TIMEOUT: ${request.request_id}`));
-      }, timeoutMs) : undefined;
-      timer?.unref?.();
-      this.pending.set(request.request_id, { resolve, reject, timer });
+      this.pending.set(request.request_id, { resolve, reject });
       this.writeFrame(request);
     });
   }
@@ -99,6 +79,10 @@ export class RustCoreClient {
     return this.request({ ...input, approval_token: token });
   }
 
+  conversation(input: { request_id: string; project_id: string; workspace_type: string; operation: `conversation.${string}`; payload: Record<string, unknown> }): Promise<RustCoreResponse> {
+    return this.request({ ...input, approval_token: "", resource_limits: { timeout_ms: 0, max_output_bytes: 1_048_576 } });
+  }
+
   async shutdown() {
     if (this.stopped) return;
     this.stopped = true;
@@ -121,14 +105,12 @@ export class RustCoreClient {
     }
     const pending = this.pending.get(response.request_id);
     if (!pending) return;
-    if (pending.timer) clearTimeout(pending.timer);
     this.pending.delete(response.request_id);
     pending.resolve(response);
   }
 
   private failAll(code: string, message: string) {
     for (const pending of this.pending.values()) {
-      if (pending.timer) clearTimeout(pending.timer);
       pending.reject(new Error(`${code}: ${message}`));
     }
     this.pending.clear();

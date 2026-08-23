@@ -10,6 +10,7 @@ import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
 const execFileAsync = promisify(execFile);
 const ffmpeg = process.env.BRAIN_FFMPEG_BINARY || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+const ffprobe = process.env.BRAIN_FFPROBE_BINARY || (process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
 const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9335);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -132,7 +133,19 @@ async function waitForReloadReady() {
   await waitFor(`Boolean(document.querySelector('[data-testid="new-chat-button"]') || document.querySelector('.brain-workspace-trigger') || document.querySelector('.brain-conversation-list'))`, 30_000);
 }
 
-async function openWorkspaceTab(kind, conversationTitle, tabLabel) {
+async function openSceneTab(kind, conversationTitle, tabLabel) {
+  const workspaceLabel = kind === "video" ? "视频制作" : "音乐创作";
+  await evaluate(`(() => {
+    const trigger = document.querySelector('.brain-workspace-trigger');
+    if (trigger && !trigger.getAttribute('aria-expanded')?.includes('true')) trigger.click();
+    return Boolean(trigger);
+  })()`);
+  await waitFor(`Boolean([...document.querySelectorAll('.brain-workspace-menu [role="menuitemradio"]')].find((button) => button.textContent?.includes(${JSON.stringify(workspaceLabel)})))`);
+  await evaluate(`(() => {
+    const button = [...document.querySelectorAll('.brain-workspace-menu [role="menuitemradio"]')].find((item) => item.textContent?.includes(${JSON.stringify(workspaceLabel)}));
+    button?.click();
+    return Boolean(button);
+  })()`);
   await waitFor(`Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${JSON.stringify(conversationTitle)})))`);
   await evaluate(`(() => {
     const button = [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes(${JSON.stringify(conversationTitle)}));
@@ -145,7 +158,66 @@ async function openWorkspaceTab(kind, conversationTitle, tabLabel) {
     button?.click();
     return Boolean(button);
   })()`);
+}
+
+async function openWorkspaceTab(kind, conversationTitle, tabLabel) {
+  await openSceneTab(kind, conversationTitle, tabLabel);
   await waitFor(`Boolean(document.querySelector(${JSON.stringify(kind === "video" ? '[data-testid="brain-video-workspace"]' : '[data-testid="brain-music-workspace"]')}))`);
+}
+
+async function runStoryboardFlow(fileId) {
+  await openSceneTab("video", "视频渲染验收", "分镜");
+  await waitFor(`Boolean(document.querySelector('[data-testid="brain-video-storyboard"]'))`);
+  await evaluate(`(() => {
+    const panel = document.querySelector('[data-testid="brain-video-storyboard"]');
+    if (!panel) return false;
+    const add = [...panel.querySelectorAll('button')].find((button) => button.textContent?.includes('添加镜头'));
+    add?.click();
+    add?.click();
+    return Boolean(add);
+  })()`);
+  await waitFor(`document.querySelectorAll('[data-testid="brain-video-storyboard"] tbody tr').length >= 3`);
+  const configured = await evaluate(`((fileId) => {
+    const rows = [...document.querySelectorAll('[data-testid="brain-video-storyboard"] tbody tr')];
+    rows.slice(0, 3).forEach((row, index) => {
+      const shot = row.querySelector('td:nth-child(1) input');
+      const visual = row.querySelector('td:nth-child(2) input');
+      const duration = row.querySelector('td:nth-child(3) input');
+      const asset = row.querySelector('td:nth-child(4) select');
+      if (shot instanceof HTMLInputElement) {
+        shot.value = String(index + 1);
+        shot.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (visual instanceof HTMLInputElement) {
+        visual.value = \`镜头 \${index + 1}\`;
+        visual.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (duration instanceof HTMLInputElement) {
+        duration.value = '500';
+        duration.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (asset instanceof HTMLSelectElement) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+        setter?.call(asset, fileId);
+        asset.dispatchEvent(new Event('input', { bubbles: true }));
+        asset.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    return rows.slice(0, 3).every((row) => row.querySelector('td:nth-child(4) select')?.value === fileId);
+  })(${JSON.stringify(fileId)})`);
+  assert.equal(configured, true, "storyboard rows missing asset selection");
+  await evaluate(`document.querySelector('[data-testid="brain-video-storyboard-push"]')?.click()`);
+  await waitFor(`document.querySelector('[data-testid="brain-video-storyboard"]')?.textContent?.includes('3 个镜头')`);
+  await openSceneTab("video", "视频渲染验收", "时间线");
+  await waitFor(`document.querySelectorAll('.brain-video-clip').length >= 3`);
+  const storyboard = await evaluate(`(() => ({
+    clipCount: document.querySelectorAll('.brain-video-clip').length,
+    timelineMeta: document.querySelector('[data-testid="brain-video-timeline-meta"]')?.textContent || '',
+    status: document.querySelector('[data-testid="brain-video-storyboard"]')?.textContent || ''
+  }))()`);
+  assert.ok(storyboard.clipCount >= 3, JSON.stringify(storyboard));
+  assert.match(storyboard.timelineMeta, /2 秒|1 秒|秒/);
+  return storyboard;
 }
 
 async function runVideoFlow() {
@@ -153,7 +225,8 @@ async function runVideoFlow() {
   const seeded = await seedBrainProject("video", fixture);
   assert.equal(seeded?.ok, true, `video seed failed: ${JSON.stringify(seeded)}`);
   await waitForReloadReady();
-  await openWorkspaceTab("video", "视频渲染验收", "视频");
+  const storyboard = await runStoryboardFlow(seeded.fileId);
+  await openWorkspaceTab("video", "视频渲染验收", "项目与素材");
   await waitFor(`document.querySelector('[data-testid="brain-video-status"]')?.textContent?.includes('时间线已保存')`);
   await waitFor(`Boolean(document.querySelector('[data-testid="brain-video-file-select"] option[value]:not([value=""])'))`);
   const selected = await evaluate(`(() => {
@@ -175,6 +248,11 @@ async function runVideoFlow() {
     return true;
   })()`);
   await waitFor(`document.querySelector('[data-testid="brain-video-status"]')?.textContent?.includes('片段已加入') || document.querySelectorAll('.brain-video-clip').length > 0`);
+  await evaluate(`(() => {
+    const button = [...document.querySelectorAll('.brain-resource-panel nav button')].find((item) => item.textContent?.trim() === "导出");
+    button?.click();
+    return Boolean(button);
+  })()`);
   await waitFor(`!document.querySelector('[data-testid="brain-video-render"]')?.disabled`);
   const approval = approveNativeDialog();
   await evaluate(`document.querySelector('[data-testid="brain-video-render"]')?.click()`);
@@ -200,13 +278,12 @@ async function runVideoFlow() {
   assert.equal(observation.previewVisible, true, JSON.stringify(observation));
   assert.equal(observation.previewReady, true, JSON.stringify(observation));
   assert.match(observation.status, /视频渲染完成/);
-  assert.match(observation.timeline, /SUCCEEDED/);
   assert.notEqual(observation.outputFileId, "无产物编号");
   assert.equal(observation.bodyHasError, false);
   const screenshot = await command("Page.captureScreenshot", { format: "png" });
   const screenshotPath = join(tmpdir(), "brain-video-workspace-preview.png");
   await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
-  return { observation, screenshotPath, fixtureRoot: fixture.root };
+  return { observation, screenshotPath, fixtureRoot: fixture.root, storyboard };
 }
 
 async function runMusicFlow() {
@@ -214,7 +291,7 @@ async function runMusicFlow() {
   const seeded = await seedBrainProject("music", fixture);
   assert.equal(seeded?.ok, true, `music seed failed: ${JSON.stringify(seeded)}`);
   await waitForReloadReady();
-  await openWorkspaceTab("music", "音乐渲染验收", "音乐");
+  await openWorkspaceTab("music", "音乐渲染验收", "项目与音频");
   await waitFor(`document.querySelector('[data-testid="brain-music-status"]')?.textContent?.includes('时间线已加载')`);
   await waitFor(`Boolean(document.querySelector('[data-testid="brain-music-file-select"] option[value]:not([value=""])'))`);
   const selected = await evaluate(`(() => {
@@ -236,19 +313,38 @@ async function runMusicFlow() {
     return true;
   })()`);
   await waitFor(`document.querySelector('[data-testid="brain-music-status"]')?.textContent?.includes('音频片段已加入') || document.querySelectorAll('.brain-music-module .brain-video-clip').length > 0`);
+  await evaluate(`(() => {
+    const button = [...document.querySelectorAll('.brain-resource-panel nav button')].find((item) => item.textContent?.trim() === "导出");
+    button?.click();
+    return Boolean(button);
+  })()`);
   const approval = approveNativeDialog();
   await evaluate(`document.querySelector('[data-testid="brain-music-render"]')?.click()`);
   await approval;
   await waitFor(`document.querySelector('[data-testid="brain-music-status"]')?.textContent?.includes('音乐渲染完成')`, 90_000);
   await waitFor(`Boolean(document.querySelector('[data-testid="brain-music-preview-result"]'))`);
+  await waitFor(`Boolean(document.querySelector('[data-testid="brain-music-output-file-id"]')?.textContent?.trim())`, 20_000);
+  await waitFor(`(() => {
+    const audio = document.querySelector('[data-testid="brain-music-audio-preview"]');
+    if (!(audio instanceof HTMLAudioElement)) return false;
+    if (!audio.src) return false;
+    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA || audio.duration > 0) return true;
+    audio.load();
+    return false;
+  })()`, 20_000);
   const observation = await evaluate(`(() => {
     const root = document.querySelector('[data-testid="brain-music-workspace"]');
     const preview = document.querySelector('[data-testid="brain-music-preview"]');
     const result = document.querySelector('[data-testid="brain-music-preview-result"]');
+    const audio = document.querySelector('[data-testid="brain-music-audio-preview"]');
     return {
       visible: Boolean(root && root.getBoundingClientRect().width > 200),
       previewVisible: Boolean(preview && preview.getBoundingClientRect().height > 20),
       previewReady: Boolean(result?.textContent?.includes('混音预览就绪')),
+      outputFileId: document.querySelector('[data-testid="brain-music-output-file-id"]')?.textContent || "",
+      audioReady: Boolean(audio instanceof HTMLAudioElement),
+      audioPlayable: Boolean(audio instanceof HTMLAudioElement && Boolean(audio.src) && (audio.readyState >= HTMLMediaElement.HAVE_METADATA || audio.duration > 0)),
+      mediaInfo: document.querySelector('[data-testid="brain-music-media-info"]')?.textContent || "",
       status: document.querySelector('[data-testid="brain-music-status"]')?.textContent || "",
       renderState: document.querySelector('[data-testid="brain-music-render-state"]')?.textContent || "",
       bodyHasError: document.body.innerText.includes("A JavaScript error occurred in the main process")
@@ -259,11 +355,29 @@ async function runMusicFlow() {
   assert.equal(observation.previewReady, true);
   assert.match(observation.status, /音乐渲染完成/);
   assert.match(observation.renderState, /SUCCEEDED/);
+  assert.notEqual(observation.outputFileId, "无产物编号");
+  assert.equal(observation.audioReady, true, JSON.stringify(observation));
+  assert.equal(observation.audioPlayable, true, JSON.stringify(observation));
+  assert.match(observation.mediaInfo, /Hz/, JSON.stringify(observation));
   assert.equal(observation.bodyHasError, false);
+  const mediaInspect = await evaluate(`(async () => {
+    const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}');
+    const projectId = selection.catalogs?.music?.projectId;
+    const fileId = document.querySelector('[data-testid="brain-music-output-file-id"]')?.textContent?.trim();
+    if (!projectId || !fileId || !window.codecn?.inspectMusicMedia) return null;
+    return window.codecn.inspectMusicMedia({ projectId, sourceFileId: fileId });
+  })()`);
+  assert.ok(mediaInspect?.durationMs > 0, JSON.stringify(mediaInspect));
+  assert.ok(mediaInspect?.sampleRate > 0, JSON.stringify(mediaInspect));
   const screenshot = await command("Page.captureScreenshot", { format: "png" });
   const screenshotPath = join(tmpdir(), "brain-music-workspace-preview.png");
   await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
-  return { observation, screenshotPath, fixtureRoot: fixture.root };
+  return { observation, mediaInspect, screenshotPath, fixtureRoot: fixture.root };
+}
+
+async function probeDuration(path) {
+  const { stdout } = await execFileAsync(ffprobe, ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], { windowsHide: true });
+  return Number(stdout.trim());
 }
 
 try {
@@ -282,6 +396,21 @@ await waitFor(`Boolean(document.querySelector('[data-testid="new-chat-button"]')
 
 const video = await runVideoFlow();
 const music = await runMusicFlow();
-console.log(JSON.stringify({ ok: true, video, music }, null, 2));
+if (video.fixtureRoot) {
+  const outputPath = join(video.fixtureRoot, "renders", "output.mp4");
+  const inputPath = join(video.fixtureRoot, "media", "input.mp4");
+  const outputDuration = await probeDuration(outputPath);
+  const inputDuration = await probeDuration(inputPath);
+  assert.ok(Math.abs(outputDuration - inputDuration) < 0.35, JSON.stringify({ outputDuration, inputDuration }));
+}
+if (music.fixtureRoot) {
+  const outputPath = join(music.fixtureRoot, "renders", "mix-output.wav");
+  const outputDuration = await probeDuration(outputPath);
+  assert.ok(outputDuration > 0.4 && outputDuration < 0.7, JSON.stringify({ outputDuration }));
+  if (music.mediaInspect?.durationMs) {
+    assert.ok(Math.abs(music.mediaInspect.durationMs / 1000 - outputDuration) < 0.2, JSON.stringify({ outputDuration, mediaInspect: music.mediaInspect }));
+  }
+}
+console.log(JSON.stringify({ ok: true, caseId: "BRAIN-MEDIA-WORKSPACE-E2E", video, music }, null, 2));
 socket.close();
 await session.close();

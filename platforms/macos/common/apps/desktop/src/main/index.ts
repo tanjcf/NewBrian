@@ -24,12 +24,17 @@ import type {
   WorkspaceThreadRecord,
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
+import { isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { createLocalRuntime } from "../../../agentd/src/runtime.js";
 import { CodexStorage } from "./codex-storage.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
+import { confirmBrainSceneUiAction } from "./brain-scene-auto-confirm.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
+import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
+import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
+import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
@@ -185,10 +190,24 @@ const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
 const codexStorage = new CodexStorage(workspaceStateRoot);
 const brainWorkspaceStorage = new BrainWorkspaceStorage(workspaceStateRoot);
-const quantSimulationService = new QuantSimulationService(process.env.BRAIN_MARKET_DATA_URL, {
-  load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
-  save: (projectId, stateJson) => brainWorkspaceStorage.saveQuantState(projectId, stateJson)
+const desktopMarketBarsClient = new DesktopMarketBarsClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
 });
+const opsMarketDataUrl = resolveBrainMarketDataUrl();
+const quantSimulationService = new QuantSimulationService(
+  opsMarketDataUrl
+    ? { remoteUrl: opsMarketDataUrl }
+    : { queryRemote: (query) => desktopMarketBarsClient.queryBars(query) },
+  {
+    load: (projectId) => brainWorkspaceStorage.loadQuantState(projectId),
+    save: (projectId, stateJson) => brainWorkspaceStorage.saveQuantState(projectId, stateJson)
+  }
+);
 const marketCalendarService = new ChinaMarketCalendarService({
   remoteUrl: process.env.BRAIN_MARKET_CALENDAR_URL,
   holidays: parseConfiguredMarketHolidays(process.env.BRAIN_MARKET_HOLIDAYS)
@@ -202,6 +221,8 @@ const quantStrategyScheduler = new QuantStrategyScheduler({
 const quantStrategyTaskRunner = new QuantStrategyTaskRunner({ store: brainWorkspaceStorage, simulation: quantSimulationService, resolveOwnerId: resolveBrainLocalOwnerId });
 let quantStrategyTimer: NodeJS.Timeout | null = null;
 let quantStrategyTaskTimer: NodeJS.Timeout | null = null;
+let brainFlowExecution: import("./flow-execution-service.js").FlowExecutionService | undefined;
+let flowSchedulerTimer: NodeJS.Timeout | null = null;
 
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.
@@ -278,7 +299,7 @@ function getRustCoreService() {
     processManager: rustCoreProcessManager,
     createClient: (child) => {
       if (!child.stdin || !child.stdout || !child.stderr) throw new Error("BRAIN_CORE_PIPE_REQUIRED");
-      return new RustCoreClient({ defaultTimeoutMs: 600_000, child: {
+      return new RustCoreClient({ child: {
         stdin: child.stdin, stdout: child.stdout, stderr: child.stderr, exitCode: child.exitCode,
         kill: (signal) => child.kill(signal), once: (event, listener) => child.once(event, listener)
       } });
@@ -2788,19 +2809,14 @@ async function showCondaManualInstallPrompt(
 }
 
 async function canReachPublicUrl(targetUrl: string) {
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), 5_000);
   try {
     const response = await fetch(targetUrl, {
       method: "HEAD",
-      redirect: "follow",
-      signal: controller.signal
+      redirect: "follow"
     });
     return response.ok;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timeoutHandle);
   }
 }
 
@@ -3183,6 +3199,7 @@ function normalizeWorkspace(item: Partial<WorkspaceCatalogItem>): WorkspaceCatal
     id: workspaceId,
     name: item.name?.trim() || basename(resolvedPath) || "workspace",
     path: resolvedPath,
+    brainWorkspaceKey: isBrainWorkspaceKey(item.brainWorkspaceKey) ? item.brainWorkspaceKey : "document",
     threads: Array.isArray(item.threads) ? sortThreads(item.threads.map(normalizeThread)) : [],
     conda: normalizeWorkspaceCondaConfig(workspaceId, item.conda as Partial<WorkspaceCondaConfig> | undefined)
   };
@@ -3548,18 +3565,13 @@ async function testMcpServer(server: McpServerConfig): Promise<McpServerHealth> 
     return { ok: false, code: "missing_url", detail: "缺少 SSE 服务地址。", checkedAt };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4000);
-
   try {
     const response = await fetch(server.url.trim(), {
       method: "GET",
-      signal: controller.signal,
       headers: {
         Accept: "text/event-stream, application/json;q=0.9, */*;q=0.8"
       }
     });
-    clearTimeout(timeout);
     return {
       ok: response.ok,
       code: response.ok ? "http_ok" : `http_${response.status}`,
@@ -3568,10 +3580,9 @@ async function testMcpServer(server: McpServerConfig): Promise<McpServerHealth> 
       running: false
     };
   } catch (error) {
-    clearTimeout(timeout);
     return {
       ok: false,
-      code: error instanceof Error && error.name === "AbortError" ? "timeout" : "network_error",
+      code: "network_error",
       detail: error instanceof Error ? error.message : String(error),
       checkedAt,
       running: false
@@ -3720,27 +3731,11 @@ async function inspectStdioMcpServer(server: McpServerConfig): Promise<McpServer
     let initialized = false;
     let serverInfo = "";
     let protocolVersion = "";
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        child.kill("SIGTERM");
-        resolveResult({
-          ok: false,
-          detail: "协议握手超时。",
-          checkedAt,
-          serverInfo,
-          protocolVersion,
-          tools: []
-        });
-      }
-    }, 5000);
-
     const finish = (payload: McpServerInspection) => {
       if (settled) {
         return;
       }
       settled = true;
-      clearTimeout(timeout);
       child.kill("SIGTERM");
       resolveResult(payload);
     };
@@ -3959,26 +3954,11 @@ async function callStdioMcpTool(
 
     let buffer = Buffer.alloc(0);
     let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        child.kill("SIGTERM");
-        resolveResult({
-          ok: false,
-          toolName,
-          serverName: server.name,
-          detail: "工具调用超时。",
-          content: ""
-        });
-      }
-    }, 8000);
-
     const finish = (payload: McpToolCallResult) => {
       if (settled) {
         return;
       }
       settled = true;
-      clearTimeout(timeout);
       child.kill("SIGTERM");
       resolveResult(payload);
     };
@@ -6742,7 +6722,7 @@ async function updateThreadMetadata(input: {
   return writeWorkspaceCatalog(nextWorkspaces);
 }
 
-async function addWorkspace(input: { name: string; path: string }) {
+async function addWorkspace(input: { name: string; path: string; brainWorkspaceKey?: string }) {
   const catalog = await readWorkspaceCatalog();
   const resolvedPath = resolve(input.path.trim());
 
@@ -6763,6 +6743,7 @@ async function addWorkspace(input: { name: string; path: string }) {
   const nextWorkspace = normalizeWorkspace({
     name: input.name,
     path: resolvedPath,
+    brainWorkspaceKey: input.brainWorkspaceKey as any,
     threads: [
       normalizeThread({
         title: "默认线程",
@@ -6986,7 +6967,7 @@ async function mergeDelegatedAgentResults(input: {
   return { ...merged, snapshot: buildSnapshotWithTimeline(runtime.getSnapshot(), state) };
 }
 
-async function createBlankWorkspace(input: { name: string }) {
+async function createBlankWorkspace(input: { name: string; brainWorkspaceKey?: string }) {
   const name = input.name.trim();
   const folderName = name
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
@@ -6999,7 +6980,7 @@ async function createBlankWorkspace(input: { name: string }) {
 
   const projectPath = join(workspaceStateRoot, "projects", folderName);
   await fs.mkdir(projectPath, { recursive: true });
-  return addWorkspace({ name, path: projectPath });
+  return addWorkspace({ name, path: projectPath, brainWorkspaceKey: input.brainWorkspaceKey });
 }
 
 async function renameWorkspace(input: { workspaceId: string; name: string }) {
@@ -9405,18 +9386,39 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
-  registerBrainWorkspaceIpcHandlers({
+  brainFlowExecution = registerBrainWorkspaceIpcHandlers({
     storage: brainWorkspaceStorage,
+    readWorkspaceCatalog,
     quant: quantSimulationService,
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
     platform: process.platform,
-    confirmGamePreview: async ({ projectName, projectRoot, command }) => {
-      const result = await dialog.showMessageBox(mainWindowRef ?? undefined, {
-        type: "warning", title: "启动游戏试玩", message: `允许启动“${projectName}”的试玩服务吗？`,
-        detail: `项目目录：${projectRoot}\n运行命令：${command}\n\n项目脚本可能执行本地代码。只有在你信任该项目时才启动。`,
-        buttons: ["启动试玩", "取消"], defaultId: 1, cancelId: 1, noLink: true
-      });
+    openSoftwareTerminal: async ({ projectRoot }) => {
+      const previous = terminalSession.process;
+      if (previous && terminalSession.isRunning) {
+        await new Promise<void>((resolveExit) => {
+          previous.once("exit", () => resolveExit());
+          previous.kill();
+        });
+      }
+      terminalSession.cwd = projectRoot;
+      terminalSession.lines = [];
+      ensureTerminalSession();
+      return { ok: true };
+    },
+    confirmGamePreview: async ({ projectName, command }) =>
+      confirmBrainSceneUiAction({
+        kind: "game_preview",
+        summary: `${projectName} · ${command}`
+      }),
+    confirmSoftwareTask: async ({ projectId, script }) =>
+      confirmBrainSceneUiAction({
+        kind: "software_task",
+        projectId,
+        summary: `${script.label} · ${script.executable} ${script.args.join(" ")}`
+      }),
+    confirmFlowApproval: async ({ projectId, nodeId }) => {
+      const result = await dialog.showMessageBox(mainWindowRef ?? undefined, { type: "warning", title: "Flow 人工审批", message: `允许项目 ${projectId} 的 Flow 继续执行吗？`, detail: `审批节点：${nodeId}\n\n批准后仅会执行主进程注册的受限工具。`, buttons: ["批准", "拒绝"], defaultId: 1, cancelId: 1, noLink: true });
       return result.response === 0;
     },
     resolveOwnerId: resolveBrainLocalOwnerId,
@@ -10547,6 +10549,17 @@ app.whenReady().then(async () => {
   void quantStrategyTaskRunner.tick();
   quantStrategyTaskTimer = setInterval(() => { void quantStrategyTaskRunner.tick(); }, 15_000);
   quantStrategyTaskTimer.unref();
+  if (brainFlowExecution) {
+    const flowScheduler = new FlowScheduler({
+      store: { listEnabled: (ownerId) => brainWorkspaceStorage.listEnabledFlowSchedules(ownerId), claim: async (scheduleId, occurrence) => brainWorkspaceStorage.claimFlowScheduleOccurrence({ ownerId: await resolveBrainLocalOwnerId(), scheduleId, occurrence }), fail: async (scheduleId, occurrence, errorCode) => brainWorkspaceStorage.completeFlowScheduleOccurrence(await resolveBrainLocalOwnerId(), scheduleId, occurrence, errorCode), complete: async (scheduleId, occurrence) => brainWorkspaceStorage.completeFlowScheduleOccurrence(await resolveBrainLocalOwnerId(), scheduleId, occurrence) },
+      resolveOwnerId: resolveBrainLocalOwnerId,
+      getFlow: (ownerId, flowId) => brainWorkspaceStorage.getFlow(ownerId, flowId),
+      execute: async (ownerId, flow) => { await brainFlowExecution!.start(ownerId, { flowId: flow.id }); }
+    });
+    void flowScheduler.tick();
+    flowSchedulerTimer = setInterval(() => { void flowScheduler.tick(); }, 60_000);
+    flowSchedulerTimer.unref();
+  }
   const authStatus = await resolveDesktopAuthStatus();
   if (authStatus.authenticated) {
     void startDesktopBootstrapAfterAuth().catch((error) => {

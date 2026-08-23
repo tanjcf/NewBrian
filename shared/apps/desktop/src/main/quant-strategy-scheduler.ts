@@ -23,6 +23,18 @@ export interface QuantStrategyExecution {
   quantity: number;
 }
 
+export interface QuantStrategyRun {
+  scheduleId: string;
+  tradingDate: string;
+  idempotencyKey: string;
+  status: "RUNNING" | "SUCCEEDED" | "FAILED";
+  attempt: number;
+  errorCode: string;
+  errorDetail: string;
+  startedAt: string;
+  finishedAt: string;
+}
+
 export interface QuantStrategyScheduleStore {
   listEnabled(ownerId: string): QuantStrategySchedule[];
   claim(scheduleId: string, tradingDate: string, idempotencyKey: string): boolean;

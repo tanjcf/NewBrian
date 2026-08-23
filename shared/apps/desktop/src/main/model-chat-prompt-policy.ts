@@ -27,8 +27,10 @@ export interface ModelChatPromptInput {
   availableModels?: ModelEconomicsOption[];
   /** Hermes/PAHF-style personalization guidance from project-manager shadow. */
   personalizationGuidance?: string;
-  /** Disk-cached global + project knowledge (automatic sync; inject every turn). */
+  /** Disk-cached global + project knowledge (manual sync; inject every turn from local cache). */
   localKnowledgeText?: string;
+  /** Current scene capability knowledge retrieved for this turn. */
+  sceneKnowledgeText?: string;
   /** Repo-root Project OS (CODECN.md / CLAUDE.md / AGENTS.md). */
   projectOs?: LoadedProjectOs | string;
 }
@@ -148,9 +150,12 @@ export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
     buildPersonalizationInstruction(input.loadedSkills, input.personalizationGuidance),
     input.localKnowledgeText?.trim()
       ? [
-          "User knowledge space (local cache; global + current project; already synced automatically across devices):",
+          "User knowledge space (local cache; global + current project; sync manually from Settings when needed):",
           input.localKnowledgeText.trim()
         ].join("\n")
+      : "",
+    input.sceneKnowledgeText?.trim()
+      ? ["Current scene capability knowledge (retrieved for this turn):", input.sceneKnowledgeText.trim()].join("\n")
       : "",
     buildSkillInstruction(input.loadedSkills)
   ].filter(Boolean).join("\n\n");

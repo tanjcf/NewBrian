@@ -14,6 +14,7 @@ test("readGrowthEnabledFromCapabilities defaults true and respects fleet flag", 
 test("GrowthControlPlaneService runs two-auto-node demo against mock fetch", async () => {
   const calls: Array<{ method: string; url: string; body?: string }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
+    assert.equal(init?.signal, undefined);
     const url = String(input);
     const method = String(init?.method || "GET");
     const body = typeof init?.body === "string" ? init.body : undefined;

@@ -136,3 +136,25 @@ test("hides subagent threads from project/chat catalogs and falls back to parent
     "project-1"
   );
 });
+
+test("defaults unbound catalog items to document and filters by scene", () => {
+  const sceneCatalog = [
+    workspace({ id: "doc-1", name: "Doc", brainWorkspaceKey: undefined, threads: [{ id: "t1", title: "A", summary: "", scope: "project", updatedAt: "2026-07-20T00:00:00.000Z" }] }),
+    workspace({ id: "quant-1", name: "Quant", brainWorkspaceKey: "quant", threads: [{ id: "t2", title: "B", summary: "", scope: "project", updatedAt: "2026-07-22T00:00:00.000Z" }] }),
+    workspace({ id: "game-1", name: "Game", brainWorkspaceKey: "game", threads: [{ id: "t3", title: "C", summary: "", scope: "project", updatedAt: "2026-07-21T00:00:00.000Z" }] })
+  ];
+
+  assert.equal(visibility.resolveCatalogBrainWorkspaceKey(sceneCatalog[0]), "document");
+  assert.deepEqual(
+    visibility.filterWorkspaceCatalogByScene(sceneCatalog, "document").map((item) => item.id),
+    ["doc-1"]
+  );
+  assert.deepEqual(
+    visibility.filterWorkspaceCatalogByScene(sceneCatalog, "quant").map((item) => item.id),
+    ["quant-1"]
+  );
+  assert.deepEqual(
+    visibility.crossSceneRecentProjects(sceneCatalog, "document").map((item) => item.id),
+    ["quant-1", "game-1"]
+  );
+});

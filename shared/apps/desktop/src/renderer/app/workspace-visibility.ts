@@ -1,5 +1,7 @@
 import {
   INTERNAL_CHAT_WORKSPACE_ID,
+  isBrainWorkspaceKey,
+  type BrainWorkspaceKey,
   type SearchResultSpec,
   type WorkspaceCatalogItem
 } from "@codex-forge/protocol";
@@ -16,6 +18,39 @@ export function normalizeWorkspaceCatalog(value: unknown): WorkspaceCatalogItem[
     }
   }
   return [];
+}
+
+export function resolveCatalogBrainWorkspaceKey(
+  workspace: Pick<WorkspaceCatalogItem, "brainWorkspaceKey"> | { brainWorkspaceKey?: unknown } | null | undefined
+): BrainWorkspaceKey {
+  return isBrainWorkspaceKey(workspace?.brainWorkspaceKey) ? workspace.brainWorkspaceKey : "document";
+}
+
+export function filterWorkspaceCatalogByScene(
+  workspaces: readonly WorkspaceCatalogItem[],
+  sceneKey: BrainWorkspaceKey
+): WorkspaceCatalogItem[] {
+  return workspaces.filter((workspace) => resolveCatalogBrainWorkspaceKey(workspace) === sceneKey);
+}
+
+export function catalogWorkspaceRecencyMs(workspace: Pick<WorkspaceCatalogItem, "threads">) {
+  let latest = 0;
+  for (const thread of workspace.threads ?? []) {
+    const at = Date.parse(String(thread.updatedAt || ""));
+    if (Number.isFinite(at) && at > latest) latest = at;
+  }
+  return latest;
+}
+
+export function crossSceneRecentProjects(
+  workspaces: readonly WorkspaceCatalogItem[],
+  currentSceneKey: BrainWorkspaceKey,
+  limit = 5
+): WorkspaceCatalogItem[] {
+  return [...workspaces]
+    .filter((workspace) => isProjectVisible(workspace) && resolveCatalogBrainWorkspaceKey(workspace) !== currentSceneKey)
+    .sort((left, right) => catalogWorkspaceRecencyMs(right) - catalogWorkspaceRecencyMs(left) || left.name.localeCompare(right.name))
+    .slice(0, limit);
 }
 
 export function isProjectVisible(workspace: Pick<WorkspaceCatalogItem, "id">) {

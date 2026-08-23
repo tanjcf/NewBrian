@@ -2,7 +2,11 @@
   "name": "@codecn-ubuntu/desktop",
   "version": "0.1.10",
   "description": "codeCN desktop coding agent for Ubuntu Linux",
-  "author": "codeCN",
+  "author": {
+    "name": "codeCN",
+    "email": "opensource@codecn.local"
+  },
+  "homepage": "https://codecn.local",
   "private": true,
   "type": "module",
   "scripts": {
@@ -76,12 +80,13 @@
     "extraResources": [
       { "from": "build/package-resources/codecn.config.json", "to": "codecn.config.json" },
       { "from": "build/package-resources/codecn.features.json", "to": "codecn.features.json" },
-      { "from": "../../../codecn.bootstrap.json", "to": "codecn.bootstrap.json" },
+      { "from": "../../codecn.bootstrap.json", "to": "codecn.bootstrap.json" },
       { "from": "src/renderer/icon.ico", "to": "codecn.ico" },
       { "from": "document-worker.js", "to": "document-worker.js" },
       { "from": "build/rust-core/brain-core", "to": "brain-core/brain-core" }
     ],
     "linux": {
+      "maintainer": "codeCN <opensource@codecn.local>",
       "category": "Development",
       "executableName": "codecn",
       "synopsis": "Local-first coding agent workbench",

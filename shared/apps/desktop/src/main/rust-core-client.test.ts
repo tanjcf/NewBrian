@@ -42,14 +42,14 @@ test("pairs a validated response with its request id", async () => {
   const child = fakeChild();
   let written = "";
   child.stdin.on("data", (chunk) => { written += chunk.toString(); });
-  const client = new RustCoreClient({ child, defaultTimeoutMs: 1000 });
+  const client = new RustCoreClient({ child });
   const pending = client.request({
     request_id: "req-1",
     project_id: "project-1",
     workspace_type: "software",
     operation: "health.check",
     approval_token: "",
-    resource_limits: { timeout_ms: 1000, max_output_bytes: 1024 },
+    resource_limits: { timeout_ms: 0, max_output_bytes: 1024 },
     payload: {}
   });
   child.stdout.write(`${JSON.stringify({
@@ -65,29 +65,11 @@ test("pairs a validated response with its request id", async () => {
   await client.shutdown();
 });
 
-test("times out a request and emits a cancellation frame", async () => {
-  const child = fakeChild();
-  let written = "";
-  child.stdin.on("data", (chunk) => { written += chunk.toString(); });
-  const client = new RustCoreClient({ child, defaultTimeoutMs: 5 });
-  await assert.rejects(client.request({
-    request_id: "req-timeout",
-    project_id: "project-1",
-    workspace_type: "documents",
-    operation: "file.read",
-    approval_token: "",
-    resource_limits: { timeout_ms: 5, max_output_bytes: 1024 },
-    payload: { path: "report.pdf" }
-  }), /BRAIN_CORE_TIMEOUT/u);
-  assert.match(written, /"operation":"request.cancel"/u);
-  await client.shutdown();
-});
-
 test("keeps an explicitly unbounded request pending until an event arrives", async () => {
   const child = fakeChild();
   let written = "";
   child.stdin.on("data", (chunk) => { written += chunk.toString(); });
-  const client = new RustCoreClient({ child, defaultTimeoutMs: 5 });
+  const client = new RustCoreClient({ child });
   const pending = client.request({ request_id: "req-no-deadline", project_id: "project-1", workspace_type: "video", operation: "process.run", approval_token: "approved", resource_limits: { timeout_ms: 0, max_output_bytes: 1024 }, payload: {} });
   await new Promise((resolve) => setTimeout(resolve, 25));
   assert.equal(written.includes('"operation":"request.cancel"'), false);
@@ -104,13 +86,13 @@ test("generates and consumes a main-process approval token for one mutating requ
       if (line) frames.push(JSON.parse(line) as Record<string, unknown>);
     }
   });
-  const client = new RustCoreClient({ child, defaultTimeoutMs: 1000 });
+  const client = new RustCoreClient({ child });
   const pending = client.requestWithApproval({
     request_id: "req-write",
     project_id: "project-1",
     workspace_type: "software",
     operation: "file.write",
-    resource_limits: { timeout_ms: 1000, max_output_bytes: 1024 },
+    resource_limits: { timeout_ms: 0, max_output_bytes: 1024 },
     payload: { path: "report.txt", data_base64: "cmVwb3J0" }
   });
   await new Promise((resolve) => setImmediate(resolve));
@@ -142,13 +124,13 @@ test("does not issue a mutating request when approval registration fails", async
       if (line) frames.push(JSON.parse(line) as Record<string, unknown>);
     }
   });
-  const client = new RustCoreClient({ child, defaultTimeoutMs: 1000 });
+  const client = new RustCoreClient({ child });
   const pending = client.requestWithApproval({
     request_id: "req-denied",
     project_id: "project-1",
     workspace_type: "documents",
     operation: "file.write",
-    resource_limits: { timeout_ms: 1000, max_output_bytes: 1024 },
+    resource_limits: { timeout_ms: 0, max_output_bytes: 1024 },
     payload: { path: "report.txt", data_base64: "cmVwb3J0" }
   });
   await new Promise((resolve) => setImmediate(resolve));

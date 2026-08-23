@@ -410,6 +410,7 @@ export async function syncUserKnowledgeOnce(input: {
 type ScheduledSync = {
   timer: ReturnType<typeof setTimeout> | null;
   inFlight: Promise<UserKnowledgeSyncResult> | null;
+  retryNotBefore: number;
 };
 
 const scheduledByRoot = new Map<string, ScheduledSync>();
@@ -426,7 +427,10 @@ export function scheduleUserKnowledgeSync(input: {
   onError?: (error: unknown) => void;
 }): void {
   const key = input.paths.userCodecnRoot;
-  const existing = scheduledByRoot.get(key) ?? { timer: null, inFlight: null };
+  const existing = scheduledByRoot.get(key) ?? { timer: null, inFlight: null, retryNotBefore: 0 };
+  // A background sync must never fan out concurrent requests or retry a failing
+  // gateway on every state update. Chat and rendering remain independent.
+  if (existing.inFlight || existing.retryNotBefore > Date.now()) return;
   if (existing.timer) clearTimeout(existing.timer);
   existing.timer = setTimeout(() => {
     existing.timer = null;
@@ -435,9 +439,14 @@ export function scheduleUserKnowledgeSync(input: {
       paths: input.paths,
       forceFullPull: input.forceFullPull
     }).then((result) => {
+      existing.retryNotBefore = 0;
       input.onResult?.(result);
       return result;
     }).catch(async (error) => {
+      // Conflict storms previously retried every 30s and kept the main process busy
+      // while the gateway generation stayed stuck. Back off longer after a failed cycle.
+      const message = error instanceof Error ? error.message : String(error);
+      existing.retryNotBefore = Date.now() + (message.includes("exhausted conflict retries") ? 300_000 : 60_000);
       input.onError?.(error);
       try {
         const state = await readKnowledgeSyncState(input.paths.userCodecnRoot);

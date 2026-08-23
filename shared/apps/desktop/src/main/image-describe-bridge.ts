@@ -41,7 +41,7 @@ export async function describeImageWithRemoteVision(
         "Content-Type": "application/json",
         Authorization: `Bearer ${input.bearerToken}`
       },
-      signal: input.signal ?? AbortSignal.timeout(180_000),
+      signal: input.signal,
       body: JSON.stringify({
         model,
         stream: false,
@@ -127,7 +127,7 @@ export async function describeImageWithLocalVision(
           images: [image]
         }]
       }),
-      signal: input.signal ?? AbortSignal.timeout(180_000)
+      signal: input.signal
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

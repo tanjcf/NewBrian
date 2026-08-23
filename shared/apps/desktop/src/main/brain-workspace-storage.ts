@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -8,10 +8,11 @@ import {
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
 import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
-import type { ChinaExchange, QuantStrategyExecution, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
+import type { ChinaExchange, QuantStrategyExecution, QuantStrategyRun, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
 import type { BrainVideoClip, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { BrainMusicClip, BrainMusicTimeline } from "@codex-forge/protocol/music-types";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
+import type { FlowAuditEvent, FlowDefinition } from "./flow-runtime.ts";
 import {
   DEFAULT_BRAIN_RETENTION,
   selectRetentionVictims,
@@ -85,15 +86,35 @@ export interface BrainFileRecord {
 
 export interface BrainTaskRecord {
   id: string; projectId: string; conversationId: string; workspaceKey: BrainWorkspaceKey;
-  taskType: string; status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+  taskType: string; status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
   progress: number; requestId: string; idempotencyKey: string; attempt: number; maxAttempts: number;
   resourceLimitsJson: string; resultJson: string;
   errorCode: string; errorDetail: string; startedAt: string; finishedAt: string; heartbeatAt: string;
 }
 
+export interface BrainFlowRecord { id: string; projectId: string; name: string; definition: FlowDefinition; createdAt: string; updatedAt: string }
+export interface BrainFlowRunRecord { id: string; flowId: string; projectId: string; status: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "DECLINED" | "INTERRUPTED"; currentNodeId: string; values: Record<string, unknown>; audit: FlowAuditEvent[]; errorCode: string; startedAt: string; updatedAt: string; finishedAt: string }
+export interface BrainFlowScheduleRecord { id: string; ownerId: string; projectId: string; flowId: string; timezone: string; runAt: string; enabled: boolean; createdAt: string; updatedAt: string }
+
 export interface BrainArtifactRecord {
-  id: string; projectId: string; taskId: string; sourceFileId: string; artifactType: string;
-  storageKey: string; contentHash: string; validationStatus: string; createdAt: string;
+  id: string; projectId: string; taskId: string; sourceFileId: string; sourceWorkspaceKey: BrainWorkspaceKey | "";
+  artifactType: string; storageKey: string; contentHash: string; validationStatus: string; createdAt: string;
+}
+
+export interface BrainEngineRuntimeRecord {
+  ownerId: string; engineId: string; executable: string; source: "system" | "managed"; version: string;
+  installedAt: string; updatedAt: string;
+}
+
+export interface BrainWorkspaceSectionRecord {
+  schemaVersion: 1;
+  projectId: string;
+  workspaceKey: BrainWorkspaceKey;
+  sectionKey: string;
+  content: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export class BrainStorageError extends Error {
@@ -106,7 +127,8 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 10;
+const latestMigrationVersion = 18;
+const maxWorkspaceSectionBytes = 1024 * 1024;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
 
@@ -430,6 +452,74 @@ CREATE TABLE IF NOT EXISTS brain_music_clip (id TEXT PRIMARY KEY, project_id TEX
 CREATE INDEX IF NOT EXISTS idx_brain_music_clip_project_start ON brain_music_clip(project_id, start_ms, id);` }
 function migrationNineSql() { return `CREATE TABLE IF NOT EXISTS brain_dataset (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, name TEXT NOT NULL, columns_json TEXT NOT NULL, row_count INTEGER NOT NULL, source_file_id TEXT, content_hash TEXT NOT NULL, updated_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS idx_brain_dataset_project ON brain_dataset(project_id, updated_at);`; }
 function migrationTenSql() { return `CREATE TABLE IF NOT EXISTS brain_data_analysis (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, dataset_id TEXT NOT NULL REFERENCES brain_dataset(id) ON DELETE CASCADE, operation TEXT NOT NULL, input_hash TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(dataset_id, operation, input_hash)); CREATE INDEX IF NOT EXISTS idx_brain_data_analysis_dataset ON brain_data_analysis(dataset_id, created_at DESC);`; }
+function migrationElevenSql() { return `ALTER TABLE brain_dataset ADD COLUMN source_sheet TEXT;`; }
+function migrationTwelveSql() { return `
+CREATE TABLE brain_flow (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, name TEXT NOT NULL, definition_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX idx_brain_flow_project_updated ON brain_flow(project_id, updated_at DESC);
+CREATE TABLE brain_flow_run (id TEXT PRIMARY KEY, flow_id TEXT NOT NULL REFERENCES brain_flow(id) ON DELETE CASCADE, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('QUEUED','RUNNING','WAITING_APPROVAL','SUCCEEDED','FAILED','DECLINED','INTERRUPTED')), current_node_id TEXT NOT NULL DEFAULT '', values_json TEXT NOT NULL DEFAULT '{}', audit_json TEXT NOT NULL DEFAULT '[]', error_code TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL, updated_at TEXT NOT NULL, finished_at TEXT NOT NULL DEFAULT '');
+CREATE INDEX idx_brain_flow_run_project_updated ON brain_flow_run(project_id, updated_at DESC);
+`; }
+function migrationThirteenSql() { return `
+CREATE TABLE brain_flow_schedule (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE, flow_id TEXT NOT NULL REFERENCES brain_flow(id) ON DELETE CASCADE, timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai', run_at TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(project_id, flow_id, timezone, run_at));
+CREATE TABLE brain_flow_schedule_occurrence (schedule_id TEXT NOT NULL REFERENCES brain_flow_schedule(id) ON DELETE CASCADE, occurrence TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('RUNNING','SUCCEEDED','FAILED')), error_code TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL, finished_at TEXT NOT NULL DEFAULT '', PRIMARY KEY(schedule_id, occurrence));
+CREATE INDEX idx_brain_flow_schedule_project ON brain_flow_schedule(project_id, enabled, run_at);
+`; }
+
+function migrationFourteenSql() { return `
+UPDATE brain_project
+SET primary_workspace_key = 'document'
+WHERE primary_workspace_key IS NULL
+   OR TRIM(primary_workspace_key) = ''
+   OR primary_workspace_key NOT IN (SELECT workspace_key FROM brain_workspace);
+UPDATE brain_conversation
+SET workspace_snapshot = COALESCE(
+  (SELECT project.primary_workspace_key FROM brain_project project WHERE project.id = brain_conversation.project_id),
+  'document'
+);
+INSERT OR IGNORE INTO brain_project_workspace(project_id, workspace_key, enabled)
+SELECT id, primary_workspace_key, 1 FROM brain_project;
+`; }
+
+function migrationFifteenSql() { return `
+UPDATE brain_task
+SET status = 'FAILED',
+    error_code = CASE WHEN error_code = '' THEN 'BRAIN_LEGACY_TIMEOUT_MIGRATED' ELSE error_code END,
+    error_detail = CASE WHEN error_detail = '' THEN 'Legacy timeout state migrated to FAILED; current BRAIN execution has no fixed deadline.' ELSE error_detail END
+WHERE status = 'TIMED_OUT';
+`; }
+
+function migrationSixteenSql() { return `
+CREATE TABLE brain_workspace_section (
+  project_id TEXT NOT NULL REFERENCES brain_project(id) ON DELETE CASCADE,
+  workspace_key TEXT NOT NULL REFERENCES brain_workspace(workspace_key),
+  section_key TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  revision_no INTEGER NOT NULL DEFAULT 1 CHECK(revision_no > 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, workspace_key, section_key)
+);
+CREATE INDEX idx_brain_workspace_section_project_updated
+  ON brain_workspace_section(project_id, workspace_key, updated_at DESC);
+`; }
+
+function migrationSeventeenSql() { return `
+ALTER TABLE brain_artifact ADD COLUMN source_workspace_key TEXT NOT NULL DEFAULT '';
+`; }
+
+function migrationEighteenSql() { return `
+CREATE TABLE brain_engine_runtime (
+  owner_id TEXT NOT NULL,
+  engine_id TEXT NOT NULL,
+  executable TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('system', 'managed')),
+  version TEXT NOT NULL DEFAULT '',
+  installed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(owner_id, engine_id)
+);
+CREATE INDEX idx_brain_engine_runtime_owner ON brain_engine_runtime(owner_id, updated_at DESC);
+`; }
 
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
@@ -509,11 +599,22 @@ function mapTask(row: Record<string, unknown>): BrainTaskRecord {
 }
 
 function mapArtifact(row: Record<string, unknown>): BrainArtifactRecord {
+  const sourceWorkspaceKey = String(row.source_workspace_key || "").trim();
   return {
     id: String(row.id), projectId: String(row.project_id), taskId: String(row.task_id || ""),
-    sourceFileId: String(row.source_file_id || ""), artifactType: String(row.artifact_type),
-    storageKey: String(row.storage_key), contentHash: String(row.content_hash),
+    sourceFileId: String(row.source_file_id || ""),
+    sourceWorkspaceKey: sourceWorkspaceKey ? requireWorkspaceKey(sourceWorkspaceKey) : "",
+    artifactType: String(row.artifact_type), storageKey: String(row.storage_key), contentHash: String(row.content_hash),
     validationStatus: String(row.validation_status), createdAt: String(row.created_at)
+  };
+}
+
+function mapEngineRuntime(row: Record<string, unknown>): BrainEngineRuntimeRecord {
+  const source = String(row.source);
+  if (source !== "system" && source !== "managed") throw new BrainStorageError("BRAIN_INPUT_INVALID", "engine runtime source is invalid");
+  return {
+    ownerId: String(row.owner_id), engineId: String(row.engine_id), executable: String(row.executable), source,
+    version: String(row.version || ""), installedAt: String(row.installed_at), updatedAt: String(row.updated_at)
   };
 }
 
@@ -558,11 +659,74 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 8, "Persist music timelines and clips", migrationEightSql());
       applyMigration(this.database, 9, "Persist data decision datasets", migrationNineSql());
       applyMigration(this.database, 10, "Persist reproducible data analysis artifacts", migrationTenSql());
+      applyMigration(this.database, 11, "Persist selected XLSX worksheet", migrationElevenSql());
+      applyMigration(this.database, 12, "Persist auditable Flow definitions and checkpoints", migrationTwelveSql());
+      applyMigration(this.database, 13, "Persist Flow schedules and idempotent occurrences", migrationThirteenSql());
+      applyMigration(this.database, 14, "Bind legacy projects and conversations to document workspace", migrationFourteenSql());
+      applyMigration(this.database, 15, "Migrate legacy timeout task states to failed", migrationFifteenSql());
+      applyMigration(this.database, 16, "Persist project-scoped workspace section documents", migrationSixteenSql());
+      applyMigration(this.database, 17, "Track artifact source workspace for cross-scene lineage", migrationSeventeenSql());
+      applyMigration(this.database, 18, "Persist managed and discovered engine runtimes", migrationEighteenSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
       throw error;
     }
+  }
+
+  getWorkspaceSection(input: { ownerId: string; projectId: string; workspaceKey: string; sectionKey: string }): BrainWorkspaceSectionRecord {
+    const project = this.getProject(input.ownerId, input.projectId);
+    const workspaceKey = requireWorkspaceKey(input.workspaceKey);
+    const sectionKey = this.requireSectionKey(input.sectionKey);
+    if (project.primaryWorkspaceKey !== workspaceKey) {
+      throw new BrainStorageError("BRAIN_WORKSPACE_SECTION_MISMATCH", "Section workspace does not match its project");
+    }
+    const row = this.database.prepare("SELECT * FROM brain_workspace_section WHERE project_id = ? AND workspace_key = ? AND section_key = ?")
+      .get(project.id, workspaceKey, sectionKey) as Record<string, unknown> | undefined;
+    if (!row) return { schemaVersion: 1, projectId: project.id, workspaceKey, sectionKey, content: "", revision: 0, createdAt: "", updatedAt: "" };
+    return {
+      schemaVersion: 1, projectId: String(row.project_id), workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
+      sectionKey: String(row.section_key), content: String(row.content), revision: Number(row.revision_no),
+      createdAt: String(row.created_at), updatedAt: String(row.updated_at)
+    };
+  }
+
+  saveWorkspaceSection(input: { ownerId: string; projectId: string; workspaceKey: string; sectionKey: string; content: string; expectedRevision: number }): BrainWorkspaceSectionRecord {
+    const current = this.getWorkspaceSection(input);
+    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 0) {
+      throw new BrainStorageError("BRAIN_WORKSPACE_SECTION_INVALID", "Expected revision must be a non-negative integer");
+    }
+    if (current.revision !== input.expectedRevision) {
+      throw new BrainStorageError("BRAIN_WORKSPACE_SECTION_CONFLICT", "Section was changed by another editor");
+    }
+    if (typeof input.content !== "string" || Buffer.byteLength(input.content, "utf8") > maxWorkspaceSectionBytes) {
+      throw new BrainStorageError("BRAIN_WORKSPACE_SECTION_TOO_LARGE", "Section content exceeds the local editor limit");
+    }
+    const timestamp = nowIso();
+    const nextRevision = current.revision + 1;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const latest = this.getWorkspaceSection(input);
+      if (latest.revision !== input.expectedRevision) {
+        throw new BrainStorageError("BRAIN_WORKSPACE_SECTION_CONFLICT", "Section was changed by another editor");
+      }
+      this.database.prepare(`INSERT INTO brain_workspace_section(project_id, workspace_key, section_key, content, revision_no, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, workspace_key, section_key) DO UPDATE SET content=excluded.content, revision_no=excluded.revision_no, updated_at=excluded.updated_at`)
+        .run(input.projectId, current.workspaceKey, current.sectionKey, input.content, nextRevision, current.createdAt || timestamp, timestamp);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.getWorkspaceSection(input);
+  }
+
+  private requireSectionKey(value: string) {
+    const sectionKey = requireText(value, "sectionKey");
+    const normalized = sectionKey.toLowerCase().replace(/[^a-z0-9_-]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 64);
+    if (!normalized || !/^[a-z]/u.test(normalized)) return "default";
+    return normalized;
   }
 
   getVideoTimeline(ownerId: string, projectId: string): BrainVideoTimeline | null {
@@ -591,8 +755,20 @@ export class BrainWorkspaceStorage {
   addVideoClip(input: { ownerId: string; projectId: string; clip: BrainVideoClip }): BrainVideoTimeline {
     this.getProject(input.ownerId, input.projectId);
     const clip = input.clip;
-    if (!/^video$|^audio$|^subtitle$/.test(clip.trackType) || !clip.sourceFileId.trim() || !Number.isInteger(clip.startMs) || clip.startMs < 0 || !Number.isInteger(clip.durationMs) || clip.durationMs <= 0 || !Number.isInteger(clip.sourceInMs) || clip.sourceInMs < 0 || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) throw new BrainStorageError("BRAIN_VIDEO_CLIP_INVALID", "Video clip values are invalid");
+    const needsSource = clip.trackType !== "subtitle";
+    if (!/^video$|^audio$|^subtitle$/.test(clip.trackType) || (needsSource && !clip.sourceFileId.trim()) || !Number.isInteger(clip.startMs) || clip.startMs < 0 || !Number.isInteger(clip.durationMs) || clip.durationMs <= 0 || !Number.isInteger(clip.sourceInMs) || clip.sourceInMs < 0 || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) throw new BrainStorageError("BRAIN_VIDEO_CLIP_INVALID", "Video clip values are invalid");
     this.database.prepare("INSERT INTO brain_video_clip(id, project_id, track_type, source_file_id, start_ms, duration_ms, source_in_ms, volume, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(clip.id, input.projectId, clip.trackType, clip.sourceFileId.trim(), clip.startMs, clip.durationMs, clip.sourceInMs, clip.volume, clip.text || "");
+    return this.getVideoTimeline(input.ownerId, input.projectId)!;
+  }
+
+  replaceVideoSubtitleClips(input: { ownerId: string; projectId: string; clips: BrainVideoClip[] }): BrainVideoTimeline {
+    this.getProject(input.ownerId, input.projectId);
+    this.database.prepare("DELETE FROM brain_video_clip WHERE project_id = ? AND track_type = 'subtitle'").run(input.projectId);
+    for (const clip of input.clips) {
+      if (clip.trackType !== "subtitle") throw new BrainStorageError("BRAIN_VIDEO_CLIP_INVALID", "Only subtitle clips are allowed in replaceVideoSubtitleClips");
+      this.database.prepare("INSERT INTO brain_video_clip(id, project_id, track_type, source_file_id, start_ms, duration_ms, source_in_ms, volume, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(clip.id, input.projectId, clip.trackType, "", clip.startMs, clip.durationMs, 0, 1, clip.text || "");
+    }
+    this.database.prepare("UPDATE brain_video_timeline SET updated_at = ? WHERE project_id = ?").run(nowIso(), input.projectId);
     return this.getVideoTimeline(input.ownerId, input.projectId)!;
   }
 
@@ -624,7 +800,7 @@ export class BrainWorkspaceStorage {
   saveDataset(input: { ownerId: string; dataset: BrainDataset }): BrainDataset {
     const project = this.getProject(input.ownerId, input.dataset.projectId);
     if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
-    this.database.prepare("INSERT INTO brain_dataset(id, project_id, name, columns_json, row_count, source_file_id, content_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, columns_json=excluded.columns_json, row_count=excluded.row_count, source_file_id=excluded.source_file_id, content_hash=excluded.content_hash, updated_at=excluded.updated_at").run(input.dataset.id, input.dataset.projectId, input.dataset.name, JSON.stringify(input.dataset.columns), input.dataset.rowCount, input.dataset.sourceFileId || null, input.dataset.contentHash, input.dataset.updatedAt);
+    this.database.prepare("INSERT INTO brain_dataset(id, project_id, name, columns_json, row_count, source_file_id, source_sheet, content_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, columns_json=excluded.columns_json, row_count=excluded.row_count, source_file_id=excluded.source_file_id, source_sheet=excluded.source_sheet, content_hash=excluded.content_hash, updated_at=excluded.updated_at").run(input.dataset.id, input.dataset.projectId, input.dataset.name, JSON.stringify(input.dataset.columns), input.dataset.rowCount, input.dataset.sourceFileId || null, input.dataset.sourceSheet || null, input.dataset.contentHash, input.dataset.updatedAt);
     return input.dataset;
   }
 
@@ -632,7 +808,7 @@ export class BrainWorkspaceStorage {
     const project = this.getProject(ownerId, projectId);
     if (project.primaryWorkspaceKey !== "data") throw new BrainStorageError("BRAIN_DATA_WORKSPACE_REQUIRED", "Project is not a data workspace");
     const rows = this.database.prepare("SELECT * FROM brain_dataset WHERE project_id = ? ORDER BY updated_at DESC, id").all(projectId) as Record<string, unknown>[];
-    return rows.map((row) => ({ schemaVersion: 1, id: String(row.id), projectId: String(row.project_id), name: String(row.name), columns: JSON.parse(String(row.columns_json)), rowCount: Number(row.row_count), sourceFileId: row.source_file_id ? String(row.source_file_id) : undefined, contentHash: String(row.content_hash), updatedAt: String(row.updated_at) }));
+    return rows.map((row) => ({ schemaVersion: 1, id: String(row.id), projectId: String(row.project_id), name: String(row.name), columns: JSON.parse(String(row.columns_json)), rowCount: Number(row.row_count), sourceFileId: row.source_file_id ? String(row.source_file_id) : undefined, sourceSheet: row.source_sheet ? String(row.source_sheet) : undefined, contentHash: String(row.content_hash), updatedAt: String(row.updated_at) }));
   }
 
   saveDataAnalysis(input: { ownerId: string; projectId: string; datasetId: string; operation: string; inputHash: string; result: unknown; createdAt: string }) {
@@ -745,6 +921,99 @@ export class BrainWorkspaceStorage {
     return (rows as Record<string, unknown>[]).map(mapProject);
   }
 
+  importUnboundCatalog(input: {
+    ownerId: string;
+    workspaces: ReadonlyArray<{
+      id?: string;
+      name?: string;
+      brainWorkspaceKey?: string;
+      threads?: ReadonlyArray<{
+        id?: string;
+        title?: string;
+        updatedAt?: string;
+        archived?: boolean;
+      }>;
+    }>;
+  }): { importedProjects: number; importedConversations: number } {
+    const ownerId = requireText(input.ownerId, "ownerId");
+    const existing = this.listProjects({ ownerId, includeArchived: true });
+    const byLocalId = new Map(existing.filter((project) => project.localWorkspaceId).map((project) => [project.localWorkspaceId, project]));
+    let importedProjects = 0;
+    let importedConversations = 0;
+    for (const workspace of input.workspaces) {
+      const localWorkspaceId = String(workspace.id || "").trim();
+      if (!localWorkspaceId) continue;
+      const workspaceKey = requireWorkspaceKey(
+        typeof workspace.brainWorkspaceKey === "string" && workspace.brainWorkspaceKey.trim()
+          ? workspace.brainWorkspaceKey.trim()
+          : "document"
+      );
+      let project = byLocalId.get(localWorkspaceId);
+      if (!project) {
+        project = this.createProject({
+          ownerId,
+          name: String(workspace.name || "").trim() || "未命名项目",
+          primaryWorkspaceKey: workspaceKey,
+          localWorkspaceId
+        });
+        byLocalId.set(localWorkspaceId, project);
+        importedProjects += 1;
+      } else if (project.primaryWorkspaceKey !== workspaceKey) {
+        if (project.primaryWorkspaceKey === "document" && workspaceKey !== "document") {
+          project = this.setProjectPrimaryWorkspaceKey({ ownerId, projectId: project.id, workspaceKey });
+          byLocalId.set(localWorkspaceId, project);
+        } else {
+          continue;
+        }
+      }
+      const knownIds = new Set(this.listConversations({ ownerId, projectId: project.id, includeArchived: true }).map((item) => item.id));
+      for (const thread of workspace.threads || []) {
+        const threadId = String(thread.id || "").trim();
+        if (!threadId) continue;
+        const conversationId = `conversation_legacy_${threadId}`;
+        if (knownIds.has(conversationId)) continue;
+        this.createConversation({
+          ownerId,
+          projectId: project.id,
+          title: String(thread.title || "").trim() || "对话",
+          workspaceKey,
+          conversationId,
+          status: thread.archived ? "ARCHIVED" : "ACTIVE",
+          lastMessageAt: String(thread.updatedAt || "").trim() || undefined
+        });
+        knownIds.add(conversationId);
+        importedConversations += 1;
+      }
+    }
+    return { importedProjects, importedConversations };
+  }
+
+  setProjectPrimaryWorkspaceKey(input: { ownerId: string; projectId: string; workspaceKey: string }): BrainProjectRecord {
+    const ownerId = requireText(input.ownerId, "ownerId");
+    const projectId = requireText(input.projectId, "projectId");
+    const workspaceKey = requireWorkspaceKey(input.workspaceKey);
+    const current = this.getProject(ownerId, projectId);
+    if (current.primaryWorkspaceKey === workspaceKey) return current;
+    const workspace = this.database.prepare("SELECT enabled FROM brain_workspace WHERE workspace_key = ?").get(workspaceKey) as { enabled: number } | undefined;
+    if (!workspace || Number(workspace.enabled) !== 1) {
+      throw new BrainStorageError("BRAIN_WORKSPACE_DISABLED", `Workspace is disabled: ${workspaceKey}`);
+    }
+    const timestamp = nowIso();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare("UPDATE brain_project SET primary_workspace_key = ?, updated_at = ?, last_opened_at = ? WHERE id = ? AND owner_id = ?")
+        .run(workspaceKey, timestamp, timestamp, projectId, ownerId);
+      this.database.prepare("DELETE FROM brain_project_workspace WHERE project_id = ?").run(projectId);
+      this.database.prepare("INSERT INTO brain_project_workspace(project_id, workspace_key, enabled) VALUES (?, ?, 1)")
+        .run(projectId, workspaceKey);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.getProject(ownerId, projectId);
+  }
+
   updateProject(input: { ownerId: string; projectId: string; name?: string; status?: BrainProjectStatus; localWorkspaceId?: string }): BrainProjectRecord {
     const current = this.getProject(input.ownerId, input.projectId);
     const name = input.name === undefined ? current.name : requireText(input.name, "name");
@@ -768,17 +1037,43 @@ export class BrainWorkspaceStorage {
     `).run(input.projectId, workspaceKey, input.enabled ? 1 : 0);
   }
 
-  createConversation(input: { ownerId: string; projectId: string; title: string; workspaceKey?: string }): BrainConversationRecord {
+  createConversation(input: {
+    ownerId: string;
+    projectId: string;
+    title: string;
+    workspaceKey?: string;
+    conversationId?: string;
+    status?: BrainConversationStatus;
+    lastMessageAt?: string;
+  }): BrainConversationRecord {
     const project = this.getProject(input.ownerId, input.projectId);
     const workspaceKey = requireWorkspaceKey(input.workspaceKey ?? project.primaryWorkspaceKey);
-    const id = `conversation_${randomUUID()}`;
+    if (workspaceKey !== project.primaryWorkspaceKey) {
+      throw new BrainStorageError("BRAIN_CONVERSATION_WORKSPACE_MISMATCH", "Conversation must inherit its project workspace");
+    }
+    const requestedId = input.conversationId?.trim();
+    if (requestedId) {
+      const existing = this.database.prepare("SELECT * FROM brain_conversation WHERE id = ?").get(requestedId) as Record<string, unknown> | undefined;
+      if (existing) {
+        if (String(existing.owner_id) !== project.ownerId) {
+          throw new BrainStorageError("BRAIN_PROJECT_FORBIDDEN", "Conversation belongs to another local owner");
+        }
+        return mapConversation(existing);
+      }
+    }
+    const id = requestedId || `conversation_${randomUUID()}`;
+    const status = input.status ?? "ACTIVE";
+    if (status !== "ACTIVE" && status !== "ARCHIVED") {
+      throw new BrainStorageError("BRAIN_INPUT_INVALID", `Unsupported conversation status: ${status}`);
+    }
     const timestamp = nowIso();
+    const lastMessageAt = input.lastMessageAt?.trim() || timestamp;
     this.database.exec("BEGIN IMMEDIATE");
     try {
       this.database.prepare(`
         INSERT INTO brain_conversation(id, project_id, owner_id, title, workspace_snapshot, status, created_at, updated_at, last_message_at)
-        VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-      `).run(id, project.id, project.ownerId, requireText(input.title, "title"), workspaceKey, timestamp, timestamp, timestamp);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, project.id, project.ownerId, requireText(input.title, "title"), workspaceKey, status, timestamp, timestamp, lastMessageAt);
       this.database.prepare("UPDATE brain_project SET last_conversation_id = ?, updated_at = ?, last_opened_at = ? WHERE id = ?")
         .run(id, timestamp, timestamp, project.id);
       this.database.exec("COMMIT");
@@ -934,6 +1229,70 @@ export class BrainWorkspaceStorage {
     return mapFile(row);
   }
 
+  recordFileIngestResult(input: {
+    ownerId: string; projectId: string; fileId: string; format: string; text: string;
+    anchors: Array<{ anchorId?: string; objectId?: string; format?: string }>; warnings: string[];
+  }): BrainFileRecord {
+    const file = this.getFile(input.ownerId, input.projectId, input.fileId);
+    const anchorCount = input.anchors.length;
+    const textSize = Buffer.byteLength(input.text, "utf8");
+    const parseStatus = anchorCount > 0 || textSize > 0 ? "READY" : "UNSUPPORTED";
+    const validationStatus = input.warnings.length ? "WARNINGS" : "VALID";
+    const pageSlideSheetCount = input.format === "xlsx"
+      ? new Set(input.anchors.map((anchor) => String(anchor.objectId || "").split("!")[0]).filter(Boolean)).size || anchorCount
+      : anchorCount;
+    this.database.prepare(`
+      UPDATE brain_file
+      SET parse_status = ?, validation_status = ?, extractor_name = ?, page_slide_sheet_count = ?, extracted_text_size = ?
+      WHERE id = ? AND project_id = ? AND owner_id = ?
+    `).run(parseStatus, validationStatus, `document-worker:${input.format}`, pageSlideSheetCount, textSize,
+      file.id, file.projectId, file.ownerId);
+    const preview = input.text.slice(0, 8192);
+    const extractHash = createHash("sha256").update(preview).digest("hex");
+    this.database.prepare(`
+      INSERT INTO brain_file_extract(
+        id, file_id, file_version, unit_type, unit_index, plain_text, structure_json, source_anchor_json, content_hash, created_at
+      ) VALUES (?, ?, ?, 'summary', 0, ?, '{}', '{}', ?, ?)
+      ON CONFLICT(file_id, file_version, unit_type, unit_index) DO UPDATE SET
+        plain_text = excluded.plain_text,
+        content_hash = excluded.content_hash,
+        created_at = excluded.created_at
+    `).run(`extract_${file.id}_v${file.versionNo}`, file.id, file.versionNo, preview, extractHash, nowIso());
+    return this.getFile(input.ownerId, input.projectId, input.fileId);
+  }
+
+  upsertEngineRuntime(input: {
+    ownerId: string; engineId: string; executable: string; source: "system" | "managed"; version?: string;
+  }): BrainEngineRuntimeRecord {
+    const ownerId = requireText(input.ownerId, "ownerId");
+    const engineId = requireText(input.engineId, "engineId");
+    const executable = requireText(input.executable, "executable");
+    const timestamp = nowIso();
+    const existing = this.database.prepare("SELECT installed_at FROM brain_engine_runtime WHERE owner_id = ? AND engine_id = ?")
+      .get(ownerId, engineId) as { installed_at: string } | undefined;
+    this.database.prepare(`
+      INSERT INTO brain_engine_runtime(owner_id, engine_id, executable, source, version, installed_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(owner_id, engine_id) DO UPDATE SET
+        executable = excluded.executable,
+        source = excluded.source,
+        version = excluded.version,
+        updated_at = excluded.updated_at
+    `).run(ownerId, engineId, executable, input.source, input.version?.trim() || "", existing?.installed_at || timestamp, timestamp);
+    return mapEngineRuntime(this.database.prepare("SELECT * FROM brain_engine_runtime WHERE owner_id = ? AND engine_id = ?").get(ownerId, engineId) as Record<string, unknown>);
+  }
+
+  getEngineRuntime(ownerId: string, engineId: string): BrainEngineRuntimeRecord | null {
+    const row = this.database.prepare("SELECT * FROM brain_engine_runtime WHERE owner_id = ? AND engine_id = ?")
+      .get(requireText(ownerId, "ownerId"), requireText(engineId, "engineId")) as Record<string, unknown> | undefined;
+    return row ? mapEngineRuntime(row) : null;
+  }
+
+  listEngineRuntimes(ownerId: string): BrainEngineRuntimeRecord[] {
+    return (this.database.prepare("SELECT * FROM brain_engine_runtime WHERE owner_id = ? ORDER BY updated_at DESC")
+      .all(requireText(ownerId, "ownerId")) as Record<string, unknown>[]).map(mapEngineRuntime);
+  }
+
   createAnnotation(input: {
     ownerId: string; projectId: string; fileId: string; fileVersion: number;
     anchor: DocumentAnchor; instruction: string;
@@ -1066,6 +1425,122 @@ export class BrainWorkspaceStorage {
       .all(projectId) as Record<string, unknown>[]).map(mapTask);
   }
 
+  saveFlow(input: { ownerId: string; projectId: string; id?: string; name: string; definition: FlowDefinition }): BrainFlowRecord {
+    const project = this.getProject(input.ownerId, input.projectId);
+    if (!["software", "data"].includes(project.primaryWorkspaceKey)) throw new BrainStorageError("BRAIN_FLOW_WORKSPACE_REQUIRED", "Flow belongs to a software or data workspace");
+    const id = input.id || `flow-${randomUUID()}`;
+    const timestamp = nowIso();
+    this.database.prepare(`INSERT INTO brain_flow(id, project_id, name, definition_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, definition_json = excluded.definition_json, updated_at = excluded.updated_at WHERE project_id = excluded.project_id`)
+      .run(id, input.projectId, requireText(input.name, "name"), JSON.stringify(input.definition), timestamp, timestamp);
+    return this.getFlow(input.ownerId, id);
+  }
+
+  getFlow(ownerId: string, flowId: string): BrainFlowRecord {
+    const row = this.database.prepare("SELECT * FROM brain_flow WHERE id = ?").get(flowId) as Record<string, unknown> | undefined;
+    if (!row) throw new BrainStorageError("BRAIN_FLOW_NOT_FOUND", "Flow was not found");
+    this.getProject(ownerId, String(row.project_id));
+    return { id: String(row.id), projectId: String(row.project_id), name: String(row.name), definition: JSON.parse(String(row.definition_json)) as FlowDefinition, createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+  }
+
+  listFlows(ownerId: string, projectId: string): BrainFlowRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT * FROM brain_flow WHERE project_id = ? ORDER BY updated_at DESC, id").all(projectId) as Array<Record<string, unknown>>)
+      .map((row) => ({
+        id: String(row.id),
+        projectId: String(row.project_id),
+        name: String(row.name),
+        definition: JSON.parse(String(row.definition_json)) as FlowDefinition,
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at)
+      }));
+  }
+
+  getLatestFlowRun(ownerId: string, projectId: string): BrainFlowRunRecord | null {
+    this.getProject(ownerId, projectId);
+    const row = this.database.prepare("SELECT * FROM brain_flow_run WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1").get(projectId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      flowId: String(row.flow_id),
+      projectId: String(row.project_id),
+      status: String(row.status) as BrainFlowRunRecord["status"],
+      currentNodeId: String(row.current_node_id),
+      values: JSON.parse(String(row.values_json)),
+      audit: JSON.parse(String(row.audit_json)),
+      errorCode: String(row.error_code),
+      startedAt: String(row.started_at),
+      updatedAt: String(row.updated_at),
+      finishedAt: String(row.finished_at)
+    };
+  }
+
+  createFlowSchedule(input: { ownerId: string; projectId: string; flowId: string; timezone?: string; runAt: string; enabled?: boolean }): BrainFlowScheduleRecord {
+    const project = this.getProject(input.ownerId, input.projectId);
+    this.getFlow(input.ownerId, input.flowId);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/u.test(input.runAt)) throw new BrainStorageError("BRAIN_FLOW_SCHEDULE_TIME_INVALID", "Flow schedule time is invalid");
+    const id = `flow-schedule-${randomUUID()}`; const timestamp = nowIso(); const timezone = input.timezone || "Asia/Shanghai";
+    this.database.prepare("INSERT INTO brain_flow_schedule(id, project_id, flow_id, timezone, run_at, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(id, project.id, input.flowId, timezone, input.runAt, input.enabled === false ? 0 : 1, timestamp, timestamp);
+    return this.getFlowSchedule(input.ownerId, id);
+  }
+
+  getFlowSchedule(ownerId: string, scheduleId: string): BrainFlowScheduleRecord {
+    const row = this.database.prepare("SELECT schedule.*, project.owner_id FROM brain_flow_schedule schedule JOIN brain_project project ON project.id = schedule.project_id WHERE schedule.id = ?").get(scheduleId) as Record<string, unknown> | undefined;
+    if (!row) throw new BrainStorageError("BRAIN_FLOW_SCHEDULE_NOT_FOUND", "Flow schedule was not found");
+    if (String(row.owner_id) !== ownerId) throw new BrainStorageError("BRAIN_PROJECT_OWNER_MISMATCH", "Flow schedule belongs to another local owner");
+    return { id: String(row.id), ownerId, projectId: String(row.project_id), flowId: String(row.flow_id), timezone: String(row.timezone), runAt: String(row.run_at), enabled: Number(row.enabled) === 1, createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+  }
+
+  listFlowSchedules(ownerId: string, projectId: string): BrainFlowScheduleRecord[] {
+    this.getProject(ownerId, projectId);
+    return (this.database.prepare("SELECT schedule.* FROM brain_flow_schedule schedule JOIN brain_project project ON project.id = schedule.project_id WHERE schedule.project_id = ? AND project.owner_id = ? ORDER BY schedule.run_at, schedule.id").all(projectId, ownerId) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), ownerId, projectId: String(row.project_id), flowId: String(row.flow_id), timezone: String(row.timezone), runAt: String(row.run_at), enabled: Number(row.enabled) === 1, createdAt: String(row.created_at), updatedAt: String(row.updated_at) }));
+  }
+
+  listEnabledFlowSchedules(ownerId: string): BrainFlowScheduleRecord[] {
+    return (this.database.prepare("SELECT schedule.* FROM brain_flow_schedule schedule JOIN brain_project project ON project.id = schedule.project_id WHERE project.owner_id = ? AND schedule.enabled = 1 ORDER BY schedule.run_at, schedule.id").all(ownerId) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), ownerId, projectId: String(row.project_id), flowId: String(row.flow_id), timezone: String(row.timezone), runAt: String(row.run_at), enabled: true, createdAt: String(row.created_at), updatedAt: String(row.updated_at) }));
+  }
+
+  claimFlowScheduleOccurrence(input: { ownerId: string; scheduleId: string; occurrence: string }): boolean {
+    const schedule = this.getFlowSchedule(input.ownerId, input.scheduleId); const timestamp = nowIso();
+    const result = this.database.prepare("INSERT OR IGNORE INTO brain_flow_schedule_occurrence(schedule_id, occurrence, status, started_at) VALUES (?, ?, 'RUNNING', ?)").run(schedule.id, input.occurrence, timestamp);
+    return Number(result.changes) === 1;
+  }
+
+  completeFlowScheduleOccurrence(ownerId: string, scheduleId: string, occurrence: string, errorCode = ""): void {
+    this.getFlowSchedule(ownerId, scheduleId); this.database.prepare("UPDATE brain_flow_schedule_occurrence SET status = ?, error_code = ?, finished_at = ? WHERE schedule_id = ? AND occurrence = ? AND status = 'RUNNING'").run(errorCode ? "FAILED" : "SUCCEEDED", errorCode, nowIso(), scheduleId, occurrence);
+  }
+
+  createFlowRun(input: { ownerId: string; flowId: string; values?: Record<string, unknown> }): BrainFlowRunRecord {
+    const flow = this.getFlow(input.ownerId, input.flowId);
+    const id = `flow-run-${randomUUID()}`;
+    const timestamp = nowIso();
+    this.database.prepare(`INSERT INTO brain_flow_run(id, flow_id, project_id, status, values_json, started_at, updated_at) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)`)
+      .run(id, flow.id, flow.projectId, JSON.stringify(input.values || {}), timestamp, timestamp);
+    return this.getFlowRun(input.ownerId, id);
+  }
+
+  checkpointFlowRun(input: { ownerId: string; runId: string; status: BrainFlowRunRecord["status"]; currentNodeId?: string; values?: Record<string, unknown>; audit?: FlowAuditEvent[]; errorCode?: string }): BrainFlowRunRecord {
+    const current = this.getFlowRun(input.ownerId, input.runId);
+    const terminal = ["SUCCEEDED", "FAILED", "DECLINED", "INTERRUPTED"].includes(input.status);
+    const timestamp = nowIso();
+    this.database.prepare(`UPDATE brain_flow_run SET status = ?, current_node_id = ?, values_json = ?, audit_json = ?, error_code = ?, updated_at = ?, finished_at = ? WHERE id = ?`)
+      .run(input.status, input.currentNodeId ?? current.currentNodeId, JSON.stringify(input.values ?? current.values), JSON.stringify(input.audit ?? current.audit), input.errorCode ?? current.errorCode, timestamp, terminal ? timestamp : "", input.runId);
+    return this.getFlowRun(input.ownerId, input.runId);
+  }
+
+  getFlowRun(ownerId: string, runId: string): BrainFlowRunRecord {
+    const row = this.database.prepare("SELECT * FROM brain_flow_run WHERE id = ?").get(runId) as Record<string, unknown> | undefined;
+    if (!row) throw new BrainStorageError("BRAIN_FLOW_RUN_NOT_FOUND", "Flow run was not found");
+    this.getProject(ownerId, String(row.project_id));
+    return { id: String(row.id), flowId: String(row.flow_id), projectId: String(row.project_id), status: String(row.status) as BrainFlowRunRecord["status"], currentNodeId: String(row.current_node_id), values: JSON.parse(String(row.values_json)), audit: JSON.parse(String(row.audit_json)), errorCode: String(row.error_code), startedAt: String(row.started_at), updatedAt: String(row.updated_at), finishedAt: String(row.finished_at) };
+  }
+
+  reconcileInterruptedFlowRuns(): number {
+    const timestamp = nowIso();
+    const result = this.database.prepare(`UPDATE brain_flow_run SET status = 'INTERRUPTED', error_code = 'BRAIN_FLOW_INTERRUPTED', updated_at = ?, finished_at = ? WHERE status = 'RUNNING'`).run(timestamp, timestamp);
+    return Number(result.changes);
+  }
+
   reconcileInterruptedGamePreviews(): number {
     const timestamp = nowIso();
     const resultJson = JSON.stringify({
@@ -1144,12 +1619,12 @@ export class BrainWorkspaceStorage {
 
   updateTask(input: { ownerId: string; taskId: string; status: BrainTaskRecord["status"]; progress?: number; errorCode?: string; errorDetail?: string; resultJson?: string }): BrainTaskRecord {
     const current = this.getTask(input.ownerId, input.taskId);
-    const statuses: BrainTaskRecord["status"][] = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"];
+    const statuses: BrainTaskRecord["status"][] = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"];
     if (!statuses.includes(input.status)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "Unsupported task status");
     const progress = input.progress ?? current.progress;
     if (!Number.isFinite(progress) || progress < 0 || progress > 1) throw new BrainStorageError("BRAIN_INPUT_INVALID", "progress must be between 0 and 1");
     const timestamp = nowIso();
-    const terminal = ["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"].includes(input.status);
+    const terminal = ["SUCCEEDED", "FAILED", "CANCELLED"].includes(input.status);
     const startedAt = input.status === "RUNNING" && !current.startedAt ? timestamp : (current.startedAt || null);
     const finishedAt = terminal ? timestamp : null;
     this.database.prepare(`
@@ -1186,12 +1661,15 @@ export class BrainWorkspaceStorage {
   }
 
   registerArtifact(input: {
-    ownerId: string; projectId: string; taskId?: string; sourceFileId?: string; artifactType: string;
-    storageKey: string; contentHash: string; validationStatus?: string;
+    ownerId: string; projectId: string; taskId?: string; sourceFileId?: string; sourceWorkspaceKey?: BrainWorkspaceKey;
+    artifactType: string; storageKey: string; contentHash: string; validationStatus?: string;
   }): BrainArtifactRecord {
     this.getProject(input.ownerId, input.projectId);
-    if (input.taskId && this.getTask(input.ownerId, input.taskId).projectId !== input.projectId) {
-      throw new BrainStorageError("BRAIN_PROJECT_FORBIDDEN", "Artifact task belongs to another project");
+    let sourceWorkspaceKey = input.sourceWorkspaceKey?.trim() || "";
+    if (input.taskId) {
+      const task = this.getTask(input.ownerId, input.taskId);
+      if (task.projectId !== input.projectId) throw new BrainStorageError("BRAIN_PROJECT_FORBIDDEN", "Artifact task belongs to another project");
+      if (!sourceWorkspaceKey) sourceWorkspaceKey = task.workspaceKey;
     }
     if (input.sourceFileId) {
       const file = this.database.prepare("SELECT project_id, owner_id FROM brain_file WHERE id = ?").get(input.sourceFileId) as { project_id: string; owner_id: string } | undefined;
@@ -1201,15 +1679,17 @@ export class BrainWorkspaceStorage {
     }
     const record: BrainArtifactRecord = {
       id: `artifact_${randomUUID()}`, projectId: input.projectId, taskId: input.taskId || "",
-      sourceFileId: input.sourceFileId || "", artifactType: requireText(input.artifactType, "artifactType"),
-      storageKey: requireText(input.storageKey, "storageKey"), contentHash: requireText(input.contentHash, "contentHash"),
-      validationStatus: input.validationStatus?.trim() || "PENDING", createdAt: nowIso()
+      sourceFileId: input.sourceFileId || "", sourceWorkspaceKey: sourceWorkspaceKey ? requireWorkspaceKey(sourceWorkspaceKey) : "",
+      artifactType: requireText(input.artifactType, "artifactType"), storageKey: requireText(input.storageKey, "storageKey"),
+      contentHash: requireText(input.contentHash, "contentHash"), validationStatus: input.validationStatus?.trim() || "PENDING",
+      createdAt: nowIso()
     };
     this.database.prepare(`
-      INSERT INTO brain_artifact(id, project_id, task_id, source_file_id, artifact_type, storage_key, content_hash, validation_status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(record.id, record.projectId, record.taskId || null, record.sourceFileId || null, record.artifactType,
-      record.storageKey, record.contentHash, record.validationStatus, record.createdAt);
+      INSERT INTO brain_artifact(
+        id, project_id, task_id, source_file_id, source_workspace_key, artifact_type, storage_key, content_hash, validation_status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(record.id, record.projectId, record.taskId || null, record.sourceFileId || null, record.sourceWorkspaceKey || "",
+      record.artifactType, record.storageKey, record.contentHash, record.validationStatus, record.createdAt);
     return record;
   }
 
@@ -1278,6 +1758,7 @@ export class BrainWorkspaceStorage {
   restoreWorkspaceAfterRestart(input?: {
     resolveArtifactPath?: (projectId: string, storageKey: string) => string | null;
   }): {
+    interruptedFlowRuns: number;
     interruptedGamePreviews: number;
     interruptedSoftwareTasks: number;
     interruptedMediaRenders: number;
@@ -1285,6 +1766,7 @@ export class BrainWorkspaceStorage {
     artifactsInvalidated: number;
     cancelledTasks: number;
   } {
+    const interruptedFlowRuns = this.reconcileInterruptedFlowRuns();
     const interruptedGamePreviews = this.reconcileInterruptedGamePreviews();
     const interruptedSoftwareTasks = this.reconcileInterruptedSoftwareTasks();
     const interruptedMediaRenders = this.reconcileInterruptedMediaRenders();
@@ -1309,6 +1791,7 @@ export class BrainWorkspaceStorage {
       }
     }
     return {
+      interruptedFlowRuns,
       interruptedGamePreviews,
       interruptedSoftwareTasks,
       interruptedMediaRenders,
@@ -1374,6 +1857,32 @@ export class BrainWorkspaceStorage {
         exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: Number(row.enabled) === 1,
         symbol: String(row.symbol), quantity: Number(row.quantity)
       }));
+  }
+
+  setQuantStrategyScheduleEnabled(input: { ownerId: string; projectId: string; scheduleId: string; enabled: boolean }): QuantStrategySchedule {
+    this.getProject(input.ownerId, input.projectId);
+    const result = this.database.prepare("UPDATE brain_quant_strategy_schedule SET enabled = ?, updated_at = ? WHERE id = ? AND project_id = ?")
+      .run(input.enabled ? 1 : 0, nowIso(), requireText(input.scheduleId, "scheduleId"), input.projectId);
+    if (Number(result.changes) !== 1) throw new BrainStorageError("BRAIN_QUANT_SCHEDULE_NOT_FOUND", "Quant strategy schedule was not found");
+    const schedule = this.listQuantStrategySchedules(input.ownerId, input.projectId).find((item) => item.id === input.scheduleId);
+    if (!schedule) throw new BrainStorageError("BRAIN_QUANT_SCHEDULE_NOT_FOUND", "Quant strategy schedule was not found");
+    return schedule;
+  }
+
+  listQuantStrategyRuns(ownerId: string, projectId: string, scheduleId?: string): QuantStrategyRun[] {
+    this.getProject(ownerId, projectId);
+    const rows = scheduleId
+      ? this.database.prepare(`SELECT run.* FROM brain_quant_strategy_run run
+          JOIN brain_quant_strategy_schedule schedule ON schedule.id = run.schedule_id
+          WHERE schedule.project_id = ? AND schedule.id = ? ORDER BY run.started_at DESC, run.trading_date DESC`).all(projectId, requireText(scheduleId, "scheduleId"))
+      : this.database.prepare(`SELECT run.* FROM brain_quant_strategy_run run
+          JOIN brain_quant_strategy_schedule schedule ON schedule.id = run.schedule_id
+          WHERE schedule.project_id = ? ORDER BY run.started_at DESC, run.trading_date DESC`).all(projectId);
+    return (rows as Record<string, unknown>[]).map((row) => ({
+      scheduleId: String(row.schedule_id), tradingDate: String(row.trading_date), idempotencyKey: String(row.idempotency_key),
+      status: String(row.status) as QuantStrategyRun["status"], attempt: Number(row.attempt), errorCode: String(row.error_code || ""),
+      errorDetail: String(row.error_detail || ""), startedAt: String(row.started_at), finishedAt: String(row.finished_at || "")
+    }));
   }
 
   quantStrategyScheduleStore(): QuantStrategyScheduleStore {

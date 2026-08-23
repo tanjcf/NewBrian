@@ -58,6 +58,8 @@ export function resolveEffectiveGatewayBaseUrl(input: {
 }): string {
   const env = String(input.envBaseUrl ?? "").trim();
   if (env) return env;
+  const configured = String(input.configuredBaseUrl ?? "").trim();
+  if (!input.isPackaged && configured) return configured;
   const bundled = String(input.bundledBaseUrl ?? "").trim();
   const migrationTarget = bundled && !isLoopbackGatewayBaseUrl(bundled)
     ? bundled

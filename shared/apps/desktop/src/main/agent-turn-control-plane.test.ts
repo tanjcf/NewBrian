@@ -13,14 +13,14 @@ test("startTurn returns offline degrade when disabled", async () => {
 });
 
 test("cancelTurn posts cancel path and tolerates network failure", async () => {
-  const calls: Array<{ url: string; body: string | undefined }> = [];
+  const calls: Array<{ url: string; body: string | undefined; signal?: AbortSignal | null }> = [];
   const service = new AgentTurnControlPlaneService({
     getConnection: async () => ({
       gatewayOrigin: "http://spring.test",
       headers: { Authorization: "Bearer t" }
     }),
     fetchImpl: (async (url: string, init?: RequestInit) => {
-      calls.push({ url: String(url), body: typeof init?.body === "string" ? init.body : undefined });
+      calls.push({ url: String(url), body: typeof init?.body === "string" ? init.body : undefined, signal: init?.signal });
       return new Response(JSON.stringify({ turnId: "trn_1", status: "cancelled" }), { status: 200 });
     }) as typeof fetch
   });
@@ -29,6 +29,7 @@ test("cancelTurn posts cancel path and tolerates network failure", async () => {
   assert.equal(result.status, "cancelled");
   assert.match(calls[0].url, /\/sessions\/thread-1\/turns\/trn_1\/cancel$/);
   assert.match(calls[0].body || "", /user_stop/);
+  assert.equal(calls[0].signal, undefined);
 
   const offline = new AgentTurnControlPlaneService({
     getConnection: async () => ({ gatewayOrigin: "http://spring.test", headers: {} }),

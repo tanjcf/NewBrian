@@ -43,7 +43,6 @@ test("formats host failures as non-security Chinese diagnostics", async () => {
   const { formatToolHostFailure } = await import("./tool-host-client.js");
   assert.match(formatToolHostFailure("exit"), /并非安全策略拦截/);
   assert.match(formatToolHostFailure("exit"), /自动重启/);
-  assert.match(formatToolHostFailure("timeout"), /并非安全策略拦截/);
   assert.match(formatToolHostFailure("output_limit"), /workspace\.search|并非安全策略拦截/);
 });
 

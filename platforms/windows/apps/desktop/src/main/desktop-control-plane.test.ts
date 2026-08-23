@@ -59,6 +59,19 @@ test("replaces loopback gateway with the bundled production endpoint", async () 
   );
 });
 
+test("development builds preserve an explicit loopback gateway", async () => {
+  const { resolveEffectiveGatewayBaseUrl } = await controlPlane;
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: "http://127.0.0.1:8790/v1",
+      bundledBaseUrl: "http://120.48.151.202:8790/v1",
+      isPackaged: false,
+      productionBaseUrl: "https://api.example.com/v1"
+    }),
+    "http://127.0.0.1:8790/v1"
+  );
+});
+
 test("synchronizes the authenticated v1 control plane without persisting credentials", async () => {
   const { syncDesktopControlPlane } = await controlPlane;
   const requested: Array<{ url: string; authorization: string | null; platform: string | null }> = [];

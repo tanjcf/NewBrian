@@ -89,11 +89,22 @@ export function rememberBrainWorkspaceCatalog(
   catalog: Partial<BrainWorkspaceCatalogSelection>
 ): BrainWorkspaceSelection {
   const current = selection.catalogs[workspaceKey] ?? emptyCatalog();
+  const next = { ...current, ...catalog };
+  // Same project/conversation must keep the same selection reference. Returning a
+  // fresh object on every effect tick forced React into continuous re-renders
+  // (context jump + Windows busy cursor) while BRAIN was idle.
+  if (
+    selection.catalogs[workspaceKey]
+    && current.projectId === next.projectId
+    && current.conversationId === next.conversationId
+  ) {
+    return selection;
+  }
   return {
     ...selection,
     catalogs: {
       ...selection.catalogs,
-      [workspaceKey]: { ...current, ...catalog }
+      [workspaceKey]: next
     }
   };
 }

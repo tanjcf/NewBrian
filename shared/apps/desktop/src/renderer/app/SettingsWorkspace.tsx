@@ -48,6 +48,8 @@ export function SettingsWorkspace(ctx: any) {
   const [mcpHeaders, setMcpHeaders] = useState<Array<{ key: string; value: string }>>([]);
   const [mcpHeaderEnv, setMcpHeaderEnv] = useState<Array<{ key: string; value: string }>>([]);
   const [settingsSavedMessage, setSettingsSavedMessage] = useState("");
+  const [knowledgeSyncBusy, setKnowledgeSyncBusy] = useState(false);
+  const [knowledgeSyncNotice, setKnowledgeSyncNotice] = useState("");
   const [recordingShortcut, setRecordingShortcut] = useState("");
   const compareSemver = (left, right) => {
     const parts = (value) => String(value || "0")
@@ -1518,6 +1520,43 @@ function renderSettingsWorkspace() {
               <>
                 <div className="settings-page-head"><div><h3>个性化</h3><p>协作语气和输出习惯会被持久化。</p></div><button type="button" onClick={() => void runSettingsSave("个性化", async () => { await saveModelConfig(); await saveDesktopPreferences(); })}>保存个性化</button></div>
                 <section className="settings-card"><label className="settings-field"><span>系统提示词</span><textarea value={modelConfig.systemPrompt} onChange={(event) => setModelConfig((current) => ({ ...current, systemPrompt: event.target.value }))} rows={8} /></label></section>
+                <section className="settings-card">
+                  <div className="settings-card-head">
+                    <div>
+                      <strong>用户知识同步</strong>
+                      <p>将本地用户知识（全局偏好、项目规则等）与 spring-app 账号空间手动同步。不会在后台自动上传或拉取。</p>
+                    </div>
+                  </div>
+                  {knowledgeSyncNotice ? <p className="settings-field-hint">{knowledgeSyncNotice}</p> : null}
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      disabled={knowledgeSyncBusy || !api?.syncUserKnowledge}
+                      onClick={() => {
+                        if (!api?.syncUserKnowledge) return;
+                        setKnowledgeSyncBusy(true);
+                        setKnowledgeSyncNotice("");
+                        void api.syncUserKnowledge({ forceFullPull: false }).then((result) => {
+                          if (result.status === "skipped") {
+                            setKnowledgeSyncNotice(result.message || "未登录，无法同步。");
+                            return;
+                          }
+                          if (!result.ok || result.status === "error") {
+                            setKnowledgeSyncNotice(result.message || "同步失败。");
+                            return;
+                          }
+                          setKnowledgeSyncNotice(
+                            `同步完成：拉取 ${result.pulled} 条，推送 ${result.pushed} 条，版本 ${result.generation}${result.conflictRetried ? `（冲突重试 ${result.conflictRetried} 次）` : ""}。`
+                          );
+                        }).catch((error) => {
+                          setKnowledgeSyncNotice(error instanceof Error ? error.message : String(error));
+                        }).finally(() => setKnowledgeSyncBusy(false));
+                      }}
+                    >
+                      {knowledgeSyncBusy ? "同步中..." : "立即同步用户知识"}
+                    </button>
+                  </div>
+                </section>
                 <section className="settings-card muted"><div className="settings-preference-list">
                   <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, personalization: { ...current.personalization, proactiveUpdates: !current.personalization.proactiveUpdates } }))}><span>主动说明正在做什么</span><SettingsSwitch enabled={desktopPreferences.personalization.proactiveUpdates} /></button>
                   <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, personalization: { ...current.personalization, autoSkillEnabled: !current.personalization.autoSkillEnabled } }))}><span>Skill 自动唤醒</span><SettingsSwitch enabled={Boolean(desktopPreferences.personalization.autoSkillEnabled)} /></button>

@@ -61,6 +61,7 @@ test("starts only the inspected command with a one-time scoped approval and reac
   const started = await service.start("owner-a", { projectId: "project-a", conversationId: "conversation-a" });
   assert.equal(started.status, "RUNNING");
   assert.equal(requests[0]?.operation, "approval.register");
+  assert.equal(requests[0]?.payload.ttl_ms, 0);
   assert.equal(requests[0]?.payload.operation, "process.run");
   assert.equal(requests[1]?.operation, "process.run");
   assert.equal(requests[1]?.payload.executable, "npm.cmd");
@@ -93,4 +94,43 @@ test("rejects status access from another owner", async () => {
   const { service } = fixture();
   await service.start("owner-a", { projectId: "project-a" });
   assert.throws(() => service.status("owner-b", "project-a"), /BRAIN_GAME_PREVIEW_NOT_FOUND/);
+});
+
+test("readiness probing has no fixed attempt or request deadline and stops through explicit cancellation", async () => {
+  let readinessSignal: AbortSignal | undefined;
+  const requests: any[] = [];
+  const service = new GamePreviewService({
+    storage: {
+      getProject: () => ({ id: "project-a", localWorkspaceId: "workspace-a" }),
+      listProjects: () => [{ id: "project-a" }],
+      createTask: (input: any) => ({ ...input, id: "task-a" }),
+      updateTask: (input: any) => input
+    } as any,
+    resolveWorkspaceRoot: async () => "C:\\authorized-game",
+    inspectProject: async () => ({
+      schemaVersion: 1, engine: "web", displayName: "Slow Game", markers: ["package.json"],
+      assets: { scripts: 1, scenes: 1, images: 0, audio: 0, video: 0, models: 0, other: 0 },
+      preview: { supported: true, command: "npm", args: ["run", "dev"], url: "http://127.0.0.1:5173", requiresApproval: true },
+      warnings: [], scannedEntries: 3, skippedEntries: 0, truncated: false
+    }),
+    confirmStart: async () => true,
+    acquireRustCore: async () => ({ request: async (input: any) => {
+      requests.push(input);
+      if (input.operation === "approval.register" || input.operation === "request.cancel") return response(input.request_id, "completed");
+      return new Promise<RustCoreResponse>(() => undefined);
+    } }),
+    readinessProbe: async (_url, signal) => {
+      readinessSignal = signal;
+      return new Promise<boolean>(() => undefined);
+    },
+    schedule: (callback) => { queueMicrotask(callback); return { unref() {} } as any; },
+    clearSchedule: () => undefined
+  });
+
+  await service.start("owner-a", { projectId: "project-a" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(readinessSignal?.aborted, false);
+  await service.stop("owner-a", "project-a");
+  assert.equal(readinessSignal?.aborted, true);
+  assert.equal(requests.at(-1)?.operation, "request.cancel");
 });

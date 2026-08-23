@@ -49,7 +49,7 @@ async function waitFor(label, expression, timeoutMs = 20_000) {
     await sleep(150);
   }
   const diagnostics = await evaluate(`JSON.stringify({ title: document.title, body: document.body?.innerText?.slice(-1200) || '' })`).catch(() => "");
-  throw new Error(`Timed out waiting for ${label}. Diagnostics: ${diagnostics}`);
+  throw new Error(`Timed out waiting for ${label}. Diagnostics: ${diagnostics}. Process: ${JSON.stringify(session.readProcessOutput?.() || {})}`);
 }
 
 assert.ok(session.workspacePath, "Thread recovery E2E requires an isolated workspace.");

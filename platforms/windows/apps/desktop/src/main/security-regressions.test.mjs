@@ -12,9 +12,12 @@ const systemIpcSource = await readFile(new URL("./system-ipc.ts", import.meta.ur
 const workspaceGitIpcSource = await readFile(new URL("./workspace-git-ipc.ts", import.meta.url), "utf8");
 const windowIpcSource = await readFile(new URL("./window-ipc.ts", import.meta.url), "utf8");
 const featuresIpcSource = await readFile(new URL("./features-ipc.ts", import.meta.url), "utf8");
+const desktopIntegrationCompositionSource = await readFile(new URL("./desktop-integration-ipc-composition.ts", import.meta.url), "utf8");
+const desktopSessionCompositionSource = await readFile(new URL("./desktop-session-runtime-composition.ts", import.meta.url), "utf8");
 const workspaceIpcSource = await readFile(new URL("./workspace-ipc.ts", import.meta.url), "utf8");
 const workspaceModulesSource = await readFile(new URL("../renderer/app/WorkspaceModules.tsx", import.meta.url), "utf8");
 const composerContractSource = await readFile(new URL("./composer-contract.ts", import.meta.url), "utf8");
+const boundedExtractorSource = await readFile(new URL("./bounded-extractor.ts", import.meta.url), "utf8");
 const appMenuServiceSource = await readFile(new URL("./app-menu-service.ts", import.meta.url), "utf8");
 const modelConfigServiceSource = await readFile(new URL("./model-config-service.ts", import.meta.url), "utf8");
 const modelChatSkillPolicySource = await readFile(new URL("./model-chat-skill-policy.ts", import.meta.url), "utf8");
@@ -33,7 +36,7 @@ const skillPolicySource = await readFile(new URL("./application-skill-policy.ts"
 const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
 const packageScript = await readFile(new URL("../../../../scripts/package-win-msi.ps1", import.meta.url), "utf8");
 const windowsWorkflow = await readFile(
-  new URL("../../../../../.github/workflows/build-windows-installer.yml", import.meta.url),
+  new URL("../../../../../../.github/workflows/build-windows-installer.yml", import.meta.url),
   "utf8"
 );
 
@@ -65,15 +68,16 @@ test("enforces a single desktop instance before touching shared user state", () 
 test("validates terminal input at the privileged IPC boundary", () => {
   assert.match(terminalIpcSource, /typeof input !== ["']string["']/);
   assert.match(terminalIpcSource, /throw new TypeError\(["']Terminal input must be a string\.["']\)/);
-  assert.match(source, /registerTerminalIpcHandlers\(\{/);
+  assert.match(desktopSessionCompositionSource, /registerTerminalIpcHandlers\(\{/);
+  assert.match(source, /registerDesktopSessionRuntimeComposition\(\{/);
 });
 
 test("validates model configuration before authorization and persistence", () => {
   assert.match(modelConfigIpcSource, /desktopIpcChannels\.model\.saveConfig/);
   assert.match(modelConfigIpcSource, /services\.saveConfig\(parseModelConfig\(input\)\)/);
   assert.match(modelConfigIpcSource, /Model configuration payload is invalid\./);
-  assert.match(source, /new ModelConfigService\(\{/);
-  assert.match(source, /registerModelConfigIpcHandlers\(\{[\s\S]{0,200}modelConfigService\.saveConfig/);
+  assert.match(desktopIntegrationCompositionSource, /new ModelConfigService\(\{/);
+  assert.match(desktopIntegrationCompositionSource, /registerModelConfigIpcHandlers\(\{[\s\S]{0,200}modelConfigService\.saveConfig/);
   assert.match(modelConfigServiceSource, /current subscription does not allow the selected model/);
 });
 
@@ -82,14 +86,14 @@ test("keeps the mobile bridge server behind a narrow IPC service boundary", () =
   assert.match(mobileIpcSource, /desktopIpcChannels\.mobile\.getPairingStatus/);
   assert.match(mobileIpcSource, /desktopIpcChannels\.mobile\.stopPairing/);
   assert.doesNotMatch(mobileIpcSource, /createServer|HttpServer|mobileBridgeServer/);
-  assert.match(source, /registerMobileIpcHandlers\(\{/);
+  assert.match(desktopIntegrationCompositionSource, /registerMobileIpcHandlers\(\{/);
 });
 
 test("keeps BrowserWindow capabilities behind validated browser IPC", () => {
   assert.match(browserIpcSource, /Browser preview URL must be a string\./);
   assert.match(browserIpcSource, /services\.openPreview\(url\)/);
   assert.doesNotMatch(browserIpcSource, /BrowserWindow|previewWindowRef|webContents/);
-  assert.match(source, /registerBrowserIpcHandlers\(\{/);
+  assert.match(desktopIntegrationCompositionSource, /registerBrowserIpcHandlers\(\{/);
 });
 
 test("validates native system capability inputs at one IPC boundary", () => {
@@ -119,7 +123,8 @@ test("validates feature catalog mutations before configuration side effects", ()
   assert.match(featuresIpcSource, /Update feature input is invalid\./);
   assert.match(featuresIpcSource, /Delete feature input is invalid\./);
   assert.doesNotMatch(featuresIpcSource, /writeFeatureConfig|activateConfiguredPlugins|fs\./);
-  assert.match(source, /registerFeaturesIpcHandlers\(\{/);
+  assert.match(desktopIntegrationCompositionSource, /registerFeaturesIpcHandlers\(\{/);
+  assert.match(source, /registerDesktopIntegrationIpcComposition\(\{/);
 });
 
 test("validates every workspace and file command before service access", () => {
@@ -180,7 +185,7 @@ test("selects, discloses, and fully injects skills for every model turn", () => 
   assert.match(modelChatGoalServiceSource, /this\.dependencies\.selectSkills\(\{/);
   assert.match(modelChatSkillPolicySource, /validateExplicitSkillNames\(/);
   assert.match(modelChatSkillPolicySource, /shouldRunAutomaticSkillSelection\(centralSkillNames\)/);
-  assert.match(modelChatSkillPolicySource, /selectAutomaticSkillNames\(input\.heuristicSkills\)/);
+  assert.match(modelChatSkillPolicySource, /selectAutomaticSkillNames\(heuristicSkills\)/);
   assert.doesNotMatch(source, /buildSkillSelectionRequest\(latestUserRequest, skillDescriptors\)/);
   assert.match(modelChatServiceSource, /this\.dependencies\.loadSkills\(\{/);
   assert.match(modelChatSkillServiceSource, /title: "本轮使用 Skill"/);
@@ -253,12 +258,15 @@ test("does not reorder threads merely because the user navigated between them", 
   assert.doesNotMatch(activation, /saveActiveThreadState\(\);/);
 });
 
-test("bounds attachment size, extractor memory, output, and clipboard IPC payloads", () => {
+test("bounds attachment size, extractor memory, output, and clipboard IPC payloads without a fixed execution deadline", () => {
   assert.match(source, /assertAttachmentSize\(extension, stat\.size\)/);
   assert.match(composerContractSource, /assertClipboardPayloadSize\(input\.data\)/);
   assert.match(source, /runBoundedExtractor/);
   assert.match(source, /MAX_EXTRACTOR_OUTPUT_BYTES/);
-  assert.match(source, /timeoutMs: 30_000/);
+  assert.doesNotMatch(source, /timeoutMs: 30_000/);
+  assert.match(boundedExtractorSource, /--max-old-space-size=256/);
+  assert.match(boundedExtractorSource, /input\.signal\?\.addEventListener\("abort", abort/);
+  assert.match(boundedExtractorSource, /nextSize > input\.maxOutputBytes/);
   assert.doesNotMatch(source, /mammoth\.extractRawText/);
 });
 

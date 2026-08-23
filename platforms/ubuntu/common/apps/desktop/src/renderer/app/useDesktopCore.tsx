@@ -1178,13 +1178,16 @@ function selectAddedWorkspace(nextCatalog: WorkspaceCatalogItem[], preferredWork
   }
 }
 
-async function createBlankProject(name: string) {
+async function createBlankProject(name: string, options?: { brainWorkspaceKey?: string }) {
   if (!api || !name.trim()) {
     return false;
   }
 
   try {
-    const nextCatalog = await api.createBlankWorkspace({ name: name.trim() });
+    const nextCatalog = await api.createBlankWorkspace({
+      name: name.trim(),
+      ...(options?.brainWorkspaceKey ? { brainWorkspaceKey: options.brainWorkspaceKey as any } : {})
+    });
     try {
       selectAddedWorkspace(nextCatalog);
     } catch (selectionError) {
@@ -1199,7 +1202,7 @@ async function createBlankProject(name: string) {
   }
 }
 
-async function addExistingProject() {
+async function addExistingProject(options?: { brainWorkspaceKey?: string }) {
   if (!api) {
     return false;
   }
@@ -1210,7 +1213,11 @@ async function addExistingProject() {
       return false;
     }
     const name = path.split(/[\\/]/).filter(Boolean).at(-1) || "新项目";
-    const nextCatalog = await api.addWorkspace({ name, path });
+    const nextCatalog = await api.addWorkspace({
+      name,
+      path,
+      ...(options?.brainWorkspaceKey ? { brainWorkspaceKey: options.brainWorkspaceKey as any } : {})
+    });
     const normalizedPath = path.replace(/[\\/]+$/, "").toLowerCase();
     const addedWorkspace = nextCatalog.find(
       (workspace) => workspace.path.replace(/[\\/]+$/, "").toLowerCase() === normalizedPath

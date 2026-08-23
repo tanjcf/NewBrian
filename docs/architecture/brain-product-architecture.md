@@ -1,5 +1,13 @@
 # BRAIN Product Architecture
 
+> Related docs:
+> - [Workspace architecture and roadmap](../product/workspace-architecture.md)
+> - [Implementation playbook](../product/implementation-playbook.md)
+> - [Unified capability runtime v1](./unified-capability-runtime-v1.md)
+> - [Scene Tools v1 — seven workspace sub-architectures](./brain-scene-tools-v1.md)
+> - [Game runtime v1 — game scene only, UE5-aligned](./brain-game-runtime-v1.md)
+> - [Docs index](../README.md)
+
 ## 1. Product boundary
 
 BRAIN is a cross-platform desktop agent workbench, not a stock-platform client and not a Spring backend rewrite. It provides one conversation surface, local project access, controlled tools, artifacts, skills, and multiple workspaces for different professional tasks.
@@ -42,7 +50,7 @@ The workspace switcher belongs at the top of the left navigation. Projects and c
 - Renderer capabilities flow through typed preload APIs into validated main-process IPC handlers.
 - File access is restricted to an explicitly authorized project root after real-path and symlink checks.
 - Mutating commands and writes require policy evaluation and approval according to risk.
-- Every process has cancellation, timeout, bounded output, and cleanup behavior.
+- Long-running work has explicit cancellation, bounded output, process-exit handling, and cleanup behavior. BRAIN never terminates a task merely because a fixed wall-clock duration elapsed.
 
 ## 3. Runtime architecture
 
@@ -70,7 +78,7 @@ Rust Core is an independent process, not a native library loaded into the Electr
 - child-process and terminal execution;
 - Git operations;
 - local file indexing and incremental hashing;
-- CPU, memory, output, and execution-time limits;
+- CPU, memory, and output limits without a fixed execution deadline;
 - approval-token validation;
 - cancellation and crash recovery;
 - computation-heavy backtesting and indicator workloads;
@@ -89,14 +97,14 @@ The versioned protocol contains:
   "workspace_type": "documents",
   "operation": "file.read",
   "approval_token": "opaque-or-empty",
-  "resource_limits": { "timeout_ms": 30000, "max_output_bytes": 1048576 },
+  "resource_limits": { "timeout_ms": 0, "max_output_bytes": 1048576 },
   "status": "accepted",
   "error_code": "",
   "artifacts": []
 }
 ```
 
-Phase 1 uses local HTTP or stdio with framed JSON. The stable transport becomes gRPC only after protocol behavior and cancellation semantics are proven.
+`timeout_ms` is a version-1 compatibility field whose only valid value is `0`; it cannot terminate work. Phase 1 uses local HTTP or stdio with framed JSON. The stable transport becomes gRPC only after protocol behavior and cancellation semantics are proven.
 
 ## 5. Project and storage model
 

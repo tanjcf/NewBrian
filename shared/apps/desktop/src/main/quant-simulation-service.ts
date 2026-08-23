@@ -1,5 +1,6 @@
-import type { MarketDataQuery, PortfolioSnapshot, QuantBar, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
-import { MarketDataService } from "./market-data-service.ts";
+import type { MarketDataQuery, PortfolioActivity, PortfolioSnapshot, QuantBar, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
+import { QuantSkillSignalError, quantSkillSignal } from "./quant-skill-signal.ts";
+import { MarketDataService, type MarketBarsRemoteQuery } from "./market-data-service.ts";
 import { SimulationLedger, type SimulationLedgerState } from "./simulation-ledger.ts";
 
 type QuantSession = { ledger: SimulationLedger; skillLedgers: Map<string, SimulationLedger>; market: MarketDataService; initialCash: number };
@@ -9,11 +10,44 @@ export interface QuantSimulationPersistence {
   save(projectId: string, stateJson: string): void;
 }
 
+export type QuantSimulationMarketOptions = {
+  remoteUrl?: string;
+  queryRemote?: MarketBarsRemoteQuery;
+};
+
+export type QuantSkillSimulationResult = {
+  skillId: string;
+  symbol: string;
+  barCount: number;
+  tradeCount: number;
+  performance: SkillPerformance;
+  snapshot: PortfolioSnapshot;
+};
+
 export class QuantSimulationService {
   private readonly sessions = new Map<string, QuantSession>();
   private readonly remoteUrl?: string;
+  private readonly queryRemote?: MarketBarsRemoteQuery;
   private readonly persistence?: QuantSimulationPersistence;
-  constructor(remoteUrl?: string, persistence?: QuantSimulationPersistence) { this.remoteUrl = remoteUrl; this.persistence = persistence; }
+  constructor(
+    remote?: string | QuantSimulationMarketOptions,
+    persistence?: QuantSimulationPersistence
+  ) {
+    if (typeof remote === "string") {
+      this.remoteUrl = remote;
+    } else if (remote) {
+      this.remoteUrl = remote.remoteUrl;
+      this.queryRemote = remote.queryRemote;
+    }
+    this.persistence = persistence;
+  }
+
+  private createMarket(fixtures: QuantBar[]): MarketDataService {
+    return new MarketDataService(fixtures, {
+      remoteUrl: this.remoteUrl,
+      queryRemote: this.queryRemote
+    });
+  }
 
   createSession(projectId: string, initialCash = 100_000, fixtures: QuantBar[] = []): void {
     if (!projectId.trim()) throw new TypeError("projectId is required");
@@ -27,10 +61,10 @@ export class QuantSimulationService {
         if (!entry || typeof entry.skillId !== "string" || !entry.skillId.trim() || !entry.ledger) throw new TypeError("QUANT_SESSION_STATE_INVALID");
         skillLedgers.set(entry.skillId, SimulationLedger.restore(entry.ledger));
       }
-      this.sessions.set(projectId, { ledger: SimulationLedger.restore(parsed.ledger), skillLedgers, market: new MarketDataService(fixtures, this.remoteUrl), initialCash: Number(parsed.initialCash) });
+      this.sessions.set(projectId, { ledger: SimulationLedger.restore(parsed.ledger), skillLedgers, market: this.createMarket(fixtures), initialCash: Number(parsed.initialCash) });
       return;
     }
-    this.sessions.set(projectId, { ledger: new SimulationLedger(initialCash), skillLedgers: new Map(), market: new MarketDataService(fixtures, this.remoteUrl), initialCash });
+    this.sessions.set(projectId, { ledger: new SimulationLedger(initialCash), skillLedgers: new Map(), market: this.createMarket(fixtures), initialCash });
     this.persist(projectId);
   }
 
@@ -38,6 +72,14 @@ export class QuantSimulationService {
     const session = this.sessions.get(projectId);
     if (!session) throw new Error("QUANT_SESSION_NOT_FOUND");
     return session;
+  }
+
+  resetSkillLedger(projectId: string, skillId: string): void {
+    const session = this.session(projectId);
+    const id = skillId.trim();
+    if (!id) throw new TypeError("skillId is required");
+    session.skillLedgers.set(id, new SimulationLedger(session.initialCash));
+    this.persist(projectId);
   }
 
   queryBars(projectId: string, query: MarketDataQuery): QuantBar[] { return this.session(projectId).market.query(query); }
@@ -59,6 +101,7 @@ export class QuantSimulationService {
     return fill;
   }
   snapshot(projectId: string, prices: Record<string, number>): PortfolioSnapshot { return this.session(projectId).ledger.snapshot(prices); }
+  activity(projectId: string, prices: Record<string, number>): PortfolioActivity { return this.session(projectId).ledger.activity(prices); }
   skillSnapshot(projectId: string, skillId: string, prices: Record<string, number>): PortfolioSnapshot {
     const ledger = this.session(projectId).skillLedgers.get(skillId);
     return ledger ? ledger.snapshot(prices) : new SimulationLedger(this.session(projectId).initialCash).snapshot(prices);
@@ -75,8 +118,89 @@ export class QuantSimulationService {
   }
   performance(projectId: string, skillId: string): SkillPerformance {
     const ledger = this.session(projectId).skillLedgers.get(skillId);
-    if (!ledger) throw new Error("QUANT_SKILL_SESSION_NOT_FOUND");
+    if (!ledger) {
+      return { skillId, totalReturnPercent: 0, maxDrawdownPercent: 0, volatilityPercent: 0, riskAdjustedReturn: 0, tradeCount: 0, winRatePercent: 0 };
+    }
     return ledger.performance(skillId);
+  }
+
+  listSkillIds(projectId: string): string[] {
+    return [...this.session(projectId).skillLedgers.keys()];
+  }
+
+  skillActivity(projectId: string, skillId: string, prices: Record<string, number>): PortfolioActivity {
+    const ledger = this.session(projectId).skillLedgers.get(skillId);
+    if (!ledger) return new SimulationLedger(this.session(projectId).initialCash).activity(prices);
+    return ledger.activity(prices);
+  }
+
+  /** Walk real bars; Skill auto-trades into its isolated ledger. Manual portfolio is untouched. */
+  async runSkillSimulation(projectId: string, input: {
+    skillId: string;
+    symbol: string;
+    quantity: number;
+    query: MarketDataQuery;
+    reset?: boolean;
+  }): Promise<QuantSkillSimulationResult> {
+    const skillId = input.skillId.trim();
+    const symbol = input.symbol.trim();
+    if (!skillId) throw new TypeError("skillId is required");
+    if (!symbol) throw new TypeError("symbol is required");
+    if (!Number.isInteger(input.quantity) || input.quantity <= 0) throw new TypeError("quantity must be a positive integer");
+    this.createSession(projectId);
+    if (input.reset !== false) this.resetSkillLedger(projectId, skillId);
+    const bars = (await this.queryBarsAsync(projectId, { ...input.query, symbol }))
+      .filter((bar) => bar.symbol === symbol)
+      .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+    if (bars.length < 20) {
+      throw new QuantSkillSignalError("QUANT_MARKET_DATA_INSUFFICIENT", "At least 20 daily bars are required for Skill simulation");
+    }
+    let tradeCount = 0;
+    for (let index = 19; index < bars.length; index += 1) {
+      const window = bars.slice(0, index + 1);
+      const bar = bars[index]!;
+      const signal = quantSkillSignal(skillId, window);
+      const prices = { [symbol]: bar.close };
+      const before = this.skillSnapshot(projectId, skillId, prices);
+      const position = before.positions.find((item) => item.symbol === symbol);
+      const stamp = String(bar.timestamp);
+      if (signal === "buy" && !position?.quantity) {
+        this.executeOrder(projectId, {
+          id: `skill-sim:${skillId}:${symbol}:buy:${stamp}`,
+          symbol,
+          side: "buy",
+          quantity: input.quantity,
+          price: bar.close,
+          feeRate: 0.0003,
+          skillId,
+          createdAt: stamp
+        });
+        tradeCount += 1;
+      } else if (signal === "sell" && position?.quantity) {
+        this.executeOrder(projectId, {
+          id: `skill-sim:${skillId}:${symbol}:sell:${stamp}`,
+          symbol,
+          side: "sell",
+          quantity: position.quantity,
+          price: bar.close,
+          feeRate: 0.0003,
+          skillId,
+          createdAt: stamp
+        });
+        tradeCount += 1;
+      }
+      this.recordSkillSnapshot(projectId, skillId, prices);
+    }
+    const latest = bars.at(-1)!;
+    const prices = { [symbol]: latest.close };
+    return {
+      skillId,
+      symbol,
+      barCount: bars.length,
+      tradeCount,
+      performance: this.performance(projectId, skillId),
+      snapshot: this.skillSnapshot(projectId, skillId, prices)
+    };
   }
 
   private persist(projectId: string): void {

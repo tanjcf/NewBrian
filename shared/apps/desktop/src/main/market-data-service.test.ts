@@ -12,13 +12,16 @@ test("market data query filters the local fixture by symbol and date", () => {
   assert.equal(service.query({ symbol: "A", interval: "1d", adjustment: "none", startDate: "2026-08-02", endDate: "2026-08-02" }).length, 1);
 });
 
-test("market data service normalizes a configured remote response", async () => {
+test("market data service normalizes a configured remote response without a fixed execution deadline", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ bars: [{
+  globalThis.fetch = async (_url, init) => {
+    assert.equal(init?.signal, undefined);
+    return new Response(JSON.stringify({ bars: [{
     symbol: "A", exchange: "XSHG", timezone: "Asia/Shanghai", interval: "1d", adjustment: "none",
     timestamp: "2026-08-02", open: 2, high: 3, low: 2, close: 3, volume: 20, turnover: 60,
     changePercent: 2, source: { provider: "adapter", dataset: "daily", fetchedAt: "2026-08-02T08:00:00Z" }
-  }] }), { status: 200 });
+    }] }), { status: 200 });
+  };
   try {
     const bars = await new MarketDataService([], "http://market.test").queryAsync({ symbol: "A", interval: "1d", adjustment: "none" });
     assert.equal(bars[0].close, 3);
@@ -34,6 +37,24 @@ test("market data service rejects incomplete or impossible remote bars", async (
       /MARKET_DATA_INVALID_BAR/
     );
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("market data service requires a real gateway when fixtures are empty", async () => {
+  await assert.rejects(
+    new MarketDataService([]).queryAsync({ symbol: "600519", interval: "1d", adjustment: "forward" }),
+    /MARKET_DATA_GATEWAY_REQUIRED/
+  );
+});
+
+test("market data service uses authenticated spring queryRemote before raw URL", async () => {
+  const bars = await new MarketDataService([], {
+    queryRemote: async (query) => [{
+      symbol: query.symbol, exchange: "XSHG", timezone: "Asia/Shanghai", interval: query.interval, adjustment: query.adjustment,
+      timestamp: "2026-08-02", open: 2, high: 3, low: 2, close: 3, volume: 20, turnover: 60,
+      changePercent: 2, source: { provider: "spring", dataset: "daily", fetchedAt: "2026-08-02T08:00:00Z" }
+    }]
+  }).queryAsync({ symbol: "A", interval: "1d", adjustment: "none" });
+  assert.equal(bars[0].close, 3);
 });
 
 test("market data service rejects non-http URLs", () => {

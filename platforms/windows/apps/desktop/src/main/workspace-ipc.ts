@@ -66,12 +66,23 @@ function parseWorkspaceId(input: unknown): WorkspaceIdInput {
 
 function parseAdd(input: unknown): AddWorkspaceInput {
   const record = requireRecord(input, "Add workspace");
-  return { name: requireString(record, "name", "Add workspace"), path: requireString(record, "path", "Add workspace") };
+  const payload: AddWorkspaceInput = {
+    name: requireString(record, "name", "Add workspace"),
+    path: requireString(record, "path", "Add workspace")
+  };
+  if (typeof record.brainWorkspaceKey === "string" && record.brainWorkspaceKey.trim()) {
+    payload.brainWorkspaceKey = record.brainWorkspaceKey.trim() as AddWorkspaceInput["brainWorkspaceKey"];
+  }
+  return payload;
 }
 
 function parseCreateBlank(input: unknown): CreateBlankWorkspaceInput {
   const record = requireRecord(input, "Create workspace");
-  return { name: requireString(record, "name", "Create workspace") };
+  const payload: CreateBlankWorkspaceInput = { name: requireString(record, "name", "Create workspace") };
+  if (typeof record.brainWorkspaceKey === "string" && record.brainWorkspaceKey.trim()) {
+    payload.brainWorkspaceKey = record.brainWorkspaceKey.trim() as CreateBlankWorkspaceInput["brainWorkspaceKey"];
+  }
+  return payload;
 }
 
 function parseRename(input: unknown): RenameWorkspaceInput {

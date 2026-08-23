@@ -6,7 +6,8 @@ const {
   INTERNAL_CHAT_WORKSPACE_ID,
   NewChatThreadActivationError,
   createAndActivateNewChatThread,
-  resolveNewChatWorkspaceId
+  resolveNewChatWorkspaceId,
+  shouldCreateChatThreadBeforeSend
 } = await import(
   new URL("./new-chat-target.ts", import.meta.url).href
 ) as typeof import("./new-chat-target.js");
@@ -51,6 +52,17 @@ test("keeps project drafts without a selected project unresolved", () => {
     chatUsesProject: false,
     selectedWorkspaceId: ""
   }), "");
+});
+
+test("creates a thread before sending from an empty new-chat surface", () => {
+  assert.equal(shouldCreateChatThreadBeforeSend({
+    isComposingNewThread: false,
+    currentThreadId: ""
+  }), true);
+  assert.equal(shouldCreateChatThreadBeforeSend({
+    isComposingNewThread: false,
+    currentThreadId: "thread-1"
+  }), false);
 });
 
 test("retains the created catalog before activation can fail", async () => {

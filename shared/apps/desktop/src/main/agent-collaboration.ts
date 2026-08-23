@@ -4,12 +4,11 @@ export type AgentCollaborationRole = typeof agentCollaborationRoles[number];
 /** OpenClaw OC-12 defaults: depth-1 only; at most N concurrent children per parent. */
 export const DEFAULT_MAX_SPAWN_DEPTH = 1;
 export const DEFAULT_MAX_CHILDREN_PER_PARENT = 3;
-export const DEFAULT_AGENT_WAIT_TIMEOUT_MS = 120_000;
 
 export const DELEGATE_DEPTH_EXCEEDED = "delegate_depth_exceeded";
 export const DELEGATE_CHILDREN_LIMIT = "delegate_children_limit";
 export const DELEGATE_REFUSED_AFTER_FAILURE = "delegate_refused_after_failure";
-export const WAIT_TIMEOUT = "wait_timeout";
+export const WAIT_UNAVAILABLE = "wait_unavailable";
 
 export function normalizeDelegationRequest(input: Record<string, unknown>) {
   const title = String(input.title ?? "").trim().slice(0, 120);
@@ -96,42 +95,23 @@ export function buildAgentCollaborationInstruction(maxParallelAgents = DEFAULT_M
   ].join(" ");
 }
 
-/** Race a run promise against timeout; never leave the parent tool hung forever. */
-export function waitWithTimeout<T>(
+/** Wait for the active child run without imposing a wall-clock execution deadline. */
+export async function waitForAgentRun<T>(
   run: Promise<T> | undefined,
-  fallback: T | undefined,
-  timeoutMs = DEFAULT_AGENT_WAIT_TIMEOUT_MS
-): Promise<{ ok: true; value: T } | { ok: false; code: typeof WAIT_TIMEOUT; value?: T }> {
+  fallback: T | undefined
+): Promise<{ ok: true; value: T } | { ok: false; code: typeof WAIT_UNAVAILABLE; value?: T }> {
   if (!run) {
     if (fallback !== undefined && isTerminalDelegatedStatus((fallback as { status?: string }).status)) {
-      return Promise.resolve({ ok: true, value: fallback });
+      return { ok: true, value: fallback };
     }
-    if (fallback !== undefined) return Promise.resolve({ ok: true, value: fallback });
-    return Promise.resolve({ ok: false, code: WAIT_TIMEOUT });
+    return { ok: false, code: WAIT_UNAVAILABLE, ...(fallback === undefined ? {} : { value: fallback }) };
   }
-  const ms = Math.max(1, Math.trunc(timeoutMs));
-  return new Promise((resolve) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve({ ok: false, code: WAIT_TIMEOUT, value: fallback });
-    }, ms);
-    timer.unref?.();
-    void run.then(
-      (value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve({ ok: true, value });
-      },
-      () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (fallback !== undefined) resolve({ ok: true, value: fallback });
-        else resolve({ ok: false, code: WAIT_TIMEOUT });
-      }
-    );
-  });
+  try {
+    return { ok: true, value: await run };
+  } catch {
+    if (fallback !== undefined && isTerminalDelegatedStatus((fallback as { status?: string }).status)) {
+      return { ok: true, value: fallback };
+    }
+    return { ok: false, code: WAIT_UNAVAILABLE, ...(fallback === undefined ? {} : { value: fallback }) };
+  }
 }

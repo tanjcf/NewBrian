@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { ModelChatStepService, VISIBLE_CONTENT_IDLE_ERROR, DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS } = await import(
+const { ModelChatStepService } = await import(
   new URL("./model-chat-step-service.ts", import.meta.url).href
 );
 
@@ -215,18 +215,13 @@ test("keeps an active streaming model step attached to the user cancellation sig
   assert.equal(receivedSignal!.aborted, true);
 });
 
-test("aborts when only reasoning streams and no visible answer arrives", async () => {
+test("does not abort a model step because visible answer text is delayed", async () => {
   const service = new ModelChatStepService({
-    callModel: async (input: { signal: AbortSignal; onReasoningDelta: (delta: string) => void }) => {
+    callModel: async (input: { onReasoningDelta: (delta: string) => void; onTextDelta?: (delta: string) => void }) => {
       input.onReasoningDelta("Let me use shell.exec to write the file...");
-      await new Promise<void>((_resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("should have been aborted")), 200);
-        input.signal.addEventListener("abort", () => {
-          clearTimeout(timer);
-          reject(input.signal.reason instanceof Error ? input.signal.reason : new Error("aborted"));
-        }, { once: true });
-      });
-      return { content: "", toolCalls: [], webSearchCalls: [], citations: [] };
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      input.onTextDelta?.("最终答案");
+      return { content: "最终答案", toolCalls: [], webSearchCalls: [], citations: [] };
     },
     isRetryableError: () => true,
     readUsageTokens: () => 0,
@@ -234,12 +229,9 @@ test("aborts when only reasoning streams and no visible answer arrives", async (
   });
   const execution = baseExecution({ visibleContentIdleTimeoutMs: 20 });
 
-  await assert.rejects(service.execute(execution.input), (error: Error) => {
-    assert.equal(error.message, VISIBLE_CONTENT_IDLE_ERROR);
-    return true;
-  });
-  assert.match(execution.reasoning.join(""), /没有可见正文|空转/);
-  assert.equal(DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS, 10 * 60_000);
+  const result = await service.execute(execution.input);
+  assert.equal(result.content, "最终答案");
+  assert.match(execution.reasoning.join(""), /shell\.exec/);
 });
 
 test("continuous reasoning deltas renew the idle budget like OpenClaw progress", async () => {
@@ -513,43 +505,4 @@ test("does not switch models on auth failures even when a fallback chain exists"
 
   await assert.rejects(service.execute(execution.input), /HTTP 401/);
   assert.equal(calls, 1);
-});
-
-test("switches model after visible-content idle without infinite retries", async () => {
-  const models: string[] = [];
-  const service = new ModelChatStepService({
-    callModel: async (input: { model?: string; signal?: AbortSignal }) => {
-      models.push(String(input.model || ""));
-      if (input.model === "primary-model") {
-        await new Promise((_, reject) => {
-          const timer = setTimeout(() => reject(new Error("stalled")), 30);
-          input.signal?.addEventListener("abort", () => {
-            clearTimeout(timer);
-            reject(input.signal?.reason ?? new Error("aborted"));
-          }, { once: true });
-        });
-      }
-      return { content: "已恢复输出。", toolCalls: [], webSearchCalls: [], citations: [] };
-    },
-    isRetryableError: () => true,
-    readUsageTokens: () => 0,
-    containsPrivatePlanning: () => false,
-    delay: async () => undefined
-  });
-  const modelInput = { requestId: "request-1", model: "primary-model" };
-  const execution = baseExecution({
-    modelInput,
-    visibleContentIdleTimeoutMs: 5,
-    modelFallback: {
-      enabled: true,
-      selected: "primary-model",
-      fallback_chain: ["backup-model"],
-      fallback_index: 0
-    }
-  });
-  const result = await service.execute(execution.input);
-  assert.equal(result.content, "已恢复输出。");
-  assert.equal(modelInput.model, "backup-model");
-  assert.ok(models.includes("primary-model"));
-  assert.ok(models.includes("backup-model"));
 });

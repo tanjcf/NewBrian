@@ -57,6 +57,9 @@ test("Kokoro engine and service enforce offline-first lifecycle contracts", () =
   assert.match(service, /playingInMain/);
   assert.match(engine, /dtype: "q4f16"/);
   assert.match(engine, /Soft-cancel/);
+  assert.doesNotMatch(engine, /170_000|Kokoro 合成超时|Kokoro 子进程启动超时/);
+  assert.doesNotMatch(service, /NOVEL_TTS_REMOTE_TIMEOUT_MS|timeoutMs|setTimeout\(/);
+  assert.match(service, /remoteController\?\.abort/);
   assert.match(engine, /killWarmChild/);
   assert.doesNotMatch(engine, /this\.cancel\(\);\s*\n\s*const jobId/);
   assert.match(worker, /type: "dispose"/);

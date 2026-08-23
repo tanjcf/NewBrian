@@ -12,7 +12,8 @@ import {
 import type { PersistedGoalSnapshot } from "./codex-storage.js";
 import {
   isGovernmentResearchWritingSkill
-} from "./central-skills.js";
+// @ts-expect-error Node's native TypeScript test runner requires the source extension.
+} from "./central-skills.ts";
 import type { ModelChatGoalRuntime, ModelChatGoalSession } from "./model-chat-goal-service.js";
 import type { LoadedModelSkill } from "./model-chat-skill-service.js";
 import type { NativeWebSearchProjection } from "./model-chat-step-service.js";
@@ -31,7 +32,8 @@ import {
   type ModelChatTimingStage
 // @ts-expect-error Node's native TypeScript test runner requires the source extension.
 } from "./model-chat-timing.ts";
-import { expandLetterChoiceRequest } from "./letter-choice-policy.js";
+// @ts-expect-error Node's native TypeScript test runner requires the source extension.
+import { expandLetterChoiceRequest } from "./letter-choice-policy.ts";
 
 interface ModelChatRuntime extends ModelChatGoalRuntime {
   getToolDescriptors(): Array<{
@@ -174,6 +176,7 @@ export interface ModelChatServiceDependencies {
     workspace: WorkspaceCatalogItem;
     projectKey?: string;
   }) => Promise<string> | string;
+  loadSceneKnowledgeText?: (input: { workspace: WorkspaceCatalogItem; query: string }) => Promise<string> | string;
   /** Load repo-root Project OS (CODECN.md / CLAUDE.md / AGENTS.md). */
   loadProjectOs?: (input: {
     workspace: WorkspaceCatalogItem;
@@ -314,6 +317,12 @@ export interface ModelChatServiceDependencies {
   publishActivity: (activity: { type: "run" | "complete"; title: string; detail: string }, requestId?: string) => void;
   finishGoal: (session: ModelChatGoalSession, fallbackTokens: number) => void;
   finishTask: (requestId: string, options: { retainForApproval: boolean }) => void | Promise<void>;
+  observePreTaskFailure?: (input: {
+    requestId: string;
+    workspaceId?: string;
+    threadId?: string;
+    error: unknown;
+  }) => void | Promise<void>;
   observeAgentEvents?: (requestId: string, events: AgentLoopRun["agentEvents"]) => void;
   observeTiming?: (mark: ModelChatTimingMark) => void;
   nowMs?: () => number;
@@ -348,6 +357,7 @@ export class ModelChatService {
     const markTiming = (stage: ModelChatTimingStage) => {
       this.dependencies.observeTiming?.(timing.mark(stage));
     };
+    let taskStarted = false;
     try {
       const prepared = await this.dependencies.prepare(input);
       markTiming("prepared");
@@ -361,6 +371,7 @@ export class ModelChatService {
         abortController,
         turnId
       });
+      taskStarted = true;
       markTiming("task-started");
       const persistedAt = this.dependencies.nowIso();
       const reasoningSummaryParts: string[] = [];
@@ -579,6 +590,9 @@ export class ModelChatService {
       const projectOs = typeof this.dependencies.loadProjectOs === "function"
         ? await this.dependencies.loadProjectOs({ workspace })
         : "";
+      const sceneKnowledgeText = typeof this.dependencies.loadSceneKnowledgeText === "function"
+        ? await this.dependencies.loadSceneKnowledgeText({ workspace, query: latestUserRequest })
+        : "";
       const preparedContext = await this.dependencies.prepareContext({
         workspace,
         thread,
@@ -622,6 +636,7 @@ export class ModelChatService {
         availableModels: this.dependencies.getAuthorizedModels?.() ?? [],
         personalizationGuidance: shadowLearning?.personalizationGuidance,
         localKnowledgeText,
+        sceneKnowledgeText,
         projectOs
       });
       if (state.context) {
@@ -819,6 +834,16 @@ export class ModelChatService {
         || runtime.getAgentLoopSnapshot()?.status === "awaiting-approval";
       markTiming("success-persisted");
       return result;
+    } catch (error) {
+      if (!taskStarted) {
+        await this.dependencies.observePreTaskFailure?.({
+          requestId: originalInput.requestId,
+          workspaceId: originalInput.workspaceId,
+          threadId: originalInput.threadId,
+          error
+        });
+      }
+      throw error;
     } finally {
       if (goalSession) this.dependencies.finishGoal(goalSession, fallbackGoalTokens);
       await this.dependencies.finishTask(input.requestId, { retainForApproval });

@@ -5,7 +5,6 @@ interface ModelCallbackFailure {
 interface PendingModelCallback {
   resolve(value: unknown): void;
   reject(error: Error): void;
-  timer: NodeJS.Timeout | null;
 }
 
 interface AgentHostModelCallbacksOptions {
@@ -14,17 +13,7 @@ interface AgentHostModelCallbacksOptions {
     callbackId: string;
     input: unknown;
   }): void;
-  /** Inactivity budget. Streaming progress must call touch() to renew it. */
-  timeoutMs?: number;
 }
-
-/**
- * Legacy default for tests that still construct callbacks with an explicit
- * inactivity budget. Production model/tool/policy callbacks use {@code 0}
- * (disabled): hang detection belongs to the parent agent.loop.advance budget
- * plus progress heartbeats (Codex / OpenClaw style), not a brittle 120s kill.
- */
-export const DEFAULT_AGENT_MODEL_CALLBACK_TIMEOUT_MS = 0;
 
 export class AgentHostModelCallbackError extends Error {
   readonly code: string;
@@ -39,13 +28,11 @@ export class AgentHostModelCallbackError extends Error {
 export class AgentHostModelCallbacks {
   private readonly options: AgentHostModelCallbacksOptions;
   private readonly pending = new Map<string, PendingModelCallback>();
-  private readonly timeoutMs: number;
   private nextCallbackId = 1;
   private stopped = false;
 
   constructor(options: AgentHostModelCallbacksOptions) {
     this.options = options;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_MODEL_CALLBACK_TIMEOUT_MS;
   }
 
   get pendingCount() {
@@ -63,21 +50,19 @@ export class AgentHostModelCallbacks {
     }
     const callbackId = `model_${this.nextCallbackId++}`;
     const promise = new Promise<unknown>((resolve, reject) => {
-      const pending: PendingModelCallback = { resolve, reject, timer: null };
-      this.armTimer(callbackId, pending);
+      const pending: PendingModelCallback = { resolve, reject };
       this.pending.set(callbackId, pending);
     });
     this.options.publish({ runtimeId, callbackId, input });
     return promise;
   }
 
-  /** Renew the inactivity budget while the provider is still streaming or working. */
+  /** Confirm that a callback is still registered; progress never changes its lifetime. */
   touch(callbackId: string) {
     const pending = this.pending.get(callbackId);
     if (!pending) {
       return { callbackId, touched: false };
     }
-    this.armTimer(callbackId, pending);
     return { callbackId, touched: true };
   }
 
@@ -89,7 +74,6 @@ export class AgentHostModelCallbacks {
         `Agent model callback was not found: ${callbackId}`
       );
     }
-    if (pending.timer) clearTimeout(pending.timer);
     this.pending.delete(callbackId);
     if (error) {
       pending.reject(new AgentHostModelCallbackError(error.code, error.message));
@@ -103,7 +87,6 @@ export class AgentHostModelCallbacks {
     if (this.stopped) return;
     this.stopped = true;
     for (const [callbackId, pending] of this.pending) {
-      if (pending.timer) clearTimeout(pending.timer);
       pending.reject(
         new AgentHostModelCallbackError(
           "host_shutting_down",
@@ -112,22 +95,5 @@ export class AgentHostModelCallbacks {
       );
     }
     this.pending.clear();
-  }
-
-  private armTimer(callbackId: string, pending: PendingModelCallback) {
-    if (pending.timer) clearTimeout(pending.timer);
-    if (!(this.timeoutMs > 0) || !Number.isFinite(this.timeoutMs)) {
-      pending.timer = null;
-      return;
-    }
-    pending.timer = setTimeout(() => {
-      this.pending.delete(callbackId);
-      pending.reject(
-        new AgentHostModelCallbackError(
-          "model_callback_timeout",
-          `Agent model callback timed out: ${callbackId}`
-        )
-      );
-    }, this.timeoutMs);
   }
 }

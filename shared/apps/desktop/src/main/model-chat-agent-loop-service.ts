@@ -2,9 +2,7 @@ import type { ModelChatInput } from "@codex-forge/protocol";
 import type { WrittenArtifact } from "./output-summary.js";
 import type { SkillDescriptor } from "./skill-selection.js";
 import {
-  DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
   EMPTY_ASSISTANT_RESPONSE_ERROR,
-  VISIBLE_CONTENT_IDLE_ERROR,
   type NativeWebSearchProjection
 } from "./model-chat-step-service.ts";
 import type { PersistedGoalSnapshot } from "./codex-storage.js";
@@ -396,6 +394,7 @@ export function shouldRunGovernmentDraftDirectly(
 type AgentModelCallback = (input: { messages: AgentMessage[]; tools: unknown[] }) => Promise<{
   content?: string;
   reasoningSummary?: string;
+  providerReasoningContent?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string | Record<string, unknown> }>;
 }>;
 
@@ -436,7 +435,6 @@ export interface ModelChatAgentLoopDependencies<TRuntimeSnapshot, TResult> {
     emitStream: (payload: { requestId: string; delta: string; reset?: boolean }) => void;
     publishRetry: (requestId: string, attempt: number, maxAttempts: number, delayMs: number) => void;
     resilientGoalMode?: boolean;
-    visibleContentIdleTimeoutMs?: number;
     publishWebSearch: (action: unknown, requestId: string) => void;
     recordWebSearch: (search: NativeWebSearchProjection) => void;
     recordTokens: (tokens: number) => void;
@@ -716,13 +714,9 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
     const executeModelStep = ({
       messages,
       tools,
-      visibleContentIdleTimeoutMs,
-      totalExecutionTimeoutMs
     }: {
       messages: AgentMessage[];
       tools: unknown[];
-      visibleContentIdleTimeoutMs?: number;
-      totalExecutionTimeoutMs?: number;
     }) =>
       this.dependencies.executeStep({
         modelInput: input.modelInput,
@@ -733,9 +727,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
             ))
           : governmentRevisionPreview ? [] : tools,
         systemPrompt: input.effectiveSystemPrompt,
-        abortSignal: totalExecutionTimeoutMs
-          ? AbortSignal.any([input.abortController.signal, AbortSignal.timeout(totalExecutionTimeoutMs)])
-          : input.abortController.signal,
+        abortSignal: input.abortController.signal,
         // Strong visibility contract: every displayable model text delta is forwarded
         // immediately. Protocol framing and private reasoning remain on their dedicated
         // channels, but workflow mode must never buffer or hide accepted answer text.
@@ -748,7 +740,6 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         publishWebSearch: input.publishWebSearch,
         recordWebSearch: (search) => nativeWebSearches.push(search),
         recordTokens: input.recordTokens,
-        visibleContentIdleTimeoutMs,
         modelFallback: input.modelFallback
       });
     const modelCallback: AgentModelCallback = async (stepInput) => {
@@ -823,8 +814,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
           input.abortController.signal.aborted
           || !(error instanceof Error)
           || ![
-            EMPTY_ASSISTANT_RESPONSE_ERROR,
-            VISIBLE_CONTENT_IDLE_ERROR
+            EMPTY_ASSISTANT_RESPONSE_ERROR
           ].includes(error.message)
         ) throw error;
         if (
@@ -950,9 +940,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
               content: `这是本轮唯一需要完成的交付格式要求：${specificationInstruction}`
             }
           ],
-          tools: [],
-          visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-          totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+          tools: []
         });
       } catch (error) {
         if (input.abortController.signal.aborted) throw error;
@@ -1012,9 +1000,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       ];
       let response = await executeModelStep({
         messages: draftMessages,
-        tools: [],
-        visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-        totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+        tools: []
       });
       let draftContent = String(response.content ?? "").trim();
       if (!draftContent || isGovernmentDraftClaimWithoutBody(draftContent)) {
@@ -1028,9 +1014,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
               content: "Your previous reply claimed the draft was ready or asked for style/fact confirmation without including the full article body. Rewrite now: output ONLY the complete Chinese article body. No confirmation prompts, no validation tables, no English self-talk."
             }
           ],
-          tools: [],
-          visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-          totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+          tools: []
         });
         draftContent = String(response.content ?? "").trim();
       }
@@ -1117,9 +1101,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
           { role: "assistant", content: summaryContent },
           { role: "system", content: governmentDraftBodyInstruction() }
         ],
-        tools: [],
-        visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-        totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+        tools: []
       });
       let draftContent = String(response.content ?? "").trim();
       if (!hasSubstantiveGovernmentDraftBody(draftContent)) {
@@ -1132,9 +1114,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
               content: "The prior reply contained only a delivery summary and no article. Output ONLY the complete Chinese article body now. Do not repeat the summary, completion claim, checklist, or validation table."
             }
           ],
-          tools: [],
-          visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-          totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+          tools: []
         });
         draftContent = String(response.content ?? "").trim();
       }
@@ -1291,9 +1271,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       try {
         let response = await executeModelStep({
           messages: synthesisMessages,
-          tools: [],
-          visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-          totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+          tools: []
         });
         let draftContent = String(response.content ?? "").trim();
         if (!draftContent || isGovernmentDraftClaimWithoutBody(draftContent)) {
@@ -1307,9 +1285,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
                 content: "Rewrite now into a usable Chinese staged draft based only on the progress brief. Output the draft body itself, not a stop notice."
               }
             ],
-            tools: [],
-            visibleContentIdleTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS,
-            totalExecutionTimeoutMs: DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
+            tools: []
           });
           draftContent = String(response.content ?? "").trim();
         }

@@ -69,6 +69,19 @@ export interface PortfolioSnapshot {
   positions: PositionSnapshot[];
 }
 
+export interface PortfolioEquityPoint {
+  timestamp: string;
+  totalValue: number;
+  cash: number;
+  marketValue: number;
+}
+
+export interface PortfolioActivity {
+  snapshot: PortfolioSnapshot;
+  fills: SimulatedFill[];
+  equityCurve: PortfolioEquityPoint[];
+}
+
 export interface SkillPerformance {
   skillId: string;
   totalReturnPercent: number;

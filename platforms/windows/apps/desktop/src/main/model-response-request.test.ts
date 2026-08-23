@@ -4,18 +4,14 @@ import test from "node:test";
 // @ts-expect-error Node's strip-types runner loads this source file directly.
 import { fetchModelResponseWithHeadersTimeout } from "./model-response-request.ts";
 
-test("aborts a model request that does not return response headers in time", async () => {
-  const fetchImpl: typeof fetch = async (_input, init) => new Promise((_resolve, reject) => {
-    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+test("does not impose a fixed deadline while waiting for model response headers", async () => {
+  const fetchImpl: typeof fetch = async () => new Promise((resolve) => {
+    setTimeout(() => resolve(new Response("ready", { status: 200 })), 25);
   });
-
-  await assert.rejects(
-    fetchModelResponseWithHeadersTimeout("https://gateway.example/v1/responses", {
-      method: "POST",
-      signal: new AbortController().signal,
-    }, { fetchImpl, headersTimeoutMs: 5 }),
-    /response headers timed out after 5ms/i,
-  );
+  const response = await fetchModelResponseWithHeadersTimeout("https://gateway.example/v1/responses", {
+    method: "POST",
+  }, { fetchImpl });
+  assert.equal(await response.text(), "ready");
 });
 
 test("preserves explicit user cancellation instead of reporting a headers timeout", async () => {
@@ -26,7 +22,7 @@ test("preserves explicit user cancellation instead of reporting a headers timeou
   });
   const pending = fetchModelResponseWithHeadersTimeout("https://gateway.example/v1/responses", {
     signal: controller.signal,
-  }, { fetchImpl, headersTimeoutMs: 100 });
+  }, { fetchImpl });
   controller.abort(cancellation);
 
   await assert.rejects(pending, /cancelled by user/);
@@ -45,7 +41,7 @@ test("does not abort the response body after headers arrive within the headers b
   const response = await fetchModelResponseWithHeadersTimeout(
     "https://gateway.example/v1/responses",
     { method: "POST", signal: new AbortController().signal },
-    { fetchImpl, headersTimeoutMs: 40 },
+    { fetchImpl },
   );
   assert.equal(response.status, 200);
   assert.ok(requestSignal);

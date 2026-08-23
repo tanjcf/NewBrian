@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { projectSearchResults } from "./workspace-visibility";
+import { executionKindLabel } from "../../shared/plugin-execution";
 
 export function FeaturePanel(ctx: any) {
   const { activeFeature, setActiveFeature, activeSettingsSection, setActiveSettingsSection, newThreadTitle, setNewThreadTitle, newThreadSummary, setNewThreadSummary, api, selectedWorkspace, createThread, selectedThread, forkThread, searchQuery, setSearchQuery, searchResults, visibleWorkspaceCatalog, setSelectedWorkspaceId, setSelectedThreadId, formatSearchKind, skillDraft, setSkillDraft, resetFeatureDraft, editingFeatureId, saveFeature, featureConfig, loadFeatureDraft, removeFeature, pluginDraft, setPluginDraft, automationDraft, setAutomationDraft, mcpDiscoveredTools, isAuthenticated, modelConfig, setModelConfig, handleLogout, saveModelConfig, isUsingLoginSession, apiKeyConfigured, snapshot, bootstrapState, projectResponseMessage, desktopBootstrapStatus, condaBootstrapSummary, handleRetryCondaBootstrap, isRetryingCondaBootstrap } = ctx;
@@ -94,7 +95,7 @@ function renderFeaturePanel() {
             {featureConfig.skills.map((item) => (
               <button key={item.id} type="button" onClick={() => loadFeatureDraft("skills", item)}>
                 <strong>{item.name}</strong>
-                <span>{item.status} · {item.summary}</span>
+                <span>{item.status} · {executionKindLabel(item.executionKind)} · {item.summary}</span>
               </button>
             ))}
           </div>
@@ -128,7 +129,7 @@ function renderFeaturePanel() {
             {featureConfig.plugins.map((item) => (
               <button key={item.id} type="button" onClick={() => loadFeatureDraft("plugins", item)}>
                 <strong>{item.name}</strong>
-                <span>{item.status} · {item.summary}</span>
+                <span>{item.status} · {executionKindLabel(item.executionKind)} · {item.summary}</span>
               </button>
             ))}
           </div>

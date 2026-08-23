@@ -6,7 +6,6 @@ interface BoundedProcessInput {
   args: string[];
   cwd: string;
   signal?: AbortSignal;
-  timeoutMs: number;
 }
 
 interface BoundedProcessResult {
@@ -38,7 +37,7 @@ export interface WorkspaceWorktreeServiceDependencies {
   appendDebugLog: (message: string) => Promise<unknown>;
 }
 
-/** Owns bounded Git worktree commands and serialized, atomic binding persistence. */
+/** Owns cancellable Git worktree commands and serialized, atomic binding persistence. */
 export class WorkspaceWorktreeService {
   private readonly dependencies: WorkspaceWorktreeServiceDependencies;
   private bindingMutation = Promise.resolve();
@@ -93,8 +92,7 @@ export class WorkspaceWorktreeService {
       executable: "git",
       args: ["worktree", "add", "-b", branchName, worktreePath],
       cwd: input.workspace.path,
-      signal: input.signal,
-      timeoutMs: 120_000
+      signal: input.signal
     });
     if (result.status !== 0) {
       return {
@@ -135,8 +133,7 @@ export class WorkspaceWorktreeService {
         executable: "git",
         args: ["worktree", "remove", "--force", binding.path],
         cwd: input.gitCwd,
-        signal: input.signal,
-        timeoutMs: 120_000
+        signal: input.signal
       });
       if (result.status === 0) {
         removed.add(binding.path);

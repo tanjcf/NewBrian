@@ -1,5 +1,6 @@
 import type { MarketDataQuery, PortfolioSnapshot, QuantBar, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
 import type { BrainTaskRecord } from "./brain-workspace-storage.ts";
+import { QuantSkillSignalError, quantSkillSignal } from "./quant-skill-signal.ts";
 
 interface StrategyTaskConfig {
   exchange: "SSE" | "SZSE" | "BSE";
@@ -45,16 +46,6 @@ function parseConfig(value: string): StrategyTaskConfig {
   return { exchange: config.exchange as StrategyTaskConfig["exchange"], tradingDate: config.tradingDate, symbol: config.symbol.trim(), quantity: Number(config.quantity), simulationOnly: true };
 }
 
-function strategySignal(skillId: string, bars: QuantBar[]): "buy" | "sell" {
-  if (bars.length < 20) throw new QuantStrategyTaskError("QUANT_MARKET_DATA_INSUFFICIENT", "At least 20 daily bars are required");
-  const closes = bars.map((bar) => bar.close);
-  const latest = closes.at(-1)!;
-  const mean = (count: number) => closes.slice(-count).reduce((sum, value) => sum + value, 0) / count;
-  if (skillId === "trend-following") return mean(5) > mean(20) ? "buy" : "sell";
-  if (skillId === "mean-reversion") return latest < mean(20) ? "buy" : "sell";
-  throw new QuantStrategyTaskError("QUANT_SKILL_UNSUPPORTED", `Unsupported quantitative Skill: ${skillId}`);
-}
-
 function startDate(tradingDate: string): string {
   const date = new Date(`${tradingDate}T00:00:00+08:00`);
   date.setUTCDate(date.getUTCDate() - 90);
@@ -91,7 +82,13 @@ export class QuantStrategyTaskRunner {
         startDate: startDate(config.tradingDate), endDate: config.tradingDate
       })).sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
       if (this.options.store.getTask(ownerId, task.id).status === "CANCELLED") return;
-      const signal = strategySignal(skillId, bars);
+      let signal: "buy" | "sell";
+      try {
+        signal = quantSkillSignal(skillId, bars);
+      } catch (error) {
+        if (error instanceof QuantSkillSignalError) throw new QuantStrategyTaskError(error.code, error.message);
+        throw error;
+      }
       const latest = bars.at(-1)!;
       const prices = { [config.symbol]: latest.close };
       const before = this.options.simulation.skillSnapshot(task.projectId, skillId, prices);

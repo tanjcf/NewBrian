@@ -32,7 +32,18 @@ async function walk(relativeRoot, current = "") {
 
 const [shared, macosCommon, macosArm64, macosX64, ubuntuCommon, ubuntuArm64, ubuntuX64, windows] = await Promise.all(layers.map((layer) => walk(layer)));
 const sharedSet = new Set(shared);
-const collisions = [...macosCommon, ...ubuntuCommon, ...windows].filter((file) => sharedSet.has(file));
+// These Windows E2E scripts intentionally mirror shared helpers so the
+// platform package can run them from its own overlay. They are kept in sync
+// byte-for-byte; platform-specific implementations remain subject to the
+// collision check below.
+const intentionalWindowsMirrors = new Set([
+  "apps/desktop/scripts/electron-e2e-session.mjs",
+  "apps/desktop/scripts/test-electron-brain-document-revision.mjs",
+  "apps/desktop/scripts/test-electron-brain-pdf-annotation.mjs",
+  "apps/desktop/scripts/test-openclaw-media-gateway-e2e.mjs"
+]);
+const collisions = [...macosCommon, ...ubuntuCommon, ...windows]
+  .filter((file) => sharedSet.has(file) && !(windows.includes(file) && intentionalWindowsMirrors.has(file)));
 if (collisions.length) throw new Error(`Shared/overlay path collision: ${collisions[0]}`);
 
 for (const [platform, overlay] of [["macos", macosCommon], ["ubuntu", ubuntuCommon], ["windows", windows]]) {

@@ -32,7 +32,7 @@ export interface ModelChatSuccessDependencies {
     events: ThreadEventRecord[]
   ) => Promise<unknown>;
   appendDiagnostics: (entry: string) => Promise<unknown>;
-  /** Optional hook after local shadow learning writes; schedules automatic knowledge sync. */
+  /** Optional hook after local shadow learning writes; knowledge sync is manual-only. */
   onShadowLearned?: (input: {
     workspace: WorkspaceCatalogItem;
     changed: string[];

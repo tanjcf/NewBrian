@@ -99,6 +99,8 @@ test("installs OpenClaw zip into managed skills root", async () => {
 
     assert.equal(result.skill.name, "demo-skill");
     assert.equal(result.skill.source, "openclaw");
+    assert.equal(result.skill.executionKind, "instructions");
+    assert.deepEqual(result.skill.executionEvidence, ["SKILL.md"]);
     const files = await collectRelativeFiles(result.targetDir);
     assert.ok(files.includes("SKILL.md"));
     assert.ok(files.includes("references/guide.md"));
@@ -153,7 +155,8 @@ test("blocks zip path traversal", () => {
 });
 
 test("clawhub client parses search and install resolution with mock fetch", async () => {
-  const fetchImpl = async (input) => {
+  const fetchImpl = async (input, init) => {
+    assert.equal(init?.signal, undefined);
     const url = String(input);
     if (url.includes("/api/v1/search")) {
       return new Response(

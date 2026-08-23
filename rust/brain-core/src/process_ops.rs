@@ -6,7 +6,7 @@ use std::io::Read;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const ALLOWED_ENVIRONMENT: &[&str] = &[
     "PATH",
@@ -73,7 +73,7 @@ fn terminate_process_tree(child: &mut Child) {
 pub fn run_process(
     boundary: &ProjectBoundary,
     payload: &Value,
-    timeout_ms: u64,
+    _timeout_ms: u64,
     max_output_bytes: u64,
     cancelled: &AtomicBool,
 ) -> Result<Value, &'static str> {
@@ -132,17 +132,9 @@ pub fn run_process(
         child.stderr.take().ok_or("BRAIN_CORE_PROCESS_PIPE")?,
         max_output_bytes,
     );
-    let deadline = (timeout_ms > 0).then(|| Instant::now() + Duration::from_millis(timeout_ms));
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| "BRAIN_CORE_PROCESS_WAIT")? {
             break status;
-        }
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            terminate_process_tree(&mut child);
-            let _ = child.wait();
-            let _ = stdout.join();
-            let _ = stderr.join();
-            return Err("BRAIN_CORE_PROCESS_TIMEOUT");
         }
         if cancelled.load(Ordering::Acquire) {
             terminate_process_tree(&mut child);

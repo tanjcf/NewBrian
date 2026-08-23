@@ -47,9 +47,10 @@ export function buildModelRequestPayload(input: {
       stream: true,
       input: input.upstreamMessages,
       store: !input.disableResponseStorage,
-      // Ask Responses-compatible providers for their safe reasoning summary.
-      // Otherwise they may reason internally without emitting summary deltas.
-      reasoning: { effort: input.reasoningEffort, summary: "auto" as const },
+      // Omit reasoning on tool continuations that cannot round-trip opaque traces.
+      ...(input.enableThinking !== false
+        ? { reasoning: { effort: input.reasoningEffort, summary: "auto" as const } }
+        : {}),
       ...(input.tools.length ? { tools: input.tools } : {})
     };
   }
@@ -59,9 +60,54 @@ export function buildModelRequestPayload(input: {
     messages: input.upstreamMessages,
     ...(input.enableThinking
       ? { reasoning_effort: input.reasoningEffort, thinking: { type: "enabled" as const } }
-      : { temperature: 0.7 }),
+      // If a prior tool-call trace is unavailable, explicitly disable provider
+      // thinking for this continuation. Leaving this implicit makes DeepSeek /
+      // Qwen gateways enter thinking mode and then reject the request because
+      // an opaque reasoning_content cannot be reconstructed from persisted UI
+      // summaries.
+      : { temperature: 0.7, thinking: { type: "disabled" as const } }),
     ...(input.tools.length ? { tools: input.tools } : {})
   };
+}
+
+/** Gateway models that can enter a server-side thinking mode. */
+const THINKING_MODEL_IDENTITY = /deepseek|qwen|doubao|ark|kimi|moonshot|minimax|thinking|reasoner/i;
+
+/**
+ * Server-side Auto hides the routed model behind the `auto` alias, so checking
+ * the requested name alone cannot tell that the gateway will pick a thinking
+ * model. Treat the alias as thinking-capable when the model the gateway already
+ * reported, or any model Auto may route to, needs the opaque reasoning trace.
+ */
+export function requiresThinkingWireProtocol(input: {
+  provider?: string;
+  model?: string;
+  routedModel?: string;
+  candidateModels?: Array<{ model?: string; provider?: string }>;
+}) {
+  const model = String(input.model ?? "").trim();
+  if (THINKING_MODEL_IDENTITY.test(`${input.provider ?? ""} ${model}`)) return true;
+  if (THINKING_MODEL_IDENTITY.test(String(input.routedModel ?? ""))) return true;
+  if (model.toLowerCase() !== "auto") return false;
+  return (input.candidateModels ?? []).some((candidate) =>
+    THINKING_MODEL_IDENTITY.test(`${candidate?.provider ?? ""} ${candidate?.model ?? ""}`));
+}
+
+/**
+ * Thinking-mode gateways reject a continuation whose history no longer carries
+ * the opaque reasoning trace. Detect that specific contract failure so the step
+ * can be repeated without thinking instead of failing the user's turn.
+ */
+export function isThinkingContextGatewayRejection(status: number, payload: unknown, rawText = "") {
+  if (status !== 400) return false;
+  let serialized = "";
+  try {
+    serialized = payload === null || payload === undefined ? "" : JSON.stringify(payload) ?? "";
+  } catch {
+    serialized = "";
+  }
+  const text = `${rawText} ${serialized}`;
+  return /reasoning_content/i.test(text) && /passed back|thinking mode/i.test(text);
 }
 
 /**

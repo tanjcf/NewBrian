@@ -9,8 +9,9 @@ export interface ModelStepResponseShape {
   content: string;
   toolCalls: unknown[];
   usage?: unknown;
-  /** Provider thinking trace for the current step (echo on later tool continuations). */
   reasoningSummary?: string;
+  /** Opaque provider reasoning trace required by thinking-mode gateways. */
+  providerReasoningContent?: string;
   webSearchCalls: Array<{
     id: string;
     status: string;
@@ -59,21 +60,6 @@ export function isEmptyAssistantResponseError(error: unknown) {
   return error instanceof Error && error.message === EMPTY_ASSISTANT_RESPONSE_ERROR;
 }
 
-/** Stable error matched by the agent-loop one-shot retry for empty visible streams. */
-export const VISIBLE_CONTENT_IDLE_ERROR = "Model response stream timed out before producing output.";
-
-/**
- * How long a model step may stream only reasoning/private planning with no
- * user-visible answer text before the step is aborted. Continuous reasoning
- * deltas renew this budget (OpenClaw-like progress). Budget matches the parent
- * loop inactivity window — not a fragile 120s hard kill.
- */
-export const DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS = 10 * 60_000;
-
-export function isVisibleContentIdleError(error: unknown) {
-  return error instanceof Error && error.message === VISIBLE_CONTENT_IDLE_ERROR;
-}
-
 /** Executes one bounded model step while preserving visible-stream and retry policy. */
 export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
   private readonly dependencies: ModelChatStepServiceDependencies<TResponse>;
@@ -97,8 +83,6 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
     publishWebSearch: (action: unknown, requestId: string) => void;
     recordWebSearch: (search: NativeWebSearchProjection) => void;
     recordTokens: (tokens: number) => void;
-    /** Override for tests; production uses DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS. */
-    visibleContentIdleTimeoutMs?: number;
     /**
      * Auto fallback_chain for「异常步长」recovery. When the current model step
      * fails abnormally after bounded same-model retries, advance to the next
@@ -121,16 +105,12 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
     const retryDelaysMs = [500, 1_000, 2_000, 4_000, 8_000];
     const maxAttempts = retryDelaysMs.length + 1;
     let streamedContent = "";
-    const visibleIdleTimeoutMs = Math.max(
-      0,
-      input.visibleContentIdleTimeoutMs ?? DEFAULT_VISIBLE_CONTENT_IDLE_TIMEOUT_MS
-    );
     let activeModelInput = input.modelInput;
     let fallbackIndex = Math.max(0, Number(input.modelFallback?.fallback_index) || 0);
     const tryAdvanceModelFallback = (error: unknown): boolean => {
       if (!input.modelFallback?.enabled) return false;
       if (isAutoModelFallbackBlocked(error)) return false;
-      if (!isAbnormalModelStepError(error) && !isEmptyAssistantResponseError(error) && !isVisibleContentIdleError(error)) {
+      if (!isAbnormalModelStepError(error) && !isEmptyAssistantResponseError(error)) {
         return false;
       }
       const advanced = advanceAutoModelFallback({
@@ -162,36 +142,6 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
     };
     modelAttempt: for (;;) {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      // Streaming steps live until the provider completes, the inactivity-aware
-      // response reader fails, visible-content idle trips, or the user cancels.
-      const stepAbort = new AbortController();
-      let visibleIdleTimer: ReturnType<typeof setTimeout> | null = null;
-      const clearVisibleIdle = () => {
-        if (visibleIdleTimer) {
-          clearTimeout(visibleIdleTimer);
-          visibleIdleTimer = null;
-        }
-      };
-      const armVisibleIdle = () => {
-        clearVisibleIdle();
-        if (!(visibleIdleTimeoutMs > 0) || input.abortSignal.aborted) return;
-        visibleIdleTimer = setTimeout(() => {
-          input.emitReasoningSummary(
-            "检测到长时间仅有思考过程、聊天区没有可见正文，已中止本轮空转。请重试或回复「继续输出正文」。\n"
-          );
-          stepAbort.abort(new Error(VISIBLE_CONTENT_IDLE_ERROR));
-        }, visibleIdleTimeoutMs);
-      };
-      const onUserAbort = () => {
-        clearVisibleIdle();
-        if (!stepAbort.signal.aborted) {
-          stepAbort.abort(input.abortSignal.reason ?? new Error("Model request aborted"));
-        }
-      };
-      input.abortSignal.addEventListener("abort", onUserAbort, { once: true });
-      if (input.abortSignal.aborted) onUserAbort();
-      else armVisibleIdle();
-
       let streamedVisibleContent = false;
       let streamedReasoning = false;
       let resetOnFirstDelta = attempt > 1 && streamedContent.length > 0;
@@ -207,20 +157,16 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
         streamedVisibleContent = true;
         streamedContent += delta;
         input.emitStream({ requestId: input.requestId, delta });
-        armVisibleIdle();
       };
       const emitReasoning = (delta: string) => {
         if (!delta) return;
         streamedReasoning = true;
         input.emitReasoningSummary(delta);
-        // Reasoning is visible progress in the thinking panel; renew the idle
-        // budget so thinking-model turns are not aborted mid-thought.
-        armVisibleIdle();
       };
       try {
         response = await this.dependencies.callModel({
           ...activeModelInput,
-          signal: stepAbort.signal,
+          signal: input.abortSignal,
           systemPrompt: input.systemPrompt,
           messages: input.messages,
           tools: input.tools,
@@ -241,12 +187,10 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
                 // Keep already accepted chat text. Only divert the latest planning
                 // delta so government-writing progress does not vanish mid-stream.
                 emitReasoning(delta);
-                armVisibleIdle();
                 return;
               }
               // No visible answer yet: move the whole planning trace into thinking.
               emitReasoning(seenText);
-              armVisibleIdle();
               return;
             }
             emitVisible(delta);
@@ -326,23 +270,6 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
             ? input.abortSignal.reason
             : error;
         }
-        const idleTimedOut = isVisibleContentIdleError(error)
-          || isVisibleContentIdleError(stepAbort.signal.reason)
-          || (
-            stepAbort.signal.aborted
-            && error instanceof Error
-            && /abort/i.test(error.name + error.message)
-            && isVisibleContentIdleError(stepAbort.signal.reason)
-          );
-        if (idleTimedOut) {
-          if (tryAdvanceModelFallback(new Error(VISIBLE_CONTENT_IDLE_ERROR))) {
-            streamedContent = "";
-            await (this.dependencies.delay ?? ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))))(500);
-            if (input.abortSignal.aborted) throw input.abortSignal.reason ?? error;
-            continue modelAttempt;
-          }
-          throw new Error(VISIBLE_CONTENT_IDLE_ERROR);
-        }
         const headersTimedOut = error instanceof Error
           && /Model response headers timed out after \d+ms\./i.test(error.message);
         const emptyVisible = isEmptyAssistantResponseError(error);
@@ -368,9 +295,6 @@ export class ModelChatStepService<TResponse extends ModelStepResponseShape> {
           await (this.dependencies.delay ?? ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))))(delayMs);
           if (input.abortSignal.aborted) throw input.abortSignal.reason ?? error;
         }
-      } finally {
-        clearVisibleIdle();
-        input.abortSignal.removeEventListener("abort", onUserAbort);
       }
     }
     break modelAttempt;

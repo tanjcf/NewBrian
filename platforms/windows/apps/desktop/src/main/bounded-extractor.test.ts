@@ -15,28 +15,29 @@ test("kills an extractor that exceeds its output budget", async () => {
       executable: process.execPath,
       extractorPath: script,
       filePath: "unused",
-      maxOutputBytes: 1024,
-      timeoutMs: 2_000
+      maxOutputBytes: 1024
     }), /stdout exceeded 1024 bytes/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("kills a long-running extractor at the deadline", async () => {
+test("keeps a long-running extractor alive until explicit cancellation", async () => {
   const root = mkdtempSync(join(tmpdir(), "codecn-extractor-"));
   try {
     const script = join(root, "hang.mjs");
     writeFileSync(script, "setInterval(() => {}, 1000);", "utf8");
-    const startedAt = Date.now();
-    await assert.rejects(runBoundedExtractor({
+    const controller = new AbortController();
+    const extraction = runBoundedExtractor({
       executable: process.execPath,
       extractorPath: script,
       filePath: "unused",
       maxOutputBytes: 1024,
-      timeoutMs: 100
-    }), /timed out after 100 milliseconds/);
-    assert.ok(Date.now() - startedAt < 2_000);
+      signal: controller.signal
+    });
+    await new Promise((resolve) => setTimeout(resolve, 125));
+    controller.abort(new Error("cancel extraction"));
+    await assert.rejects(extraction, /cancel extraction/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

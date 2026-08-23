@@ -25,7 +25,8 @@ import {
   cloneNewChatComposerDraft,
   createAndActivateNewChatThread,
   NewChatThreadActivationError,
-  resolveNewChatWorkspaceId
+  resolveNewChatWorkspaceId,
+  shouldCreateChatThreadBeforeSend
 } from "./app/new-chat-target";
 import {
   readThreadComposerSkills,
@@ -70,6 +71,7 @@ import {
   settingsFeatureItem,
   withTimeout
 } from "./app/desktop-model";
+import { projectModelChatFailure } from "./app/model-chat-failure-projection";
 import type {
   BootstrapPayload,
   ComposerToolFieldValueMap,
@@ -241,6 +243,12 @@ export function App() {
   const setSelectedThreadId = (value: SetStateAction<string>) => {
     const previous = selectedThreadIdRef.current;
     const next = typeof value === "function" ? value(previous) : value;
+    // Same-id selection must be a no-op. Re-activating the current thread updates
+    // snapshot → re-render → BRAIN conversation sync effects call setSelectedThreadId
+    // again (unstable setter identity), which caused chat thrash + Windows busy cursor.
+    if (previous === next) {
+      return;
+    }
     selectedThreadIdRef.current = next;
     setSelectedThreadIdState(next);
     // 切换线程时立刻从缓存恢复消息，避免在 activateWorkspaceThread 返回前仍显示上一个线程的内容（串线程展示）。
@@ -249,9 +257,8 @@ export function App() {
       if (cached) {
         chatMessagesRef.current = cached;
         setChatMessagesState(cached);
-      } else if (previous !== next) {
-        // Only clear when actually switching threads. Re-selecting the same thread
-        // (approval settle) must not flash an empty transcript before activate returns.
+      } else {
+        // Only clear when actually switching threads. Same-id reselect is handled above.
         chatMessagesRef.current = [];
         setChatMessagesState([]);
       }
@@ -528,7 +535,7 @@ export function App() {
   }, [showOpenLocationMenu, showWorkspaceStatusMenu]);
 
   // Guard against corrupted catalog shapes (e.g. accidental { workspaces: [] } writes).
-  const safeWorkspaceCatalog = normalizeWorkspaceCatalog(workspaceCatalog);
+  const safeWorkspaceCatalog = useMemo(() => normalizeWorkspaceCatalog(workspaceCatalog), [workspaceCatalog]);
   useEffect(() => {
     if (!Array.isArray(workspaceCatalog)) {
       setWorkspaceCatalog([]);
@@ -540,6 +547,7 @@ export function App() {
   const selectedThread = isComposingStandaloneChat
     ? undefined
     : resolveUserVisibleThreadSelection(selectedWorkspace?.threads ?? [], selectedThreadId);
+  const selectionRepairKeyRef = useRef("");
 
   useEffect(() => {
     if (!safeWorkspaceCatalog.length) return;
@@ -547,6 +555,9 @@ export function App() {
       safeWorkspaceCatalog.find((item) => item.id === selectedWorkspaceId) ??
       safeWorkspaceCatalog[0];
     if (!workspace) return;
+    const repairKey = `${workspace.id}:${selectedWorkspaceId}:${selectedThreadId}:${isComposingStandaloneChat ? "compose" : "view"}`;
+    if (selectionRepairKeyRef.current === repairKey) return;
+    selectionRepairKeyRef.current = repairKey;
 
     if (workspace.id !== selectedWorkspaceId) {
       setSelectedWorkspaceId(workspace.id);
@@ -600,7 +611,7 @@ export function App() {
     return () => {
       canceled = true;
     };
-  }, [api, selectedWorkspace?.id, snapshot.runs]);
+  }, [api, selectedWorkspace?.id]);
   useEffect(() => {
     if (!showWorkspaceStatusMenu || !api || !selectedWorkspace?.id) return;
     const timer = window.setInterval(() => {
@@ -1430,7 +1441,10 @@ export function App() {
       return;
     }
 
-    const composingNewThread = isComposingNewThread;
+    let composingNewThread = shouldCreateChatThreadBeforeSend({
+      isComposingNewThread,
+      currentThreadId: currentThread?.id || currentThreadId
+    });
     const composingThreadScope = newThreadScope === "chat" && chatUsesProject ? "project" : newThreadScope;
     let targetWorkspaceId = composingNewThread
       ? resolveNewChatWorkspaceId({
@@ -1443,6 +1457,9 @@ export function App() {
       (targetWorkspaceId === currentWorkspaceId ? currentWorkspace : undefined);
     let targetThread = targetWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
       (targetWorkspaceId === currentWorkspaceId ? currentThread : undefined);
+    // A selected-thread object can be stale after switching from a project to the
+    // internal chat workspace. Validate against the resolved target workspace.
+    if (!targetThread?.id) composingNewThread = true;
     let targetThreadTitle = selectedThread?.title || "新对话";
     if (composingNewThread) {
       if (!targetWorkspaceId) {
@@ -1583,6 +1600,7 @@ export function App() {
     streamingAssistantRef.current = { id: "", contentLength: 0 };
     const requestStartedAt = Date.now();
     let awaitingApproval = false;
+    let requestFailed = false;
     setAskingThreadId(targetThread?.id || "");
     setAssistantStartedAt(requestStartedAt);
     setLastAssistantElapsedSeconds(null);
@@ -1695,6 +1713,7 @@ export function App() {
       }
       await refreshCatalog();
     } catch (error) {
+      requestFailed = true;
       const message = normalizeModelErrorMessage(error);
       setChatStatus("模型请求失败。");
       setErrorMessage(message);
@@ -1705,16 +1724,9 @@ export function App() {
       const livePartial = String(liveModelContentRef.current[streamRequestId] ?? "");
       updateThreadMessages(targetThreadId, (current) => current.map((item) => {
         if (item.id !== streamRequestId) return item;
-        const preservedContent = item.content.trim().length >= livePartial.trim().length
-          ? item.content
-          : (livePartial || item.content);
         return {
           ...item,
-          content: preservedContent,
-          reasoningSummary: item.reasoningSummary?.trim()
-            ? `${item.reasoningSummary.trim()}\n\n本轮在完成前发生异常：${message}`
-            : `本轮在完成前发生异常：${message}`,
-          excludeFromModelContext: true
+          ...projectModelChatFailure(item, message, livePartial)
         };
       }));
     } finally {
@@ -1740,7 +1752,7 @@ export function App() {
       );
       if (!awaitingApproval) {
         await refreshCatalog();
-        if (targetThreadId && selectedThreadIdRef.current === targetThreadId) {
+        if (!requestFailed && targetThreadId && selectedThreadIdRef.current === targetThreadId) {
           try {
             syncSnapshot(await api.activateWorkspaceThread({
               workspaceId: targetWorkspaceId,
@@ -1755,7 +1767,7 @@ export function App() {
         // and global composer do not retain the just-finished "active" state.
         window.setTimeout(() => {
           void refreshCatalog();
-          if (targetThreadId && selectedThreadIdRef.current === targetThreadId) {
+          if (!requestFailed && targetThreadId && selectedThreadIdRef.current === targetThreadId) {
             void api.activateWorkspaceThread({
               workspaceId: targetWorkspaceId,
               threadId: targetThreadId

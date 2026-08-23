@@ -15,7 +15,7 @@ function makeChild() {
 
 test("document worker client sends bounded requests and resolves results", async () => {
   const child = makeChild();
-  const client = new DocumentWorkerClient({ child, defaultTimeoutMs: 500 });
+  const client = new DocumentWorkerClient({ child });
   const requestPromise = client.ingest({ requestId: "read-1", projectRoot: "C:/project", relativePath: "notes.md", maxBytes: 99_999_999 });
   const request = JSON.parse(child.stdin.read()?.toString() ?? "{}");
   assert.equal(request.protocol_version, "2");
@@ -27,7 +27,7 @@ test("document worker client sends bounded requests and resolves results", async
 
 test("document worker client fails closed on worker error", async () => {
   const child = makeChild();
-  const client = new DocumentWorkerClient({ child, defaultTimeoutMs: 500 });
+  const client = new DocumentWorkerClient({ child });
   const pending = client.ingest({ requestId: "read-2", projectRoot: "C:/project", relativePath: "notes.md" });
   child.stdout.write(`${JSON.stringify({ protocol_version: "2", request_id: "read-2", status: "failed", error_code: "DOCUMENT_WORKER_PATH_FORBIDDEN" })}\n`);
   await assert.rejects(pending, /DOCUMENT_WORKER_PATH_FORBIDDEN/);

@@ -16,12 +16,12 @@ test("TypeScript protocol matches the checked Rust Core schema fixture", async (
   assert.deepEqual(schema.response.required, [
     "protocol_version", "request_id", "status", "error_code", "artifacts"
   ]);
-  assert.equal(schema.request.resource_limits.timeout_ms.maximum, 600_000);
-  assert.match(schema.request.resource_limits.timeout_ms.description, /no execution deadline/u);
+  assert.equal(schema.request.resource_limits.timeout_ms.const, 0);
+  assert.match(schema.request.resource_limits.timeout_ms.description, /event-driven/u);
   assert.equal(schema.request.resource_limits.max_output_bytes.maximum, 16_777_216);
 });
 
-test("accepts a bounded versioned Rust Core request", () => {
+test("accepts an event-driven versioned Rust Core request", () => {
   const request = parseRustCoreRequest({
     protocol_version: "1",
     request_id: "req-1",
@@ -29,7 +29,7 @@ test("accepts a bounded versioned Rust Core request", () => {
     workspace_type: "documents",
     operation: "file.read",
     approval_token: "",
-    resource_limits: { timeout_ms: 30_000, max_output_bytes: 1_048_576 },
+    resource_limits: { timeout_ms: 0, max_output_bytes: 1_048_576 },
     payload: { path: "report.docx" }
   });
   assert.equal(request.operation, "file.read");
@@ -51,7 +51,7 @@ test("rejects unknown versions, unbounded limits, and credential-shaped fields",
     workspace_type: "software",
     operation: "process.run",
     approval_token: "approved",
-    resource_limits: { timeout_ms: 30_000, max_output_bytes: 1024 },
+    resource_limits: { timeout_ms: 0, max_output_bytes: 1024 },
     payload: {}
   }), /protocol_version/u);
 
@@ -73,9 +73,14 @@ test("rejects unknown versions, unbounded limits, and credential-shaped fields",
     workspace_type: "software",
     operation: "process.run",
     approval_token: "approved",
-    resource_limits: { timeout_ms: 30_000, max_output_bytes: 1024 },
+    resource_limits: { timeout_ms: 0, max_output_bytes: 1024 },
     payload: { authorization: "Bearer secret" }
   }), /credential/u);
+
+  assert.throws(() => parseRustCoreRequest({
+    protocol_version: "1", request_id: "req-fixed-deadline", project_id: "project-1", workspace_type: "software",
+    operation: "process.run", approval_token: "approved", resource_limits: { timeout_ms: 1, max_output_bytes: 1024 }, payload: {}
+  }), /no fixed deadline/u);
 });
 
 test("parses data-only responses with stable status and error fields", () => {

@@ -8,7 +8,6 @@ export interface BoundedCommandInput {
   args: string[];
   cwd: string;
   signal?: AbortSignal;
-  timeoutMs: number;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -58,7 +57,7 @@ export function resolveBoundedSpawnCommand(
   };
 }
 
-/** Runs a subprocess with cancellation, timeout, hidden-window, and bounded-output guarantees. */
+/** Runs a subprocess with cancellation, hidden-window, and bounded-output guarantees. */
 export function runBoundedEnvironmentCommand(input: BoundedCommandInput): Promise<BoundedCommandResult> {
   return new Promise((resolve, reject) => {
     if (input.signal?.aborted) {
@@ -88,14 +87,12 @@ export function runBoundedEnvironmentCommand(input: BoundedCommandInput): Promis
     let stdout = "";
     let stderr = "";
     let settled = false;
-    let timeout: ReturnType<typeof setTimeout>;
     const append = (current: string, chunk: Buffer) => `${current}${chunk.toString("utf8")}`.slice(-MAX_CAPTURED_OUTPUT);
     child.stdout?.on("data", (chunk: Buffer) => { stdout = append(stdout, chunk); });
     child.stderr?.on("data", (chunk: Buffer) => { stderr = append(stderr, chunk); });
     const stop = (error: Error) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
       input.signal?.removeEventListener("abort", onAbort);
       child.kill();
       reject(error);
@@ -103,13 +100,11 @@ export function runBoundedEnvironmentCommand(input: BoundedCommandInput): Promis
     const onAbort = () => stop(input.signal?.reason instanceof Error
       ? input.signal.reason
       : new Error("Process was canceled."));
-    timeout = setTimeout(() => stop(new Error(`Process timed out after ${input.timeoutMs}ms.`)), input.timeoutMs);
     input.signal?.addEventListener("abort", onAbort, { once: true });
     child.once("error", stop);
     child.once("close", (code) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
       input.signal?.removeEventListener("abort", onAbort);
       resolve({ status: code ?? -1, stdout, stderr });
     });
@@ -170,8 +165,7 @@ export class ManagedCondaInstallerService {
         executable,
         args,
         cwd: this.dependencies.workspacePath,
-        signal,
-        timeoutMs: 10 * 60_000
+        signal
       });
       if (downloaded.status !== 0) {
         throw new Error(`Unable to download Miniconda installer: ${downloaded.stderr || downloaded.stdout || downloaded.status}`);
@@ -183,14 +177,12 @@ export class ManagedCondaInstallerService {
       executable: installerPath,
       args: ["/S", `/D=${condaRoot}`],
       cwd: this.dependencies.workspacePath,
-      signal,
-      timeoutMs: 10 * 60_000
+      signal
     } : {
       executable: "/bin/zsh",
       args: ["-lc", `${this.dependencies.quoteShellArgument(installerPath)} -b -p ${this.dependencies.quoteShellArgument(condaRoot)}`],
       cwd: this.dependencies.workspacePath,
-      signal,
-      timeoutMs: 10 * 60_000
+      signal
     });
     if (installed.status !== 0) {
       throw new Error(`Unable to install managed Miniconda: ${installed.stderr || installed.stdout || installed.status}`);

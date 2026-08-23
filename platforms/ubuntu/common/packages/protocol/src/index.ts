@@ -202,6 +202,8 @@ export interface WorkspaceCatalogItem {
   name: string;
   path: string;
   threads: WorkspaceThreadRecord[];
+  /** BRAIN scene binding; missing/invalid values normalize to `document`. */
+  brainWorkspaceKey?: import("./workspace-types.js").BrainWorkspaceKey;
   conda?: WorkspaceCondaConfig;
 }
 
@@ -1151,8 +1153,15 @@ export interface ApplyGovernmentWritingSuggestionsInput extends GovernmentWritin
   suggestionIds: string[];
 }
 
-export interface AddWorkspaceInput { name: string; path: string }
-export interface CreateBlankWorkspaceInput { name: string }
+export interface AddWorkspaceInput {
+  name: string;
+  path: string;
+  brainWorkspaceKey?: import("./workspace-types.js").BrainWorkspaceKey;
+}
+export interface CreateBlankWorkspaceInput {
+  name: string;
+  brainWorkspaceKey?: import("./workspace-types.js").BrainWorkspaceKey;
+}
 export interface WorkspaceIdInput { workspaceId: string }
 export interface RenameWorkspaceInput extends WorkspaceIdInput { name: string }
 export interface OpenWorkspaceLocationInput extends WorkspaceIdInput { target: "explorer" | "vscode" }
@@ -1578,4 +1587,5 @@ export interface PhaseOneSnapshot {
   automations?: AutomationSpec[];
 }
 export * from "./brain-workspace.js";
+export * from "./software-types.js";
 export * from "./workspace-types.js";

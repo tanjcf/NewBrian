@@ -56,7 +56,7 @@ export class DocumentWorkerProcess {
       workspace_type: "document",
       operation: "document.ingest",
       approval_token: "",
-      resource_limits: { timeout_ms: 30_000, max_output_bytes: Math.min(Math.max(input.maxBytes ?? 5 * 1024 * 1024, 64 * 1024), 16 * 1024 * 1024) },
+      resource_limits: { timeout_ms: 0, max_output_bytes: Math.min(Math.max(input.maxBytes ?? 5 * 1024 * 1024, 64 * 1024), 16 * 1024 * 1024) },
       payload: { relative_path: input.relativePath, max_bytes: input.maxBytes ?? 5 * 1024 * 1024 }
     });
     if (response.status !== "completed") throw new Error(`${response.error_code || "BRAIN_CORE_DOCUMENT_FAILED"}: Rust-supervised document ingestion failed.`);
@@ -77,7 +77,7 @@ export class DocumentWorkerProcess {
       stdio: ["pipe", "pipe", "ignore"]
     });
     this.child = child;
-    this.client = new DocumentWorkerClient({ child, defaultTimeoutMs: 30_000 });
+    this.client = new DocumentWorkerClient({ child });
   }
 
   private resolveWorkerPath() {

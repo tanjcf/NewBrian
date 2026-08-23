@@ -293,6 +293,18 @@ test("composer model menu exposes Auto as a selectable route", () => {
   assert.match(workspaceSource, /modelConfig\.model\.toLowerCase\(\) === "auto"/);
 });
 
+test("BRAIN conversation composer never uses new-chat absolute dock", () => {
+  assert.match(
+    workspaceSource,
+    /composer-area\$\{isNewChatMode && !isBrainConversationSelection \? " new-chat-composer" : ""\}\$\{isBrainConversationSelection \? " brain-chat-composer" : ""\}/
+  );
+  assert.match(workspaceSource, /setIsComposingNewThread\(false\);[\s\S]*selectedBrainConversationId, selectedBrainProjectId, brainConversations, setIsComposingNewThread/);
+  assert.match(
+    styles,
+    /\.brain-chat-composer-slot \.composer-area\.new-chat-composer\s*\{[^}]*position:\s*static;[^}]*transform:\s*none;/s
+  );
+});
+
 test("live thinking panel prints Chinese process text in the marked reasoning area", () => {
   assert.match(workspaceSource, /function buildLiveReasoningProcess/);
   assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);

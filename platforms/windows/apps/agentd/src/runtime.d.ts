@@ -25,6 +25,7 @@ export class LocalAgentRuntime {
     load(name: string): Promise<LoadedSkill>;
   };
   agentLoop: { snapshot(): AgentLoopSnapshot } | null;
+  capabilityResolver: { resolve(capabilityId: string, context?: Record<string, unknown>): Promise<Record<string, unknown>> } | null;
   orchestrator: {
     list(parentThreadId?: string): DelegatedAgentTask[];
   };
@@ -47,9 +48,11 @@ export class LocalAgentRuntime {
     maxAgentConcurrency?: number;
     policyRules?: PolicyRule[];
     maxMemoryRecords?: number;
+    capabilityDataRoot?: string;
   });
 
   initialize(): Promise<void>;
+  prepareCapabilities(messages: AgentLoopMessage[], options?: { approved?: boolean; force?: boolean }): Promise<Record<string, unknown>[]>;
   getSnapshot(): PhaseOneSnapshot;
   buildContextCapsule(input?: {
     instruction?: string;

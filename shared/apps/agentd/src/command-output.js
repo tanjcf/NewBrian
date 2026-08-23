@@ -27,7 +27,7 @@ const TRUNCATION_NOTE_RE = /输出过大，已保留开头与结尾/;
 export function formatOutputTruncationNote(originalBytes, visibleBytes) {
   const original = Math.max(0, Number(originalBytes) || 0);
   const visible = Math.max(0, Number(visibleBytes) || 0);
-  return `…（输出过大，已保留开头与结尾共约 ${visible} 字节；完整约 ${original} 字节。并非安全策略拦截。请改用 workspace.glob / workspace.grep，或缩小命令输出范围后重试。）`;
+  return `…（输出过大，已保留开头与结尾共约 ${visible} 字节；完整约 ${original} 字节。并非安全策略拦截。请改用 workspace.search / workspace.glob / workspace.grep，或缩小命令输出范围后重试。）`;
 }
 
 /**

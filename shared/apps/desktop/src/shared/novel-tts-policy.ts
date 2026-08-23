@@ -103,12 +103,6 @@ export const NOVEL_TTS_VOICE_STORAGE_KEY = "codecn.novelTtsVoice.v3";
 export const NOVEL_TTS_MAX_CHARS = 4_000;
 /** Local SpeechSynthesis chunk size — long single utterances hang Electron. */
 export const NOVEL_TTS_LOCAL_CHUNK_CHARS = 220;
-/**
- * Offline Kokoro first load can take >60s on CPU; do not fall back early
- * or the main process keeps synthesizing and may OOM/crash the app.
- */
-export const NOVEL_TTS_REMOTE_TIMEOUT_MS = 180_000;
-
 export function resolveNovelTtsVoice(voiceId?: string | null): NovelTtsVoice {
   return (
     NOVEL_TTS_VOICES.find((voice) => voice.id === voiceId) ||

@@ -202,21 +202,19 @@ test("retries one transient 429 or 5xx response", async () => {
   }
 });
 
-test("maps request timeouts to a stable credential-free error", async () => {
+test("does not attach a timer-generated abort signal", async () => {
   const { HolonControlPlaneService } = await serviceModule;
+  let signal: AbortSignal | null | undefined;
   const service = new HolonControlPlaneService({
     getConnection: async () => ({
       gatewayOrigin: "http://server", deviceId: "device_1", headers: { Authorization: "Bearer secret" }
     }),
-    fetchImpl: async () => {
-      throw new DOMException("The operation timed out", "TimeoutError");
+    now: () => Date.parse("2026-07-22T00:01:00.000Z"),
+    fetchImpl: async (_url, init) => {
+      signal = init?.signal;
+      return new Response(JSON.stringify({ ok: true, item: claimedItem }), { status: 200 });
     }
   });
-
-  await assert.rejects(
-    () => service.claimNextWorkItem(),
-    (error: unknown) => error instanceof Error
-      && error.message === "HOLON_HTTP_TIMEOUT"
-      && !error.message.includes("secret")
-  );
+  assert.equal((await service.claimNextWorkItem())?.id, "wi_1");
+  assert.equal(signal, undefined);
 });

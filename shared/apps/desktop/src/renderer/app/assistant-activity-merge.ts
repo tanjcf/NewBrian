@@ -33,10 +33,10 @@ function sameRunIdentity(
  * Same-callId (or same command detail) run updates replace earlier pending rows
  * so "等待批准" does not stick after the tool finishes.
  */
-export function mergeAssistantActivityItems(
-  currentItems: AssistantActivityLike[],
-  activity: AssistantActivityLike
-): AssistantActivityLike[] {
+export function mergeAssistantActivityItems<T extends AssistantActivityLike>(
+  currentItems: T[],
+  activity: T
+): T[] {
   if (activity.type === "run") {
     const replaceIndex = currentItems.findIndex(
       (item) =>
@@ -124,10 +124,10 @@ export function resolveEffectiveApproval(input: {
 }
 
 /** Optimistically replace sticky 等待批准 rows after the user clicks approve/reject. */
-export function markApprovalActivitiesSettling(
-  activities: AssistantActivityLike[],
+export function markApprovalActivitiesSettling<T extends AssistantActivityLike>(
+  activities: T[],
   approved: boolean
-): AssistantActivityLike[] {
+): T[] {
   return activities.map((activity) => {
     if (!(activity?.title === "等待批准" || activity?.status === "approval")) return activity;
     if (approved) {
@@ -135,13 +135,13 @@ export function markApprovalActivitiesSettling(
         ...activity,
         title: "正在执行命令",
         status: "running"
-      };
+      } as T;
     }
     return {
       ...activity,
       title: "命令执行失败",
       status: "failed",
       failureMessage: "已拒绝批准"
-    };
+    } as T;
   });
 }

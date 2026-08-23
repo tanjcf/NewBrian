@@ -9,7 +9,7 @@
     "predev": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
     "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
     "prebuild": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
-    "build": "node node_modules/electron-vite/bin/electron-vite.js build",
+    "build": "node node_modules/electron-vite/bin/electron-vite.js build && node scripts/repair-bundle-cjs-shim.mjs",
     "package:win-msi": "node node_modules/electron-builder/cli.js --win msi",
     "package:mac": "node node_modules/electron-builder/cli.js --mac dmg zip",
     "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
@@ -28,8 +28,17 @@
     "test:composer-runtime": "node scripts/test-electron-composer-layout.mjs",
     "test:approval-runtime": "node scripts/test-electron-approval-flow.mjs",
     "test:media-workspace-runtime": "node scripts/test-electron-media-workspace.mjs",
+    "test:game-workspace-runtime": "node scripts/test-electron-game-workspace.mjs",
+    "test:game-level-editor-runtime": "node scripts/test-electron-game-level-editor.mjs",
+    "test:workspace-section-restart-runtime": "node scripts/test-electron-workspace-section-restart.mjs",
+    "test:flow-workspace-runtime": "node scripts/test-electron-flow-workspace.mjs",
+    "test:data-workspace-runtime": "node scripts/test-electron-data-workspace.mjs",
+    "test:quant-workspace-runtime": "node scripts/test-electron-quant-workspace.mjs",
     "test:document-revision-runtime": "node scripts/test-electron-brain-document-revision.mjs",
     "test:pdf-annotation-runtime": "node scripts/test-electron-brain-pdf-annotation.mjs",
+    "test:seven-workspace-l2": "node scripts/test-electron-seven-workspace-l2.mjs",
+    "test:game-template-runtime": "node scripts/test-electron-game-template.mjs",
+    "test:engine-auto-install-runtime": "node scripts/test-electron-engine-auto-install.mjs",
     "test:openclaw-media-gateway": "node --experimental-strip-types scripts/test-openclaw-media-gateway-e2e.mjs",
     "test:writing-format-matrix": "node --experimental-strip-types scripts/test-writing-format-matrix.mjs",
     "test:government-runtime": "node scripts/test-electron-government-flow.mjs",
@@ -112,7 +121,7 @@
         "to": "codecn.features.json"
       },
       {
-        "from": "../../../codecn.bootstrap.json",
+        "from": "../../codecn.bootstrap.json",
         "to": "codecn.bootstrap.json"
       },
       {

@@ -27,13 +27,14 @@ export async function ensureElectronE2ESession(debugPort) {
       pages: existingPages,
       started: false,
       close: () => undefined,
-      workspacePath: process.env.CODECN_WORKSPACE_PATH?.trim() || undefined
+      workspacePath: process.env.CODECN_WORKSPACE_PATH?.trim() || undefined,
+      readProcessOutput: () => ({ stdout: "", stderr: "", existingSession: true })
     };
   }
 
-  const executable = process.platform === "win32"
+  const executable = process.env.CODECN_E2E_ELECTRON_EXECUTABLE?.trim() || (process.platform === "win32"
     ? join(appDirectory, "node_modules", "electron", "dist", "electron.exe")
-    : join(appDirectory, "node_modules", ".bin", "electron");
+    : join(appDirectory, "node_modules", ".bin", "electron"));
   if (!existsSync(executable)) throw new Error(`Electron executable is missing: ${executable}`);
 
   const sourceModelConfigPath = process.env.CODECN_E2E_MODEL_CONFIG_PATH?.trim();
@@ -84,6 +85,9 @@ export async function ensureElectronE2ESession(debugPort) {
       provider: "codecn"
     }], null, 2)}\n`, "utf8");
   }
+  let stdout = "";
+  let stderr = "";
+  const appendOutput = (current, chunk) => `${current}${chunk}`.slice(-24_000);
   const child = spawn(executable, ["."], {
     cwd: appDirectory,
     env: {
@@ -92,11 +96,17 @@ export async function ensureElectronE2ESession(debugPort) {
       CODECN_E2E_AUTH_BYPASS: "1",
       CODECN_WORKSPACE_PATH: isolatedWorkspacePath
     },
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: false
   });
+  child.stdout?.on("data", (chunk) => { stdout = appendOutput(stdout, chunk); });
+  child.stderr?.on("data", (chunk) => { stderr = appendOutput(stderr, chunk); });
+  const readProcessOutput = () => ({ stdout, stderr, exitCode: child.exitCode, processId: child.pid });
   let closed = false;
   let preserveWorkspace = false;
+  const keepWorkspace = () => {
+    preserveWorkspace = true;
+  };
   const removeIsolatedWorkspace = () => {
     if (useLiveWorkspace || preserveWorkspace) return;
     try {
@@ -116,13 +126,13 @@ export async function ensureElectronE2ESession(debugPort) {
 
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`Electron E2E instance exited early with code ${child.exitCode}.`);
+    if (child.exitCode !== null) throw new Error(`Electron E2E instance exited early with code ${child.exitCode}. Output: ${JSON.stringify(readProcessOutput())}`);
     const pages = await readPages(debugPort);
     if (pages?.some((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl)) {
-      return { pages, started: true, close, workspacePath: isolatedWorkspacePath, processId: child.pid };
+      return { pages, started: true, close, preserveWorkspace: keepWorkspace, workspacePath: isolatedWorkspacePath, processId: child.pid, readProcessOutput };
     }
     await sleep(200);
   }
   close();
-  throw new Error(`Electron E2E debug endpoint did not become ready on local port ${debugPort}.`);
+  throw new Error(`Electron E2E debug endpoint did not become ready on local port ${debugPort}. Output: ${JSON.stringify(readProcessOutput())}`);
 }

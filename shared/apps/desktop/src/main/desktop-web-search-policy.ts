@@ -1,5 +1,9 @@
-const FRESHNESS_CLAIM = /(?:最新|今天|今日|当前|实时|刚刚|近期|现在|截至|截至目前|as of today|latest|currently|right now)/iu;
+const LOCAL_RUNTIME_STATE = /当前(?:持久化|目标|步骤|任务|线程|审批|运行|进度|状态|会话|工作区)/gu;
 
+/**
+ * Tool-side guidance only. Must never be written into the user-visible assistant
+ * bubble — Auto Mode / search policy prompts live in spring-app, not BRAIN UI.
+ */
 export function formatDesktopWebSearchUnavailable(reason: string): string {
   return [
     "WEB_SEARCH_UNAVAILABLE",
@@ -9,13 +13,17 @@ export function formatDesktopWebSearchUnavailable(reason: string): string {
   ].join(" ");
 }
 
+/** Kept for unit tests / tool contracts; BRAIN must not rewrite chat answers with this. */
 export function assertAnswerAllowsFreshnessClaims(input: {
   answer: string;
   searchedAt?: string;
   sourceUrls?: string[];
 }): { ok: true } | { ok: false; reason: string } {
-  const answer = String(input.answer || "");
-  if (!FRESHNESS_CLAIM.test(answer)) return { ok: true };
+  const answer = String(input.answer || "").replace(LOCAL_RUNTIME_STATE, "");
+  // Narrow: only strong external freshness claims, not casual 现在/当前 chat.
+  const strongClaim =
+    /(?:最新(?:消息|新闻|股价|价格|行情|公告|数据)|今天(?:的)?(?:股价|价格|行情|新闻)|今日(?:股价|价格|行情)|实时(?:股价|价格|行情|数据)|截至目前|as of today|\blatest (?:price|news|data)\b)/iu;
+  if (!strongClaim.test(answer)) return { ok: true };
   const urls = (input.sourceUrls || []).filter((url) => /^https?:\/\//iu.test(url));
   if (!input.searchedAt?.trim() || !urls.length) {
     return {
@@ -93,27 +101,18 @@ export function collectDesktopWebSearchEvidenceFromTexts(texts: string[]): {
   return { searchedAt, items, unavailable };
 }
 
-/** Binds search evidence onto the final answer or blocks unsupported freshness claims. */
+/**
+ * Optionally attach citation blocks when this turn actually ran web search.
+ * Never rewrite the assistant answer into WEB_SEARCH_* machine prompts — those
+ * belong in tool payloads / spring-app Auto Mode, not the BRAIN chat bubble.
+ */
 export function finalizeDesktopWebSearchAnswer(input: {
   answer: string;
   toolTexts: string[];
 }): string {
   const evidence = collectDesktopWebSearchEvidenceFromTexts(input.toolTexts);
   const answer = String(input.answer || "");
-  if (!evidence) {
-    const check = assertAnswerAllowsFreshnessClaims({ answer, searchedAt: "", sourceUrls: [] });
-    return check.ok ? answer : check.reason;
-  }
-  const sourceUrls = evidence.items.map((item) => item.url);
-  const check = assertAnswerAllowsFreshnessClaims({
-    answer,
-    searchedAt: evidence.searchedAt,
-    sourceUrls
-  });
-  if (!check.ok) {
-    return check.reason;
-  }
-  if (!evidence.items.length || !evidence.searchedAt) return answer;
+  if (!evidence?.items.length || !evidence.searchedAt) return answer;
   return attachDesktopWebSearchCitations({
     answer,
     searchedAt: evidence.searchedAt,

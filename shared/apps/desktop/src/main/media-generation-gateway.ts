@@ -256,7 +256,7 @@ export async function createMediaGenerationJob(
     response = await fetchImpl(`${base}${createPath(input.kind)}`, {
       method: "POST",
       headers,
-      signal: input.signal ?? AbortSignal.timeout(60_000),
+      signal: input.signal,
       body: JSON.stringify(body)
     });
   } catch (error) {
@@ -292,7 +292,7 @@ export async function getMediaGenerationJob(
         Authorization: `Bearer ${input.bearerToken}`,
         Accept: "application/json"
       }, correlation),
-      signal: input.signal ?? AbortSignal.timeout(30_000)
+      signal: input.signal
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -345,7 +345,7 @@ export async function getAutoMediaToolJob(input: {
       Authorization: `Bearer ${input.bearerToken}`,
       Accept: "application/json"
     }, correlation),
-    signal: input.signal ?? AbortSignal.timeout(60_000)
+    signal: input.signal
   });
   const payload = await readJson(response);
   if (!response.ok) {
@@ -406,18 +406,12 @@ export async function runAutoMediaTool(
     response = await fetchImpl(`${base}/auto/tools/invoke`, {
       method: "POST",
       headers,
-      // Submit should return quickly when wait=false; keep a short HTTP budget.
-      signal: input.signal ?? AbortSignal.timeout(
-        waitOnServer
-          ? Math.max(60_000, input.maxWaitMs ?? 10 * 60_000)
-          : 120_000
-      ),
+      signal: input.signal,
       body: JSON.stringify(withSpringCorrelationBody({
         name: input.toolName,
         arguments: argumentsBody,
         idempotency_key: input.idempotencyKey,
-        wait: waitOnServer,
-        max_wait_ms: input.maxWaitMs ?? 10 * 60_000
+        wait: waitOnServer
       }, correlation))
     });
   } catch (error) {
@@ -454,15 +448,8 @@ export async function runAutoMediaTool(
   if (!waitOnServer && job.id && !isTerminalGenerationState(job.state)
     && extractMediaUrlsFromResult(job.resultJson).length === 0) {
     const pollIntervalMs = Math.max(1, input.pollIntervalMs ?? 2_000);
-    const maxWaitMs = Math.max(pollIntervalMs, input.maxWaitMs ?? 10 * 60_000);
-    const started = Date.now();
     while (!isTerminalGenerationState(job.state)
       && extractMediaUrlsFromResult(job.resultJson).length === 0) {
-      if (Date.now() - started > maxWaitMs) {
-        throw new Error(
-          `${input.toolName === "video_generate" ? "视频" : "图片"}生成超时（任务 ${job.id}，已等待 ${Math.round(maxWaitMs / 1000)} 秒）。`
-        );
-      }
       await sleep(pollIntervalMs, input.signal);
       const polled = await getAutoMediaToolJob({
         gatewayBaseUrl: input.gatewayBaseUrl,
@@ -517,12 +504,7 @@ export async function runMediaGenerationJob(
   }
 
   const pollIntervalMs = Math.max(1_500, input.pollIntervalMs ?? 3_000);
-  const maxWaitMs = Math.max(pollIntervalMs, input.maxWaitMs ?? 10 * 60_000);
-  const started = Date.now();
   while (!isTerminalGenerationState(job.state)) {
-    if (Date.now() - started > maxWaitMs) {
-      throw new Error(`${input.kind}生成超时（任务 ${job.id}，已等待 ${Math.round(maxWaitMs / 1000)} 秒）。`);
-    }
     await sleep(pollIntervalMs, input.signal);
     job = await getMediaGenerationJob({
       gatewayBaseUrl: input.gatewayBaseUrl,

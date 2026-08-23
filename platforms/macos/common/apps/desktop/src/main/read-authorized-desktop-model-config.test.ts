@@ -24,6 +24,7 @@ test("uses the OS vault credential only inside the trusted model request", async
   const originalFetch = globalThis.fetch;
   let authorization = "";
   globalThis.fetch = async (_input, init) => {
+    assert.equal(init?.signal, undefined);
     authorization = new Headers(init?.headers).get("authorization") ?? "";
     return new Response(JSON.stringify({
       data: [{ id: "private-model", model: "private-model", provider: "private", label: "Private" }]

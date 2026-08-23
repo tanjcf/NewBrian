@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  discoverManagedEnginePathEntries,
   enrichShellEnvForTools,
   formatMissingHostToolGuidance,
   guardUnboundedRecursiveSearch,
@@ -158,6 +159,23 @@ test("shell.exec appends Chinese missing-tool guidance on command-not-found", as
     assert.equal(result.ok, false);
     assert.match(String(result.output), /未能在当前工具宿主 PATH/);
     assert.match(String(result.output), /重启 codeCN/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("prepends managed engine bins when BRAIN_MANAGED_ENGINES_ROOT is set", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-managed-engines-"));
+  try {
+    const ffmpegBin = join(root, "ffmpeg", "bin");
+    mkdirSync(ffmpegBin, { recursive: true });
+    writeFileSync(join(ffmpegBin, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"), "");
+    const enriched = enrichShellEnvForTools({}, {
+      managedEnginesRoot: root,
+      processEnv: { Path: "C:\\base" }
+    });
+    assert.match(readPathFromEnv(enriched), new RegExp(ffmpegBin.replace(/\\/g, "\\\\")));
+    assert.deepEqual(discoverManagedEnginePathEntries(root), [ffmpegBin]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

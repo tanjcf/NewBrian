@@ -17,7 +17,6 @@ interface DocumentWorkerChild {
 
 export interface DocumentWorkerClientOptions {
   child: DocumentWorkerChild;
-  defaultTimeoutMs?: number;
 }
 
 export interface DocumentWorkerIngestInput {
@@ -29,14 +28,12 @@ export interface DocumentWorkerIngestInput {
 
 export class DocumentWorkerClient {
   private readonly child: DocumentWorkerChild;
-  private readonly timeoutMs: number;
   private readonly lines;
-  private readonly pending = new Map<string, { resolve: (value: DocumentWorkerResponse) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly pending = new Map<string, { resolve: (value: DocumentWorkerResponse) => void; reject: (error: Error) => void }>();
   private stopped = false;
 
   constructor(options: DocumentWorkerClientOptions) {
     this.child = options.child;
-    this.timeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.lines = createInterface({ input: this.child.stdout });
     this.lines.on("line", (line) => this.acceptLine(line));
     this.child.once("exit", () => this.failAll("DOCUMENT_WORKER_EXITED", "Document worker exited."));
@@ -55,12 +52,7 @@ export class DocumentWorkerClient {
     if (!request.request_id) return Promise.reject(new Error("DOCUMENT_WORKER_REQUEST_ID_REQUIRED"));
     if (this.pending.has(request.request_id)) return Promise.reject(new Error("DOCUMENT_WORKER_DUPLICATE_REQUEST"));
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(request.request_id);
-        reject(new Error(`DOCUMENT_WORKER_TIMEOUT: ${request.request_id}`));
-      }, this.timeoutMs);
-      timer.unref?.();
-      this.pending.set(request.request_id, { resolve, reject, timer });
+      this.pending.set(request.request_id, { resolve, reject });
       this.child.stdin.write(`${JSON.stringify(request)}\n`);
     });
   }
@@ -79,14 +71,13 @@ export class DocumentWorkerClient {
     catch { this.failAll("DOCUMENT_WORKER_PROTOCOL_ERROR", "Document worker returned an invalid response."); return; }
     const pending = this.pending.get(response.request_id);
     if (!pending) return;
-    clearTimeout(pending.timer);
     this.pending.delete(response.request_id);
     if (response.status === "failed") pending.reject(new Error(`${response.error_code || "DOCUMENT_WORKER_FAILED"}: document ingestion failed`));
     else pending.resolve(response);
   }
 
   private failAll(code: string, message: string) {
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error(`${code}: ${message}`)); }
+    for (const pending of this.pending.values()) pending.reject(new Error(`${code}: ${message}`));
     this.pending.clear();
   }
 }

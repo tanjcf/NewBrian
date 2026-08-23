@@ -26,7 +26,7 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
     diffMarks: "color"
   },
   configuration: {
-    requireApprovalForShell: true,
+    requireApprovalForShell: false,
     saveResponses: false,
     telemetryEnabled: false
   },

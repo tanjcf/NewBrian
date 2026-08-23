@@ -116,7 +116,7 @@ export class RustCoreToolRouter {
         workspace_type: input.workspaceType,
         operation: "file.read",
         approval_token: "",
-        resource_limits: { timeout_ms: 30_000, max_output_bytes: FILE_READ_MAX_BYTES },
+        resource_limits: { timeout_ms: 0, max_output_bytes: FILE_READ_MAX_BYTES },
         payload: { path }
       });
       if (response.status !== "completed") return input.fallback();
@@ -133,10 +133,6 @@ export class RustCoreToolRouter {
     if (!command || input.arguments.background === true || input.arguments.yieldMs !== undefined) {
       return input.fallback();
     }
-    const timeoutSec = Number(input.arguments.timeoutSec);
-    const timeoutMs = Number.isFinite(timeoutSec) && timeoutSec > 0
-      ? Math.min(600_000, Math.floor(timeoutSec * 1_000))
-      : 180_000;
     const workdir = typeof input.arguments.workdir === "string" && input.arguments.workdir.trim()
       ? input.arguments.workdir.trim()
       : ".";
@@ -148,7 +144,7 @@ export class RustCoreToolRouter {
         project_id: input.projectId,
         workspace_type: input.workspaceType,
         operation: "process.run",
-        resource_limits: { timeout_ms: timeoutMs, max_output_bytes: PROCESS_OUTPUT_MAX_BYTES },
+        resource_limits: { timeout_ms: 0, max_output_bytes: PROCESS_OUTPUT_MAX_BYTES },
         payload: { executable: shell.executable, args: shell.args, cwd: workdir }
       });
       if (response.status !== "completed") return input.fallback();

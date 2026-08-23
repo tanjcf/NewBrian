@@ -219,14 +219,15 @@ test("resolves host policy and tool callbacks through dedicated handlers", async
   await started;
 });
 
-test("times out bounded requests and ignores their late responses", async () => {
+test("keeps control requests pending until a response or host exit", async () => {
   const host = fakeHost(102);
-  const client = new clientModule.AgentHostClient({ entryPath: "entry.js", forkProcess: () => host, requestTimeoutMs: 10 });
+  const client = new clientModule.AgentHostClient({ entryPath: "entry.js", forkProcess: () => host });
   const pending = client.request("terminal.snapshot", {});
-
-  await assert.rejects(pending, (error: unknown) => error instanceof Error && "code" in error && error.code === "host_request_timeout");
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(client.pendingCount, 1);
   const requestId = (host.sent[0] as { id: string }).id;
-  host.emit("message", { version: 1, kind: "response", id: requestId, ok: true, result: { late: true } });
+  host.emit("message", { version: 1, kind: "response", id: requestId, ok: true, result: { completed: true } });
+  assert.deepEqual(await pending, { completed: true });
   assert.equal(client.pendingCount, 0);
 });
 
@@ -234,9 +235,7 @@ test("keeps model loop requests alive beyond the bounded control timeout", async
   const host = fakeHost(109);
   const client = new clientModule.AgentHostClient({
     entryPath: "entry.js",
-    forkProcess: () => host,
-    requestTimeoutMs: 10,
-    agentLoopRequestTimeoutMs: 100
+    forkProcess: () => host
   });
   const pending = client.request("agent.loop.advance", { runtimeId: "runtime-1" });
 
@@ -282,7 +281,6 @@ test("renews agent.loop.advance inactivity while model progress is reported", as
   const client = new clientModule.AgentHostClient({
     entryPath: "entry.js",
     forkProcess: () => host,
-    agentLoopRequestTimeoutMs: 80,
     onModelRequest: async (input: { reportProgress: () => void }) => {
       reportProgress = input.reportProgress;
       for (let i = 0; i < 4; i += 1) {
@@ -322,18 +320,15 @@ test("renews agent.loop.advance inactivity while model progress is reported", as
   assert.deepEqual(await advance, { status: "completed", finalContent: "done" });
 });
 
-test("times out agent.loop.advance after sustained inactivity", async () => {
+test("keeps inactive agent.loop.advance pending until explicitly completed", async () => {
   const host = fakeHost(111);
-  const client = new clientModule.AgentHostClient({
-    entryPath: "entry.js",
-    forkProcess: () => host,
-    agentLoopRequestTimeoutMs: 40
-  });
+  const client = new clientModule.AgentHostClient({ entryPath: "entry.js", forkProcess: () => host });
   const pending = client.request("agent.loop.advance", { runtimeId: "runtime-1" });
-  await assert.rejects(
-    pending,
-    (error: unknown) => error instanceof Error && "code" in error && error.code === "host_request_timeout"
-  );
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(client.pendingCount, 1);
+  const requestId = (host.sent[0] as { id: string }).id;
+  host.emit("message", { version: 1, kind: "response", id: requestId, ok: true, result: { status: "completed" } });
+  assert.deepEqual(await pending, { status: "completed" });
 });
 
 test("renews agent.loop.advance while tool reportProgress heartbeats continue", async () => {
@@ -360,7 +355,6 @@ test("renews agent.loop.advance while tool reportProgress heartbeats continue", 
   const client = new clientModule.AgentHostClient({
     entryPath: "entry.js",
     forkProcess: () => host,
-    agentLoopRequestTimeoutMs: 80,
     onToolRequest: async (input: { reportProgress: () => void }) => {
       reportProgress = input.reportProgress;
       for (let i = 0; i < 4; i += 1) {
@@ -400,13 +394,9 @@ test("renews agent.loop.advance while tool reportProgress heartbeats continue", 
   assert.deepEqual(await advance, { status: "completed", finalContent: "built" });
 });
 
-test("renew mid-flight supersedes a near-expiry advance timer", async () => {
+test("agent events do not impose a fixed deadline on an advance request", async () => {
   const host = fakeHost(113);
-  const client = new clientModule.AgentHostClient({
-    entryPath: "entry.js",
-    forkProcess: () => host,
-    agentLoopRequestTimeoutMs: 60
-  });
+  const client = new clientModule.AgentHostClient({ entryPath: "entry.js", forkProcess: () => host });
   const advance = client.request("agent.loop.advance", { runtimeId: "runtime-1" });
   await new Promise((resolve) => setImmediate(resolve));
   const advanceId = (host.sent[0] as { id: string }).id;

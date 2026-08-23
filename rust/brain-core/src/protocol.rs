@@ -2,17 +2,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const PROTOCOL_VERSION: &str = "1";
-pub const MAX_TIMEOUT_MS: u64 = 600_000;
 pub const MAX_OUTPUT_BYTES: u64 = 16_777_216;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceLimits {
     pub timeout_ms: u64,
     pub max_output_bytes: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
     pub protocol_version: String,
@@ -105,7 +104,7 @@ pub fn validate_request(request: &Request) -> Result<(), &'static str> {
     {
         return Err("BRAIN_CORE_REQUIRED_FIELD");
     }
-    if request.resource_limits.timeout_ms > MAX_TIMEOUT_MS
+    if request.resource_limits.timeout_ms != 0
         || request.resource_limits.max_output_bytes == 0
         || request.resource_limits.max_output_bytes > MAX_OUTPUT_BYTES
     {
@@ -130,7 +129,7 @@ mod tests {
             "workspace_type": "software",
             "operation": "health.check",
             "approval_token": "",
-            "resource_limits": { "timeout_ms": 1000, "max_output_bytes": 1024 },
+            "resource_limits": { "timeout_ms": 0, "max_output_bytes": 1024 },
             "payload": {}
         }))
         .expect("valid fixture")
@@ -144,8 +143,8 @@ mod tests {
         .expect("shared protocol schema");
         assert_eq!(schema["protocol_version"], PROTOCOL_VERSION);
         assert_eq!(
-            schema["request"]["resource_limits"]["timeout_ms"]["maximum"],
-            MAX_TIMEOUT_MS
+            schema["request"]["resource_limits"]["timeout_ms"]["const"],
+            0
         );
         assert_eq!(
             schema["request"]["resource_limits"]["max_output_bytes"]["maximum"],
@@ -158,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_a_bounded_request() {
+    fn accepts_an_event_driven_request() {
         assert_eq!(validate_request(&request()), Ok(()));
     }
 

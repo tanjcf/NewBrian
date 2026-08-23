@@ -10,19 +10,19 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$desktopRoot = Join-Path $repoRoot "apps\\desktop"
-$electronVite = Join-Path $desktopRoot "node_modules\\electron-vite\\bin\\electron-vite.js"
-$electronBuilder = Join-Path $desktopRoot "node_modules\\electron-builder\\cli.js"
-$asarPackageRoot = Join-Path $repoRoot "node_modules\\@electron\\asar"
+$desktopRoot = Join-Path $repoRoot "apps\desktop"
+$electronVite = Join-Path $desktopRoot "node_modules\electron-vite\bin\electron-vite.js"
+$electronBuilder = Join-Path $desktopRoot "node_modules\electron-builder\cli.js"
+$asarPackageRoot = Join-Path $repoRoot "node_modules\@electron\asar"
 if (-not (Test-Path -LiteralPath $asarPackageRoot)) {
-  $pnpmAsarPackage = Get-ChildItem -LiteralPath (Join-Path $repoRoot "node_modules\\.pnpm") -Directory -Filter "@electron+asar@*" -ErrorAction SilentlyContinue |
+  $pnpmAsarPackage = Get-ChildItem -LiteralPath (Join-Path $repoRoot "node_modules\.pnpm") -Directory -Filter "@electron+asar@*" -ErrorAction SilentlyContinue |
     Sort-Object Name -Descending |
     Select-Object -First 1
   if ($null -ne $pnpmAsarPackage) {
-    $asarPackageRoot = Join-Path $pnpmAsarPackage.FullName "node_modules\\@electron\\asar"
+    $asarPackageRoot = Join-Path $pnpmAsarPackage.FullName "node_modules\@electron\asar"
   }
 }
-$asarCli = Join-Path $asarPackageRoot "bin\\asar.js"
+$asarCli = Join-Path $asarPackageRoot "bin\asar.js"
 $desktopPackage = Get-Content (Join-Path $desktopRoot "package.json") -Raw | ConvertFrom-Json
 $isProduction = $Channel -eq "Production"
 $channelSlug = $Channel.ToLowerInvariant()
@@ -38,7 +38,10 @@ $maxPackageAttempts = 3
 $msiInstallDir = $env:CODECN_MSI_INSTALL_DIR
 $rootConfigPath = Join-Path $repoRoot "codecn.config.json"
 $featureConfigPath = Join-Path $repoRoot "codecn.features.json"
-$packageResourcesDir = Join-Path $desktopRoot "build\\package-resources"
+$bootstrapConfigPath = Join-Path $repoRoot "codecn.bootstrap.json"
+$documentWorkerSourcePath = Join-Path $desktopRoot "src\main\document-worker.js"
+$documentWorkerPath = Join-Path $desktopRoot "document-worker.js"
+$packageResourcesDir = Join-Path $desktopRoot "build\package-resources"
 $packageConfigPath = Join-Path $packageResourcesDir "codecn.config.json"
 $packageFeatureConfigPath = Join-Path $packageResourcesDir "codecn.features.json"
 $iconPath = Join-Path $desktopRoot "build\icon.ico"
@@ -82,6 +85,12 @@ if (-not (Test-Path -LiteralPath $asarCli)) {
 }
 if (-not (Test-Path -LiteralPath $iconPath)) {
   throw "Missing Windows icon: $iconPath"
+}
+if (-not (Test-Path -LiteralPath $bootstrapConfigPath -PathType Leaf)) {
+  throw "Missing bootstrap configuration: $bootstrapConfigPath"
+}
+if (-not (Test-Path -LiteralPath $documentWorkerSourcePath -PathType Leaf)) {
+  throw "Missing document worker source: $documentWorkerSourcePath"
 }
 
 Write-Host "Repo root: $repoRoot" -ForegroundColor Cyan
@@ -144,6 +153,12 @@ if (-not $SkipBuild) {
 } else {
   Write-Host "Skip build: using existing out/*" -ForegroundColor Yellow
 }
+
+Write-Host "Synchronizing document worker..." -ForegroundColor Cyan
+& node (Join-Path $desktopRoot "scripts\sync-document-worker.mjs")
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $documentWorkerPath -PathType Leaf)) {
+  throw "Unable to stage document worker: $documentWorkerPath"
+}
 if (-not (Test-Path -LiteralPath $rustCorePackagePath -PathType Leaf)) {
   throw "Missing staged Rust Core binary: $rustCorePackagePath"
 }
@@ -182,7 +197,7 @@ $lastBuilderExit = 0
 try {
   New-Item -ItemType Directory -Force -Path $packageResourcesDir | Out-Null
   if (Test-Path -LiteralPath $rootConfigPath) {
-    # Release configuration is built from a fixed allowlist, never from developer credentials or hooks.
+    # Release configuration is built from a fixed credential-free allowlist, never from developer credentials or hooks.
     $packageConfig = [ordered]@{
       llm = [ordered]@{
         provider = "DeepSeek"
@@ -308,11 +323,15 @@ try {
         $packagedIcon = Join-Path $unpackedRoot "resources\\codecn.ico"
         $packagedAsar = Join-Path $unpackedRoot "resources\\app.asar"
         $packagedRustCore = Join-Path $unpackedRoot "resources\\brain-core\\brain-core.exe"
+        $packagedBootstrap = Join-Path $unpackedRoot "resources\\codecn.bootstrap.json"
+        $packagedDocumentWorker = Join-Path $unpackedRoot "resources\\document-worker.js"
         if (-not (Test-Path -LiteralPath $unpackedExe)) { throw "Missing unpacked executable: $unpackedExe" }
         if (-not (Test-Path -LiteralPath $packagedIcon)) { throw "Missing packaged taskbar icon: $packagedIcon" }
         if (-not (Test-Path -LiteralPath $packagedAsar)) { throw "Missing packaged application archive: $packagedAsar" }
         if (-not (Test-Path -LiteralPath $packagedRustCore)) { throw "Missing packaged Rust Core binary: $packagedRustCore" }
         if ((Get-Item -LiteralPath $packagedRustCore).Length -le 0) { throw "Packaged Rust Core binary is empty: $packagedRustCore" }
+        if (-not (Test-Path -LiteralPath $packagedBootstrap -PathType Leaf)) { throw "Missing packaged bootstrap configuration: $packagedBootstrap" }
+        if (-not (Test-Path -LiteralPath $packagedDocumentWorker -PathType Leaf)) { throw "Missing packaged document worker: $packagedDocumentWorker" }
         $longestPackagedPath = Get-ChildItem -LiteralPath $unpackedRoot -File -Recurse |
           Sort-Object { $_.FullName.Length } -Descending |
           Select-Object -First 1
@@ -421,7 +440,15 @@ if (Test-Path -LiteralPath $generatedMsi) {
   if ((Get-Item -LiteralPath $msiOut).Length -le 0) {
     throw "Generated MSI is empty: $msiOut"
   }
-  $signature = Get-AuthenticodeSignature -LiteralPath $msiOut
+  try {
+    $signature = Get-AuthenticodeSignature -LiteralPath $msiOut
+  } catch {
+    if ($requireSignature) {
+      throw "Unable to inspect MSI signature in Production channel: $($_.Exception.Message)"
+    }
+    $signature = [pscustomobject]@{ Status = "Unavailable" }
+    Write-Host "MSI signature inspection unavailable; retaining Test artifact as unsigned." -ForegroundColor Yellow
+  }
   if ($requireSignature -and $signature.Status -ne "Valid") {
     throw "MSI signature gate failed: $($signature.Status). Configure a signing certificate before release."
   }

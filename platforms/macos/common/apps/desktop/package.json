@@ -82,7 +82,7 @@
         "to": "codecn.features.json"
       },
       {
-        "from": "../../../codecn.bootstrap.json",
+        "from": "../../codecn.bootstrap.json",
         "to": "codecn.bootstrap.json"
       },
       {

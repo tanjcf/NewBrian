@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { generateArtifact, validateArtifactCreateInput, validateDocumentCreateInput } from "./artifact-generator.js";
+import { analyzeSpreadsheet, inspectSpreadsheet, updateSpreadsheet, verifySpreadsheetArtifact } from "./spreadsheet-workbook.js";
 import {
   COMMAND_OUTPUT_LIMITS,
   createBoundedStreamCollector,
@@ -34,6 +35,10 @@ import {
   handleShellProcessAction,
   startShellProcess
 } from "./shell-process-registry.js";
+import { CapabilityRegistry } from "./capability-registry.js";
+import { CapabilityRuntime } from "./capability-runtime.js";
+import { verifyBuiltinArtifactResult, verifyBuiltinResult, verifySpreadsheetResult } from "./capability-verifier.js";
+import { createBuiltinCapabilityCatalog as createBuiltinCatalogFromDescriptors } from "./builtin-capability-catalog.js";
 
 export { COMMAND_OUTPUT_LIMITS, truncateHeadTail };
 
@@ -112,7 +117,6 @@ export function normalizeWindowsShellCommand(command) {
  * Caps match COMMAND_OUTPUT_LIMITS (maxCaptureBytes ≈ former maxBuffer).
  */
 async function execShellCommand(command, args, options = {}) {
-  const timeoutMs = options.timeout ?? 180_000;
   const maxCaptureBytes = options.maxBuffer ?? COMMAND_OUTPUT_LIMITS.maxCaptureBytes;
   const stdoutCollector = createBoundedStreamCollector({
     ...COMMAND_OUTPUT_LIMITS,
@@ -125,7 +129,6 @@ async function execShellCommand(command, args, options = {}) {
 
   return await new Promise((resolve) => {
     let settled = false;
-    let timedOut = false;
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
@@ -136,7 +139,6 @@ async function execShellCommand(command, args, options = {}) {
     const finish = (payload) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
       resolve(payload);
     };
@@ -170,11 +172,6 @@ async function execShellCommand(command, args, options = {}) {
       });
     };
 
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree();
-    }, timeoutMs);
-
     child.stdout.on("data", (chunk) => stdoutCollector.write(chunk));
     child.stderr.on("data", (chunk) => stderrCollector.write(chunk));
     child.on("error", (error) => {
@@ -194,11 +191,9 @@ async function execShellCommand(command, args, options = {}) {
     child.on("close", (code, signal) => {
       const stdout = stdoutCollector.finish(decodeStreamBuffer);
       const stderr = stderrCollector.finish(decodeStreamBuffer);
-      const exitCode = timedOut ? 1 : (typeof code === "number" ? code : (signal ? 1 : 0));
-      const ok = !timedOut && exitCode === 0;
-      const failureMessage = timedOut
-        ? `Command timed out after ${timeoutMs}ms`
-        : (ok ? undefined : (signal ? `Killed by ${signal}` : `Exit code ${exitCode}`));
+      const exitCode = typeof code === "number" ? code : (signal ? 1 : 0);
+      const ok = exitCode === 0;
+      const failureMessage = ok ? undefined : (signal ? `Killed by ${signal}` : `Exit code ${exitCode}`);
       finish({
         ok,
         exitCode,
@@ -440,10 +435,7 @@ function requireCommand(input) {
   const yieldMs = input?.yieldMs === undefined || input?.yieldMs === null
     ? undefined
     : Number(input.yieldMs);
-  const timeoutSec = input?.timeoutSec === undefined || input?.timeoutSec === null
-    ? undefined
-    : Number(input.timeoutSec);
-  return { command, workdir, background, yieldMs, timeoutSec };
+  return { command, workdir, background, yieldMs };
 }
 
 function requireReadInput(input) {
@@ -833,6 +825,22 @@ export function createBuiltinToolRegistry() {
         };
       }
     })
+    .register(spreadsheetTool("inspect", "read", async (input, context) => {
+      const source = await resolveSafeWorkspaceTarget(context.workspacePath, input.targetPath);
+      return { ok: true, output: JSON.stringify(await inspectSpreadsheet(source.target, input)) };
+    }))
+    .register(spreadsheetTool("analyze", "read", async (input, context) => {
+      const source = await resolveSafeWorkspaceTarget(context.workspacePath, input.targetPath);
+      return { ok: true, output: JSON.stringify(await analyzeSpreadsheet(source.target, input)) };
+    }))
+    .register(spreadsheetTool("update", "write", async (input, context) => {
+      const source = await resolveSafeWorkspaceTarget(context.workspacePath, input.targetPath);
+      const target = await resolveSafeWorkspaceTarget(context.workspacePath, input.outputPath || input.targetPath);
+      const result = await updateSpreadsheet(source.target, target.target, input.operations || []);
+      const stat = await fs.stat(target.target);
+      const verification = await verifySpreadsheetArtifact(target.target);
+      return { ok: true, output: JSON.stringify(result), artifact: { path: target.relativePath, size: stat.size, format: "xlsx", verified: true, verification } };
+    }))
     .register({
       name: "git.status",
       title: "Git status",
@@ -864,8 +872,7 @@ export function createBuiltinToolRegistry() {
           command: { type: "string", minLength: 1 },
           workdir: { type: "string", minLength: 1 },
           background: { type: "boolean" },
-          yieldMs: { type: "number", minimum: 0 },
-          timeoutSec: { type: "number", minimum: 1 }
+          yieldMs: { type: "number", minimum: 0 }
         },
         required: ["command"],
         additionalProperties: false
@@ -889,7 +896,7 @@ export function createBuiltinToolRegistry() {
           const resolved = await resolveSafeWorkspacePath(context.workspacePath, input.workdir, { fieldName: "workdir" });
           cwd = resolved.target;
         }
-        const useSession = Boolean(input.background) || input.yieldMs !== undefined || input.timeoutSec !== undefined;
+        const useSession = Boolean(input.background) || input.yieldMs !== undefined;
         if (useSession) {
           const result = await startShellProcess({
             command: shellCommand,
@@ -899,7 +906,6 @@ export function createBuiltinToolRegistry() {
             displayCommand: normalizedCommand,
             background: Boolean(input.background),
             yieldMs: input.yieldMs,
-            timeoutSec: input.timeoutSec,
             signal: context.abortSignal
           });
           if (!result.ok) {
@@ -970,6 +976,59 @@ export function createBuiltinToolRegistry() {
     .registerAlias("apply_patch", "workspace.apply_patch")
     .registerAlias("exec", "shell.exec")
     .registerAlias("process", "shell.process");
+}
+
+export function createRuntimeCapabilityRegistry(toolRegistry = createBuiltinToolRegistry()) {
+  const registry = new CapabilityRegistry();
+  registry.registerProvider({
+    id: "builtin.core",
+    type: "builtin",
+    version: "1.0.0",
+    status: "active",
+    capabilities: toolRegistry.list().map((tool) => tool.name)
+  });
+  for (const tool of toolRegistry.list()) {
+    registry.registerCapability({
+      id: tool.name,
+      version: "1.0.0",
+      providerId: "builtin.core",
+      providerType: "builtin",
+      inputSchema: tool.inputSchema || { type: "object" },
+      outputSchema: { type: "object" },
+      risk: tool.kind === "write" ? "local-write" : "read",
+      permissions: tool.kind === "write" ? ["workspace.write"] : ["workspace.read"],
+      approval: tool.requiresApproval ? "conditional" : "never",
+      idempotency: tool.kind === "write" ? "request-and-tool-call" : "safe",
+      verification: tool.name.startsWith("spreadsheet.") ? "spreadsheet.v1" : (tool.name.startsWith("artifact.") || tool.name.startsWith("document.create_") ? "builtin.artifact.v1" : "builtin.basic.v1")
+    });
+  }
+  return registry;
+}
+
+export function createBuiltinCapabilityRuntime(toolRegistry = createBuiltinToolRegistry(), options = {}) {
+  const registry = createRuntimeCapabilityRegistry(toolRegistry);
+  const providerHandler = options.providerHandler || ((capabilityId, input, context) => toolRegistry.invoke(capabilityId, input, context));
+  const providers = new Map([["builtin.core", (input, context) => providerHandler(context.capabilityId, input, context)]]);
+  const verifiers = new Map([["spreadsheet.v1", verifySpreadsheetResult], ["builtin.artifact.v1", verifyBuiltinArtifactResult], ["builtin.basic.v1", verifyBuiltinResult]]);
+  return new CapabilityRuntime({ registry, providers, verifiers, policy: options.policy });
+}
+
+export function createBuiltinCapabilityCatalog(toolRegistry = createBuiltinToolRegistry()) {
+  return createBuiltinCatalogFromDescriptors(toolRegistry.list());
+}
+
+function spreadsheetTool(action, kind, execute) {
+  return {
+    name: `spreadsheet.${action}`,
+    title: `${action} Excel workbook`,
+    description: action === "inspect" ? "Read XLSX values, formulas, and sheet dimensions." : action === "analyze" ? "Group and aggregate XLSX table data deterministically." : "Edit an existing XLSX while preserving unaffected workbook content.",
+    kind,
+    risk: kind === "write" ? "medium" : "low",
+    requiresApproval: false,
+    inputSchema: { type: "object", properties: { targetPath: { type: "string" }, outputPath: { type: "string" }, sheet: { type: "string" }, sheetNames: { type: "array", items: { type: "string" } }, headerRow: { type: "integer" }, groupBy: { type: "array", items: { type: "string" } }, metrics: { type: "array", items: { type: "object" } }, operations: { type: "array", items: { type: "object" } }, maxRows: { type: "integer" }, maxColumns: { type: "integer" }, includeFormulas: { type: "boolean" } }, required: ["targetPath"], additionalProperties: false },
+    validate(input) { if (!input?.targetPath) throw new Error("targetPath is required."); if (action === "update" && !input.operations?.length) throw new Error("operations are required."); return input; },
+    execute
+  };
 }
 
 const documentSectionSchema = {

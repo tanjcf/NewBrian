@@ -38,15 +38,15 @@ test("music cancellation bumps generation and ignores late completion", async ()
   assert.equal(calls.at(-1).operation, "request.cancel");
 });
 
-test("music render maps legacy process timeout to FAILED instead of TIMED_OUT", async () => {
+test("music render maps process failures to FAILED", async () => {
   let completeProcess!: (value: any) => void;
   const service = new MusicRenderService({ platform: "win32", confirmRender: async () => true, acquireRustCore: async () => ({ request: async (input: any) => { if (input.operation === "process.run") return new Promise((resolve) => { completeProcess = resolve; }); return { protocol_version: "1", request_id: input.request_id, status: "completed", error_code: "", artifacts: [], result: {} }; } }) });
   const started = await service.start("owner", { projectId: "p1", projectRoot: "C:/work", outputRelativePath: "renders/mix.wav", mediaRelativePaths: ["audio/take.wav"], artifactType: "mix", timeline });
-  completeProcess({ protocol_version: "1", request_id: started.renderId, status: "failed", error_code: "BRAIN_CORE_PROCESS_TIMEOUT", artifacts: [], result: { success: false } });
+  completeProcess({ protocol_version: "1", request_id: started.renderId, status: "failed", error_code: "BRAIN_CORE_PROCESS_FAILED", artifacts: [], result: { success: false } });
   await new Promise((resolve) => setTimeout(resolve, 5));
   const state = service.status("owner", started.renderId);
   assert.equal(state.status, "FAILED");
-  assert.equal(state.errorCode, "BRAIN_CORE_PROCESS_TIMEOUT");
+  assert.equal(state.errorCode, "BRAIN_CORE_PROCESS_FAILED");
 });
 
 test("music render only accepts a WAV output", async () => {

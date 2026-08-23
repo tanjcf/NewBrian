@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SimulationLedger } from "./simulation-ledger.ts";
 
+test("buy order preserves cash plus position market value", () => {
+  const ledger = new SimulationLedger(10_000);
+  ledger.execute({ id: "buy-a", symbol: "600519", side: "buy", quantity: 100, price: 10, feeRate: 0, createdAt: "now" });
+  const snapshot = ledger.snapshot({ "600519": 12 });
+  assert.equal(snapshot.cash + snapshot.marketValue, 10_000);
+  assert.equal(snapshot.totalValue, 10_200);
+});
+
 test("ledger tracks cash, position and pnl", () => {
   const ledger = new SimulationLedger(10_000);
   ledger.execute({ id: "1", symbol: "600519", side: "buy", quantity: 100, price: 10, feeRate: 0, createdAt: "now" });
@@ -66,4 +74,17 @@ test("rebuilds the same balanced journal after ledger restart", () => {
   ledger.execute({ id: "buy-restore", symbol: "A", side: "buy", quantity: 10, price: 10, feeRate: 0.001, createdAt: "2026-08-20T01:00:00Z" });
   const restored = SimulationLedger.restore(ledger.exportState());
   assert.deepEqual(restored.journalEntries(), ledger.journalEntries());
+});
+
+test("reports persisted fills and an accounting-derived equity curve", () => {
+  const ledger = new SimulationLedger(10_000);
+  ledger.execute({ id: "buy-a", symbol: "A", side: "buy", quantity: 100, price: 10, feeRate: 0, createdAt: "2026-08-20T01:00:00Z" });
+  ledger.execute({ id: "buy-b", symbol: "B", side: "buy", quantity: 50, price: 20, feeRate: 0, createdAt: "2026-08-21T01:00:00Z" });
+  ledger.execute({ id: "sell-a", symbol: "A", side: "sell", quantity: 40, price: 12, feeRate: 0, createdAt: "2026-08-22T01:00:00Z" });
+
+  const activity = ledger.activity({ A: 12, B: 21 });
+  assert.deepEqual(activity.fills.map((fill) => fill.id), ["buy-a", "buy-b", "sell-a"]);
+  assert.equal(activity.equityCurve[0]?.totalValue, 10_000);
+  assert.equal(activity.equityCurve.at(-1)?.totalValue, 10_200);
+  assert.equal(activity.snapshot.totalValue, 10_250);
 });

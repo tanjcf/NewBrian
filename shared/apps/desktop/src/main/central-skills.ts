@@ -3,7 +3,7 @@
  * Set to `true` to restore catalog registration, composer pick, auto-routing,
  * and writing-specification confirmation flows.
  */
-export const GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED = false;
+export const GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED = true;
 
 export const GOVERNMENT_RESEARCH_WRITING_SKILL_NAME = "government-research-writing";
 

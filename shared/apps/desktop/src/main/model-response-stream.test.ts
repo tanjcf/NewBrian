@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-const { DEFAULT_MODEL_STREAM_INACTIVITY_TIMEOUT_MS, readModelResponseBody } = await import(
+const { readModelResponseBody } = await import(
   new URL("./model-response-stream.ts", import.meta.url).href
 );
-
-test("allows slow reasoning providers at least one minute between SSE chunks by default", () => {
-  assert.ok(DEFAULT_MODEL_STREAM_INACTIVITY_TIMEOUT_MS >= 60_000);
-});
 
 test("finishes an SSE response at response.completed even when the server leaves the socket open", async () => {
   const encoder = new TextEncoder();
@@ -31,21 +27,7 @@ test("finishes an SSE response at response.completed even when the server leaves
   assert.match(result.rawText, /response\.completed/);
 });
 
-test("fails an incomplete SSE stream after the configured inactivity timeout", async () => {
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode('data: {"type":"response.output_text.delta","delta":"可恢复正文"}\n\n'));
-    }
-  });
-  const response = new Response(body, { headers: { "content-type": "text/event-stream" } });
-  await assert.rejects(readModelResponseBody(response, {
-    wireApi: "responses",
-    inactivityTimeoutMs: 10
-  }), /inactive.*10ms/i);
-});
-
-test("resets inactivity detection whenever a valid SSE event arrives", async () => {
+test("waits for delayed SSE events without imposing a fixed execution deadline", async () => {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -59,7 +41,6 @@ test("resets inactivity detection whenever a valid SSE event arrives", async () 
 
   await readModelResponseBody(response, {
     wireApi: "responses",
-    inactivityTimeoutMs: 10,
     onTextDelta: (delta: string) => deltas.push(delta)
   });
 
@@ -84,7 +65,6 @@ test("keeps a task running while reasoning messages continue to arrive", async (
 
   await readModelResponseBody(response, {
     wireApi: "chat.completions",
-    inactivityTimeoutMs: 10,
     onReasoningDelta: (delta: string) => reasoning.push(delta)
   });
 
@@ -106,7 +86,6 @@ test("responses wire still harvests chat-style reasoning_content from compatible
 
   await readModelResponseBody(response, {
     wireApi: "responses",
-    inactivityTimeoutMs: 10,
     onReasoningDelta: (delta: string) => reasoning.push(delta)
   });
 

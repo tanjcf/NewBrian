@@ -1,4 +1,4 @@
-import type { PortfolioSnapshot, PositionSnapshot, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
+import type { PortfolioActivity, PortfolioEquityPoint, PortfolioSnapshot, PositionSnapshot, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
 
 export interface SimulationLedgerState {
   version: 1;
@@ -121,6 +121,19 @@ export class SimulationLedger {
     const marketValue = positions.reduce((sum, item) => sum + item.marketValue, 0);
     const unrealizedPnl = positions.reduce((sum, item) => sum + item.unrealizedPnl, 0);
     return { cash: this.cash, initialCash: this.initialCash, marketValue, totalValue: this.cash + marketValue, realizedPnl: this.realizedPnl, unrealizedPnl, totalReturnPercent: ((this.cash + marketValue - this.initialCash) / this.initialCash) * 100, positions };
+  }
+
+  activity(prices: Record<string, number>): PortfolioActivity {
+    const replay = new SimulationLedger(this.initialCash);
+    const observedPrices: Record<string, number> = {};
+    const equityCurve: PortfolioEquityPoint[] = [{ timestamp: "", totalValue: this.initialCash, cash: this.initialCash, marketValue: 0 }];
+    for (const fill of this.fills) {
+      observedPrices[fill.symbol] = fill.price;
+      replay.execute(fill);
+      const point = replay.snapshot(observedPrices);
+      equityCurve.push({ timestamp: fill.createdAt, totalValue: point.totalValue, cash: point.cash, marketValue: point.marketValue });
+    }
+    return { snapshot: this.snapshot(prices), fills: this.fills.map((fill) => ({ ...fill })), equityCurve };
   }
 
   recordSkillSnapshot(skillId: string, prices: Record<string, number>): void {

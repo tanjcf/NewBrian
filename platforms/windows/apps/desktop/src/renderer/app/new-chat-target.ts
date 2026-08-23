@@ -28,6 +28,13 @@ export function resolveNewChatWorkspaceId(input: {
   return input.selectedWorkspaceId;
 }
 
+export function shouldCreateChatThreadBeforeSend(input: {
+  isComposingNewThread: boolean;
+  currentThreadId?: string;
+}) {
+  return input.isComposingNewThread || !String(input.currentThreadId || "").trim();
+}
+
 export class NewChatThreadActivationError extends Error {
   readonly activationError: unknown;
   readonly catalog: WorkspaceCatalogItem[];

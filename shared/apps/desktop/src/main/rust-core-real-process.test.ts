@@ -44,7 +44,7 @@ test("real Rust Core binds the project, enforces approval replay, traversal, and
   const request = (input: Record<string, unknown>) => new Promise<any>((resolve, reject) => {
     const frame = {
       protocol_version: "1", project_id: "project-real", workspace_type: "game",
-      approval_token: "", resource_limits: { timeout_ms: 5_000, max_output_bytes: 16_384 }, payload: {}, ...input
+      approval_token: "", resource_limits: { timeout_ms: 0, max_output_bytes: 16_384 }, payload: {}, ...input
     };
     const requestId = String(frame.request_id);
     const timer = setTimeout(() => { pending.delete(requestId); reject(new Error(`Rust Core response timeout: ${requestId}`)); }, 10_000);
@@ -87,7 +87,7 @@ test("real Rust Core binds the project, enforces approval replay, traversal, and
     });
     const running = request({
       request_id: "long-process", operation: "process.run", approval_token: processToken,
-      resource_limits: { timeout_ms: 8_000, max_output_bytes: 16_384 },
+      resource_limits: { timeout_ms: 0, max_output_bytes: 16_384 },
       payload: { executable: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"], cwd: "." }
     });
     await new Promise((resolve) => setTimeout(resolve, 100));

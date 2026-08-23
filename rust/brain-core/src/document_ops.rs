@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct DocumentWorkerConfig {
@@ -93,7 +93,7 @@ pub fn ingest(
     config: &DocumentWorkerConfig,
     request_id: &str,
     payload: &Value,
-    timeout_ms: u64,
+    _timeout_ms: u64,
     max_output_bytes: u64,
     cancelled: &AtomicBool,
 ) -> Result<Value, &'static str> {
@@ -173,7 +173,6 @@ pub fn ingest(
         child.stderr.take().ok_or("BRAIN_CORE_DOCUMENT_PIPE")?,
         64 * 1024,
     );
-    let deadline = (timeout_ms > 0).then(|| Instant::now() + Duration::from_millis(timeout_ms));
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| "BRAIN_CORE_DOCUMENT_WAIT")? {
             break status;
@@ -184,13 +183,6 @@ pub fn ingest(
             let _ = stdout.join();
             let _ = stderr.join();
             return Err("BRAIN_CORE_CANCELLED");
-        }
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            terminate_process_tree(&mut child);
-            let _ = child.wait();
-            let _ = stdout.join();
-            let _ = stderr.join();
-            return Err("BRAIN_CORE_DOCUMENT_TIMEOUT");
         }
         thread::sleep(Duration::from_millis(10));
     };

@@ -58,6 +58,8 @@ test("builds wire-specific model request payloads", () => {
   assert.deepEqual(thinkingChat.thinking, { type: "enabled" });
   assert.equal(thinkingChat.reasoning_effort, "high");
   assert.equal("temperature" in thinkingChat, false);
+  const plainResponses = protocol.buildModelRequestPayload({ ...common, wireApi: "responses", enableThinking: false });
+  assert.equal(plainResponses.reasoning, undefined);
 });
 
 test("serializes tool calls and outputs for both wire protocols", () => {
@@ -127,6 +129,38 @@ test("disables thinking continuation when persisted tool history has no provider
   assert.equal(protocol.canContinueThinkingWithMessages([
     { role: "assistant", content: "普通回答" }
   ]), true);
+});
+
+test("treats server-side Auto as thinking-capable when the catalog can route there", () => {
+  const catalog = [
+    { model: "deepseek-v3.2-BD", provider: "百度智能云千帆" },
+    { model: "ernie-5.1", provider: "百度智能云千帆" }
+  ];
+  assert.equal(protocol.requiresThinkingWireProtocol({
+    provider: "百度智能云千帆", model: "auto", candidateModels: catalog
+  }), true, "Auto must use the wire that can round-trip a thinking trace");
+  assert.equal(protocol.requiresThinkingWireProtocol({
+    provider: "百度智能云千帆", model: "auto", candidateModels: [{ model: "ernie-5.1", provider: "百度智能云千帆" }]
+  }), false);
+  assert.equal(protocol.requiresThinkingWireProtocol({
+    provider: "gateway", model: "auto", routedModel: "deepseek-v3.2"
+  }), true, "a previously routed thinking model must decide the next step");
+  assert.equal(protocol.requiresThinkingWireProtocol({ provider: "DeepSeek", model: "deepseek-v4-pro" }), true);
+  assert.equal(protocol.requiresThinkingWireProtocol({ provider: "openai", model: "gpt-5" }), false);
+});
+
+test("detects the thinking-context rejection that must be repaired, not surfaced", () => {
+  const payload = {
+    error: { message: "The `reasoning_content` in the thinking mode must be passed back to the API." }
+  };
+  assert.equal(protocol.isThinkingContextGatewayRejection(400, payload), true);
+  assert.equal(protocol.isThinkingContextGatewayRejection(
+    400,
+    null,
+    "The `reasoning_content` in the thinking mode must be passed back to the API."
+  ), true);
+  assert.equal(protocol.isThinkingContextGatewayRejection(400, { error: { message: "invalid model" } }), false);
+  assert.equal(protocol.isThinkingContextGatewayRejection(200, payload), false);
 });
 
 test("streams response deltas through a terminal SSE event", async () => {

@@ -18,8 +18,8 @@ const localSkills = [
 
 const researchPrompt = "请撰写一篇地方实践调研报告，突出因地制宜路径。";
 
-test("product offline: government-research-writing never enables from request, persist, heuristic, or keywords", () => {
-  assert.equal(GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED, false);
+test("explicit government-research-writing selection enables the central workflow", () => {
+  assert.equal(GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED, true);
 
   for (const autoSkillEnabled of [false, true]) {
     const selection = selectModelChatSkills({
@@ -32,9 +32,9 @@ test("product offline: government-research-writing never enables from request, p
       latestUserRequest: researchPrompt
     });
 
-    assert.equal(selection.governmentSkillEnabled, false, `autoSkillEnabled=${autoSkillEnabled}`);
-    assert.deepEqual(selection.centralSkillNames, []);
-    assert.ok(!selection.explicitSkillNames.includes("government-research-writing"));
+    assert.equal(selection.governmentSkillEnabled, true, `autoSkillEnabled=${autoSkillEnabled}`);
+    assert.ok(selection.centralSkillNames.includes("government-research-writing"));
+    assert.ok(selection.explicitSkillNames.includes("government-research-writing"));
     assert.ok(!selection.selectedLocalSkillNames.includes("government-research-writing"));
     assert.ok(selection.explicitSkillNames.includes("sd-project-manager"));
   }
@@ -75,7 +75,7 @@ test("autoSkill OFF: new-chat research keywords and heuristic match do not enabl
   assert.ok(selection.selectedLocalSkillNames.includes("sd-project-manager"));
 });
 
-test("autoSkill OFF: greeting still attaches always-on project-manager shadow", () => {
+test("autoSkill OFF: greeting does not force always-on project-manager shadow", () => {
   const selection = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: [],
@@ -86,12 +86,12 @@ test("autoSkill OFF: greeting still attaches always-on project-manager shadow", 
     latestUserRequest: "你好"
   });
 
-  assert.deepEqual(selection.selectedLocalSkillNames, ["sd-project-manager"]);
+  assert.deepEqual(selection.selectedLocalSkillNames, []);
   assert.deepEqual(selection.explicitSkillNames, []);
   assert.equal(selection.governmentSkillEnabled, false);
 });
 
-test("autoSkill ON: greeting can still auto-inject project-manager from heuristics", () => {
+test("autoSkill ON: greeting still does not force project-manager without explicit need", () => {
   const selection = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: [],
@@ -102,10 +102,39 @@ test("autoSkill ON: greeting can still auto-inject project-manager from heuristi
     latestUserRequest: "你好"
   });
 
+  assert.deepEqual(selection.selectedLocalSkillNames, []);
+});
+
+test("simple chat does not use automatic skill or project-manager shadow", () => {
+  for (const latestUserRequest of ["谢谢你", "这是什么意思", "帮我翻译成英文：你好"]) {
+    const selection = selectModelChatSkills({
+      requestedSkillNames: [],
+      persistedSkillNames: [],
+      localSkillDescriptors: localSkills,
+      heuristicSkills: [localSkills[0]],
+      hasActiveGoal: false,
+      autoSkillEnabled: true,
+      latestUserRequest
+    });
+    assert.deepEqual(selection.selectedLocalSkillNames, [], latestUserRequest);
+  }
+});
+
+test("non-chat task still attaches always-on project-manager shadow", () => {
+  const selection = selectModelChatSkills({
+    requestedSkillNames: [],
+    persistedSkillNames: [],
+    localSkillDescriptors: localSkills,
+    heuristicSkills: [localSkills[0]],
+    hasActiveGoal: false,
+    autoSkillEnabled: false,
+    latestUserRequest: "修复 typescript 编译报错"
+  });
+
   assert.deepEqual(selection.selectedLocalSkillNames, ["sd-project-manager"]);
 });
 
-test("product offline: explicit composer selection cannot enable government-research-writing", () => {
+test("explicit composer selection enables government-research-writing", () => {
   for (const autoSkillEnabled of [false, true]) {
     const selection = selectModelChatSkills({
       requestedSkillNames: ["government-research-writing"],
@@ -116,12 +145,12 @@ test("product offline: explicit composer selection cannot enable government-rese
       autoSkillEnabled,
       latestUserRequest: "随便聊聊"
     });
-    assert.equal(selection.governmentSkillEnabled, false, `autoSkillEnabled=${autoSkillEnabled}`);
-    assert.deepEqual(selection.centralSkillNames, []);
+    assert.equal(selection.governmentSkillEnabled, true, `autoSkillEnabled=${autoSkillEnabled}`);
+    assert.ok(selection.centralSkillNames.includes("government-research-writing"));
   }
 });
 
-test("product offline: autoSkill keyword advisory does not enable government-research-writing", () => {
+test("autoSkill keyword advisory enables government-research-writing", () => {
   const selection = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: [],
@@ -132,11 +161,11 @@ test("product offline: autoSkill keyword advisory does not enable government-res
     latestUserRequest: "写一个煤炭企业2025年年终总结发言稿，输出PDF文件"
   });
 
-  assert.equal(selection.governmentSkillEnabled, false);
-  assert.ok(!selection.centralSkillNames.includes("government-research-writing"));
+  assert.equal(selection.governmentSkillEnabled, true);
+  assert.ok(selection.centralSkillNames.includes("government-research-writing"));
 });
 
-test("product offline: persisted goal specialty and heuristic specialty cannot auto-awaken", () => {
+test("autoSkill can revive persisted and heuristic government specialty", () => {
   const fromPersisted = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: ["government-research-writing"],
@@ -146,7 +175,7 @@ test("product offline: persisted goal specialty and heuristic specialty cannot a
     autoSkillEnabled: true,
     latestUserRequest: "继续"
   });
-  assert.equal(fromPersisted.governmentSkillEnabled, false);
+  assert.equal(fromPersisted.governmentSkillEnabled, true);
 
   const fromHeuristic = selectModelChatSkills({
     requestedSkillNames: [],
@@ -157,6 +186,6 @@ test("product offline: persisted goal specialty and heuristic specialty cannot a
     autoSkillEnabled: true,
     latestUserRequest: researchPrompt
   });
-  assert.equal(fromHeuristic.governmentSkillEnabled, false);
-  assert.ok(!fromHeuristic.centralSkillNames.includes("government-research-writing"));
+  assert.equal(fromHeuristic.governmentSkillEnabled, true);
+  assert.ok(fromHeuristic.centralSkillNames.includes("government-research-writing"));
 });

@@ -13,7 +13,7 @@ interface GamePreviewServiceOptions {
   acquireRustCore: (binding: { projectId: string; projectRoot: string; workspaceType: "game" }) => Promise<GamePreviewRustClient>;
   confirmStart: (input: { projectName: string; projectRoot: string; command: string }) => Promise<boolean>;
   inspectProject: (projectRoot: string) => Promise<BrainGameProjectInspection>;
-  readinessProbe?: (url: string) => Promise<boolean>;
+  readinessProbe?: (url: string, signal?: AbortSignal) => Promise<boolean>;
   platform?: NodeJS.Platform;
   schedule?: (callback: () => void, delayMs: number) => NodeJS.Timeout;
   clearSchedule?: (timer: NodeJS.Timeout) => void;
@@ -24,6 +24,7 @@ interface InternalPreview {
   requestId: string;
   client: GamePreviewRustClient;
   timer?: NodeJS.Timeout;
+  readinessController?: AbortController;
   state: BrainGamePreviewState;
 }
 
@@ -54,9 +55,9 @@ export class GamePreviewService {
   constructor(options: GamePreviewServiceOptions) {
     this.options = options;
     this.inspectProject = options.inspectProject;
-    this.readinessProbe = options.readinessProbe ?? (async (url) => {
+    this.readinessProbe = options.readinessProbe ?? (async (url, signal) => {
       try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(1_000), redirect: "manual" });
+        const response = await fetch(url, { signal, redirect: "manual" });
         return response.status >= 200 && response.status < 500;
       } catch { return false; }
     });
@@ -85,7 +86,7 @@ export class GamePreviewService {
       ownerId, projectId: input.projectId, conversationId: input.conversationId,
       workspaceKey: "game", taskType: "game.preview", requestId,
       idempotencyKey: sessionId, maxAttempts: 1,
-      resourceLimitsJson: JSON.stringify({ timeoutMs: 600_000, maxOutputBytes: 1_048_576 })
+      resourceLimitsJson: JSON.stringify({ maxOutputBytes: 1_048_576 })
     });
     const state: BrainGamePreviewState = {
       schemaVersion: 1, sessionId, projectId: input.projectId, taskId: task.id, status: "STARTING",
@@ -101,8 +102,8 @@ export class GamePreviewService {
       registration = await client.request({
         request_id: `${requestId}:approval`, project_id: input.projectId, workspace_type: "game",
         operation: "approval.register", approval_token: "",
-        resource_limits: { timeout_ms: 5_000, max_output_bytes: 1_024 },
-        payload: { token, operation: "process.run", ttl_ms: 30_000 }
+        resource_limits: { timeout_ms: 0, max_output_bytes: 1_024 },
+        payload: { token, operation: "process.run", ttl_ms: 0 }
       });
     } catch (error) {
       this.finish(internal, "FAILED", "BRAIN_CORE_APPROVAL_FAILED", error instanceof Error ? error.message : String(error));
@@ -116,12 +117,12 @@ export class GamePreviewService {
     const executable = this.options.platform === "win32" && inspection.preview.command === "npm" ? "npm.cmd" : inspection.preview.command;
     void client.request({
       request_id: requestId, project_id: input.projectId, workspace_type: "game", operation: "process.run", approval_token: token,
-      resource_limits: { timeout_ms: 600_000, max_output_bytes: 1_048_576 },
+      resource_limits: { timeout_ms: 0, max_output_bytes: 1_048_576 },
       payload: { executable, args: inspection.preview.args, cwd: "." }
     }).then((response) => this.acceptCompletion(internal, response)).catch((error: unknown) => {
       this.finish(internal, "FAILED", "BRAIN_GAME_PREVIEW_PROCESS_FAILED", error instanceof Error ? error.message : String(error));
     });
-    if (state.previewUrl) this.scheduleReadiness(internal, 0);
+    if (state.previewUrl) this.scheduleReadiness(internal, true);
     return { ...state };
   }
 
@@ -137,11 +138,13 @@ export class GamePreviewService {
     if (!ACTIVE.has(session.state.status)) return { ...session.state };
     session.state.status = "STOPPING";
     if (session.timer) { this.clearSchedule(session.timer); session.timer = undefined; }
+    session.readinessController?.abort(new Error("Game preview readiness check cancelled."));
+    session.readinessController = undefined;
     try {
       const response = await session.client.request({
         request_id: `${session.requestId}:cancel:${randomUUID()}`, project_id: projectId, workspace_type: "game",
         operation: "request.cancel", approval_token: "",
-        resource_limits: { timeout_ms: 5_000, max_output_bytes: 1_024 }, payload: { target_request_id: session.requestId }
+        resource_limits: { timeout_ms: 0, max_output_bytes: 1_024 }, payload: { target_request_id: session.requestId }
       });
       if (response.status !== "completed") {
         this.finish(session, "FAILED", response.error_code || "BRAIN_GAME_PREVIEW_CANCEL_FAILED", "");
@@ -159,18 +162,24 @@ export class GamePreviewService {
     return project;
   }
 
-  private scheduleReadiness(session: InternalPreview, attempt: number) {
-    if (!ACTIVE.has(session.state.status) || session.state.status === "STOPPING" || !session.state.previewUrl || attempt >= 60) return;
+  private scheduleReadiness(session: InternalPreview, immediate = false) {
+    if (!ACTIVE.has(session.state.status) || session.state.status === "STOPPING" || !session.state.previewUrl) return;
     session.timer = this.schedule(() => {
-      void this.readinessProbe(session.state.previewUrl).then((ready) => {
+      const controller = new AbortController();
+      session.readinessController = controller;
+      void this.readinessProbe(session.state.previewUrl, controller.signal).then((ready) => {
+        if (session.readinessController === controller) session.readinessController = undefined;
         if (!ACTIVE.has(session.state.status) || session.state.status === "STOPPING") return;
         if (ready) {
           session.state.status = "READY";
           session.state.readyAt = now();
           this.options.storage.updateTask({ ownerId: session.ownerId, taskId: session.state.taskId, status: "RUNNING", progress: 0.5, resultJson: this.evidence(session.state) });
-        } else this.scheduleReadiness(session, attempt + 1);
+        } else this.scheduleReadiness(session);
+      }).catch(() => {
+        if (session.readinessController === controller) session.readinessController = undefined;
+        if (ACTIVE.has(session.state.status) && session.state.status !== "STOPPING") this.scheduleReadiness(session);
       });
-    }, attempt === 0 ? 0 : 500);
+    }, immediate ? 0 : 500);
     session.timer.unref?.();
   }
 
@@ -179,13 +188,15 @@ export class GamePreviewService {
     const output = [decode(result.stdout_base64), decode(result.stderr_base64)].filter(Boolean).join("\n").slice(-MAX_EVIDENCE_CHARS);
     if (response.status === "cancelled") this.finish(session, "CANCELLED", response.error_code || "BRAIN_CORE_CANCELLED", output);
     else if (response.status !== "completed") {
-      this.finish(session, response.error_code === "BRAIN_CORE_PROCESS_TIMEOUT" ? "TIMED_OUT" : "FAILED", response.error_code || "BRAIN_GAME_PREVIEW_FAILED", output);
+      this.finish(session, "FAILED", response.error_code || "BRAIN_GAME_PREVIEW_FAILED", output);
     } else if (result.success === false) this.finish(session, "FAILED", "BRAIN_GAME_PREVIEW_EXIT_NONZERO", output);
     else this.finish(session, "SUCCEEDED", "", output);
   }
 
-  private finish(session: InternalPreview, status: Extract<BrainGamePreviewState["status"], "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT">, errorCode: string, output: string) {
+  private finish(session: InternalPreview, status: Extract<BrainGamePreviewState["status"], "SUCCEEDED" | "FAILED" | "CANCELLED">, errorCode: string, output: string) {
     if (session.timer) { this.clearSchedule(session.timer); session.timer = undefined; }
+    session.readinessController?.abort(new Error("Game preview process finished."));
+    session.readinessController = undefined;
     session.state.status = status;
     session.state.finishedAt = now();
     session.state.errorCode = errorCode;

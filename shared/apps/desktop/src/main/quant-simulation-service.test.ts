@@ -41,3 +41,32 @@ test("restores manual and per-skill ledgers from durable project state", () => {
   assert.equal(restarted.performance("project", "trend").totalReturnPercent, 2);
   assert.equal(restarted.executeOrder("project", { id: "manual", symbol: "A", side: "buy", quantity: 10, price: 999, feeRate: 0, createdAt: "later" }).price, 10);
 });
+
+test("runSkillSimulation auto-trades on rising bars for trend-following without touching manual ledger", async () => {
+  const bars = Array.from({ length: 40 }, (_, index) => {
+    const close = 10 + index;
+    return {
+      symbol: "600519", exchange: "SSE", timezone: "Asia/Shanghai", interval: "1d" as const, adjustment: "forward" as const,
+      timestamp: `2026-06-${String((index % 28) + 1).padStart(2, "0")}T15:00:00+08:00`,
+      open: close, high: close + 1, low: close - 1, close, volume: 1000, turnover: 10_000, changePercent: 1,
+      source: { provider: "fixture", dataset: "test", fetchedAt: "2026-08-23T00:00:00Z" }
+    };
+  });
+  // Fix timestamps to be strictly increasing across months
+  for (let i = 0; i < bars.length; i += 1) {
+    const day = new Date(Date.UTC(2026, 5, 1 + i));
+    bars[i]!.timestamp = `${day.toISOString().slice(0, 10)}T15:00:00+08:00`;
+  }
+  const service = new QuantSimulationService();
+  service.createSession("project", 100_000, bars);
+  const result = await service.runSkillSimulation("project", {
+    skillId: "trend-following",
+    symbol: "600519",
+    quantity: 100,
+    query: { symbol: "600519", interval: "1d", adjustment: "forward", startDate: "2026-06-01", endDate: "2026-08-01" }
+  });
+  assert.ok(result.tradeCount >= 1);
+  assert.equal(result.performance.skillId, "trend-following");
+  assert.equal(service.snapshot("project", {}).positions.length, 0);
+  assert.ok(service.skillSnapshot("project", "trend-following", { "600519": bars.at(-1)!.close }).positions.length >= 0);
+});

@@ -64,8 +64,6 @@ export const MAX_RESEARCH_QUESTION_CHARS = 240;
 export const MAX_RESEARCH_ANSWER_CHARS = 600;
 export const MAX_RESEARCH_ATTACHMENT_PATH_CHARS = 4_096;
 export const MAX_RESEARCH_ATTACHMENT_URL_CHARS = 8_192;
-export const RESEARCH_INTAKE_ATTEMPT_TIMEOUT_MS = 18_000;
-export const RESEARCH_INTAKE_TOTAL_TIMEOUT_MS = 36_000;
 
 export function selectResearchIntakeModel<
   TCurrent extends { model: string },
@@ -76,10 +74,6 @@ export function selectResearchIntakeModel<
 ): TCurrent | TAvailable {
   const candidates = [current, ...availableModels.filter((item) => item.model !== current.model)];
   return candidates.find((item) => /(?:flash|mini|haiku|lite)/i.test(item.model)) ?? current;
-}
-
-export function remainingResearchIntakeTimeout(deadline: number, now = Date.now()) {
-  return Math.max(1, Math.min(RESEARCH_INTAKE_ATTEMPT_TIMEOUT_MS, deadline - now));
 }
 
 export function alignResearchIntakeProgress(result: ResearchIntakeResult, answeredCount: number): ResearchIntakeResult {

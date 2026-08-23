@@ -30,6 +30,9 @@ import type {
   BrainProjectUpdateInput,
   BrainProjectWorkspaceInput,
   BrainWorkspaceDto,
+  BrainWorkspaceSectionDto,
+  BrainSoftwareScript,
+  BrainSoftwareTaskState,
   BrainTaskCreateInput,
   BrainTaskDto,
   BrainTaskUpdateInput,
@@ -275,6 +278,13 @@ declare global {
       getBrainProject: (input: BrainProjectGetInput) => Promise<BrainProjectDto>;
       updateBrainProject: (input: BrainProjectUpdateInput) => Promise<BrainProjectDto>;
       setBrainProjectWorkspace: (input: BrainProjectWorkspaceInput) => Promise<{ ok: boolean }>;
+      getBrainWorkspaceSection: (input: { projectId: string; workspaceKey: string; sectionKey: string }) => Promise<BrainWorkspaceSectionDto>;
+      saveBrainWorkspaceSection: (input: { projectId: string; workspaceKey: string; sectionKey: string; content: string; expectedRevision: number }) => Promise<BrainWorkspaceSectionDto>;
+      listSoftwareScripts: (input: { projectId: string }) => Promise<BrainSoftwareScript[]>;
+      startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => Promise<BrainSoftwareTaskState>;
+      getSoftwareTaskStatus: (input: { taskId: string }) => Promise<BrainSoftwareTaskState>;
+      cancelSoftwareTask: (input: { taskId: string }) => Promise<BrainSoftwareTaskState>;
+      openSoftwareProjectTerminal: (input: BrainProjectGetInput) => Promise<{ ok: boolean }>;
       createBrainConversation: (input: BrainConversationCreateInput) => Promise<BrainConversationDto>;
       listBrainConversations: (input?: BrainConversationListInput) => Promise<BrainConversationDto[]>;
       getBrainConversation: (input: BrainConversationGetInput) => Promise<BrainConversationDto>;
@@ -300,6 +310,36 @@ declare global {
       startBrainGamePreview: (input: { projectId: string; conversationId?: string }) => Promise<BrainGamePreviewState>;
       getBrainGamePreviewStatus: (input: BrainProjectGetInput) => Promise<BrainGamePreviewState>;
       stopBrainGamePreview: (input: BrainProjectGetInput) => Promise<BrainGamePreviewState>;
+      createBrainGameWebTemplate: (input: BrainProjectGetInput) => Promise<{ engine: "web"; previewCommand: string; previewUrl: string }>;
+      exportBrainGameDesign: (input: BrainProjectGetInput) => Promise<any>;
+      getBrainGameLevelEditor: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainGameLevelEditor: (input: { projectId: string; state: unknown }) => Promise<any>;
+      spawnBrainGameActor: (input: { projectId: string; kind: "enemy" | "boss" | "npc"; levelIndex?: number }) => Promise<any>;
+      getBrainGameContentTree: (input: BrainProjectGetInput) => Promise<any>;
+      getBrainVideoPipeline: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainVideoPipeline: (input: { projectId: string; state: unknown }) => Promise<any>;
+      markBrainVideoShot: (input: { projectId: string; shotIndex: number; ready: boolean }) => Promise<any>;
+      cookBrainVideoPipeline: (input: BrainProjectGetInput) => Promise<any>;
+      getBrainMusicDaw: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainMusicDaw: (input: { projectId: string; state: unknown }) => Promise<any>;
+      cookBrainMusicDaw: (input: BrainProjectGetInput) => Promise<any>;
+      getBrainDataAnalysis: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainDataAnalysis: (input: { projectId: string; state: unknown }) => Promise<any>;
+      cookBrainDataAnalysis: (input: BrainProjectGetInput) => Promise<any>;
+      discoverBrainEngines: () => Promise<Array<{ engineId: string; executable: string; source: string; version: string }>>;
+      ensureBrainEngine: (input: { engineId: string }) => Promise<{ engineId: string; executable: string; source: string; version: string }>;
+      ensureBrainEnginesForScene: (input: { workspaceKey: string }) => Promise<Array<{ engineId: string; executable: string; source: string; version: string }>>;
+      getBrainFilePreviewUrl: (input: { projectId: string; fileId: string }) => Promise<string>;
+      importVideoSubtitles: (input: { projectId: string; srt: string }) => Promise<unknown>;
+      exportVideoSubtitles: (input: { projectId: string }) => Promise<{ srt: string }>;
+      addVideoClip: (input: { projectId: string; trackType: "video" | "audio" | "subtitle"; sourceFileId: string; startMs: number; durationMs: number; sourceInMs: number; volume?: number; text?: string }) => Promise<any>;
+      startVideoRender: (input: { projectId: string; outputRelativePath: string; source?: "timeline" | "pipeline"; mediaRelativePaths?: string[] }) => Promise<any>;
+      getVideoRenderStatus: (input: { renderId: string }) => Promise<any>;
+      cancelVideoRender: (input: { renderId: string }) => Promise<any>;
+      startMusicRender: (input: { projectId: string; outputRelativePath: string }) => Promise<any>;
+      getMusicRenderStatus: (input: { renderId: string }) => Promise<any>;
+      cancelMusicRender: (input: { renderId: string }) => Promise<any>;
+      generateBrainSceneMedia: (input: { projectId: string; kind: "video" | "music" | "image"; prompt: string; model?: string; shotIndex?: number }) => Promise<{ content: string; kind: string }>;
       bootstrap: () => Promise<BootstrapPayload>;
       getSnapshot: () => Promise<PhaseOneSnapshot>;
       getGoal: () => Promise<ThreadGoalState | null>;
@@ -348,6 +388,19 @@ declare global {
       approveLearningCandidate: (input: LearningCandidateInput) => Promise<Record<string, unknown>>;
       rejectLearningCandidate: (input: LearningCandidateInput) => Promise<Record<string, unknown>>;
       rollbackPrivateSkill: (input: LearningRollbackInput) => Promise<Record<string, unknown>>;
+      syncUserKnowledge: (input?: {
+        projectWorkspacePath?: string;
+        projectKey?: string;
+        forceFullPull?: boolean;
+      }) => Promise<{
+        ok: boolean;
+        pulled: number;
+        pushed: number;
+        generation: number;
+        conflictRetried: number;
+        status: "synced" | "pending" | "conflict-queued" | "skipped" | "error";
+        message?: string;
+      }>;
       submitHolonFeedback: (input: HolonFeedbackInput) => Promise<Record<string, unknown>>;
       queueWorkspaceScan: () => Promise<PhaseOneSnapshot>;
       queueGitStatus: () => Promise<PhaseOneSnapshot>;

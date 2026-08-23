@@ -84,6 +84,8 @@ test("runs an approved package script and persists bounded successful evidence",
     assert.equal(state.output.length, 64 * 1024);
     assert.match(state.output, /-tail$/u);
     assert.deepEqual(calls.map((call) => call.operation), ["approval.register", "process.run"]);
+    assert.equal(calls[0]?.payload.ttl_ms, 0);
+    assert.equal(calls[1]?.resource_limits.timeout_ms, 0);
     assert.equal(calls[1]?.payload.executable, "npm.cmd");
     assert.deepEqual(calls[1]?.payload.args, ["run", "test"]);
     assert.equal(calls[1]?.approval_token, calls[0]?.payload.token);
@@ -104,18 +106,18 @@ test("declined approval performs no Rust Core call and creates no task", async (
   } finally { context.close(); }
 });
 
-test("persists Rust Core timeout as a terminal timed-out task", async () => {
+test("persists a Rust Core process failure as FAILED without manufacturing a timeout state", async () => {
   const context = fixture({
     request: async (request) => request.operation === "approval.register"
       ? response(request.request_id)
-      : response(request.request_id, "failed", { success: false }, "BRAIN_CORE_PROCESS_TIMEOUT")
+      : response(request.request_id, "failed", { success: false }, "BRAIN_CORE_PROCESS_FAILED")
   });
   try {
     const started = await context.service.start("owner-a", { projectId: context.project.id, scriptId: "test" });
-    await waitFor(() => context.service.status("owner-a", started.id).status === "TIMED_OUT");
+    await waitFor(() => context.service.status("owner-a", started.id).status === "FAILED");
     const persisted = context.storage.listTasks("owner-a", context.project.id)[0]!;
-    assert.equal(persisted.status, "TIMED_OUT");
-    assert.equal(persisted.errorCode, "BRAIN_CORE_PROCESS_TIMEOUT");
+    assert.equal(persisted.status, "FAILED");
+    assert.equal(persisted.errorCode, "BRAIN_CORE_PROCESS_FAILED");
   } finally { context.close(); }
 });
 

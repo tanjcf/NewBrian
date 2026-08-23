@@ -11,10 +11,6 @@ import {
   formatApprovalResumeFailureMessage,
   isTerminalAgentLoopFailure
 } from "./approval-resume-failure-policy.ts";
-import {
-  formatApprovalResumeFailureMessage,
-  isTerminalAgentLoopFailure
-} from "./approval-resume-failure-policy.ts";
 
 interface ApprovalResumeServiceOptions {
   getTasks: () => Map<string, any>;

@@ -1,5 +1,4 @@
 import { resolveNovelTtsVoice } from "../shared/novel-tts-policy.js";
-import { NOVEL_TTS_REMOTE_TIMEOUT_MS } from "../shared/novel-tts-policy.js";
 import { NovelTtsKokoroEngine } from "./novel-tts-kokoro-engine.js";
 
 export type NovelTtsSynthesizeInput = {
@@ -22,7 +21,6 @@ type NovelTtsServiceDependencies = {
   readBearerToken: () => Promise<string>;
   appendDebugLog?: (message: string) => Promise<void> | void;
   fetchImpl?: typeof fetch;
-  timeoutMs?: number;
   /** When false, skip spring-app /v1/audio/speech (default: offline-first). */
   enableGatewaySpeech?: boolean;
   kokoroEngine?: NovelTtsKokoroEngine;
@@ -48,6 +46,7 @@ function buildSpeechUrl(baseUrl: string) {
 export class NovelTtsService {
   private readonly dependencies: NovelTtsServiceDependencies;
   private readonly kokoroEngine: NovelTtsKokoroEngine;
+  private remoteController: AbortController | null = null;
 
   constructor(dependencies: NovelTtsServiceDependencies) {
     this.dependencies = dependencies;
@@ -91,6 +90,8 @@ export class NovelTtsService {
   }
 
   cancel() {
+    this.remoteController?.abort(new Error("Novel speech cancelled"));
+    this.remoteController = null;
     this.kokoroEngine.cancel();
   }
 
@@ -100,9 +101,9 @@ export class NovelTtsService {
     voiceLabel: string
   ): Promise<NovelTtsSynthesizeResult> {
     const fetchImpl = this.dependencies.fetchImpl ?? fetch;
-    const timeoutMs = this.dependencies.timeoutMs ?? NOVEL_TTS_REMOTE_TIMEOUT_MS;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    this.remoteController?.abort(new Error("Novel speech replaced"));
+    this.remoteController = controller;
     try {
       const [baseUrl, bearerToken] = await Promise.all([
         this.dependencies.readGatewayBaseUrl(),
@@ -153,16 +154,16 @@ export class NovelTtsService {
         provider: "gateway-audio-speech"
       };
     } catch (error) {
-      const aborted = Boolean(error && typeof error === "object" && "name" in error && (error as { name?: string }).name === "AbortError");
+      const aborted = controller.signal.aborted || Boolean(error && typeof error === "object" && "name" in error && (error as { name?: string }).name === "AbortError");
       const detail = aborted
-        ? "朗读服务超时，将尝试本地朗读。"
+        ? "朗读已取消。"
         : "朗读服务请求失败，将尝试本地朗读。";
       await this.dependencies.appendDebugLog?.(
-        `novel tts error ${aborted ? "timeout" : error instanceof Error ? error.message : String(error)}`
+        `novel tts error ${aborted ? "cancelled" : error instanceof Error ? error.message : String(error)}`
       );
       return { ok: false, detail };
     } finally {
-      clearTimeout(timer);
+      if (this.remoteController === controller) this.remoteController = null;
     }
   }
 }

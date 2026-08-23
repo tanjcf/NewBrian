@@ -7,7 +7,6 @@ type GrowthControlPlaneServiceInput = {
   getConnection: () => Promise<GrowthConnection>;
   refreshConnection?: () => Promise<GrowthConnection>;
   fetchImpl?: typeof fetch;
-  timeoutMs?: number;
 };
 
 /**
@@ -17,13 +16,11 @@ export class GrowthControlPlaneService {
   private readonly getConnection: GrowthControlPlaneServiceInput["getConnection"];
   private readonly refreshConnection?: GrowthControlPlaneServiceInput["refreshConnection"];
   private readonly fetchImpl: typeof fetch;
-  private readonly timeoutMs: number;
 
   constructor(input: GrowthControlPlaneServiceInput) {
     this.getConnection = input.getConnection;
     this.refreshConnection = input.refreshConnection;
     this.fetchImpl = input.fetchImpl ?? fetch;
-    this.timeoutMs = Math.max(1_000, Math.min(60_000, input.timeoutMs ?? 15_000));
   }
 
   async createProcess(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -438,18 +435,14 @@ export class GrowthControlPlaneService {
     let connection = await this.getConnection();
     let refreshed = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        const response = await this.fetchImpl(`${connection.gatewayOrigin}${path}`, {
+      const response = await this.fetchImpl(`${connection.gatewayOrigin}${path}`, {
           method,
           headers: {
             Accept: "application/json",
             ...(body ? { "Content-Type": "application/json" } : {}),
             ...connection.headers
           },
-          body: body ? JSON.stringify(body) : undefined,
-          signal: controller.signal
+          body: body ? JSON.stringify(body) : undefined
         });
         const raw = await response.text();
         let payload: unknown = null;
@@ -477,10 +470,7 @@ export class GrowthControlPlaneService {
         if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
           throw new Error("GROWTH_INVALID_OBJECT");
         }
-        return payload as Record<string, unknown>;
-      } finally {
-        clearTimeout(timer);
-      }
+      return payload as Record<string, unknown>;
     }
     throw new Error("GROWTH_REQUEST_FAILED");
   }

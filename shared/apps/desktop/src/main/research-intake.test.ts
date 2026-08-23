@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-expect-error Node's strip-types runner loads this source file directly.
-import { buildResearchIntakeModelPrompt, normalizeResearchIntakeAnswers, parseResearchIntakeResult, remainingResearchIntakeTimeout, RESEARCH_INTAKE_TOTAL_TIMEOUT_MS, selectResearchIntakeModel } from "./research-intake.ts";
+import { buildResearchIntakeModelPrompt, normalizeResearchIntakeAnswers, parseResearchIntakeResult, selectResearchIntakeModel } from "./research-intake.ts";
 
 const plan = [
   { id: "materials", title: "主题与素材输入", description: "建立主题与素材边界", status: "active" },
@@ -111,14 +111,6 @@ test("rejects options without an impact description and sanitizes question ids",
   }));
   assert.match(parsed.question?.id || "", /^[a-zA-Z0-9_-]+$/);
   assert.ok((parsed.question?.id.length || 0) <= 120);
-});
-
-test("shares a bounded total timeout across intake repair and retry attempts", () => {
-  const startedAt = 1_000;
-  const deadline = startedAt + RESEARCH_INTAKE_TOTAL_TIMEOUT_MS;
-  assert.equal(remainingResearchIntakeTimeout(deadline, startedAt), 18_000);
-  assert.equal(remainingResearchIntakeTimeout(deadline, startedAt + 20_000), 16_000);
-  assert.equal(remainingResearchIntakeTimeout(deadline, deadline + 1), 1);
 });
 
 test("prefers an authorized low-latency model for interactive intake", () => {

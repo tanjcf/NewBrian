@@ -6,7 +6,7 @@ import type { RustCoreRequest, RustCoreResponse } from "@codex-forge/protocol/ru
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 
 type RequestInput = Omit<RustCoreRequest, "protocol_version">;
-type MusicRenderStatus = "STARTING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+type MusicRenderStatus = "STARTING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 type MusicRenderState = {
   schemaVersion: 1;
   renderId: string;
@@ -27,6 +27,7 @@ export interface MusicRenderOptions {
   confirmRender: (input: { projectId: string; command: string }) => Promise<boolean>;
   prepareOutput?: (root: string, output: string) => Promise<void>;
   validateOutput?: (root: string, output: string) => Promise<boolean>;
+  resolveFfmpegExecutable?: () => Promise<string>;
   storage?: BrainWorkspaceStorage;
   platform?: NodeJS.Platform;
 }
@@ -41,7 +42,7 @@ type Session = {
   projectRoot: string;
 };
 
-const TERMINAL = new Set<MusicRenderStatus>(["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"]);
+const TERMINAL = new Set<MusicRenderStatus>(["SUCCEEDED", "FAILED", "CANCELLED"]);
 const MAX_OUTPUT = 64 * 1024;
 const now = () => new Date().toISOString();
 const rec = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -55,9 +56,6 @@ function safeRelativePath(value: string, code: string) {
 }
 
 function mapProcessFailure(errorCode: string): { status: MusicRenderStatus; errorCode: string } {
-  if (errorCode === "BRAIN_CORE_PROCESS_TIMEOUT") {
-    return { status: "FAILED", errorCode: "BRAIN_CORE_PROCESS_TIMEOUT" };
-  }
   return { status: "FAILED", errorCode: errorCode || "BRAIN_MUSIC_RENDER_FAILED" };
 }
 
@@ -77,7 +75,9 @@ export class MusicRenderService {
     const media = (input.mediaRelativePaths || []).map((item) => safeRelativePath(item, "BRAIN_MUSIC_MEDIA_PATH_INVALID"));
     const renderId = `music-render-${randomUUID()}`;
     const requestId = `${renderId}:process`;
-    const executable = this.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+    const executable = this.options.resolveFfmpegExecutable
+      ? await this.options.resolveFfmpegExecutable()
+      : (this.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
     const duration = String(Math.max(0.1, input.timeline.durationMs / 1000));
     const inputArgs = media.length
       ? ["-i", media[0]!]

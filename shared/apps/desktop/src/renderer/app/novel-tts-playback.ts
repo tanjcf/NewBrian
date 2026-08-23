@@ -1,6 +1,5 @@
 import {
   NOVEL_TTS_LOCAL_CHUNK_CHARS,
-  NOVEL_TTS_REMOTE_TIMEOUT_MS,
   chunkNovelSpeechText,
   estimateFollowAbsoluteIndex,
   estimateFollowDurationMs,
@@ -175,22 +174,6 @@ function pickLocalVoice(
     return score(right) - score(left);
   });
   return ranked[0] || null;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, detail: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(detail)), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
 }
 
 function speakChunk(
@@ -466,15 +449,11 @@ export async function playNovelSpeech(input: PlayInput): Promise<PlayResult> {
   if (input.synthesizer) {
     input.onStatus?.(`正在加载离线音色 · ${input.voice.label}（首次可能需 1–2 分钟）`);
     try {
-      const remote = await withTimeout(
-        input.synthesizer({
-          text: input.text,
-          voiceId: input.voice.id,
-          voiceLabel: input.voice.label
-        }),
-        NOVEL_TTS_REMOTE_TIMEOUT_MS,
-        "离线朗读超时，改用系统朗读（音色会明显变少）。"
-      );
+      const remote = await input.synthesizer({
+        text: input.text,
+        voiceId: input.voice.id,
+        voiceLabel: input.voice.label
+      });
       if (generation !== playGeneration) return { ok: true, mode: "remote", stopped: true };
       if (remote.ok && remote.playingInMain) {
         input.onStatus?.(`正在朗读 · ${input.voice.label}`);

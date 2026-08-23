@@ -40,15 +40,15 @@ test("video cancellation bumps generation and ignores late process completion", 
   assert.equal(calls.at(-1).operation, "request.cancel");
 });
 
-test("video render maps legacy process timeout to FAILED instead of TIMED_OUT", async () => {
+test("video render maps process failures to FAILED", async () => {
   let completeProcess!: (value: any) => void;
   const service = new VideoRenderService({ acquireRustCore: async () => ({ request: async (input: any) => { if (input.operation === "process.run") return new Promise((resolve) => { completeProcess = resolve; }); return { protocol_version: "1", request_id: input.request_id, status: "completed", error_code: "", artifacts: [], result: {} }; } }), confirmRender: async () => true, platform: "win32" });
   const started = await service.start("owner", { projectId: "p1", projectRoot: "C:/project", timeline, outputRelativePath: "renders/out.mp4", mediaRelativePaths: ["media/input.mp4"] });
-  completeProcess({ protocol_version: "1", request_id: started.renderId, status: "failed", error_code: "BRAIN_CORE_PROCESS_TIMEOUT", artifacts: [], result: { success: false } });
+  completeProcess({ protocol_version: "1", request_id: started.renderId, status: "failed", error_code: "BRAIN_CORE_PROCESS_FAILED", artifacts: [], result: { success: false } });
   await new Promise((resolve) => setTimeout(resolve, 5));
   const state = service.status("owner", started.renderId);
   assert.equal(state.status, "FAILED");
-  assert.equal(state.errorCode, "BRAIN_CORE_PROCESS_TIMEOUT");
+  assert.equal(state.errorCode, "BRAIN_CORE_PROCESS_FAILED");
 });
 
 test("video render defaults to process.platform executable naming", async () => {
@@ -68,6 +68,57 @@ test("video render refuses a timeline without a media input", async () => {
   const service = new VideoRenderService({ acquireRustCore: async () => { acquired = true; return { request: async () => ({ status: "completed", result: {} } as any) }; }, confirmRender: async () => true, platform: "win32" });
   await assert.rejects(() => service.start("owner", { projectId: "p1", projectRoot: "C:/project", timeline, outputRelativePath: "renders/out.mp4" }), /BRAIN_VIDEO_MEDIA_NOT_FOUND/);
   assert.equal(acquired, false);
+});
+
+test("video render supports multi-clip concat demuxer", async () => {
+  const calls: any[] = [];
+  const root = mkdtempSync(join(tmpdir(), "brain-video-concat-"));
+  try {
+    const service = new VideoRenderService({
+      acquireRustCore: async () => ({
+        request: async (input: any) => {
+          calls.push(input);
+          return { status: "completed", result: { success: true } } as any;
+        }
+      }),
+      confirmRender: async () => true,
+      platform: "win32"
+    });
+    await service.start("owner", {
+      projectId: "p1",
+      projectRoot: root,
+      timeline,
+      outputRelativePath: "renders/out.mp4",
+      mediaRelativePaths: ["media/clips/a.mp4", "media/clips/b.mp4"]
+    });
+    assert.equal(calls[1].payload.args[2], "concat");
+    assert.ok(String(calls[1].payload.args[6]).includes(".brain-video/concat-"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("video render can synthesize lavfi media when allowed", async () => {
+  const calls: any[] = [];
+  const service = new VideoRenderService({
+    acquireRustCore: async () => ({
+      request: async (input: any) => {
+        calls.push(input);
+        return { status: "completed", result: { success: true } } as any;
+      }
+    }),
+    confirmRender: async () => true,
+    platform: "win32"
+  });
+  await service.start("owner", {
+    projectId: "p1",
+    projectRoot: "C:/project",
+    timeline,
+    outputRelativePath: "renders/out.mp4",
+    mediaRelativePaths: [],
+    allowSyntheticMedia: true
+  });
+  assert.ok(calls[1].payload.args.includes("lavfi"));
 });
 
 test("video render persists task and registers output artifact on success", async () => {

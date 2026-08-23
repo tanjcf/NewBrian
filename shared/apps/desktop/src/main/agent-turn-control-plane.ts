@@ -40,7 +40,6 @@ export type AgentToolProposeResult = {
 type AgentTurnControlPlaneInput = {
   getConnection: () => Promise<AgentTurnConnection>;
   fetchImpl?: typeof fetch;
-  timeoutMs?: number;
   /** When false, all calls no-op as offline degrade. */
   isEnabled?: () => boolean | Promise<boolean>;
   onCorrelationMismatch?: (message: string, mismatches: SpringCorrelationMismatch[]) => void;
@@ -50,14 +49,12 @@ type AgentTurnControlPlaneInput = {
 export class AgentTurnControlPlaneService {
   private readonly getConnection: AgentTurnControlPlaneInput["getConnection"];
   private readonly fetchImpl: typeof fetch;
-  private readonly timeoutMs: number;
   private readonly isEnabled: () => boolean | Promise<boolean>;
   private readonly onCorrelationMismatch?: AgentTurnControlPlaneInput["onCorrelationMismatch"];
 
   constructor(input: AgentTurnControlPlaneInput) {
     this.getConnection = input.getConnection;
     this.fetchImpl = input.fetchImpl ?? fetch;
-    this.timeoutMs = Math.max(1_000, Math.min(30_000, input.timeoutMs ?? 8_000));
     this.isEnabled = input.isEnabled ?? (() => true);
     this.onCorrelationMismatch = input.onCorrelationMismatch;
   }
@@ -265,13 +262,9 @@ export class AgentTurnControlPlaneService {
           ...(body ? { "Content-Type": "application/json" } : {}),
           ...extraHeaders
         },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(this.timeoutMs)
+        body: body ? JSON.stringify(body) : undefined
       });
     } catch (error) {
-      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-        throw new Error("AGENT_TURN_HTTP_TIMEOUT");
-      }
       throw new Error("AGENT_TURN_HTTP_UNAVAILABLE");
     }
     if (!response.ok) {

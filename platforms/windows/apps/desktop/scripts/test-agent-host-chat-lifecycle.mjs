@@ -22,7 +22,6 @@ function nextModelStep(runtimeId) {
 const client = new AgentHostClient({
   entryPath,
   cwd: desktopRoot,
-  requestTimeoutMs: 5_000,
   forkProcess: (modulePath, args, options) => {
     const child = fork(modulePath, args, options);
     children.push(child);

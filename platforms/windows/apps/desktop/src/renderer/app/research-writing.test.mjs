@@ -47,7 +47,7 @@ test("builds a trustworthy source ledger and excludes synthetic goal decisions",
 
 test("explicit government writing uses the normal composer and durable goal decision UI", async () => {
   const source = await readFile(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
-  assert.match(source, /RESEARCH_WRITING_PRODUCT_ENABLED = false/);
+  assert.match(source, /RESEARCH_WRITING_PRODUCT_ENABLED = true/);
   assert.match(source, /intakeComplete: researchEnabled \? true/);
   assert.doesNotMatch(source, /if \(requireResearchIntake\(\)\) return/);
   assert.match(source, /const researchIntakePending = false/);

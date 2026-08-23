@@ -60,6 +60,29 @@ test("persists projects conversations messages and drafts across restart", () =>
   }
 });
 
+test("persists revisioned workspace sections across restart and isolates owner and scene", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-section-restart-"));
+  let storage = new BrainWorkspaceStorage(root);
+  const project = storage.createProject({ ownerId: "owner-a", name: "九尾游戏", primaryWorkspaceKey: "game" });
+  const saved = storage.saveWorkspaceSection({
+    ownerId: "owner-a", projectId: project.id, workspaceKey: "game", sectionKey: "design",
+    content: "# 核心循环\n探索、战斗、成长", expectedRevision: 0
+  });
+  assert.equal(saved.revision, 1);
+  storage.close();
+
+  storage = new BrainWorkspaceStorage(root);
+  try {
+    assert.equal(storage.getWorkspaceSection({ ownerId: "owner-a", projectId: project.id, workspaceKey: "game", sectionKey: "design" }).content, "# 核心循环\n探索、战斗、成长");
+    assert.throws(() => storage.getWorkspaceSection({ ownerId: "owner-b", projectId: project.id, workspaceKey: "game", sectionKey: "design" }), /another local owner/);
+    assert.throws(() => storage.getWorkspaceSection({ ownerId: "owner-a", projectId: project.id, workspaceKey: "video", sectionKey: "design" }), /does not match/);
+    assert.throws(() => storage.saveWorkspaceSection({ ownerId: "owner-a", projectId: project.id, workspaceKey: "game", sectionKey: "design", content: "stale", expectedRevision: 0 }), (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_WORKSPACE_SECTION_CONFLICT");
+  } finally {
+    storage.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("marks interrupted game previews failed on restart without replaying them", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "试玩恢复", primaryWorkspaceKey: "game" });
@@ -104,6 +127,50 @@ test("marks interrupted software tasks failed on restart without replaying side 
     assert.equal(JSON.parse(recovered.resultJson).replayed, false);
     assert.equal(storage.reconcileInterruptedSoftwareTasks(), 0);
   });
+});
+
+test("persists owner-scoped Flow checkpoints and never replays interrupted tools", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-flow-restart-"));
+  let storage = new BrainWorkspaceStorage(root);
+  const project = storage.createProject({ ownerId: "owner-a", name: "Flow 恢复", primaryWorkspaceKey: "software" });
+  const flow = storage.saveFlow({ ownerId: "owner-a", projectId: project.id, name: "检查与审批", definition: { schemaVersion: 1, nodes: [{ id: "start", type: "start", next: "approval" }, { id: "approval", type: "approval", next: "end" }, { id: "end", type: "end" }] } });
+  const waiting = storage.createFlowRun({ ownerId: "owner-a", flowId: flow.id, values: { source: "test" } });
+  storage.checkpointFlowRun({ ownerId: "owner-a", runId: waiting.id, status: "WAITING_APPROVAL", currentNodeId: "approval", audit: [{ nodeId: "approval", nodeType: "approval", attempt: 1, status: "WAITING" }] });
+  const running = storage.createFlowRun({ ownerId: "owner-a", flowId: flow.id });
+  storage.checkpointFlowRun({ ownerId: "owner-a", runId: running.id, status: "RUNNING", currentNodeId: "tool" });
+  storage.close();
+
+  storage = new BrainWorkspaceStorage(root);
+  try {
+    const recovery = storage.restoreWorkspaceAfterRestart();
+    assert.equal(recovery.interruptedFlowRuns, 1);
+    assert.equal(storage.getFlowRun("owner-a", running.id).status, "INTERRUPTED");
+    assert.equal(storage.getFlowRun("owner-a", running.id).errorCode, "BRAIN_FLOW_INTERRUPTED");
+    assert.equal(storage.getFlowRun("owner-a", waiting.id).status, "WAITING_APPROVAL");
+    assert.equal(storage.getFlowRun("owner-a", waiting.id).currentNodeId, "approval");
+    assert.equal(storage.getFlow("owner-a", flow.id).definition.schemaVersion, 1);
+    assert.throws(() => storage.getFlowRun("owner-b", waiting.id), /another local owner/);
+    assert.equal(storage.reconcileInterruptedFlowRuns(), 0);
+  } finally {
+    storage.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("persists Flow schedules and claims each occurrence once", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-flow-schedule-"));
+  const storage = new BrainWorkspaceStorage(root);
+  try {
+    const project = storage.createProject({ ownerId: "owner-a", name: "调度项目", primaryWorkspaceKey: "software" });
+    const flow = storage.saveFlow({ ownerId: "owner-a", projectId: project.id, name: "每日检查", definition: { schemaVersion: 1, nodes: [{ id: "start", type: "start" }] } });
+    const schedule = storage.createFlowSchedule({ ownerId: "owner-a", projectId: project.id, flowId: flow.id, runAt: "09:00" });
+    assert.equal(storage.listEnabledFlowSchedules("owner-a").length, 1);
+    assert.equal(storage.claimFlowScheduleOccurrence({ ownerId: "owner-a", scheduleId: schedule.id, occurrence: `${schedule.id}:2026-08-21` }), true);
+    assert.equal(storage.claimFlowScheduleOccurrence({ ownerId: "owner-a", scheduleId: schedule.id, occurrence: `${schedule.id}:2026-08-21` }), false);
+    storage.completeFlowScheduleOccurrence("owner-a", schedule.id, `${schedule.id}:2026-08-21`);
+    assert.equal(storage.getFlowSchedule("owner-a", schedule.id).runAt, "09:00");
+    assert.throws(() => storage.getFlowSchedule("owner-b", schedule.id), /another local owner/);
+  } finally { storage.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("marks interrupted media renders failed on restart without replaying them", () => {
@@ -174,6 +241,10 @@ test("persists owner-scoped strategy schedules and claims one run per trading da
     assert.equal(runs.claim(schedule.id, "2026-08-20", key), false);
     runs.complete(schedule.id, "2026-08-20", key);
     assert.equal(runs.claim(schedule.id, "2026-08-20", key), false);
+    assert.equal(storage.listQuantStrategyRuns("owner-a", project.id)[0]?.status, "SUCCEEDED");
+    assert.equal(storage.setQuantStrategyScheduleEnabled({ ownerId: "owner-a", projectId: project.id, scheduleId: schedule.id, enabled: false }).enabled, false);
+    assert.equal(storage.quantStrategyScheduleStore().listEnabled("owner-a").length, 0);
+    assert.throws(() => storage.setQuantStrategyScheduleEnabled({ ownerId: "owner-b", projectId: project.id, scheduleId: schedule.id, enabled: true }), /Project belongs to another local owner/);
   });
 });
 
@@ -191,6 +262,18 @@ test("lists conversations by owner project and workspace without leaking archive
     assert.throws(
       () => storage.listConversations({ ownerId: "owner-a", projectId: foreign.id }),
       (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_PROJECT_FORBIDDEN"
+    );
+  });
+});
+
+test("binds every conversation to its project workspace", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "历史文档", primaryWorkspaceKey: "document" });
+    const conversation = storage.createConversation({ ownerId: "owner-a", projectId: project.id, title: "旧对话" });
+    assert.equal(conversation.workspaceSnapshot, "document");
+    assert.throws(
+      () => storage.createConversation({ ownerId: "owner-a", projectId: project.id, title: "错误场景", workspaceKey: "quant" }),
+      (error: unknown) => error instanceof BrainStorageError && error.code === "BRAIN_CONVERSATION_WORKSPACE_MISMATCH"
     );
   });
 });
@@ -276,7 +359,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 10);
+      assert.equal(Number(migrations.count), 16);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);
@@ -289,12 +372,125 @@ test("migration is idempotent and private model metadata has no secret columns",
   }
 });
 
+test("imports catalog workspace with explicit brainWorkspaceKey into matching scene", () => {
+  withStorage((storage) => {
+    const result = storage.importUnboundCatalog({
+      ownerId: "owner-a",
+      workspaces: [
+        {
+          id: "workspace-game-ui",
+          name: "BRAIN Game Scene Test",
+          brainWorkspaceKey: "game",
+          threads: [{ id: "thread-g1", title: "游戏验收对话", updatedAt: "2026-08-22T00:00:00.000Z" }]
+        }
+      ]
+    });
+    assert.equal(result.importedProjects, 1);
+    assert.equal(result.importedConversations, 1);
+    const gameProjects = storage.listProjects({ ownerId: "owner-a", workspaceKey: "game" });
+    assert.equal(gameProjects.some((item) => item.localWorkspaceId === "workspace-game-ui" && item.primaryWorkspaceKey === "game"), true);
+    assert.equal(storage.listProjects({ ownerId: "owner-a", workspaceKey: "document" }).some((item) => item.localWorkspaceId === "workspace-game-ui"), false);
+    const project = gameProjects.find((item) => item.localWorkspaceId === "workspace-game-ui");
+    assert.ok(project);
+    const conversations = storage.listConversations({ ownerId: "owner-a", projectId: project.id, workspaceKey: "game" });
+    assert.equal(conversations.some((item) => item.id === "conversation_legacy_thread-g1"), true);
+  });
+});
+
+test("imports unbound local workspaces and chats into the document scene only", () => {
+  withStorage((storage) => {
+    storage.createProject({ ownerId: "owner-a", name: "已绑定量化", primaryWorkspaceKey: "quant", localWorkspaceId: "workspace-quant" });
+    const first = storage.importUnboundCatalog({
+      ownerId: "owner-a",
+      workspaces: [
+        { id: "workspace-docs", name: "创业计划书", threads: [{ id: "thread-1", title: "整理方案大纲", updatedAt: "2026-08-01T00:00:00.000Z" }] },
+        { id: "workspace:internal-chat", name: "独立聊天", threads: [{ id: "chat-1", title: "未分类对话" }] },
+        { id: "workspace-quant", name: "量化旧名", threads: [{ id: "thread-q", title: "不该进文档" }] }
+      ]
+    });
+    const second = storage.importUnboundCatalog({
+      ownerId: "owner-a",
+      workspaces: [
+        { id: "workspace-docs", name: "创业计划书", threads: [{ id: "thread-1", title: "整理方案大纲" }] }
+      ]
+    });
+    assert.equal(first.importedProjects, 2);
+    assert.equal(first.importedConversations, 2);
+    assert.deepEqual(second, { importedProjects: 0, importedConversations: 0 });
+    const documentProjects = storage.listProjects({ ownerId: "owner-a", workspaceKey: "document" });
+    assert.equal(documentProjects.some((item) => item.name === "创业计划书" && item.localWorkspaceId === "workspace-docs"), true);
+    assert.equal(documentProjects.some((item) => item.localWorkspaceId === "workspace:internal-chat"), true);
+    assert.equal(storage.listProjects({ ownerId: "owner-a", workspaceKey: "game" }).length, 0);
+    const docs = documentProjects.find((item) => item.localWorkspaceId === "workspace-docs");
+    assert.ok(docs);
+    const conversations = storage.listConversations({ ownerId: "owner-a", projectId: docs.id, workspaceKey: "document" });
+    assert.equal(conversations.some((item) => item.id === "conversation_legacy_thread-1" && item.title === "整理方案大纲"), true);
+    const quant = storage.listProjects({ ownerId: "owner-a", workspaceKey: "quant" })[0];
+    assert.equal(storage.listConversations({ ownerId: "owner-a", projectId: quant.id, workspaceKey: "document" }).length, 0);
+    assert.equal(storage.listConversations({ ownerId: "owner-a", projectId: quant.id }).some((item) => item.title === "不该进文档"), false);
+  });
+});
+
+test("migrates unbound historical projects and conversations into the document workspace", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-legacy-workspace-migration-"));
+  let storage = new BrainWorkspaceStorage(root);
+  try {
+    const project = storage.createProject({ ownerId: "owner-a", name: "历史未分类项目", primaryWorkspaceKey: "document" });
+    const conversation = storage.createConversation({ ownerId: "owner-a", projectId: project.id, title: "历史未分类对话" });
+    storage.close();
+
+    const database = new DatabaseSync(join(root, "brain.db"));
+    database.exec("PRAGMA foreign_keys=OFF");
+    database.prepare("UPDATE brain_project SET primary_workspace_key = 'legacy-unbound' WHERE id = ?").run(project.id);
+    database.prepare("UPDATE brain_conversation SET workspace_snapshot = 'legacy-unbound' WHERE id = ?").run(conversation.id);
+    database.exec("DROP TABLE brain_workspace_section");
+    database.prepare("DELETE FROM brain_project_workspace WHERE project_id = ?").run(project.id);
+    database.prepare("DELETE FROM brain_schema_migration WHERE version >= 14").run();
+    database.close();
+
+    storage = new BrainWorkspaceStorage(root);
+    const documentProjects = storage.listProjects({ ownerId: "owner-a", workspaceKey: "document", includeArchived: true });
+    assert.equal(documentProjects.some((item) => item.id === project.id), true);
+    assert.equal(storage.listProjects({ ownerId: "owner-a", workspaceKey: "game", includeArchived: true }).some((item) => item.id === project.id), false);
+    const conversations = storage.listConversations({ ownerId: "owner-a", projectId: project.id, workspaceKey: "document", includeArchived: true });
+    assert.equal(conversations.some((item) => item.id === conversation.id && item.workspaceSnapshot === "document"), true);
+    assert.deepEqual(storage.listConversations({ ownerId: "owner-a", projectId: project.id, workspaceKey: "game", includeArchived: true }), []);
+  } finally {
+    storage.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("migrates historical TIMED_OUT tasks to FAILED and never exposes timeout as a current state", () => {
+  const root = mkdtempSync(join(tmpdir(), "brain-timeout-migration-"));
+  let storage = new BrainWorkspaceStorage(root);
+  try {
+    const project = storage.createProject({ ownerId: "owner-a", name: "历史任务", primaryWorkspaceKey: "document" });
+    const task = storage.createTask({ ownerId: "owner-a", projectId: project.id, workspaceKey: "document", taskType: "legacy.task", idempotencyKey: "legacy-timeout" });
+    storage.close();
+    const database = new DatabaseSync(join(root, "brain.db"));
+    database.exec("PRAGMA foreign_keys=ON");
+    database.prepare("UPDATE brain_task SET status = 'TIMED_OUT' WHERE id = ?").run(task.id);
+    database.exec("DROP TABLE brain_workspace_section");
+    database.prepare("DELETE FROM brain_schema_migration WHERE version >= 15").run();
+    database.close();
+    storage = new BrainWorkspaceStorage(root);
+    const migrated = storage.getTask("owner-a", task.id);
+    assert.equal(migrated.status, "FAILED");
+    assert.equal(migrated.errorCode, "BRAIN_LEGACY_TIMEOUT_MIGRATED");
+  } finally {
+    storage.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("persists reproducible data analysis artifacts by source hash", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-analysis-"));
   const storage = new BrainWorkspaceStorage(root);
   try {
     const project = storage.createProject({ ownerId: "owner-a", name: "数据", primaryWorkspaceKey: "data" });
-    storage.saveDataset({ ownerId: "owner-a", dataset: { schemaVersion: 1, id: "d1", projectId: project.id, name: "指标", columns: [{ key: "close", label: "收盘", type: "number" }], rowCount: 2, contentHash: "a".repeat(64), updatedAt: "2026-08-20T00:00:00Z" } });
+    storage.saveDataset({ ownerId: "owner-a", dataset: { schemaVersion: 1, id: "d1", projectId: project.id, name: "指标", columns: [{ key: "close", label: "收盘", type: "number" }], rowCount: 2, sourceSheet: "行情", contentHash: "a".repeat(64), updatedAt: "2026-08-20T00:00:00Z" } });
+    assert.equal(storage.listDatasets("owner-a", project.id)[0]?.sourceSheet, "行情");
     const result = { datasetId: "d1", operation: "summary", inputHash: "b".repeat(64), columns: [{ key: "close", count: 2, min: 1, max: 2, mean: 1.5 }] };
     storage.saveDataAnalysis({ ownerId: "owner-a", projectId: project.id, datasetId: "d1", operation: "summary", inputHash: result.inputHash, result, createdAt: "2026-08-20T00:00:00Z" });
     storage.saveDataAnalysis({ ownerId: "owner-a", projectId: project.id, datasetId: "d1", operation: "summary", inputHash: result.inputHash, result, createdAt: "2026-08-20T00:01:00Z" });
@@ -319,7 +515,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v10.bak`;
+  const backupPath = `${databasePath}.v0-before-v16.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();
@@ -404,5 +600,64 @@ test("restores interrupted tasks and cancelled markers after restart without rep
     assert.equal(storage.getTask("owner-a", running.id).status, "FAILED");
     assert.equal(storage.getTask("owner-a", cancelled.id).status, "CANCELLED");
     assert.equal(storage.listArtifacts("owner-a", project.id).find((item) => item.id === artifact.id)?.validationStatus, "MISSING_AFTER_RESTART");
+  });
+});
+
+test("registers artifact source workspace from task lineage", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "Game", primaryWorkspaceKey: "game" });
+    const task = storage.createTask({
+      ownerId: "owner-a", projectId: project.id, workspaceKey: "video", taskType: "video_render",
+      requestId: "render-1", idempotencyKey: "render-1", maxAttempts: 1
+    });
+    const artifact = storage.registerArtifact({
+      ownerId: "owner-a", projectId: project.id, taskId: task.id, artifactType: "video/mp4",
+      storageKey: "renders/output.mp4", contentHash: "sha256:abc"
+    });
+    assert.equal(artifact.sourceWorkspaceKey, "video");
+  });
+});
+
+test("persists file ingest parse status and extract summary", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "Doc", primaryWorkspaceKey: "document" });
+    const file = storage.registerFile({
+      ownerId: "owner-a", projectId: project.id, logicalName: "notes.md", mimeType: "text/markdown",
+      sizeBytes: 12, contentHash: "sha256:notes", storageKey: "notes.md"
+    });
+    assert.equal(file.parseStatus, "PENDING");
+    const updated = storage.recordFileIngestResult({
+      ownerId: "owner-a", projectId: project.id, fileId: file.id, format: "markdown",
+      text: "# Title\nBody", anchors: [{ anchorId: "a1", objectId: "line-1" }], warnings: []
+    });
+    assert.equal(updated.parseStatus, "READY");
+    assert.equal(updated.validationStatus, "VALID");
+  });
+});
+
+test("records parse status for representative document formats", () => {
+  withStorage((storage) => {
+    const project = storage.createProject({ ownerId: "owner-a", name: "Formats", primaryWorkspaceKey: "document" });
+    const formats = [
+      ["notes.txt", "text/plain", "text"],
+      ["notes.md", "text/markdown", "markdown"],
+      ["pixel.png", "image/png", "image"],
+      ["notice.pdf", "application/pdf", "pdf"],
+      ["report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
+      ["deck.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"],
+      ["model.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"]
+    ] as const;
+    for (const [logicalName, mimeType, format] of formats) {
+      const file = storage.registerFile({
+        ownerId: "owner-a", projectId: project.id, logicalName, mimeType,
+        sizeBytes: 64, contentHash: `sha256:${format}`, storageKey: logicalName
+      });
+      const updated = storage.recordFileIngestResult({
+        ownerId: "owner-a", projectId: project.id, fileId: file.id, format,
+        text: `${format} fixture`, anchors: [{ anchorId: `${format}-a1`, objectId: `${format}-obj` }], warnings: []
+      });
+      assert.equal(updated.parseStatus, "READY", format);
+      assert.equal(updated.validationStatus, "VALID", format);
+    }
   });
 });

@@ -70,6 +70,17 @@ test("agent loop persists distinct structured execution details for repeated com
 
 const agentdRoot = dirname(fileURLToPath(import.meta.url));
 
+test("production runtime wires a capability resolver by default", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-capabilities-"));
+  try {
+    const runtime = await createLocalRuntime({ runtimeId: "capability-wiring", workspacePath: root, platformLabel: "Windows", shellLabel: "PowerShell", skillRoots: [], capabilityDataRoot: join(root, ".capabilities") });
+    assert.ok(runtime.capabilityResolver);
+    assert.equal((await runtime.prepareCapabilities([{ role: "user", content: "普通问题" }])).length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runtime allows read-only agent tools in workspace approval mode", async () => {
   const root = mkdtempSync(join(tmpdir(), "codecn-runtime-"));
   try {
@@ -274,6 +285,10 @@ test("runtime creates and loads the project manager skill for user shadow update
     assert.ok(existsSync(join(root, ".codecn", "skills", projectSkill.name, "SKILL.md")));
     const loadedSkill = await runtime.loadSkill(projectSkill.name);
     assert.deepEqual(loadedSkill.resources.references, [
+      "backend-technical-design-framework.md",
+      "java-javadoc-rules.md",
+      "learning-open-questions.md",
+      "programming-guardrails.md",
       "project-knowledge.md",
       "session-digest.md",
       "user-output-rules.md"

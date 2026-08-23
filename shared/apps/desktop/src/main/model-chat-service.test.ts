@@ -13,6 +13,38 @@ test("reconciles canonical content without repainting an identical or prefix str
   ]);
 });
 
+test("reports preparation failures before closing an unstarted task", async () => {
+  const observed: unknown[] = [];
+  const finished: string[] = [];
+  const failure = new Error("Auto route unavailable");
+  const service = new ModelChatService({
+    prepare: async () => { throw failure; },
+    observePreTaskFailure: (input: unknown) => { observed.push(input); },
+    finishTask: (requestId: string) => { finished.push(requestId); },
+    finishGoal: () => undefined,
+    nowIso: () => "2026-01-01T00:00:00.000Z",
+    makeId: () => "turn"
+  } as never);
+
+  await assert.rejects(
+    service.chat({ send: () => undefined }, {
+      requestId: "request-prepare-failure",
+      workspaceId: "workspace-1",
+      threadId: "thread-1",
+      messages: [{ role: "user", content: "market quote" }]
+    } as ModelChatInput),
+    failure
+  );
+
+  assert.deepEqual(observed, [{
+    requestId: "request-prepare-failure",
+    workspaceId: "workspace-1",
+    threadId: "thread-1",
+    error: failure
+  }]);
+  assert.deepEqual(finished, ["request-prepare-failure"]);
+});
+
 test("coordinates a successful model turn and always closes goal and task accounting", async () => {
   const order: string[] = [];
   const timingStages: string[] = [];

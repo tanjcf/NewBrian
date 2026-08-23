@@ -187,7 +187,6 @@ export async function startShellProcess(options) {
     displayCommand,
     background = false,
     yieldMs = DEFAULT_YIELD_MS,
-    timeoutSec,
     signal
   } = options;
 
@@ -226,15 +225,6 @@ export async function startShellProcess(options) {
   if (signal?.aborted) onAbort();
   else signal?.addEventListener("abort", onAbort, { once: true });
 
-  let timeoutTimer;
-  if (Number.isFinite(Number(timeoutSec)) && Number(timeoutSec) > 0) {
-    timeoutTimer = setTimeout(() => {
-      appendLog(session, `\n[timeout after ${timeoutSec}s]\n`);
-      killProcessTree(session.pid);
-    }, Math.floor(Number(timeoutSec) * 1000));
-    timeoutTimer.unref?.();
-  }
-
   const finishCollectors = () => {
     const stdout = session.stdoutCollector?.finish(decodeChildOutputBuffer) || { text: "", truncated: false, originalBytes: 0 };
     const stderr = session.stderrCollector?.finish(decodeChildOutputBuffer) || { text: "", truncated: false, originalBytes: 0 };
@@ -256,8 +246,6 @@ export async function startShellProcess(options) {
 
   const waitMs = Math.max(0, Number.isFinite(Number(yieldMs)) ? Number(yieldMs) : DEFAULT_YIELD_MS);
   const waitResult = await waitForExitOrTimeout(session, waitMs);
-  if (timeoutTimer && session.status === "exited") clearTimeout(timeoutTimer);
-
   if (waitResult === "exited") {
     const { stdout, stderr } = finishCollectors();
     const output = [stdout.text, stderr.text].filter(Boolean).join("\n") || session.logText;

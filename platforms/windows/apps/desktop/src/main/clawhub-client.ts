@@ -8,7 +8,6 @@
  * the flag is closed.
  */
 const DEFAULT_CLAWHUB_URL = "https://clawhub.ai";
-const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
 
@@ -100,35 +99,29 @@ async function fetchJson<T>(input: {
   baseUrl?: string;
   path: string;
   search?: Record<string, string | undefined>;
-  timeoutMs?: number;
+  signal?: AbortSignal;
   fetchImpl?: FetchLike;
 }): Promise<T> {
   const url = buildUrl(input.baseUrl || DEFAULT_CLAWHUB_URL, input.path, input.search);
   const fetchImpl = input.fetchImpl || fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  try {
-    const response = await fetchImpl(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`ClawHub ${url.pathname} failed (${response.status}): ${detail.slice(0, 240)}`);
-    }
-    const bytes = await readLimitedBytes(response, MAX_JSON_BYTES, `ClawHub JSON ${url.pathname}`);
-    return JSON.parse(new TextDecoder("utf-8").decode(bytes)) as T;
-  } finally {
-    clearTimeout(timer);
+  const response = await fetchImpl(url, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    signal: input.signal
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`ClawHub ${url.pathname} failed (${response.status}): ${detail.slice(0, 240)}`);
   }
+  const bytes = await readLimitedBytes(response, MAX_JSON_BYTES, `ClawHub JSON ${url.pathname}`);
+  return JSON.parse(new TextDecoder("utf-8").decode(bytes)) as T;
 }
 
 export async function searchClawHubSkills(input: {
   query: string;
   limit?: number;
   baseUrl?: string;
-  timeoutMs?: number;
+  signal?: AbortSignal;
   fetchImpl?: FetchLike;
 }): Promise<ClawHubSkillSearchHit[]> {
   const query = input.query.trim() || "*";
@@ -140,7 +133,7 @@ export async function searchClawHubSkills(input: {
       limit: String(Math.min(Math.max(input.limit ?? 20, 1), 50)),
       nonSuspiciousOnly: "true"
     },
-    timeoutMs: input.timeoutMs,
+    signal: input.signal,
     fetchImpl: input.fetchImpl
   });
   const results = Array.isArray(payload) ? payload : payload.results || [];
@@ -157,7 +150,7 @@ export async function resolveClawHubSkillInstall(input: {
   ref: string;
   forceInstall?: boolean;
   baseUrl?: string;
-  timeoutMs?: number;
+  signal?: AbortSignal;
   fetchImpl?: FetchLike;
 }): Promise<ClawHubResolvedInstall> {
   const parsed = parseClawHubSkillRef(input.ref);
@@ -168,7 +161,7 @@ export async function resolveClawHubSkillInstall(input: {
       ownerHandle: parsed.ownerHandle,
       forceInstall: input.forceInstall ? "1" : undefined
     },
-    timeoutMs: input.timeoutMs,
+    signal: input.signal,
     fetchImpl: input.fetchImpl
   });
 
@@ -217,26 +210,20 @@ export async function resolveClawHubSkillInstall(input: {
 export async function downloadClawHubArchive(input: {
   url: string;
   baseUrl?: string;
-  timeoutMs?: number;
+  signal?: AbortSignal;
   fetchImpl?: FetchLike;
 }): Promise<{ bytes: Uint8Array; downloadUrl: string }> {
   const fetchImpl = input.fetchImpl || fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  try {
-    const response = await fetchImpl(input.url, {
-      method: "GET",
-      headers: { Accept: "application/zip,application/octet-stream,*/*" },
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      throw new Error(`ClawHub archive download failed (${response.status}) for ${input.url}`);
-    }
-    const bytes = await readLimitedBytes(response, MAX_ARCHIVE_BYTES, "ClawHub skill archive");
-    return { bytes, downloadUrl: input.url };
-  } finally {
-    clearTimeout(timer);
+  const response = await fetchImpl(input.url, {
+    method: "GET",
+    headers: { Accept: "application/zip,application/octet-stream,*/*" },
+    signal: input.signal
+  });
+  if (!response.ok) {
+    throw new Error(`ClawHub archive download failed (${response.status}) for ${input.url}`);
   }
+  const bytes = await readLimitedBytes(response, MAX_ARCHIVE_BYTES, "ClawHub skill archive");
+  return { bytes, downloadUrl: input.url };
 }
 
 export function buildGitHubCodeloadUrl(repo: string, commit: string) {
@@ -245,19 +232,19 @@ export function buildGitHubCodeloadUrl(repo: string, commit: string) {
 
 export async function downloadResolvedClawHubInstall(
   resolved: Extract<ClawHubResolvedInstall, { ok: true }>,
-  options: { baseUrl?: string; timeoutMs?: number; fetchImpl?: FetchLike } = {}
+  options: { baseUrl?: string; signal?: AbortSignal; fetchImpl?: FetchLike } = {}
 ) {
   if (resolved.installKind === "archive") {
     return downloadClawHubArchive({
       url: resolved.downloadUrl,
       baseUrl: options.baseUrl,
-      timeoutMs: options.timeoutMs,
+      signal: options.signal,
       fetchImpl: options.fetchImpl
     });
   }
   return downloadClawHubArchive({
     url: buildGitHubCodeloadUrl(resolved.repo, resolved.commit),
-    timeoutMs: options.timeoutMs,
+    signal: options.signal,
     fetchImpl: options.fetchImpl
   });
 }

@@ -90,7 +90,10 @@ export async function inspectGameProject(projectRoot: string, options: InspectOp
     }
   } else if (engine === "godot" && godotProjectPath) {
     try { displayName = godotName(await readSmallText(godotProjectPath)) || displayName; } catch { /* retain folder name */ }
-    warnings.push("未配置可验证的 Godot 可执行程序，暂不生成试玩命令。");
+    const godotExecutable = process.env.BRAIN_GODOT_EXECUTABLE?.trim();
+    if (godotExecutable) {
+      preview = { supported: true, command: godotExecutable, args: ["--path", projectRoot], url: "", requiresApproval: true };
+    } else warnings.push("未配置可验证的 Godot 可执行程序，暂不生成试玩命令。");
   } else if (engine === "unity") warnings.push("未配置可验证的 Unity Editor，暂不生成试玩命令。");
   else if (engine === "unreal") warnings.push("未配置可验证的 Unreal Editor，暂不生成试玩命令。");
   else warnings.push("未识别受支持的游戏工程标记。");

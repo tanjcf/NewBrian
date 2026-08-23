@@ -27,20 +27,18 @@ test("publishes and resolves correlated model requests", async () => {
   assert.equal(callbacks.pendingCount, 0);
 });
 
-test("production disables model-callback hard timeout; parent loop + heartbeat own hangs", async () => {
-  assert.equal(callbacksModule.DEFAULT_AGENT_MODEL_CALLBACK_TIMEOUT_MS, 0);
+test("production has no model-callback execution deadline", async () => {
   const source = await import("node:fs/promises").then((fs) =>
     fs.readFile(new URL("./agent-host-entry.ts", import.meta.url), "utf8")
   );
   assert.match(source, /progressModel:\s*\(callbackId\)\s*=>\s*modelCallbacks\.touch\(callbackId\)/);
-  assert.match(source, /timeoutMs:\s*0/);
-  assert.match(source, /Codex\/OpenClaw-style|parent agent\.loop\.advance/i);
+  assert.doesNotMatch(source, /timeoutMs:/);
+  assert.match(source, /until completion, explicit cancellation, or host shutdown/i);
 });
 
-test("touch renews inactivity so continuous streaming does not time out", async () => {
+test("touch reports progress without controlling callback lifetime", async () => {
   const published: unknown[] = [];
   const callbacks = new callbacksModule.AgentHostModelCallbacks({
-    timeoutMs: 40,
     publish: (payload: unknown) => published.push(payload)
   });
   const pending = callbacks.request("runtime_1", {});
@@ -56,10 +54,9 @@ test("touch renews inactivity so continuous streaming does not time out", async 
   assert.deepEqual(await pending, { content: "still-alive" });
 });
 
-test("rejects provider failures, unknown callbacks, timeouts, and shutdown", async () => {
+test("rejects provider failures and unknown callbacks, then waits until shutdown", async () => {
   const published: unknown[] = [];
   const callbacks = new callbacksModule.AgentHostModelCallbacks({
-    timeoutMs: 10,
     publish: (payload: unknown) => published.push(payload)
   });
 
@@ -75,14 +72,13 @@ test("rejects provider failures, unknown callbacks, timeouts, and shutdown", asy
     (error: unknown) => error instanceof Error && "code" in error && error.code === "model_callback_not_found"
   );
 
-  const timedOut = callbacks.request("runtime_1", {});
-  await assert.rejects(
-    timedOut,
-    (error: unknown) => error instanceof Error && "code" in error && error.code === "model_callback_timeout"
-  );
-
+  const waiting = callbacks.request("runtime_1", {});
   const stopped = callbacks.request("runtime_2", {});
   callbacks.shutdown();
+  await assert.rejects(
+    waiting,
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "host_shutting_down"
+  );
   await assert.rejects(
     stopped,
     (error: unknown) => error instanceof Error && "code" in error && error.code === "host_shutting_down"

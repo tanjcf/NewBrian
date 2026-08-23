@@ -12,6 +12,7 @@ interface RustCoreClientLike {
   request(input: RustCoreRequestInput): Promise<RustCoreResponse>;
   requestWithApproval(input: RustCoreApprovedRequestInput): Promise<RustCoreResponse>;
   shutdown(): Promise<void>;
+  conversation?(input: { request_id: string; project_id: string; workspace_type: string; operation: `conversation.${string}`; payload: Record<string, unknown> }): Promise<RustCoreResponse>;
 }
 
 interface RustCoreChild {
@@ -80,6 +81,16 @@ export class RustCoreService {
     return operation;
   }
 
+  async conversation(binding: RustCoreProjectBinding, input: {
+    request_id: string;
+    operation: `conversation.${string}`;
+    payload: Record<string, unknown>;
+  }): Promise<RustCoreResponse> {
+    const client = await this.acquire(binding);
+    if (!client.conversation) throw new Error("BRAIN_CORE_CONVERSATION_UNSUPPORTED");
+    return client.conversation({ ...input, project_id: binding.projectId, workspace_type: binding.workspaceType });
+  }
+
   shutdown(): Promise<void> {
     if (this.stopped) return this.transition.then(() => undefined);
     this.stopped = true;
@@ -124,7 +135,7 @@ export class RustCoreService {
         workspace_type: workspaceType,
         operation: "health.check",
         approval_token: "",
-        resource_limits: { timeout_ms: 5_000, max_output_bytes: 4_096 },
+        resource_limits: { timeout_ms: 0, max_output_bytes: 4_096 },
         payload: {}
       });
       if (response.status !== "completed") {

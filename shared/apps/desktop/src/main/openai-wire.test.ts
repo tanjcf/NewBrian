@@ -83,6 +83,7 @@ test("reconstructs streamed Chat Completions text and tool calls", async () => {
   assert.deepEqual(extractChatEnvelopeFromSse(blocks), {
     content: "你好",
     reasoningSummary: "",
+    providerReasoningContent: "",
     toolCalls: [{ id: "call-1", name: "shell.exec", arguments: '{\"command\":\"pwd\"}' }],
     webSearchCalls: [],
     citations: [],

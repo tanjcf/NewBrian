@@ -21,7 +21,6 @@ async function runGit(cwd, args) {
       cwd,
       encoding: "utf8",
       windowsHide: true,
-      timeout: 120_000,
       maxBuffer: 8 * 1024 * 1024,
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }
     });

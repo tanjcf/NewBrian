@@ -56,7 +56,7 @@ export class ChinaMarketCalendarService {
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > this.now()) return cached.decision;
     const response = await fetch(this.remoteUrl, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ exchange, date }), signal: AbortSignal.timeout(5_000)
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ exchange, date })
     });
     if (!response.ok) throw new Error(`MARKET_CALENDAR_HTTP_${response.status}`);
     const decision = parseDecision(await response.json(), exchange, date);

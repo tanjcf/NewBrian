@@ -14,10 +14,11 @@ test("accepts only HTTP government domains without credentials", () => {
   assert.equal(isOfficialGovernmentUrl("not a URL"), false);
 });
 
-test("search prefers the official gov.cn API and filters non-government URLs", async () => {
+test("search prefers the official gov.cn API without a fixed deadline and filters non-government URLs", async () => {
   let requestedUrl = "";
-  const fetchImpl: typeof fetch = async (input) => {
+  const fetchImpl: typeof fetch = async (input, init) => {
     requestedUrl = String(input);
+    assert.equal(init?.signal, undefined);
     return new Response(JSON.stringify({
       code: 200,
       searchVO: {
@@ -54,6 +55,18 @@ test("search prefers the official gov.cn API and filters non-government URLs", a
       rank: 1,
     },
   ]);
+});
+
+test("search forwards explicit cancellation instead of replacing it with a timer", async () => {
+  const controller = new AbortController();
+  const service = new OfficialGovernmentWebService({
+    fetchImpl: async (_input, init) => {
+      assert.equal(init?.signal, controller.signal);
+      controller.abort(new Error("user cancelled"));
+      throw controller.signal.reason;
+    },
+  });
+  await assert.rejects(() => service.search({ query: "policy", signal: controller.signal }), /user cancelled/);
 });
 
 test("search falls back to Bing RSS when the official API returns no gov.cn hits", async () => {

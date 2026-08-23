@@ -20,8 +20,6 @@ interface ExchangeContext<Result> {
 
 interface ExchangeOptions<Result> {
   server: McpServerConfig;
-  timeoutMs: number;
-  timeoutResult: () => Result;
   errorResult: (error: Error) => Result;
   onMessage: (message: any, context: ExchangeContext<Result>) => void;
 }
@@ -37,7 +35,7 @@ const initializeRequest = {
   }
 };
 
-/** Runs one bounded MCP stdio exchange and owns all child cleanup paths. */
+/** Runs one MCP stdio exchange until completion, process failure, or app-owned cancellation. */
 export class McpStdioClient {
   private readonly spawnProcess: SpawnProcess;
   private readonly now: () => Date;
@@ -58,11 +56,9 @@ export class McpStdioClient {
       const finish = (result: Result) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
         try { child.kill("SIGTERM"); } catch { /* process already exited */ }
         resolve(result);
       };
-      const timeout = setTimeout(() => finish(options.timeoutResult()), options.timeoutMs);
       try {
         child = this.spawnProcess(options.server.command, options.server.args, {
           cwd: this.options.cwd,
@@ -70,7 +66,6 @@ export class McpStdioClient {
           stdio: "pipe"
         });
       } catch (error) {
-        clearTimeout(timeout);
         resolve(options.errorResult(error instanceof Error ? error : new Error(String(error))));
         return;
       }
@@ -119,8 +114,6 @@ export class McpStdioClient {
     });
     return this.exchange({
       server,
-      timeoutMs: 5000,
-      timeoutResult: () => failure(new Error("MCP handshake timed out.")),
       errorResult: failure,
       onMessage: (message, context) => {
         if (message.id === 1 && message.result) {
@@ -154,8 +147,6 @@ export class McpStdioClient {
     });
     return this.exchange({
       server,
-      timeoutMs: 8000,
-      timeoutResult: () => failure(new Error("MCP tool call timed out.")),
       errorResult: failure,
       onMessage: (message, context) => {
         if (message.id === 1 && message.result) {

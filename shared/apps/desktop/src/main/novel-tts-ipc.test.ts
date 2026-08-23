@@ -5,10 +5,11 @@ import { readFileSync } from "node:fs";
 const systemIpc = readFileSync(new URL("./system-ipc.ts", import.meta.url), "utf8");
 const main = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
 const preload = readFileSync(new URL("../preload/index.ts", import.meta.url), "utf8");
-const protocol = readFileSync(new URL("../../../../../mac/packages/protocol/src/index.ts", import.meta.url), "utf8");
+const protocol = readFileSync(new URL("../../../../packages/protocol/src/index.ts", import.meta.url), "utf8");
 const workspace = readFileSync(new URL("../renderer/app/WorkspaceModules.tsx", import.meta.url), "utf8");
 const button = readFileSync(new URL("../renderer/app/NovelTtsButton.tsx", import.meta.url), "utf8");
 const policy = readFileSync(new URL("../shared/novel-tts-policy.ts", import.meta.url), "utf8");
+const playback = readFileSync(new URL("../renderer/app/novel-tts-playback.ts", import.meta.url), "utf8");
 
 test("exposes synthesizeNovelSpeech IPC end to end", () => {
   assert.match(protocol, /synthesizeNovelSpeech:\s*"phase1:synthesize-novel-speech"/);
@@ -40,4 +41,6 @@ test("wires speaker controls on assistant actions and file preview header", () =
   assert.match(policy, /kokoroVoice/);
   assert.match(policy, /youth_bright/);
   assert.match(main, /NovelTtsService/);
+  assert.doesNotMatch(policy, /NOVEL_TTS_REMOTE_TIMEOUT_MS/);
+  assert.doesNotMatch(playback, /withTimeout\(|离线朗读超时/);
 });

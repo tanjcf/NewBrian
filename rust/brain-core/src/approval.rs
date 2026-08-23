@@ -48,7 +48,10 @@ impl ApprovalRegistry {
             .grants
             .remove(token)
             .ok_or("BRAIN_CORE_APPROVAL_REQUIRED")?;
-        if grant.expires_at.is_some_and(|expires_at| expires_at < Instant::now()) {
+        if grant
+            .expires_at
+            .is_some_and(|expires_at| expires_at < Instant::now())
+        {
             return Err("BRAIN_CORE_APPROVAL_EXPIRED");
         }
         if grant.project_id != project_id || grant.operation != operation {

@@ -9,10 +9,11 @@ import { MemoryIndex } from "./memory-index.js";
 import { MultiAgentOrchestrator } from "./multi-agent-orchestrator.js";
 import { PolicyEngine } from "./policy-engine.js";
 import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
-import { createBuiltinToolRegistry } from "./tool-registry.js";
+import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { ToolHostClient } from "./tool-host-client.js";
 import { UserShadow } from "./user-shadow.js";
 import { enrichShellEnvForTools } from "./shell-env.js";
+import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 
 function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -80,6 +81,23 @@ export class LocalAgentRuntime {
     this.shellEnv = enrichShellEnvForTools(input.shellEnv ?? {});
     this.toolRegistry = input.toolRegistry ?? createBuiltinToolRegistry();
     this.toolHost = input.toolHost ?? (input.toolRegistry ? null : new ToolHostClient(input.toolHostOptions));
+    this.capabilitySystem = input.capabilitySystem ?? (!input.capabilityRuntime && !input.capabilityResolver
+      ? createCapabilitySystem({
+          toolRegistry: this.toolRegistry,
+          catalog: input.capabilityCatalog,
+          dataRoot: input.capabilityDataRoot,
+          platform: "windows",
+          providerHandler: (name, toolInput, context) => this.toolHost
+            ? this.toolHost.invoke(name, toolInput, context)
+            : this.toolRegistry.invoke(name, toolInput, context),
+          onEvent: (event) => this.recordCapabilityEvent(event)
+        })
+      : null);
+    this.capabilityRuntime = input.capabilityRuntime ?? this.capabilitySystem?.capabilityRuntime ?? createBuiltinCapabilityRuntime(this.toolRegistry);
+    this.capabilityCatalog = input.capabilityCatalog ?? this.capabilitySystem?.capabilityCatalog ?? createBuiltinCapabilityCatalog(this.toolRegistry);
+    this.capabilityResolver = input.capabilityResolver ?? this.capabilitySystem?.resolver ?? null;
+    this.capabilitySystemRestored = false;
+    this.preflightedCapabilityIntents = new Set();
     this.artifacts = new ArtifactService({
       workspacePath: this.workspacePath,
       invokeTool: (name, toolInput, options) => this.invokeTool(name, toolInput, options)
@@ -177,6 +195,10 @@ export class LocalAgentRuntime {
 
   async initialize() {
     this.resetSnapshotState();
+    if (this.capabilitySystem && !this.capabilitySystemRestored) {
+      await restoreCapabilitySystem(this.capabilitySystem);
+      this.capabilitySystemRestored = true;
+    }
     await this.userShadow.ensureProjectSkill();
     await this.skillRegistry.discover();
     const scan = await this.invokeTool("workspace.scan", {});
@@ -185,6 +207,20 @@ export class LocalAgentRuntime {
     if (!Array.isArray(this.sessionMachine.snapshot.messages) || this.sessionMachine.snapshot.messages.length === 0) {
       this.sessionMachine.snapshot.messages = [this.createSystemMessage()];
     }
+  }
+
+  recordCapabilityEvent(event) {
+    if (!this.sessionMachine) return;
+    this.sessionMachine.events.push({ id: makeId("capability-event"), type: event.type, timestamp: new Date().toISOString(), payload: clone(event) });
+  }
+
+  async prepareCapabilities(messages, options = {}) {
+    if (!this.capabilityResolver?.resolveForIntent) return [];
+    const latest = [...(messages || [])].reverse().find((message) => message?.role === "user" && String(message.content || "").trim());
+    const intent = String(latest?.content || "").trim();
+    if (!intent || (this.preflightedCapabilityIntents.has(intent) && options.force !== true)) return [];
+    this.preflightedCapabilityIntents.add(intent);
+    return this.capabilityResolver.resolveForIntent(intent, { platform: "windows", runtimeVersion: "0.1.0", approved: options.approved === true });
   }
 
   getSnapshot() {
@@ -263,7 +299,19 @@ export class LocalAgentRuntime {
   }
 
   async invokeTool(name, input, options = {}) {
-    const descriptor = this.toolRegistry.get(name);
+    let descriptor = this.toolRegistry.get(name);
+    if (!descriptor && this.capabilityResolver) {
+      const resolution = await this.capabilityResolver.resolve(name, { platform: this.platformLabel, approved: options.approved === true });
+      if (resolution.status !== "resolved") throw new Error(resolution.reason || `Capability unavailable: ${name}`);
+      descriptor = this.toolRegistry.get(name) || {
+        name,
+        title: name,
+        kind: "read",
+        risk: resolution.capability?.risk || "low",
+        requiresApproval: false,
+        inputSchema: resolution.capability?.inputSchema || { type: "object" }
+      };
+    }
     if (!descriptor) throw new Error(`Unknown tool: ${name}`);
     const policy = this.evaluateToolPolicy(descriptor, input, options.permissionMode ?? "approval");
     if (policy.decision === "deny" || (policy.decision === "ask" && options.approved !== true)) {
@@ -281,9 +329,19 @@ export class LocalAgentRuntime {
       shellEnv: this.shellEnv,
       abortSignal: this.abortController?.signal
     };
-    const result = descriptor.external || !this.toolHost
-      ? await this.toolRegistry.invoke(name, input, toolContext)
-      : await this.toolHost.invoke(name, input, toolContext);
+    const capabilityResult = descriptor.external
+      ? null
+      : await this.capabilityRuntime.invoke(name, input, { ...toolContext, approved: true });
+    const result = capabilityResult
+      ? capabilityResult.status === "completed"
+        ? capabilityResult.output
+        : {
+            ok: false,
+            exitCode: 1,
+            output: [capabilityResult.error?.message, capabilityResult.verification?.reason].filter(Boolean).join(" ") || "Capability execution failed.",
+            capabilityResult
+          }
+      : await this.toolRegistry.invoke(name, input, toolContext);
     return { ...result, policy };
   }
 
@@ -392,6 +450,7 @@ export class LocalAgentRuntime {
 
   async advanceAgentLoop(callModel) {
     if (!this.agentLoop) throw new Error("No agent loop has been started.");
+    await this.prepareCapabilities(this.agentLoop.snapshot().messages);
     const snapshot = await this.agentLoop.advance(callModel);
     this.syncAgentLoopState(snapshot);
     return snapshot;

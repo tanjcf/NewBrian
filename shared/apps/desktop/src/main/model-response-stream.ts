@@ -5,15 +5,7 @@ interface ModelResponseStreamOptions {
   signal?: AbortSignal;
   onTextDelta?: (delta: string) => void;
   onReasoningDelta?: (delta: string) => void;
-  inactivityTimeoutMs?: number;
 }
-
-/**
- * Absolute silence on the SSE byte stream (no chunks at all).
- * Align with agent.loop.advance inactivity (10 min). Progress heartbeats and
- * parent-loop renewals own hang detection — do not use a fragile 120s kill.
- */
-export const DEFAULT_MODEL_STREAM_INACTIVITY_TIMEOUT_MS = 10 * 60_000;
 
 function dispatchSseBlock(block: string, options: ModelResponseStreamOptions) {
   const dataText = block.split(/\r?\n/)
@@ -76,29 +68,9 @@ export async function readModelResponseBody(response: Response, options: ModelRe
   let rawText = "";
   let pending = "";
   let protocolCompleted = false;
-  const inactivityTimeoutMs = Math.max(
-    1,
-    options.inactivityTimeoutMs ?? DEFAULT_MODEL_STREAM_INACTIVITY_TIMEOUT_MS
-  );
   while (true) {
     if (options.signal?.aborted) throw new DOMException("Model request aborted", "AbortError");
-    const readResult = await new Promise<
-      { type: "read"; result: ReadableStreamReadResult<Uint8Array> } | { type: "timeout" }
-    >((resolveRead, rejectRead) => {
-      const timer = setTimeout(() => resolveRead({ type: "timeout" }), inactivityTimeoutMs);
-      reader.read().then((result) => {
-        clearTimeout(timer);
-        resolveRead({ type: "read", result });
-      }, (error) => {
-        clearTimeout(timer);
-        rejectRead(error);
-      });
-    });
-    if (readResult.type === "timeout") {
-      await reader.cancel().catch(() => undefined);
-      throw new Error(`Model response stream inactive for ${inactivityTimeoutMs}ms.`);
-    }
-    const { value, done } = readResult.result;
+    const { value, done } = await reader.read();
     if (done) break;
     const chunk = decoder.decode(value, { stream: true });
     rawText += chunk;

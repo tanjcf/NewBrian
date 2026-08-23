@@ -67,8 +67,7 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
     for (const credential of credentials) {
       try {
         const response = await fetch(modelsUrl, {
-          headers: credential.headers,
-          signal: AbortSignal.timeout(15_000)
+          headers: credential.headers
         });
         if (!response.ok) {
           lastError = `HTTP ${response.status}`;

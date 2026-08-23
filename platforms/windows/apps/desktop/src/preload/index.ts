@@ -23,6 +23,12 @@ import type {
   BrainFileRegisterInput,
   BrainGameProjectInspection,
   BrainGamePreviewState,
+  BrainFlowIdInput,
+  BrainFlowRunIdInput,
+  BrainFlowScheduleCreateInput,
+  BrainFlowScheduleListInput,
+  BrainFlowSaveInput,
+  BrainFlowStartInput,
   BrainDocumentIngestInput,
   BrainDocumentIngestResult,
   BrainMessageAppendInput,
@@ -34,6 +40,9 @@ import type {
   BrainProjectUpdateInput,
   BrainProjectWorkspaceInput,
   BrainWorkspaceDto,
+  BrainWorkspaceSectionDto,
+  BrainWorkspaceSectionGetInput,
+  BrainWorkspaceSectionSaveInput,
   BrainTaskCreateInput,
   BrainTaskDto,
   BrainTaskUpdateInput,
@@ -164,11 +173,14 @@ contextBridge.exposeInMainWorld("codecn", {
   getBrainProject: (input: BrainProjectGetInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectGet, input),
   updateBrainProject: (input: BrainProjectUpdateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectUpdate, input),
   setBrainProjectWorkspace: (input: BrainProjectWorkspaceInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectWorkspaceEnable, input),
+  getBrainWorkspaceSection: (input: BrainWorkspaceSectionGetInput): Promise<BrainWorkspaceSectionDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceSectionGet, input),
+  saveBrainWorkspaceSection: (input: BrainWorkspaceSectionSaveInput): Promise<BrainWorkspaceSectionDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceSectionSave, input),
   createBrainConversation: (input: BrainConversationCreateInput): Promise<BrainConversationDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.conversationCreate, input),
   listBrainConversations: (input: BrainConversationListInput = {}): Promise<BrainConversationDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.conversationList, input),
   getBrainConversation: (input: BrainConversationGetInput): Promise<BrainConversationDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.conversationGet, input),
   listBrainMessages: (input: BrainConversationGetInput): Promise<BrainMessageDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.messageList, input),
   appendBrainMessage: (input: BrainMessageAppendInput): Promise<BrainMessageDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.messageAppend, input),
+  rustConversation: (input: { projectId: string; workspaceType: string; operation: `conversation.${string}`; payload: Record<string, unknown> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.rustConversation, input),
   getBrainDraft: (input: BrainConversationGetInput): Promise<{ content: string; updatedAt: string } | null> => ipcRenderer.invoke(brainWorkspaceIpcChannels.draftGet, input),
   saveBrainDraft: (input: BrainDraftSaveInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.draftSave, input),
   listBrainFiles: (input: BrainProjectGetInput): Promise<BrainFileDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.fileList, input),
@@ -183,6 +195,30 @@ contextBridge.exposeInMainWorld("codecn", {
   startBrainGamePreview: (input: { projectId: string; conversationId?: string }): Promise<BrainGamePreviewState> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gamePreviewStart, input),
   getBrainGamePreviewStatus: (input: BrainProjectGetInput): Promise<BrainGamePreviewState> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gamePreviewStatus, input),
   stopBrainGamePreview: (input: BrainProjectGetInput): Promise<BrainGamePreviewState> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gamePreviewStop, input),
+  createBrainGameWebTemplate: (input: BrainProjectGetInput): Promise<{ engine: "web"; previewCommand: string; previewUrl: string }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameWebTemplateCreate, input),
+  exportBrainGameDesign: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameDesignExport, input),
+  getBrainGameLevelEditor: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameLevelEditorGet, input),
+  saveBrainGameLevelEditor: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameLevelEditorSave, input),
+  spawnBrainGameActor: (input: { projectId: string; kind: "enemy" | "boss" | "npc"; levelIndex?: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameSpawnActor, input),
+  getBrainGameContentTree: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameContentTree, input),
+  getBrainVideoPipeline: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineGet, input),
+  saveBrainVideoPipeline: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineSave, input),
+  markBrainVideoShot: (input: { projectId: string; shotIndex: number; ready: boolean }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoMarkShot, input),
+  cookBrainVideoPipeline: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineCook, input),
+  generateBrainSceneMedia: (input: { projectId: string; kind: "video" | "music" | "image"; prompt: string; model?: string; shotIndex?: number }) =>
+    ipcRenderer.invoke(brainWorkspaceIpcChannels.sceneMediaGenerate, input),
+  getBrainMusicDaw: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawGet, input),
+  saveBrainMusicDaw: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawSave, input),
+  cookBrainMusicDaw: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawCook, input),
+  getBrainDataAnalysis: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisGet, input),
+  saveBrainDataAnalysis: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisSave, input),
+  cookBrainDataAnalysis: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisCook, input),
+  discoverBrainEngines: (): Promise<Array<{ engineId: string; executable: string; source: string; version: string }>> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentDiscover),
+  ensureBrainEngine: (input: { engineId: string }): Promise<{ engineId: string; executable: string; source: string; version: string }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentEnsure, input),
+  ensureBrainEnginesForScene: (input: { workspaceKey: string }): Promise<Array<{ engineId: string; executable: string; source: string; version: string }>> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentEnsureScene, input),
+  getBrainFilePreviewUrl: (input: { projectId: string; fileId: string }): Promise<string> => ipcRenderer.invoke(brainWorkspaceIpcChannels.filePreviewUrl, input),
+  importVideoSubtitles: (input: { projectId: string; srt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoSubtitleImport, input),
+  exportVideoSubtitles: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoSubtitleExport, input),
   listBrainAnnotations: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationList, input),
   createBrainAnnotation: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationCreate, input),
   listBrainChangeSets: (input: BrainProjectGetInput): Promise<BrainChangeSetDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.changeSetList, input),
@@ -194,13 +230,27 @@ contextBridge.exposeInMainWorld("codecn", {
   queryQuantBars: (input: { projectId: string; query: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantBarsQuery, input),
   executeQuantOrder: (input: { projectId: string; order: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantOrderExecute, input),
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
+  getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),
   getQuantSkillPerformance: (input: { projectId: string; skillId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillPerformance, input),
+  runQuantSkillSimulation: (input: {
+    projectId: string;
+    skillId: string;
+    symbol: string;
+    quantity: number;
+    query: unknown;
+    reset?: boolean;
+  }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillRunSimulation, input),
+  getQuantSkillActivity: (input: { projectId: string; skillId: string; prices: Record<string, number> }) =>
+    ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillActivity, input),
   listQuantStrategySchedules: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleList, input),
   createQuantStrategySchedule: (input: { projectId: string; skillId: string; exchange: "SSE" | "SZSE" | "BSE"; runAt: string; symbol: string; quantity: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleCreate, input),
+  setQuantStrategyScheduleEnabled: (input: { projectId: string; scheduleId: string; enabled: boolean }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleSetEnabled, input),
+  listQuantStrategyRuns: (input: { projectId: string; scheduleId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleRunList, input),
   getVideoTimeline: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoTimelineGet, input),
   saveVideoTimeline: (input: { projectId: string; title: string; width: number; height: number; fps: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoTimelineSave, input),
   addVideoClip: (input: { projectId: string; trackType: "video" | "audio" | "subtitle"; sourceFileId: string; startMs: number; durationMs: number; sourceInMs: number; volume?: number; text?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoClipAdd, input),
-  startVideoRender: (input: { projectId: string; outputRelativePath: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderStart, input),
+  startVideoRender: (input: { projectId: string; outputRelativePath: string; source?: "timeline" | "pipeline"; mediaRelativePaths?: string[] }) =>
+    ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderStart, input),
   getVideoRenderStatus: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderStatus, input),
   cancelVideoRender: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderCancel, input),
   getMusicTimeline: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicTimelineGet, input),
@@ -209,6 +259,8 @@ contextBridge.exposeInMainWorld("codecn", {
   listDataDatasets: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetList, input),
   saveDataDataset: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetSave, input),
   importDataCsv: (input: { projectId: string; fileId: string; datasetId: string; name: string; updatedAt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetImportCsv, input),
+  importDataXlsx: (input: { projectId: string; fileId: string; datasetId: string; name: string; updatedAt: string; sheetName?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetImportXlsx, input),
+  listDataXlsxSheets: (input: { projectId: string; fileId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetXlsxSheets, input),
   readDataRows: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetRows, input),
   summarizeData: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisSummarize, input),
   listDataAnalyses: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisList, input),
@@ -216,6 +268,16 @@ contextBridge.exposeInMainWorld("codecn", {
   startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStart, input),
   getSoftwareTaskStatus: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStatus, input),
   cancelSoftwareTask: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskCancel, input),
+  openSoftwareProjectTerminal: (input: BrainProjectGetInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTerminalOpen, input),
+  saveBrainFlow: (input: BrainFlowSaveInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowSave, input),
+  getBrainFlow: (input: BrainFlowIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowGet, input),
+  listBrainFlows: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowList, input),
+  getLatestBrainFlowRun: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunLatest, input),
+  startBrainFlow: (input: BrainFlowStartInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunStart, input),
+  getBrainFlowRun: (input: BrainFlowRunIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunGet, input),
+  cancelBrainFlow: (input: BrainFlowRunIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunCancel, input),
+  createBrainFlowSchedule: (input: BrainFlowScheduleCreateInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowScheduleCreate, input),
+  listBrainFlowSchedules: (input: BrainFlowScheduleListInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowScheduleList, input),
   inspectMusicMedia: (input: { projectId: string; sourceFileId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicMediaInspect, input),
   startMusicRender: (input: { projectId: string; outputRelativePath: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicRenderStart, input),
   getMusicRenderStatus: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicRenderStatus, input),
@@ -261,6 +323,8 @@ contextBridge.exposeInMainWorld("codecn", {
   approveLearningCandidate: (input: LearningCandidateInput) => ipcRenderer.invoke(desktopIpcChannels.learning.approveCandidate, input),
   rejectLearningCandidate: (input: LearningCandidateInput) => ipcRenderer.invoke(desktopIpcChannels.learning.rejectCandidate, input),
   rollbackPrivateSkill: (input: LearningRollbackInput) => ipcRenderer.invoke(desktopIpcChannels.learning.rollbackPrivateSkill, input),
+  syncUserKnowledge: (input?: { projectWorkspacePath?: string; projectKey?: string; forceFullPull?: boolean }) =>
+    ipcRenderer.invoke(desktopIpcChannels.knowledge.sync, input ?? {}),
   submitHolonFeedback: (input: HolonFeedbackInput) => ipcRenderer.invoke(desktopIpcChannels.holon.submitFeedback, input),
   queueWorkspaceScan: () => ipcRenderer.invoke(desktopIpcChannels.core.queueWorkspaceScan),
   queueGitStatus: () => ipcRenderer.invoke(desktopIpcChannels.core.queueGitStatus),
@@ -504,6 +568,16 @@ contextBridge.exposeInMainWorld("codecn", {
     const handler = (_event: Electron.IpcRendererEvent, snapshot: PhaseOneSnapshot) => listener(snapshot);
     ipcRenderer.on(desktopIpcChannels.events.snapshotUpdate, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.events.snapshotUpdate, handler);
+  },
+  onQuantMarketUpdated: (listener: (payload: { projectId: string; query: unknown; bars: unknown[] }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; query: unknown; bars: unknown[] }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.quantMarketUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantMarketUpdated, handler);
+  },
+  onQuantPortfolioUpdated: (listener: (payload: { projectId: string; skillId: string; title?: string; activity: unknown }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; skillId: string; title?: string; activity: unknown }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.quantPortfolioUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantPortfolioUpdated, handler);
   },
   getTerminalSession: (): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.getSession),
   writeTerminalInput: (input: string): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.writeInput, input),

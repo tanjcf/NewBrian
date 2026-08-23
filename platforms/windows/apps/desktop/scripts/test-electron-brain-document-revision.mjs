@@ -35,7 +35,7 @@ function evaluate(expression, timeoutMs = 15_000) {
       clearTimeout(timeout);
       socket.removeEventListener("message", onMessage);
       if (payload.error || payload.result?.exceptionDetails) {
-        reject(new Error(payload.error?.message || payload.result.exceptionDetails.text));
+        reject(new Error(payload.error?.message || payload.result?.exceptionDetails?.exception?.description || payload.result.exceptionDetails.text));
         return;
       }
       resolve(payload.result?.result?.value);
@@ -96,6 +96,7 @@ await evaluate(`(() => {
   conversation?.click();
   return Boolean(conversation);
 })()`);
+await evaluate(`([...document.querySelectorAll('.brain-resource-global-nav button')].find((item) => item.textContent?.includes('文件')))?.click()`);
 await waitFor("BRAIN file resource", `Boolean([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.md')))`);
 const ingestProbe = JSON.parse(await evaluate(`(async () => {
   try {
@@ -126,6 +127,7 @@ await waitFor("reloaded BRAIN document project", `document.body?.innerText?.incl
 await evaluate(`([...document.querySelectorAll('.brain-project-list button')].find((item) => item.textContent?.includes('文档修改闭环 E2E')))?.click()`);
 await waitFor("reloaded BRAIN conversation", `document.body?.innerText?.includes("修改 note.md")`);
 await evaluate(`([...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes('修改 note.md')))?.click()`);
+await evaluate(`([...document.querySelectorAll('.brain-resource-global-nav button')].find((item) => item.textContent?.includes('文件')))?.click()`);
 await waitFor("exported file resource", `Boolean([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.v2.md') && item.textContent?.includes('版本 2')))`);
 await evaluate(`([...document.querySelectorAll('.brain-resource-row')].find((item) => item.textContent?.includes('note.v2.md') && item.textContent?.includes('版本 2')))?.click()`);
 await waitFor("reopened exported revision", `document.querySelector('.search-file-preview')?.textContent?.includes(${JSON.stringify(replacement)}) && document.querySelector('.search-file-preview')?.textContent?.includes('note.v2.md')`);

@@ -29,6 +29,9 @@ import type {
   BrainProjectUpdateInput,
   BrainProjectWorkspaceInput,
   BrainWorkspaceDto,
+  BrainWorkspaceSectionDto,
+  BrainSoftwareScript,
+  BrainSoftwareTaskState,
   BrainTaskCreateInput,
   BrainTaskDto,
   BrainTaskUpdateInput,
@@ -421,6 +424,13 @@ declare global {
       getBrainProject: (input: BrainProjectGetInput) => Promise<BrainProjectDto>;
       updateBrainProject: (input: BrainProjectUpdateInput) => Promise<BrainProjectDto>;
       setBrainProjectWorkspace: (input: BrainProjectWorkspaceInput) => Promise<{ ok: boolean }>;
+      getBrainWorkspaceSection: (input: { projectId: string; workspaceKey: string; sectionKey: string }) => Promise<BrainWorkspaceSectionDto>;
+      saveBrainWorkspaceSection: (input: { projectId: string; workspaceKey: string; sectionKey: string; content: string; expectedRevision: number }) => Promise<BrainWorkspaceSectionDto>;
+      listSoftwareScripts: (input: { projectId: string }) => Promise<BrainSoftwareScript[]>;
+      startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => Promise<BrainSoftwareTaskState>;
+      getSoftwareTaskStatus: (input: { taskId: string }) => Promise<BrainSoftwareTaskState>;
+      cancelSoftwareTask: (input: { taskId: string }) => Promise<BrainSoftwareTaskState>;
+      openSoftwareProjectTerminal: (input: BrainProjectGetInput) => Promise<{ ok: boolean }>;
       createBrainConversation: (input: BrainConversationCreateInput) => Promise<BrainConversationDto>;
       listBrainConversations: (input?: BrainConversationListInput) => Promise<BrainConversationDto[]>;
       getBrainConversation: (input: BrainConversationGetInput) => Promise<BrainConversationDto>;
@@ -446,6 +456,16 @@ declare global {
       startBrainGamePreview: (input: { projectId: string; conversationId?: string }) => Promise<BrainGamePreviewState>;
       getBrainGamePreviewStatus: (input: BrainProjectGetInput) => Promise<BrainGamePreviewState>;
       stopBrainGamePreview: (input: BrainProjectGetInput) => Promise<BrainGamePreviewState>;
+      getBrainVideoPipeline: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainVideoPipeline: (input: { projectId: string; state: unknown }) => Promise<any>;
+      markBrainVideoShot: (input: { projectId: string; shotIndex: number; ready: boolean }) => Promise<any>;
+      cookBrainVideoPipeline: (input: BrainProjectGetInput) => Promise<any>;
+      getBrainMusicDaw: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainMusicDaw: (input: { projectId: string; state: unknown }) => Promise<any>;
+      cookBrainMusicDaw: (input: BrainProjectGetInput) => Promise<any>;
+      getBrainDataAnalysis: (input: BrainProjectGetInput) => Promise<any>;
+      saveBrainDataAnalysis: (input: { projectId: string; state: unknown }) => Promise<any>;
+      cookBrainDataAnalysis: (input: BrainProjectGetInput) => Promise<any>;
       bootstrap: () => Promise<BootstrapPayload>;
       getSnapshot: () => Promise<PhaseOneSnapshot>;
       getGoal: (input?: { threadId?: string }) => Promise<ThreadGoalState | null>;

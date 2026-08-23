@@ -72,8 +72,8 @@ export function parseRustCoreRequest(value: unknown): RustCoreRequest {
   const limits = record(input.resource_limits, "resource_limits");
   const timeoutMs = Number(limits.timeout_ms);
   const maxOutputBytes = Number(limits.max_output_bytes);
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 600_000) {
-    throw new TypeError("resource_limits.timeout_ms must be 0 (no deadline) or between 1 and 600000");
+  if (timeoutMs !== 0) {
+    throw new TypeError("resource_limits.timeout_ms must be 0 because BRAIN execution has no fixed deadline");
   }
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > 16_777_216) {
     throw new TypeError("resource_limits.max_output_bytes must be between 1 and 16777216");

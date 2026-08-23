@@ -226,7 +226,11 @@ export async function installOpenClawSkillPackage(
       status: "enabled",
       source: origin.source === "clawhub" ? "clawhub" : "openclaw",
       scope: "workspace",
-      path: "SKILL.md"
+      path: "SKILL.md",
+      executionKind: packageInfo.hasScripts ? "script-assisted" : "instructions",
+      executionEvidence: packageInfo.hasScripts
+        ? ["SKILL.md", "scripts/（不会自动执行）"]
+        : ["SKILL.md"]
     };
 
     return { skill, targetDir, origin, security };

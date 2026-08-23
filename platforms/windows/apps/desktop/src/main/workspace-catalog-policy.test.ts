@@ -20,6 +20,25 @@ test("repairs persisted thread text and applies bounded defaults", () => {
   assert.equal(thread.updatedAt, context.nowIso());
 });
 
+test("defaults missing brainWorkspaceKey to document scene", () => {
+  const workspace = policy.normalizeWorkspaceCatalogItem({
+    id: "workspace-legacy",
+    path: "./legacy",
+    threads: []
+  }, context);
+  assert.equal(workspace.brainWorkspaceKey, "document");
+});
+
+test("preserves an explicit brainWorkspaceKey on catalog items", () => {
+  const workspace = policy.normalizeWorkspaceCatalogItem({
+    id: "workspace-quant",
+    path: "./quant",
+    brainWorkspaceKey: "quant",
+    threads: []
+  }, context);
+  assert.equal(workspace.brainWorkspaceKey, "quant");
+});
+
 test("normalizes workspace identity, thread order, and Conda defaults", () => {
   const workspace = policy.normalizeWorkspaceCatalogItem({
     id: " workspace-1 ",

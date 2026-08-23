@@ -16,7 +16,11 @@ platforms/ubuntu/arm64/ Ubuntu ARM64-specific overrides
 platforms/ubuntu/x64/   Ubuntu Intel/AMD 64-bit-specific overrides
 platforms/windows/      Windows-only files and Windows versions of divergent files
 scripts/                Import, materialization, and verification tooling
-docs/architecture/      Repository architecture and contribution rules
+docs/                   Documentation index under docs/README.md
+docs/architecture/      Technical contracts and repository rules
+docs/product/           Product design and implementation playbook
+docs/plans/             Active implementation checklists
+docs/evidence/          Dated test and release evidence
 .materialized/          Generated runnable workspaces (ignored by Git)
 ```
 
@@ -94,5 +98,6 @@ Refresh the managed layers from a deliberate upstream snapshot with:
 node scripts/import-upstream.mjs /path/to/original/codeCN
 ```
 
-See [docs/architecture/repository-layout.md](docs/architecture/repository-layout.md)
-for the ownership and synchronization rules.
+See [docs/README.md](docs/README.md) for the documentation map, and
+[docs/architecture/repository-layout.md](docs/architecture/repository-layout.md)
+for ownership and synchronization rules.

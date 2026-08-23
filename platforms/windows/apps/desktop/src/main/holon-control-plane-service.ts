@@ -24,14 +24,12 @@ type HolonControlPlaneServiceInput = {
   getConnection: () => Promise<HolonConnection>;
   refreshConnection?: () => Promise<HolonConnection>;
   fetchImpl?: typeof fetch;
-  timeoutMs?: number;
   now?: () => number;
 };
 
 export class HolonControlPlaneService {
   private readonly getConnection: HolonControlPlaneServiceInput["getConnection"];
   private readonly fetchImpl: typeof fetch;
-  private readonly timeoutMs: number;
   private readonly refreshConnection?: HolonControlPlaneServiceInput["refreshConnection"];
   private readonly now: () => number;
 
@@ -39,7 +37,6 @@ export class HolonControlPlaneService {
     this.getConnection = input.getConnection;
     this.refreshConnection = input.refreshConnection;
     this.fetchImpl = input.fetchImpl ?? fetch;
-    this.timeoutMs = Math.max(1_000, Math.min(60_000, input.timeoutMs ?? 15_000));
     this.now = input.now ?? Date.now;
   }
 
@@ -187,13 +184,9 @@ export class HolonControlPlaneService {
             ...activeConnection.headers,
             ...(body ? { "Content-Type": "application/json" } : {})
           },
-          body: body ? JSON.stringify(body) : undefined,
-          signal: AbortSignal.timeout(this.timeoutMs)
+          body: body ? JSON.stringify(body) : undefined
         });
       } catch (error) {
-        if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-          throw new Error("HOLON_HTTP_TIMEOUT");
-        }
         throw new Error("HOLON_HTTP_UNAVAILABLE");
       }
       if (response.status === 401 && this.refreshConnection && !refreshedAuthentication) {

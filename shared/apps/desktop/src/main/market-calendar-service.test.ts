@@ -17,6 +17,7 @@ test("uses a strict exchange calendar response and caches the decision", async (
   const originalFetch = globalThis.fetch; let calls = 0; let now = 1_000;
   globalThis.fetch = async (_url, init) => {
     calls += 1;
+    assert.equal(init?.signal, undefined);
     assert.deepEqual(JSON.parse(String(init?.body)), { exchange: "SSE", date: "2026-08-20" });
     return new Response(JSON.stringify({ exchange: "SSE", date: "2026-08-20", isTradingDay: true, source: "exchange-calendar", fetchedAt: "2026-08-20T00:00:00Z" }), { status: 200 });
   };

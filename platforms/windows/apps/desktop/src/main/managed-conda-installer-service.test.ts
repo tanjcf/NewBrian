@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const { buildBoundedCommandEnv, ManagedCondaInstallerService, resolveBoundedSpawnCommand, runBoundedEnvironmentCommand } = await import(
@@ -31,7 +32,6 @@ test("executes the installed npm.cmd shim on Windows", { skip: process.platform 
     executable: "C:\\Program Files\\nodejs\\npm.cmd",
     args: ["--version"],
     cwd: process.cwd(),
-    timeoutMs: 15_000,
     env: process.env
   });
   assert.equal(result.status, 0, result.stderr);
@@ -43,7 +43,6 @@ test("executes npm.cmd when the supplied task environment omits Windows system v
     executable: "C:\\Program Files\\nodejs\\npm.cmd",
     args: ["--version"],
     cwd: process.cwd(),
-    timeoutMs: 15_000,
     env: { PATH: process.env.PATH, CUSTOM_VALUE: "ready" }
   });
   assert.equal(result.status, 0, result.stderr);
@@ -55,23 +54,21 @@ test("reports a missing working directory before spawning a command", async () =
   await assert.rejects(() => runBoundedEnvironmentCommand({
     executable: process.execPath,
     args: ["--version"],
-    cwd: missingCwd,
-    timeoutMs: 1_000
+    cwd: missingCwd
   }), /Command working directory does not exist/);
 });
 
 test("rejects a file path used as the command working directory", async () => {
-  const currentFile = new URL(import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/, "");
+  const currentFile = fileURLToPath(import.meta.url);
   await assert.rejects(() => runBoundedEnvironmentCommand({
     executable: process.execPath,
     args: ["--version"],
-    cwd: currentFile,
-    timeoutMs: 1_000
+    cwd: currentFile
   }), /Command working directory is not a directory/);
 });
 
 test("downloads and installs managed Conda through bounded commands", async () => {
-  const commands: Array<{ executable: string; timeoutMs: number }> = [];
+  const commands: Array<{ executable: string }> = [];
   let installed = false;
   const service = new ManagedCondaInstallerService({
     workspacePath: "C:\\codecn",
@@ -94,7 +91,7 @@ test("downloads and installs managed Conda through bounded commands", async () =
     canReachPublicUrl: async () => true,
     ensureDirectory: async () => undefined,
     quoteShellArgument: (value: string) => `"${value}"`,
-    runCommand: async (input: { executable: string; timeoutMs: number }) => {
+    runCommand: async (input: { executable: string }) => {
       commands.push(input);
       if (input.executable.endsWith("miniconda.exe")) installed = true;
       return { status: 0, stdout: "", stderr: "" };
@@ -103,7 +100,7 @@ test("downloads and installs managed Conda through bounded commands", async () =
 
   assert.equal(await service.ensureInstalled(), "C:\\state\\conda\\Scripts\\conda.exe");
   assert.deepEqual(commands.map((command) => command.executable), ["powershell.exe", "C:\\codecn\\install\\miniconda.exe"]);
-  assert.ok(commands.every((command) => command.timeoutMs === 10 * 60_000));
+  assert.ok(commands.every((command) => !("timeoutMs" in command)));
 });
 
 test("requires manual installation when the platform is unsupported", async () => {
@@ -132,8 +129,7 @@ test("rejects an already canceled bounded command before spawning", async () => 
     executable: "unused",
     args: [],
     cwd: ".",
-    signal: controller.signal,
-    timeoutMs: 1_000
+    signal: controller.signal
   }), /stop now/);
 });
 
@@ -143,8 +139,7 @@ test("terminates a running environment command when cancellation arrives", async
     executable: process.execPath,
     args: ["-e", "setTimeout(() => {}, 10000)"],
     cwd: process.cwd(),
-    signal: controller.signal,
-    timeoutMs: 5_000
+    signal: controller.signal
   });
   setTimeout(() => controller.abort(new Error("cancel running command")), 20);
   await assert.rejects(() => running, /cancel running command/);

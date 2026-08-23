@@ -6,8 +6,9 @@ import { MemoryIndex } from "./memory-index.js";
 import { MultiAgentOrchestrator } from "./multi-agent-orchestrator.js";
 import { PolicyEngine } from "./policy-engine.js";
 import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
-import { createBuiltinToolRegistry } from "./tool-registry.js";
+import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { UserShadow } from "./user-shadow.js";
+import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 
 function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -57,6 +58,12 @@ export class LocalAgentRuntime {
     this.shellLabel = input.shellLabel;
     this.shellEnv = { ...(process.env ?? {}), ...(input.shellEnv ?? {}) };
     this.toolRegistry = input.toolRegistry ?? createBuiltinToolRegistry();
+    this.capabilitySystem = input.capabilitySystem ?? (!input.capabilityRuntime && !input.capabilityResolver ? createCapabilitySystem({ toolRegistry: this.toolRegistry, catalog: input.capabilityCatalog, dataRoot: input.capabilityDataRoot, platform: "ubuntu", onEvent: (event) => this.recordCapabilityEvent(event) }) : null);
+    this.capabilityRuntime = input.capabilityRuntime ?? this.capabilitySystem?.capabilityRuntime ?? createBuiltinCapabilityRuntime(this.toolRegistry);
+    this.capabilityCatalog = input.capabilityCatalog ?? this.capabilitySystem?.capabilityCatalog ?? createBuiltinCapabilityCatalog(this.toolRegistry);
+    this.capabilityResolver = input.capabilityResolver ?? this.capabilitySystem?.resolver ?? null;
+    this.capabilitySystemRestored = false;
+    this.preflightedCapabilityIntents = new Set();
     this.policyEngine = input.policyEngine ?? new PolicyEngine({ rules: input.policyRules ?? [] });
     this.memoryIndex = new MemoryIndex({ maxRecords: input.maxMemoryRecords ?? 100 });
     this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
@@ -121,6 +128,7 @@ export class LocalAgentRuntime {
 
   async initialize() {
     this.resetSnapshotState();
+    if (this.capabilitySystem && !this.capabilitySystemRestored) { await restoreCapabilitySystem(this.capabilitySystem); this.capabilitySystemRestored = true; }
     await this.userShadow.ensureProjectSkill();
     await this.skillRegistry.discover();
     const scan = await this.invokeTool("workspace.scan", {});
@@ -129,6 +137,20 @@ export class LocalAgentRuntime {
     if (!Array.isArray(this.sessionMachine.snapshot.messages) || this.sessionMachine.snapshot.messages.length === 0) {
       this.sessionMachine.snapshot.messages = [this.createSystemMessage()];
     }
+  }
+
+  recordCapabilityEvent(event) {
+    if (!this.sessionMachine) return;
+    this.sessionMachine.events.push({ id: makeId("capability-event"), type: event.type, timestamp: new Date().toISOString(), payload: clone(event) });
+  }
+
+  async prepareCapabilities(messages, options = {}) {
+    if (!this.capabilityResolver?.resolveForIntent) return [];
+    const latest = [...(messages || [])].reverse().find((message) => message?.role === "user" && String(message.content || "").trim());
+    const intent = String(latest?.content || "").trim();
+    if (!intent || (this.preflightedCapabilityIntents.has(intent) && options.force !== true)) return [];
+    this.preflightedCapabilityIntents.add(intent);
+    return this.capabilityResolver.resolveForIntent(intent, { platform: "ubuntu", runtimeVersion: "0.1.0", approved: options.approved === true });
   }
 
   getSnapshot() {
@@ -192,7 +214,12 @@ export class LocalAgentRuntime {
   }
 
   async invokeTool(name, input, options = {}) {
-    const descriptor = this.toolRegistry.get(name);
+    let descriptor = this.toolRegistry.get(name);
+    if (!descriptor && this.capabilityResolver) {
+      const resolution = await this.capabilityResolver.resolve(name, { platform: this.platformLabel, approved: options.approved === true });
+      if (resolution.status !== "resolved") throw new Error(resolution.reason || `Capability unavailable: ${name}`);
+      descriptor = this.toolRegistry.get(name) || { name, title: name, kind: "read", risk: resolution.capability?.risk || "low", requiresApproval: false, inputSchema: resolution.capability?.inputSchema || { type: "object" } };
+    }
     if (!descriptor) throw new Error(`Unknown tool: ${name}`);
     const policy = this.evaluateToolPolicy(descriptor, input, options.permissionMode ?? "full");
     if (policy.decision === "deny") {
@@ -205,10 +232,16 @@ export class LocalAgentRuntime {
         policy
       };
     }
-    const result = await this.toolRegistry.invoke(name, input, {
+    const toolContext = {
       workspacePath: this.workspacePath,
       shellEnv: this.shellEnv
-    });
+    };
+    const capabilityResult = descriptor.external ? null : await this.capabilityRuntime.invoke(name, input, { ...toolContext, approved: true });
+    const result = capabilityResult
+      ? capabilityResult.status === "completed"
+        ? capabilityResult.output
+        : { ok: false, exitCode: 1, output: capabilityResult.error?.message || "Capability execution failed.", capabilityResult }
+      : await this.toolRegistry.invoke(name, input, toolContext);
     return { ...result, policy };
   }
 
@@ -279,6 +312,7 @@ export class LocalAgentRuntime {
 
   async advanceAgentLoop(callModel) {
     if (!this.agentLoop) throw new Error("No agent loop has been started.");
+    await this.prepareCapabilities(this.agentLoop.snapshot().messages);
     const snapshot = await this.agentLoop.advance(callModel);
     this.syncAgentLoopState(snapshot);
     return snapshot;

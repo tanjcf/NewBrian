@@ -1,4 +1,5 @@
 import { cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -22,6 +23,7 @@ if (!Object.hasOwn(targetLayers, target)) {
 }
 
 const shared = path.join(root, "shared");
+const rust = path.join(root, "rust");
 const overlayPaths = targetLayers[target].map((layer) => path.join(root, layer));
 const outputRoot = path.join(root, ".materialized");
 const output = path.join(outputRoot, target);
@@ -32,7 +34,7 @@ function includeManagedSource(source) {
   return !source.split(path.sep).some((segment) => ignoredDirectoryNames.has(segment));
 }
 
-for (const required of [shared, ...overlayPaths]) {
+for (const required of [shared, rust, ...overlayPaths]) {
   try {
     if (!(await stat(required)).isDirectory()) throw new Error();
   } catch {
@@ -44,6 +46,12 @@ for (const required of [shared, ...overlayPaths]) {
 await mkdir(outputRoot, { recursive: true });
 await rm(temporary, { recursive: true, force: true });
 await cp(shared, temporary, { recursive: true, force: true, filter: includeManagedSource });
+await cp(rust, path.join(temporary, "rust"), { recursive: true, force: true, filter: includeManagedSource });
+for (const configName of ["codecn.bootstrap.json", "codecn.config.json", "codecn.features.json", "codecn.workspaces.json"]) {
+  const candidates = [path.join(root, configName), path.join(shared, configName)];
+  const source = candidates.find((candidate) => existsSync(candidate));
+  if (source) await cp(source, path.join(temporary, configName), { force: true });
+}
 for (const overlay of overlayPaths) {
   await cp(overlay, temporary, { recursive: true, force: true, filter: includeManagedSource });
 }
@@ -56,7 +64,23 @@ const metadata = {
   sourceLayers: ["shared", ...targetLayers[target]]
 };
 await writeFile(path.join(temporary, ".codecn-source.json"), `${JSON.stringify(metadata, null, 2)}\n`);
-await rm(output, { recursive: true, force: true });
-await rename(temporary, output);
 
-console.log(output);
+async function publishMaterializedTree() {
+  try {
+    await rm(output, { recursive: true, force: true });
+    await rename(temporary, output);
+    return "replace";
+  } catch (error) {
+    const code = /** @type {NodeJS.ErrnoException} */ (error).code;
+    if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") throw error;
+    // Windows may lock .materialized/<target>/apps/desktop while Electron/Cursor holds handles.
+    // Fall back to in-place overwrite so agents can keep iterating without killing the IDE/app.
+    await cp(temporary, output, { recursive: true, force: true });
+    await rm(temporary, { recursive: true, force: true });
+    return "inplace";
+  }
+}
+
+const publishMode = await publishMaterializedTree();
+console.log(`${output} (${publishMode})`);
+

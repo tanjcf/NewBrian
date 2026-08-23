@@ -39,6 +39,7 @@ test("fetchSpringAppAutoRoute posts to /v1/auto/route and maps image_gen decisio
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://gateway.example/v1/auto/route");
   assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.signal, undefined);
   const headers = calls[0].init.headers as Record<string, string>;
   assert.equal(headers.Authorization, "Bearer tok");
   assert.equal(headers["X-CodeCN-Thread-Id"], "thread-a");

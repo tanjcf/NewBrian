@@ -18,6 +18,7 @@ export interface UrlCitation {
 export interface StructuredModelEnvelope {
   content: string;
   reasoningSummary?: string;
+  providerReasoningContent?: string;
   toolCalls: StructuredToolCall[];
   webSearchCalls: WebSearchCall[];
   citations: UrlCitation[];
@@ -86,6 +87,7 @@ export function extractChatEnvelope(payload: any): StructuredModelEnvelope {
     content: typeof message.content === "string" ? message.content.trim() : "",
     reasoningSummary: chatDeltaReasoningText(message).trim()
       || (typeof message.reasoning_summary === "string" ? message.reasoning_summary.trim() : ""),
+    providerReasoningContent: typeof message.reasoning_content === "string" ? message.reasoning_content : "",
     toolCalls,
     webSearchCalls: [],
     citations: [],
@@ -166,12 +168,16 @@ export function extractResponsesEnvelopeFromSse(rawText: string): StructuredMode
     if (!envelope.content && textParts.length) envelope.content = textParts.join("").trim();
     if (!envelope.content && chatTextParts.length) envelope.content = chatTextParts.join("").trim();
     if (!envelope.reasoningSummary && mergedReasoning) envelope.reasoningSummary = mergedReasoning;
+    if (!envelope.providerReasoningContent && chatReasoningParts.length) {
+      envelope.providerReasoningContent = chatReasoningParts.join("");
+    }
     if (!envelope.toolCalls.length && calls.size) envelope.toolCalls = [...calls.values()].filter((call) => call.name);
     return envelope;
   }
   return {
     content: (textParts.length ? textParts : chatTextParts).join("").trim(),
     reasoningSummary: mergedReasoning,
+    providerReasoningContent: chatReasoningParts.join(""),
     toolCalls: [...calls.values()].filter((call) => call.name),
     webSearchCalls: [],
     citations: []
@@ -181,6 +187,7 @@ export function extractResponsesEnvelopeFromSse(rawText: string): StructuredMode
 export function extractChatEnvelopeFromSse(rawText: string): StructuredModelEnvelope {
   const textParts: string[] = [];
   const reasoningParts: string[] = [];
+  const providerReasoningParts: string[] = [];
   const calls = new Map<number, StructuredToolCall>();
   let usage: unknown;
   // Parse each data line independently. Compatible gateways do not always
@@ -196,6 +203,7 @@ export function extractChatEnvelopeFromSse(rawText: string): StructuredModelEnve
     if (typeof delta?.content === "string") textParts.push(delta.content);
     const reasoning = chatDeltaReasoningText(delta);
     if (reasoning) reasoningParts.push(reasoning);
+    if (typeof delta?.reasoning_content === "string") providerReasoningParts.push(delta.reasoning_content);
     for (const call of Array.isArray(delta?.tool_calls) ? delta.tool_calls : []) {
       const index = Number(call.index ?? 0);
       const current = calls.get(index) ?? { id: "", name: "", arguments: "" };
@@ -208,6 +216,7 @@ export function extractChatEnvelopeFromSse(rawText: string): StructuredModelEnve
   return {
     content: textParts.join("").trim(),
     reasoningSummary: reasoningParts.join("").trim(),
+    providerReasoningContent: providerReasoningParts.join(""),
     toolCalls: [...calls.entries()].map(([index, call]) => ({
       ...call,
       id: call.id || `call-${index + 1}`

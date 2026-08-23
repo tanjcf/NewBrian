@@ -1,8 +1,6 @@
 import { parse } from "parse5";
 import { SaxesParser } from "saxes";
 
-const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
-const DEFAULT_READ_TIMEOUT_MS = 20_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_MAX_TEXT_CHARS = 40_000;
 const MAX_REDIRECTS = 5;
@@ -18,8 +16,6 @@ export interface OfficialSearchResult {
 
 interface WebServiceOptions {
   fetchImpl?: typeof fetch;
-  searchTimeoutMs?: number;
-  readTimeoutMs?: number;
   maxResponseBytes?: number;
   maxTextChars?: number;
 }
@@ -60,20 +56,16 @@ export function requireOfficialGovernmentUrl(value: string): URL {
 
 export class OfficialGovernmentWebService {
   readonly #fetchImpl: typeof fetch;
-  readonly #searchTimeoutMs: number;
-  readonly #readTimeoutMs: number;
   readonly #maxResponseBytes: number;
   readonly #maxTextChars: number;
 
   constructor(options: WebServiceOptions = {}) {
     this.#fetchImpl = options.fetchImpl ?? fetch;
-    this.#searchTimeoutMs = options.searchTimeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
-    this.#readTimeoutMs = options.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
     this.#maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
     this.#maxTextChars = options.maxTextChars ?? DEFAULT_MAX_TEXT_CHARS;
   }
 
-  async search(input: { query: string; limit?: number }): Promise<OfficialSearchResult[]> {
+  async search(input: { query: string; limit?: number; signal?: AbortSignal }): Promise<OfficialSearchResult[]> {
     const query = input.query.trim();
     if (!query) throw new Error("Search query is required");
     const limit = Math.max(1, Math.min(10, input.limit ?? 5));
@@ -81,9 +73,10 @@ export class OfficialGovernmentWebService {
     // Prefer the official State Council search API. Bing RSS often returns unrelated
     // non-gov.cn noise that collapses to an empty filtered result set.
     try {
-      const official = await this.#searchOfficialApi(query, limit);
+      const official = await this.#searchOfficialApi(query, limit, input.signal);
       if (official.length > 0) return official;
-    } catch {
+    } catch (error) {
+      if (input.signal?.aborted) throw error;
       // Fall through to Bing fallbacks on transport/parse issues.
     }
 
@@ -94,13 +87,14 @@ export class OfficialGovernmentWebService {
 
     let rssResults: OfficialSearchResult[] = [];
     try {
-      const response = await this.#fetchBounded(searchUrl, this.#searchTimeoutMs, {
+      const response = await this.#fetchBounded(searchUrl, {
         redirect: "follow",
-      });
+      }, input.signal);
       if (!response.ok) throw new Error(`Official search failed with HTTP ${response.status}`);
       const xml = new TextDecoder().decode(response.body);
       rssResults = filterOfficialResults(parseRss(xml), limit);
     } catch (error) {
+      if (input.signal?.aborted) throw error;
       if (!(error instanceof DOMException && error.name === "AbortError") && !(error instanceof TypeError)) {
         throw error;
       }
@@ -110,15 +104,15 @@ export class OfficialGovernmentWebService {
     const htmlSearchUrl = new URL("https://cn.bing.com/search");
     htmlSearchUrl.searchParams.set("q", `${query} site:gov.cn`);
     htmlSearchUrl.searchParams.set("setlang", "zh-cn");
-    const htmlResponse = await this.#fetchBounded(htmlSearchUrl, this.#searchTimeoutMs, {
+    const htmlResponse = await this.#fetchBounded(htmlSearchUrl, {
       redirect: "follow",
-    });
+    }, input.signal);
     if (!htmlResponse.ok) throw new Error(`Official HTML search failed with HTTP ${htmlResponse.status}`);
     const html = new TextDecoder().decode(htmlResponse.body);
     return filterOfficialResults(parseBingHtml(html), limit);
   }
 
-  async #searchOfficialApi(query: string, limit: number): Promise<OfficialSearchResult[]> {
+  async #searchOfficialApi(query: string, limit: number, signal?: AbortSignal): Promise<OfficialSearchResult[]> {
     const searchUrl = new URL(OFFICIAL_SEARCH_ENDPOINT);
     searchUrl.searchParams.set("t", OFFICIAL_SEARCH_TYPE);
     searchUrl.searchParams.set("q", query);
@@ -129,13 +123,13 @@ export class OfficialGovernmentWebService {
     searchUrl.searchParams.set("n", String(Math.max(limit, 20)));
     searchUrl.searchParams.set("timetype", "timezd");
 
-    const response = await this.#fetchBounded(searchUrl, this.#searchTimeoutMs, {
+    const response = await this.#fetchBounded(searchUrl, {
       redirect: "follow",
       headers: {
         accept: "application/json, text/plain, */*",
         referer: "https://sousuo.www.gov.cn/",
       },
-    });
+    }, signal);
     if (!response.ok) throw new Error(`Official gov.cn search failed with HTTP ${response.status}`);
     const raw = new TextDecoder().decode(response.body);
     let payload: unknown;
@@ -147,13 +141,13 @@ export class OfficialGovernmentWebService {
     return filterOfficialResults(parseOfficialSearchPayload(payload), limit);
   }
 
-  async read(input: { url: string }): Promise<{ url: string; title: string; text: string }> {
+  async read(input: { url: string; signal?: AbortSignal }): Promise<{ url: string; title: string; text: string }> {
     let currentUrl = requireOfficialGovernmentUrl(input.url);
 
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-      const response = await this.#fetchBounded(currentUrl, this.#readTimeoutMs, {
+      const response = await this.#fetchBounded(currentUrl, {
         redirect: "manual",
-      });
+      }, input.signal);
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
         if (!location) throw new Error("Official page redirect is missing Location");
@@ -181,30 +175,24 @@ export class OfficialGovernmentWebService {
 
   async #fetchBounded(
     url: URL,
-    timeoutMs: number,
     init: RequestInit,
+    signal?: AbortSignal,
   ): Promise<{ ok: boolean; status: number; headers: Headers; body: Uint8Array }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await this.#fetchImpl(url, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          "accept-language": "zh-CN,zh;q=0.9",
-          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36 codeCN/0.1",
-          ...(init.headers ?? {}),
-        },
-      });
-      const contentLength = Number(response.headers.get("content-length"));
-      if (Number.isFinite(contentLength) && contentLength > this.#maxResponseBytes) {
-        throw new Error("Official web response is too large");
-      }
-      const body = await readBoundedBody(response, this.#maxResponseBytes);
-      return { ok: response.ok, status: response.status, headers: response.headers, body };
-    } finally {
-      clearTimeout(timeout);
+    const response = await this.#fetchImpl(url, {
+      ...init,
+      signal,
+      headers: {
+        "accept-language": "zh-CN,zh;q=0.9",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36 codeCN/0.1",
+        ...(init.headers ?? {}),
+      },
+    });
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > this.#maxResponseBytes) {
+      throw new Error("Official web response is too large");
     }
+    const body = await readBoundedBody(response, this.#maxResponseBytes);
+    return { ok: response.ok, status: response.status, headers: response.headers, body };
   }
 }
 
