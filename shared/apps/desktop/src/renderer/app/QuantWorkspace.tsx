@@ -108,7 +108,11 @@ export function QuantWorkspace({
   useEffect(() => {
     if (!projectId || !window.codecn?.onQuantMarketUpdated) return;
     return window.codecn.onQuantMarketUpdated((payload) => {
-      if (payload?.projectId !== projectId && payload?.projectId !== workspaceId || !Array.isArray(payload.bars)) return;
+      // The model runtime uses the local workspace id, while the Brain panel
+      // may be keyed by a Brain project id. This panel is the active quant
+      // surface, so a completed quant tool result must be applied here even
+      // when those two identifiers differ.
+      if (!Array.isArray(payload.bars)) return;
       const query = (payload.query || {}) as any;
       const nextInterval = query.interval === "1w" ? "周线" : query.interval === "1mo" ? "月线" : "日线";
       const nextAdjustment = query.adjustment === "backward" ? "后复权" : query.adjustment === "none" ? "不复权" : "前复权";
@@ -123,7 +127,7 @@ export function QuantWorkspace({
   useEffect(() => {
     if (!projectId || !window.codecn?.onQuantPortfolioUpdated) return;
     return window.codecn.onQuantPortfolioUpdated((payload: any) => {
-      if ((payload?.projectId !== projectId && payload?.projectId !== workspaceId) || !payload?.skillId || !payload?.activity?.snapshot) return;
+      if (!payload?.skillId || !payload?.activity?.snapshot) return;
       const id = String(payload.skillId);
       setSkillPortfolios((current) => ({ ...current, [id]: payload.activity.snapshot }));
       setSkillActivities((current) => ({ ...current, [id]: payload.activity }));
