@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrainWorkspaceKey } from "@codex-forge/protocol";
 
 const UI_STATE_SECTION = "_ui_state";
@@ -14,9 +14,9 @@ export function useWorkspaceSceneState<T extends Record<string, unknown>>(
   const hydratedRef = useRef(false);
   const [hydrated, setHydrated] = useState(false);
 
-  const setState = (updater: T | ((current: T) => T)) => {
+  const setState = useCallback((updater: T | ((current: T) => T)) => {
     setStateInternal((current) => (typeof updater === "function" ? (updater as (value: T) => T)(current) : updater));
-  };
+  }, []);
 
   useEffect(() => {
     hydratedRef.current = false;
