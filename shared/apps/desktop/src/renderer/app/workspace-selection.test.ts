@@ -8,11 +8,11 @@ import {
 // @ts-expect-error Node's native TypeScript test runner requires the source extension.
 } from "./workspace-selection.ts";
 
-test("defines six workspace families with video and music as separate media modes", async () => {
+test("defines seven workspace families with video and music as separate media modes", async () => {
   const protocol = await import(
     new URL("../../../../../packages/protocol/src/workspace-types.ts", import.meta.url).href
   ) as typeof import("../../../../../packages/protocol/src/workspace-types.js");
-  assert.equal(protocol.brainWorkspaceFamilies.length, 6);
+  assert.equal(protocol.brainWorkspaceFamilies.length, 7);
   assert.deepEqual(protocol.brainWorkspaceFamilies.find((family) => family.familyKey === "media")?.modeKeys, ["video", "music"]);
   assert.deepEqual(protocol.brainWorkspaceModes.map((mode) => mode.workspaceKey), [
     "quant", "game", "video", "music", "data", "software", "document", "explore"
@@ -23,6 +23,12 @@ test("migrates the legacy selected workspace without assigning another workspace
   const restored = restoreBrainWorkspaceSelection({ legacyWorkspaceKey: "music" });
   assert.equal(restored.migrated, true);
   assert.equal(restored.selection.selectedWorkspaceKey, "music");
+  assert.deepEqual(restored.selection.catalogs, {});
+});
+
+test("defaults a fresh Brain profile to the scene learning workspace", () => {
+  const restored = restoreBrainWorkspaceSelection({});
+  assert.equal(restored.selection.selectedWorkspaceKey, "explore");
   assert.deepEqual(restored.selection.catalogs, {});
 });
 

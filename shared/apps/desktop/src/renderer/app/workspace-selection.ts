@@ -72,7 +72,7 @@ export function restoreBrainWorkspaceSelection(input: {
   const legacyKey = isBrainWorkspaceKey(input.legacyWorkspaceKey)
     ? input.legacyWorkspaceKey
     : null;
-  const requestedKey = persistedKey ?? legacyKey ?? "software";
+  const requestedKey = persistedKey ?? legacyKey ?? "explore";
   const selectedWorkspaceKey = available.includes(requestedKey)
     ? requestedKey
     : (available.includes("explore") ? "explore" : available[0] ?? "explore");
