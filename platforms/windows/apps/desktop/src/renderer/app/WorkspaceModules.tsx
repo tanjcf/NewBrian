@@ -72,6 +72,7 @@ const brainWorkspaceIcon = (workspaceKey: string) =>
   brainWorkspaceModes.find((workspace) => workspace.workspaceKey === workspaceKey)?.icon || "folder";
 
 const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ key: string; label: string }>> = {
+  explore: [{ key: "knowledge", label: "场景知识" }, { key: "tools", label: "可用工具" }],
   quant: [
     { key: "market", label: "行情" },
     { key: "portfolio", label: "组合" },
@@ -4652,6 +4653,9 @@ function renderSidebarModule() {
           return <WorkspaceSectionEditor projectId={selectedBrainProject?.id} workspaceKey="quant" sectionKey="research" title="研究笔记" description="记录策略假设、风控约束与回测结论" prompts={["策略假设", "风控边界", "回测结论", "待验证信号"]} />;
         }
         return <QuantWorkspace projectId={selectedBrainProject?.id} compact activeView={brainSceneTab as "market" | "portfolio" | "strategy" | "radar"} />;
+      }
+      if (selectedBrainWorkspaceKey === "explore") {
+        return renderPendingCapability(brainSceneTab === "tools" ? "可用工具" : "场景知识");
       }
       if (selectedBrainWorkspaceKey === "game") {
         if (brainSceneTab === "level") return <GameLevelEditor projectId={selectedBrainProject?.id} />;

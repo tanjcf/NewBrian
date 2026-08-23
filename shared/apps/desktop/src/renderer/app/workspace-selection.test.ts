@@ -15,7 +15,7 @@ test("defines six workspace families with video and music as separate media mode
   assert.equal(protocol.brainWorkspaceFamilies.length, 6);
   assert.deepEqual(protocol.brainWorkspaceFamilies.find((family) => family.familyKey === "media")?.modeKeys, ["video", "music"]);
   assert.deepEqual(protocol.brainWorkspaceModes.map((mode) => mode.workspaceKey), [
-    "quant", "game", "video", "music", "data", "software", "document"
+    "quant", "game", "video", "music", "data", "software", "document", "explore"
   ]);
 });
 
@@ -72,7 +72,7 @@ test("falls back to an available workspace while retaining unavailable catalog h
 
 test("recovers from corrupt persisted selection without trusting invalid workspace keys", () => {
   const corrupt = restoreBrainWorkspaceSelection({ serialized: "{broken", legacyWorkspaceKey: "unknown" });
-  assert.equal(corrupt.selection.selectedWorkspaceKey, "software");
+  assert.equal(corrupt.selection.selectedWorkspaceKey, "explore");
   assert.deepEqual(corrupt.selection.catalogs, {});
   assert.equal(corrupt.migrated, true);
 });

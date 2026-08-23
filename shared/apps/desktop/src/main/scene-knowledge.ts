@@ -3,6 +3,9 @@ import type { BrainWorkspaceKey } from "@codex-forge/protocol";
 type SceneSection = { title: string; keywords: string[]; content: string };
 
 const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[] }> = {
+  explore: { title: "场景学习探索", sections: [
+    { title: "通用 Brain", keywords: ["探索", "学习", "场景"], content: "这是原生 Brain 的无专用场景模式。对话、项目、线程、Skill、知识检索和工具调用均按通用能力工作；明确进入量化、游戏、视频等业务场景时，再切换到对应场景。" }
+  ] },
   quant: { title: "量化交易", sections: [
     { title: "能力", keywords: ["行情", "股票", "K线", "量柱", "组合", "策略"], content: "查询真实行情、查看K线与成交量、组合持仓、策略回测和风险分析。默认不连接真实券商，不执行真实下单。" },
     { title: "工具接口", keywords: ["quant.market.query", "quant.portfolio.create", "bars", "行情", "组合"], content: "quant.market.query：查询股票/指数行情。quant.portfolio.create：用户要求创建组合或组合 Skill 时必须调用，用 skillId 和 title 建立真实模拟组合并同步右侧组合面板；只生成 Skill 文档不算完成。quant.strategy.run：运行策略并把结果同步右侧组合。行情参数包括 symbol、startDate、endDate、interval、adjustment。必须使用工具返回的数据，不编造实时价格。" }

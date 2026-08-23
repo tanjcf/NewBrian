@@ -35,7 +35,7 @@ function catalogSelection(value: unknown): BrainWorkspaceCatalogSelection | null
 }
 
 export function defaultBrainWorkspaceSelection(): BrainWorkspaceSelection {
-  return { version: 2, selectedWorkspaceKey: "software", catalogs: {} };
+  return { version: 2, selectedWorkspaceKey: "explore", catalogs: {} };
 }
 
 export function restoreBrainWorkspaceSelection(input: {
@@ -75,7 +75,7 @@ export function restoreBrainWorkspaceSelection(input: {
   const requestedKey = persistedKey ?? legacyKey ?? "software";
   const selectedWorkspaceKey = available.includes(requestedKey)
     ? requestedKey
-    : (available.includes("software") ? "software" : available[0] ?? "software");
+    : (available.includes("explore") ? "explore" : available[0] ?? "explore");
 
   return {
     selection: { version: 2, selectedWorkspaceKey, catalogs },
