@@ -574,8 +574,8 @@ contextBridge.exposeInMainWorld("codecn", {
     ipcRenderer.on(desktopIpcChannels.events.quantMarketUpdated, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantMarketUpdated, handler);
   },
-  onQuantPortfolioUpdated: (listener: (payload: { projectId: string; skillId: string; title?: string; activity: unknown }) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; skillId: string; title?: string; activity: unknown }) => listener(payload);
+  onQuantPortfolioUpdated: (listener: (payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => listener(payload);
     ipcRenderer.on(desktopIpcChannels.events.quantPortfolioUpdated, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantPortfolioUpdated, handler);
   },

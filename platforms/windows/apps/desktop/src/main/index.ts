@@ -115,6 +115,7 @@ import { DataImportService } from "./data-import-service.js";
 import { DataAnalysisService } from "./data-analysis-service.js";
 import { registerDataImportIpc } from "./data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
+import { QuantSkillPackageService } from "./quant-skill-package-service.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
@@ -3306,9 +3307,11 @@ function registerGoalRuntimeTools(
 /** Exposes the quantitative Tools workspace to the native Agent Loop. */
 function registerQuantRuntimeTools(
   targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>,
-  workspaceId: string
+  workspaceId: string,
+  workspacePath: string
 ) {
   if (!workspaceId.trim()) return;
+  const quantSkillPackages = new QuantSkillPackageService(workspacePath);
   targetRuntime.registerExternalTool({
     name: "quant.market.query",
     title: "查询量化行情",
@@ -3349,24 +3352,51 @@ function registerQuantRuntimeTools(
   });
   targetRuntime.registerExternalTool({
     name: "quant.portfolio.create",
-    title: "创建 Skill 模拟组合",
-    description: "在当前量化项目中创建一个由 Skill 管理的独立模拟组合，并立即同步到右侧组合面板。不连接真实券商。",
+    title: "创建量化 Skill 与模拟组合",
+    description: "在当前项目 .codecn/skills 中真实创建量化 Skill 包，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
     namespace: "quant", kind: "write", risk: "low", requiresApproval: false,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "Skill 的稳定英文标识" },
-      title: { type: "string", description: "右侧组合卡片显示名称" }
-    }, required: ["skillId", "title"], additionalProperties: false }
+      title: { type: "string", description: "Skill 名称和右侧组合卡片显示名称" },
+      symbol: { type: "string", description: "Skill 主要模拟标的代码" },
+      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "Skill 使用的内置信号策略" }
+    }, required: ["skillId", "title", "symbol", "strategyId"], additionalProperties: false }
   }, async (input) => {
     const skillId = String(input.skillId || "").trim();
     const title = String(input.title || "").trim();
     if (!skillId || !title) throw new TypeError("skillId and title are required");
+    const skillPackage = await quantSkillPackages.create({
+      skillId,
+      title,
+      symbol: String(input.symbol || "").trim(),
+      strategyId: String(input.strategyId || "") as "trend-following" | "mean-reversion"
+    });
     quantSimulationService.createSession(workspaceId);
     quantSimulationService.resetSkillLedger(workspaceId, skillId);
     const activity = quantSimulationService.skillActivity(workspaceId, skillId, {});
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, title, activity });
     }
-    return { ok: true, output: JSON.stringify({ simulationOnly: true, skillId, title, activity }) };
+    return { ok: true, output: JSON.stringify({ simulationOnly: true, skillId, title, skillPackage, activity }) };
+  });
+  targetRuntime.registerExternalTool({
+    name: "quant.portfolio.delete",
+    title: "删除 Skill 模拟组合",
+    description: "删除当前量化项目中指定 Skill 的模拟组合及其持久化交易账本，并同步移除右侧组合卡片。不连接真实券商。若用户要求删除整个 Skill，还必须同时删除工作区内对应的 .codecn/skills Skill 包。",
+    namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
+    inputSchema: { type: "object", properties: {
+      skillId: { type: "string", description: "要删除的 Skill 稳定英文标识" }
+    }, required: ["skillId"], additionalProperties: false }
+  }, async (input) => {
+    const skillId = String(input.skillId || "").trim();
+    if (!skillId) throw new TypeError("skillId is required");
+    quantSimulationService.createSession(workspaceId);
+    const skillPackage = await quantSkillPackages.remove(skillId);
+    const removed = quantSimulationService.removeSkillLedger(workspaceId, skillId);
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, deleted: true });
+    }
+    return { ok: true, output: JSON.stringify({ simulationOnly: true, skillId, removed, skillPackage }) };
   });
   targetRuntime.registerExternalTool({
     name: "quant.simulation.order", title: "执行模拟交易",
@@ -3390,17 +3420,19 @@ function registerQuantRuntimeTools(
     description: "使用历史行情运行隔离的量化策略模拟，不连接真实券商。",
     namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: {
-      skillId: { type: "string", enum: ["trend-following", "mean-reversion"] }, symbol: { type: "string" },
+      skillId: { type: "string", description: "承载模拟成交的组合 Skill 标识" },
+      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "运行的内置信号策略" },
+      symbol: { type: "string" },
       quantity: { type: "integer", minimum: 1 }, startDate: { type: "string" }, endDate: { type: "string" }
     }, required: ["skillId", "symbol", "quantity"], additionalProperties: false }
   }, async (input) => {
     const result = await quantSimulationService.runSkillSimulation(workspaceId, {
-      skillId: String(input.skillId), symbol: String(input.symbol), quantity: Number(input.quantity),
+      skillId: String(input.skillId), strategyId: input.strategyId ? String(input.strategyId) : undefined, symbol: String(input.symbol), quantity: Number(input.quantity),
       query: { symbol: String(input.symbol), interval: "1d", adjustment: "forward", startDate: input.startDate ? String(input.startDate) : undefined, endDate: input.endDate ? String(input.endDate) : undefined }
     });
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       const activity = quantSimulationService.skillActivity(workspaceId, String(input.skillId), { [String(input.symbol)]: result.snapshot.positions.find((item) => item.symbol === String(input.symbol))?.currentPrice || 0 });
-      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId: String(input.skillId), title: String(input.skillId), activity });
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId: String(input.skillId), activity });
     }
     return { ok: true, output: JSON.stringify({ simulationOnly: true, result }) };
   });
@@ -3412,6 +3444,56 @@ function registerQuantRuntimeTools(
   }, async (input) => {
     quantSimulationService.createSession(workspaceId);
     return { ok: true, output: JSON.stringify(quantSimulationService.performance(workspaceId, String(input.skillId))) };
+  });
+  targetRuntime.registerExternalTool({
+    name: "quant.radar.create", title: "创建 Skill 雷达并立即模拟",
+    description: "创建交易日自动运行的 Skill 雷达计划，并立即用最近 12 个月真实历史行情执行一次模拟以同步右侧雷达和组合。不连接真实券商。",
+    namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
+    inputSchema: { type: "object", properties: {
+      skillId: { type: "string", description: "承载雷达模拟成交的自定义组合 Skill 标识" },
+      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "雷达自动运行的内置信号策略" },
+      symbol: { type: "string" }, quantity: { type: "integer", minimum: 1 },
+      exchange: { type: "string", enum: ["SSE", "SZSE", "BSE"] },
+      runAt: { type: "string", description: "交易日执行时间，HH:mm" }
+    }, required: ["skillId", "strategyId", "symbol", "quantity", "exchange", "runAt"], additionalProperties: false }
+  }, async (input) => {
+    const skillId = String(input.skillId || "").trim();
+    const strategyId = String(input.strategyId || "") as "trend-following" | "mean-reversion";
+    const symbol = String(input.symbol || "").trim();
+    const quantity = Number(input.quantity);
+    const exchange = String(input.exchange || "") as "SSE" | "SZSE" | "BSE";
+    const runAt = String(input.runAt || "").trim();
+    const ownerId = await resolveBrainLocalOwnerId();
+    const schedule = brainWorkspaceStorage.createQuantStrategySchedule({ ownerId, projectId: workspaceId, skillId, strategyId, exchange, runAt, symbol, quantity });
+    const end = new Date();
+    const start = new Date(end);
+    start.setUTCFullYear(start.getUTCFullYear() - 1);
+    const result = await quantSimulationService.runSkillSimulation(workspaceId, {
+      skillId, strategyId, symbol, quantity,
+      query: { symbol, interval: "1d", adjustment: "forward", startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) }
+    });
+    const activity = quantSimulationService.skillActivity(workspaceId, skillId, { [symbol]: result.snapshot.positions.find((item) => item.symbol === symbol)?.currentPrice || 0 });
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, schedule, activity });
+    }
+    return { ok: true, output: JSON.stringify({ simulationOnly: true, schedule, result }) };
+  });
+  targetRuntime.registerExternalTool({
+    name: "quant.note.add", title: "添加量化研究笔记",
+    description: "把 AI 基于真实行情、组合或雷达结果形成的总结写入当前项目右侧研究笔记。不要只在聊天中输出总结。",
+    namespace: "quant", kind: "write", risk: "low", requiresApproval: false,
+    inputSchema: { type: "object", properties: {
+      title: { type: "string" }, content: { type: "string" }, symbol: { type: "string" }
+    }, required: ["title", "content"], additionalProperties: false }
+  }, async (input) => {
+    const title = String(input.title || "").trim();
+    const content = String(input.content || "").trim();
+    if (!title || !content) throw new TypeError("title and content are required");
+    const note = { id: `quant-note-${randomUUID()}`, title, content, symbol: String(input.symbol || "").trim() || undefined, createdAt: new Date().toISOString() };
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, note });
+    }
+    return { ok: true, output: JSON.stringify({ saved: true, note }) };
   });
 }
 function createDefaultWorkspaceThread(workspaceName: string): WorkspaceThreadRecord {
@@ -8365,7 +8447,7 @@ function registerIpc() {
         ownerId: await resolveBrainLocalOwnerId(),
         workspaceKey: "quant"
       }).find((project) => project.localWorkspaceId === workspace.id);
-      registerQuantRuntimeTools(targetRuntime, quantProject?.id || workspace.id);
+      registerQuantRuntimeTools(targetRuntime, quantProject?.id || workspace.id, workspace.path);
       registerAgentCollaborationTools(targetRuntime, workspace, thread);
       // Model-chat requests run in their own Agent Host-backed runtime. Register
       // the official-evidence tools here as well as on the long-lived desktop

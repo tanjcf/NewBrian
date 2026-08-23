@@ -4,7 +4,7 @@ import { QuantStrategyScheduler, type QuantStrategySchedule, type QuantStrategyS
 
 function schedule(overrides: Partial<QuantStrategySchedule> = {}): QuantStrategySchedule {
   return {
-    id: "schedule-1", projectId: "project-1", skillId: "trend", exchange: "SSE",
+    id: "schedule-1", projectId: "project-1", skillId: "trend", strategyId: "trend-following", exchange: "SSE",
     timezone: "Asia/Shanghai", runAt: "15:10", enabled: true,
     symbol: "600519", quantity: 100, ...overrides
   };

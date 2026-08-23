@@ -127,7 +127,7 @@ export class BrainStorageError extends Error {
   }
 }
 
-const latestMigrationVersion = 18;
+const latestMigrationVersion = 19;
 const maxWorkspaceSectionBytes = 1024 * 1024;
 const workspaceDefinitions: ReadonlyArray<readonly [BrainWorkspaceKey, string, number]> =
   brainWorkspaceModes.map((workspace) => [workspace.workspaceKey, workspace.displayName, workspace.sortOrder]);
@@ -521,6 +521,11 @@ CREATE TABLE brain_engine_runtime (
 CREATE INDEX idx_brain_engine_runtime_owner ON brain_engine_runtime(owner_id, updated_at DESC);
 `; }
 
+function migrationNineteenSql() { return `
+ALTER TABLE brain_quant_strategy_schedule ADD COLUMN strategy_id TEXT NOT NULL DEFAULT 'trend-following'
+  CHECK(strategy_id IN ('trend-following', 'mean-reversion'));
+`; }
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -667,6 +672,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 16, "Persist project-scoped workspace section documents", migrationSixteenSql());
       applyMigration(this.database, 17, "Track artifact source workspace for cross-scene lineage", migrationSeventeenSql());
       applyMigration(this.database, 18, "Persist managed and discovered engine runtimes", migrationEighteenSql());
+      applyMigration(this.database, 19, "Separate quantitative portfolio Skill identity from signal strategy", migrationNineteenSql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -1818,34 +1824,35 @@ export class BrainWorkspaceStorage {
     `).run(normalizedProjectId, normalizedState, nowIso());
   }
 
-  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; exchange: ChinaExchange; runAt: string; symbol: string; quantity: number }): QuantStrategySchedule {
+  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; strategyId?: "trend-following" | "mean-reversion"; exchange: ChinaExchange; runAt: string; symbol: string; quantity: number }): QuantStrategySchedule {
     this.getProject(input.ownerId, input.projectId);
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(input.runAt)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "runAt must use HH:mm");
     if (!(["SSE", "SZSE", "BSE"] as const).includes(input.exchange)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "exchange is invalid");
     const skillId = requireText(input.skillId, "skillId");
+    const strategyId = input.strategyId ?? (skillId === "mean-reversion" ? "mean-reversion" : "trend-following");
     const symbol = requireText(input.symbol, "symbol");
     if (!Number.isInteger(input.quantity) || input.quantity <= 0) throw new BrainStorageError("BRAIN_INPUT_INVALID", "quantity must be a positive integer");
     const existing = this.database.prepare(`SELECT * FROM brain_quant_strategy_schedule
       WHERE project_id = ? AND skill_id = ? AND exchange = ? AND run_at = ?`)
       .get(input.projectId, skillId, input.exchange, input.runAt) as Record<string, unknown> | undefined;
     if (existing) {
-      this.database.prepare("UPDATE brain_quant_strategy_schedule SET symbol = ?, quantity = ?, updated_at = ? WHERE id = ?")
-        .run(symbol, input.quantity, nowIso(), String(existing.id));
+      this.database.prepare("UPDATE brain_quant_strategy_schedule SET symbol = ?, quantity = ?, strategy_id = ?, updated_at = ? WHERE id = ?")
+        .run(symbol, input.quantity, strategyId, nowIso(), String(existing.id));
       return {
-        id: String(existing.id), projectId: String(existing.project_id), skillId: String(existing.skill_id),
+        id: String(existing.id), projectId: String(existing.project_id), skillId: String(existing.skill_id), strategyId,
         exchange: String(existing.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(existing.run_at),
         enabled: Number(existing.enabled) === 1, symbol, quantity: input.quantity
       };
     }
     const timestamp = nowIso();
     const record: QuantStrategySchedule = {
-      id: `quant_schedule_${randomUUID()}`, projectId: input.projectId, skillId,
+      id: `quant_schedule_${randomUUID()}`, projectId: input.projectId, skillId, strategyId,
       exchange: input.exchange, timezone: "Asia/Shanghai", runAt: input.runAt, enabled: true, symbol, quantity: input.quantity
     };
     this.database.prepare(`
-      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, exchange, timezone, run_at, enabled, symbol, quantity, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-    `).run(record.id, record.projectId, record.skillId, record.exchange, record.timezone, record.runAt, record.symbol, record.quantity, timestamp, timestamp);
+      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, strategy_id, exchange, timezone, run_at, enabled, symbol, quantity, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+    `).run(record.id, record.projectId, record.skillId, record.strategyId, record.exchange, record.timezone, record.runAt, record.symbol, record.quantity, timestamp, timestamp);
     return record;
   }
 
@@ -1853,7 +1860,7 @@ export class BrainWorkspaceStorage {
     this.getProject(ownerId, projectId);
     return (this.database.prepare("SELECT * FROM brain_quant_strategy_schedule WHERE project_id = ? ORDER BY created_at, id")
       .all(projectId) as Record<string, unknown>[]).map((row) => ({
-        id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
+        id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id), strategyId: String(row.strategy_id || "trend-following") as QuantStrategySchedule["strategyId"],
         exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: Number(row.enabled) === 1,
         symbol: String(row.symbol), quantity: Number(row.quantity)
       }));
@@ -1932,7 +1939,7 @@ export class BrainWorkspaceStorage {
       requestId: input.idempotencyKey,
       idempotencyKey: input.idempotencyKey,
       maxAttempts: 3,
-      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, symbol: input.symbol, quantity: input.quantity, simulationOnly: true })
+      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, symbol: input.symbol, quantity: input.quantity, strategyId: input.strategyId, simulationOnly: true })
     });
   }
 

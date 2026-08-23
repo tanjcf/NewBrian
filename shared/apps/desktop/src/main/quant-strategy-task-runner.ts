@@ -7,6 +7,7 @@ interface StrategyTaskConfig {
   tradingDate: string;
   symbol: string;
   quantity: number;
+  strategyId: "trend-following" | "mean-reversion";
   simulationOnly: true;
 }
 
@@ -40,10 +41,11 @@ function parseConfig(value: string): StrategyTaskConfig {
     || typeof config.tradingDate !== "string" || Number.isNaN(Date.parse(config.tradingDate))
     || typeof config.symbol !== "string" || !config.symbol.trim()
     || !Number.isInteger(config.quantity) || Number(config.quantity) <= 0
+    || (config.strategyId !== "trend-following" && config.strategyId !== "mean-reversion")
     || config.simulationOnly !== true) {
     throw new QuantStrategyTaskError("QUANT_TASK_CONFIG_INVALID", "Strategy task configuration is invalid");
   }
-  return { exchange: config.exchange as StrategyTaskConfig["exchange"], tradingDate: config.tradingDate, symbol: config.symbol.trim(), quantity: Number(config.quantity), simulationOnly: true };
+  return { exchange: config.exchange as StrategyTaskConfig["exchange"], tradingDate: config.tradingDate, symbol: config.symbol.trim(), quantity: Number(config.quantity), strategyId: config.strategyId, simulationOnly: true };
 }
 
 function startDate(tradingDate: string): string {
@@ -84,7 +86,7 @@ export class QuantStrategyTaskRunner {
       if (this.options.store.getTask(ownerId, task.id).status === "CANCELLED") return;
       let signal: "buy" | "sell";
       try {
-        signal = quantSkillSignal(skillId, bars);
+        signal = quantSkillSignal(config.strategyId, bars);
       } catch (error) {
         if (error instanceof QuantSkillSignalError) throw new QuantStrategyTaskError(error.code, error.message);
         throw error;

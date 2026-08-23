@@ -16,6 +16,7 @@ type QuantUiState = {
   quantity: number;
   /** One-time migration tag so legacy short ranges pick up the 12-month default once. */
   dateRangePreset?: string;
+  notes: Array<{ id: string; title: string; content: string; symbol?: string; createdAt: string }>;
 };
 
 const DATE_RANGE_PRESET = "end-today-start-12m";
@@ -27,6 +28,7 @@ const defaultQuantUi: QuantUiState = {
   startDate: "",
   endDate: "",
   quantity: 100,
+  notes: [],
   dateRangePreset: DATE_RANGE_PRESET
 };
 
@@ -52,7 +54,7 @@ export function QuantWorkspace({
   /** Local workspace id used by model tools before a Brain project id is known to main. */
   workspaceId?: string;
   compact?: boolean;
-  activeView?: "market" | "portfolio" | "strategy" | "radar";
+  activeView?: "market" | "portfolio" | "strategy" | "radar" | "research";
 }) {
   const { state: ui, setState: setUi, hydrated } = useWorkspaceSceneState(projectId, "quant", defaultQuantUi);
   const symbol = ui.symbol;
@@ -127,8 +129,45 @@ export function QuantWorkspace({
   useEffect(() => {
     if (!projectId || !window.codecn?.onQuantPortfolioUpdated) return;
     return window.codecn.onQuantPortfolioUpdated((payload: any) => {
-      if (!payload?.skillId || !payload?.activity?.snapshot) return;
+      if (payload?.note?.id) {
+        setUi((current) => ({
+          ...current,
+          notes: [payload.note, ...(Array.isArray(current.notes) ? current.notes : []).filter((note) => note.id !== payload.note.id)]
+        }));
+      }
+      if (!payload?.skillId) return;
       const id = String(payload.skillId);
+      if (payload.schedule?.id) {
+        setSchedules((current) => {
+          const index = current.findIndex((item) => item.id === payload.schedule.id);
+          if (index < 0) return [...current, payload.schedule];
+          return current.map((item, itemIndex) => itemIndex === index ? payload.schedule : item);
+        });
+      }
+      if (payload.deleted === true) {
+        setSkillPortfolios((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+        setSkillActivities((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+        setSkillTitles((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+        setSkillPerformance((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+        return;
+      }
+      if (!payload?.activity?.snapshot) return;
       setSkillPortfolios((current) => ({ ...current, [id]: payload.activity.snapshot }));
       setSkillActivities((current) => ({ ...current, [id]: payload.activity }));
       if (payload.title) setSkillTitles((current) => ({ ...current, [id]: String(payload.title) }));
@@ -368,7 +407,7 @@ export function QuantWorkspace({
   );
 
   return <main className={`brain-quant-module${compact ? " compact" : ""}`} data-testid="brain-quant-workspace" data-active-view={activeView}>
-    <header className="brain-quant-header"><div><span>量化交易</span><strong>{activeView === "market" ? "行情分析" : activeView === "portfolio" ? "模拟组合" : activeView === "strategy" ? "Skill 策略" : "股市雷达"}</strong></div><small data-testid="brain-quant-market-status">{status} · 不连接真实券商</small></header>
+    <header className="brain-quant-header"><div><span>量化交易</span><strong>{activeView === "market" ? "行情分析" : activeView === "portfolio" ? "模拟组合" : activeView === "strategy" ? "Skill 策略" : activeView === "research" ? "研究笔记" : "股市雷达"}</strong></div><small data-testid="brain-quant-market-status">{status} · 不连接真实券商</small></header>
     {activeView === "market" ? <><section className="brain-quant-toolbar">
       <label>代码<input value={symbol} onChange={(event) => setUi((current) => ({ ...current, symbol: event.target.value }))} /></label>
       <label>周期<select value={interval} onChange={(event) => setUi((current) => ({ ...current, interval: event.target.value }))}><option>日线</option><option>周线</option><option>月线</option></select></label>
@@ -435,6 +474,9 @@ export function QuantWorkspace({
       {schedules.length ? <div className="brain-quant-schedule-list">{schedules.map((item) => { const runs = strategyRuns.filter((run) => run.scheduleId === item.id); return <article key={item.id}><strong>{skillLabel(item.skillId)}</strong><span>{item.symbol} · {item.quantity} 股 · {item.exchange} · 交易日 {item.runAt}</span><em>{item.enabled ? "运行中" : "已暂停"}</em><div className="brain-quant-radar-actions"><button type="button" onClick={() => setExpandedRadarId(expandedRadarId === item.id ? "" : item.id)}>{expandedRadarId === item.id ? "收起记录" : "查看记录"}</button><button type="button" onClick={() => setScheduleEnabled(item.id, !item.enabled)}>{item.enabled ? "暂停" : "启用"}</button></div>{expandedRadarId === item.id ? <div className="brain-quant-run-list">{runs.length ? runs.map((run) => <small key={run.idempotencyKey}>{run.tradingDate} · {run.status}{run.errorCode ? ` · ${run.errorCode}` : ""}</small>) : <small>尚无运行记录</small>}</div> : null}</article>; })}</div> : <div className="brain-quant-empty">尚未创建 Skill 雷达计划。计划只会生成模拟任务，不会连接真实券商。</div>}
       {scheduleStatus ? <small className="brain-quant-order-status">{scheduleStatus}</small> : null}
       {skillRunStatus ? <small className="brain-quant-order-status">{skillRunStatus}</small> : null}
+    </section> : null}
+    {activeView === "research" ? <section className="brain-quant-skills" data-testid="brain-quant-research-notes"><header><h3>研究笔记</h3><span>由 AI 基于真实行情、组合和雷达结果总结并写入当前项目</span></header>
+      {Array.isArray(ui.notes) && ui.notes.length ? <div className="brain-quant-schedule-list">{ui.notes.map((note) => <article key={note.id}><strong>{note.title}</strong><span>{note.content}</span><em>{note.symbol ? `${note.symbol} · ` : ""}{String(note.createdAt).replace("T", " ").slice(0, 19)}</em></article>)}</div> : <div className="brain-quant-empty">尚无研究笔记。可在对话中要求 AI 总结当前行情或模拟结果并添加笔记。</div>}
     </section> : null}
   </main>;
 }

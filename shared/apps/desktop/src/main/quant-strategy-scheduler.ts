@@ -4,6 +4,7 @@ export interface QuantStrategySchedule {
   id: string;
   projectId: string;
   skillId: string;
+  strategyId: "trend-following" | "mean-reversion";
   exchange: ChinaExchange;
   timezone: "Asia/Shanghai";
   runAt: string;
@@ -16,6 +17,7 @@ export interface QuantStrategyExecution {
   scheduleId: string;
   projectId: string;
   skillId: string;
+  strategyId: "trend-following" | "mean-reversion";
   exchange: ChinaExchange;
   tradingDate: string;
   idempotencyKey: string;
@@ -95,7 +97,7 @@ export class QuantStrategyScheduler {
       const idempotencyKey = `quant-strategy:${schedule.id}:${clock.date}`;
       if (!this.store.claim(schedule.id, clock.date, idempotencyKey)) continue;
       const execution: QuantStrategyExecution = {
-        scheduleId: schedule.id, projectId: schedule.projectId, skillId: schedule.skillId,
+        scheduleId: schedule.id, projectId: schedule.projectId, skillId: schedule.skillId, strategyId: schedule.strategyId,
         exchange: schedule.exchange, tradingDate: clock.date, idempotencyKey,
         symbol: schedule.symbol, quantity: schedule.quantity
       };

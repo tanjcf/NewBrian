@@ -82,6 +82,15 @@ export class QuantSimulationService {
     this.persist(projectId);
   }
 
+  removeSkillLedger(projectId: string, skillId: string): boolean {
+    const session = this.session(projectId);
+    const id = skillId.trim();
+    if (!id) throw new TypeError("skillId is required");
+    const removed = session.skillLedgers.delete(id);
+    if (removed) this.persist(projectId);
+    return removed;
+  }
+
   queryBars(projectId: string, query: MarketDataQuery): QuantBar[] { return this.session(projectId).market.query(query); }
   queryBarsAsync(projectId: string, query: MarketDataQuery): Promise<QuantBar[]> { return this.session(projectId).market.queryAsync(query); }
   executeOrder(projectId: string, order: SimulatedOrder): SimulatedFill {
@@ -137,6 +146,7 @@ export class QuantSimulationService {
   /** Walk real bars; Skill auto-trades into its isolated ledger. Manual portfolio is untouched. */
   async runSkillSimulation(projectId: string, input: {
     skillId: string;
+    strategyId?: string;
     symbol: string;
     quantity: number;
     query: MarketDataQuery;
@@ -159,7 +169,7 @@ export class QuantSimulationService {
     for (let index = 19; index < bars.length; index += 1) {
       const window = bars.slice(0, index + 1);
       const bar = bars[index]!;
-      const signal = quantSkillSignal(skillId, window);
+      const signal = quantSkillSignal(input.strategyId?.trim() || skillId, window);
       const prices = { [symbol]: bar.close };
       const before = this.skillSnapshot(projectId, skillId, prices);
       const position = before.positions.find((item) => item.symbol === symbol);

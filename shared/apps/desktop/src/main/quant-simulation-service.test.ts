@@ -42,6 +42,28 @@ test("restores manual and per-skill ledgers from durable project state", () => {
   assert.equal(restarted.executeOrder("project", { id: "manual", symbol: "A", side: "buy", quantity: 10, price: 999, feeRate: 0, createdAt: "later" }).price, 10);
 });
 
+test("removes a skill ledger durably without touching the manual portfolio", () => {
+  const states = new Map<string, string>();
+  const persistence = {
+    load: (projectId: string) => states.get(projectId) ?? null,
+    save: (projectId: string, stateJson: string) => { states.set(projectId, stateJson); }
+  };
+  const service = new QuantSimulationService(undefined, persistence);
+  service.createSession("project", 1_000);
+  service.executeOrder("project", { id: "manual", symbol: "A", side: "buy", quantity: 10, price: 10, feeRate: 0, createdAt: "now" });
+  service.executeOrder("project", { id: "skill", skillId: "trend", symbol: "B", side: "buy", quantity: 20, price: 10, feeRate: 0, createdAt: "now" });
+
+  assert.equal(service.removeSkillLedger("project", "trend"), true);
+  assert.deepEqual(service.listSkillIds("project"), []);
+  assert.equal(service.snapshot("project", { A: 10 }).positions[0]?.quantity, 10);
+
+  const restarted = new QuantSimulationService(undefined, persistence);
+  restarted.createSession("project");
+  assert.deepEqual(restarted.listSkillIds("project"), []);
+  assert.equal(restarted.snapshot("project", { A: 10 }).positions[0]?.quantity, 10);
+  assert.equal(restarted.removeSkillLedger("project", "trend"), false);
+});
+
 test("runSkillSimulation auto-trades on rising bars for trend-following without touching manual ledger", async () => {
   const bars = Array.from({ length: 40 }, (_, index) => {
     const close = 10 + index;
@@ -69,4 +91,30 @@ test("runSkillSimulation auto-trades on rising bars for trend-following without 
   assert.equal(result.performance.skillId, "trend-following");
   assert.equal(service.snapshot("project", {}).positions.length, 0);
   assert.ok(service.skillSnapshot("project", "trend-following", { "600519": bars.at(-1)!.close }).positions.length >= 0);
+});
+
+test("runs a built-in strategy into the caller's custom Skill ledger", async () => {
+  const bars = Array.from({ length: 40 }, (_, index) => {
+    const close = 10 + index;
+    const day = new Date(Date.UTC(2026, 5, 1 + index));
+    return {
+      symbol: "600031", exchange: "SSE", timezone: "Asia/Shanghai", interval: "1d" as const, adjustment: "forward" as const,
+      timestamp: `${day.toISOString().slice(0, 10)}T15:00:00+08:00`,
+      open: close, high: close + 1, low: close - 1, close, volume: 1000, turnover: 10_000, changePercent: 1,
+      source: { provider: "fixture", dataset: "test", fetchedAt: "2026-08-23T00:00:00Z" }
+    };
+  });
+  const service = new QuantSimulationService();
+  service.createSession("project", 100_000, bars);
+  const result = await service.runSkillSimulation("project", {
+    skillId: "sany-trend-portfolio",
+    strategyId: "trend-following",
+    symbol: "600031",
+    quantity: 100,
+    query: { symbol: "600031", interval: "1d", adjustment: "forward" }
+  });
+
+  assert.equal(result.skillId, "sany-trend-portfolio");
+  assert.deepEqual(service.listSkillIds("project"), ["sany-trend-portfolio"]);
+  assert.ok(service.performance("project", "sany-trend-portfolio").tradeCount >= 1);
 });

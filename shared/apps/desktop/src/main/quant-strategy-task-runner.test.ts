@@ -17,7 +17,7 @@ function bars(rising = true): QuantBar[] {
 function task(skillId = "trend-following"): BrainTaskRecord {
   return { id: "task-1", projectId: "project-1", conversationId: "", workspaceKey: "quant", taskType: `quant.strategy.${skillId}`,
     status: "QUEUED", progress: 0, requestId: "request-1", idempotencyKey: "quant-strategy:schedule-1:2026-08-20",
-    attempt: 0, maxAttempts: 3, resourceLimitsJson: JSON.stringify({ exchange: "SSE", tradingDate: "2026-08-20", symbol: "600519", quantity: 100, simulationOnly: true }),
+    attempt: 0, maxAttempts: 3, resourceLimitsJson: JSON.stringify({ exchange: "SSE", tradingDate: "2026-08-20", symbol: "600519", quantity: 100, strategyId: "trend-following", simulationOnly: true }),
     resultJson: "{}", errorCode: "", errorDetail: "", startedAt: "", finishedAt: "", heartbeatAt: "" };
 }
 
@@ -57,8 +57,8 @@ test("does not accumulate another position when the strategy is already aligned"
   assert.equal(orders.length, 1);
 });
 
-test("fails unknown Skills with a stable error code and no trade", async () => {
-  const current = task("not-installed"); const updates: any[] = []; const simulation = new QuantSimulationService();
+test("runs a supported signal strategy into a custom Skill ledger", async () => {
+  const current = task("custom-portfolio"); const updates: any[] = []; const simulation = new QuantSimulationService();
   simulation.createSession(current.projectId, 100_000, bars(true));
   const runner = new QuantStrategyTaskRunner({
     resolveOwnerId: () => "owner-a", simulation,
@@ -66,8 +66,8 @@ test("fails unknown Skills with a stable error code and no trade", async () => {
       updateTask: (input) => { updates.push(input); return { ...current, ...input }; } }
   });
   await runner.tick();
-  assert.equal(updates.at(-1)?.status, "FAILED");
-  assert.equal(updates.at(-1)?.errorCode, "QUANT_SKILL_UNSUPPORTED");
+  assert.equal(updates.at(-1)?.status, "SUCCEEDED");
+  assert.equal(JSON.parse(updates.at(-1)?.resultJson).skillId, "custom-portfolio");
 });
 
 test("rejects non-simulation task configuration before reading market data", async () => {

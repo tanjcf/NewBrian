@@ -219,7 +219,7 @@ test("enforces local owner boundaries", () => {
 test("persists owner-scoped strategy schedules and claims one run per trading date", () => {
   withStorage((storage) => {
     const project = storage.createProject({ ownerId: "owner-a", name: "量化项目", primaryWorkspaceKey: "quant" });
-    const scheduleInput = { ownerId: "owner-a", projectId: project.id, skillId: "trend", exchange: "SSE" as const, runAt: "15:10", symbol: "600519", quantity: 100 };
+    const scheduleInput = { ownerId: "owner-a", projectId: project.id, skillId: "trend", strategyId: "trend-following" as const, exchange: "SSE" as const, runAt: "15:10", symbol: "600519", quantity: 100 };
     const schedule = storage.createQuantStrategySchedule(scheduleInput);
     assert.equal(storage.createQuantStrategySchedule(scheduleInput).id, schedule.id);
     assert.equal(storage.listQuantStrategySchedules("owner-a", project.id)[0]?.id, schedule.id);
@@ -228,10 +228,11 @@ test("persists owner-scoped strategy schedules and claims one run per trading da
     assert.equal(runs.listEnabled("owner-b").length, 0);
     assert.equal(runs.listEnabled("owner-a").length, 1);
     const key = `quant-strategy:${schedule.id}:2026-08-20`;
-    const queued = storage.enqueueQuantStrategyExecution({ scheduleId: schedule.id, projectId: project.id, skillId: "trend", exchange: "SSE", tradingDate: "2026-08-20", idempotencyKey: key, symbol: "600519", quantity: 100 });
+    const queued = storage.enqueueQuantStrategyExecution({ scheduleId: schedule.id, projectId: project.id, skillId: "trend", strategyId: "trend-following", exchange: "SSE", tradingDate: "2026-08-20", idempotencyKey: key, symbol: "600519", quantity: 100 });
     assert.equal(queued.idempotencyKey, key);
     assert.match(queued.taskType, /^quant\.strategy\./u);
     assert.equal(JSON.parse(queued.resourceLimitsJson).symbol, "600519");
+    assert.equal(JSON.parse(queued.resourceLimitsJson).strategyId, "trend-following");
     assert.equal(storage.listRunnableQuantStrategyTasks("owner-b").length, 0);
     assert.equal(storage.listRunnableQuantStrategyTasks("owner-a").length, 1);
     assert.equal(storage.claimQuantStrategyTask("owner-b", queued.id), null);
@@ -359,7 +360,7 @@ test("migration is idempotent and private model metadata has no secret columns",
     const database = new DatabaseSync(join(root, "brain.db"), { readOnly: true });
     try {
       const migrations = database.prepare("SELECT COUNT(*) AS count FROM brain_schema_migration").get() as { count: number };
-      assert.equal(Number(migrations.count), 16);
+      assert.equal(Number(migrations.count), 19);
       const columns = database.prepare("PRAGMA table_info(brain_private_model_profile)").all() as Array<{ name: string }>;
       const columnNames = columns.map((column) => column.name);
       assert.equal(columnNames.some((name) => /api.?key|secret|authorization|token/i.test(name)), false);
@@ -444,6 +445,9 @@ test("migrates unbound historical projects and conversations into the document w
     database.prepare("UPDATE brain_project SET primary_workspace_key = 'legacy-unbound' WHERE id = ?").run(project.id);
     database.prepare("UPDATE brain_conversation SET workspace_snapshot = 'legacy-unbound' WHERE id = ?").run(conversation.id);
     database.exec("DROP TABLE brain_workspace_section");
+    database.exec("ALTER TABLE brain_artifact DROP COLUMN source_workspace_key");
+    database.exec("DROP TABLE brain_engine_runtime");
+    database.exec("ALTER TABLE brain_quant_strategy_schedule DROP COLUMN strategy_id");
     database.prepare("DELETE FROM brain_project_workspace WHERE project_id = ?").run(project.id);
     database.prepare("DELETE FROM brain_schema_migration WHERE version >= 14").run();
     database.close();
@@ -472,6 +476,9 @@ test("migrates historical TIMED_OUT tasks to FAILED and never exposes timeout as
     database.exec("PRAGMA foreign_keys=ON");
     database.prepare("UPDATE brain_task SET status = 'TIMED_OUT' WHERE id = ?").run(task.id);
     database.exec("DROP TABLE brain_workspace_section");
+    database.exec("ALTER TABLE brain_artifact DROP COLUMN source_workspace_key");
+    database.exec("DROP TABLE brain_engine_runtime");
+    database.exec("ALTER TABLE brain_quant_strategy_schedule DROP COLUMN strategy_id");
     database.prepare("DELETE FROM brain_schema_migration WHERE version >= 15").run();
     database.close();
     storage = new BrainWorkspaceStorage(root);
@@ -515,7 +522,7 @@ test("backs up an existing database before applying a newer migration", () => {
 
   const storage = new BrainWorkspaceStorage(root);
   storage.close();
-  const backupPath = `${databasePath}.v0-before-v16.bak`;
+  const backupPath = `${databasePath}.v0-before-v19.bak`;
   const backup = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backup.prepare("SELECT value FROM legacy_local_data").get()?.value, "keep-me");
   backup.close();
