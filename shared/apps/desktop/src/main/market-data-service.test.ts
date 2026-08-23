@@ -57,6 +57,18 @@ test("market data service uses authenticated spring queryRemote before raw URL",
   assert.equal(bars[0].close, 3);
 });
 
+test("market data service trims an over-broad monthly provider response to the requested months", async () => {
+  const monthly = (timestamp: string) => ({
+    symbol: "000001", exchange: "XSHE", timezone: "Asia/Shanghai", interval: "1mo" as const, adjustment: "none" as const,
+    timestamp, open: 10, high: 12, low: 9, close: 11, volume: 100, turnover: 1_100,
+    changePercent: 1, source: { provider: "adapter", dataset: "monthly", fetchedAt: "2026-08-20T08:00:00Z" }
+  });
+  const bars = await new MarketDataService([], {
+    queryRemote: async () => [monthly("2025-12-31T15:00:00+08:00"), monthly("2026-02-28T15:00:00+08:00"), monthly("2026-08-31T15:00:00+08:00")]
+  }).queryAsync({ symbol: "000001", interval: "1mo", adjustment: "none", startDate: "2026-02-01", endDate: "2026-08-23" });
+  assert.deepEqual(bars.map((bar) => bar.timestamp.slice(0, 7)), ["2026-02", "2026-08"]);
+});
+
 test("market data service rejects non-http URLs", () => {
   assert.throws(() => new MarketDataService([], "file:///etc/passwd"), /HTTP or HTTPS/);
 });

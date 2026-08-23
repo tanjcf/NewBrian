@@ -4379,6 +4379,8 @@ function renderSidebarModule() {
   const selectedBuiltinPlugin = builtinPluginCatalog.find((plugin) => plugin.packageName === selectedComposerSkill?.name);
 
   const selectedBrainProject = brainProjects.find((project) => project.id === selectedBrainProjectId);
+  const resourceBrainProject = selectedBrainProject
+    ?? brainProjects.find((project) => project.localWorkspaceId && project.localWorkspaceId === selectedWorkspace?.id);
   const selectedBrainConversation = brainConversations.find((conversation) => conversation.id === selectedBrainConversationId);
   const isLegacySidebarSelection = Boolean(
     selectedSidebarRow?.startsWith("feature:")
@@ -4649,7 +4651,7 @@ function renderSidebarModule() {
     );
     const renderSceneCapability = () => {
       if (selectedBrainWorkspaceKey === "quant") {
-        return <QuantWorkspace projectId={selectedBrainProject?.id} workspaceId={selectedBrainProject?.localWorkspaceId} compact activeView={brainSceneTab as "market" | "portfolio" | "strategy" | "radar" | "research"} />;
+        return <QuantWorkspace projectId={resourceBrainProject?.id} workspaceId={resourceBrainProject?.localWorkspaceId || selectedWorkspace?.id} compact activeView={brainSceneTab as "market" | "portfolio" | "strategy" | "radar" | "research"} />;
       }
       if (selectedBrainWorkspaceKey === "explore") {
         return renderPendingCapability(brainSceneTab === "tools" ? "可用工具" : "场景知识");

@@ -17,10 +17,10 @@ function withStorage(run: (storage: BrainWorkspaceStorage, root: string) => void
   }
 }
 
-test("seeds all seven workspaces and rejects unknown workspace keys", () => {
+test("seeds all eight workspace modes and rejects unknown workspace keys", () => {
   withStorage((storage) => {
     assert.deepEqual(storage.listWorkspaces().map((item) => item.workspaceKey), [
-      "quant", "game", "video", "music", "data", "software", "document"
+      "quant", "game", "video", "music", "data", "software", "document", "explore"
     ]);
     assert.throws(
       () => storage.createProject({ ownerId: "owner-a", name: "bad", primaryWorkspaceKey: "unknown" }),

@@ -79,8 +79,30 @@ export class MarketDataService {
     if (bars.some((bar) => bar.symbol !== input.symbol || bar.interval !== input.interval || bar.adjustment !== input.adjustment)) {
       throw new Error("MARKET_DATA_QUERY_MISMATCH");
     }
-    return bars;
+    return filterRemoteDateRange(bars, request);
   }
+}
+
+function filterRemoteDateRange(bars: QuantBar[], input: MarketDataQuery): QuantBar[] {
+  const start = Date.parse(String(input.startDate));
+  const end = Date.parse(String(input.endDate));
+  if (Number.isNaN(start) || Number.isNaN(end) || start > end) throw new RangeError("invalid date range");
+  if (input.interval === "1mo") {
+    const monthKey = (value: string | number) => {
+      const date = new Date(value);
+      return date.getUTCFullYear() * 12 + date.getUTCMonth();
+    };
+    const firstMonth = monthKey(start);
+    const lastMonth = monthKey(end);
+    return bars.filter((bar) => {
+      const month = monthKey(bar.timestamp);
+      return month >= firstMonth && month <= lastMonth;
+    });
+  }
+  return bars.filter((bar) => {
+    const timestamp = Date.parse(bar.timestamp);
+    return timestamp >= start && timestamp <= end + 86_399_999;
+  });
 }
 
 function formatIsoDate(value: Date): string {
