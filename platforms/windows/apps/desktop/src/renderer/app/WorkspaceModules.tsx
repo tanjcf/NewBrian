@@ -4379,8 +4379,8 @@ function renderSidebarModule() {
   const selectedBuiltinPlugin = builtinPluginCatalog.find((plugin) => plugin.packageName === selectedComposerSkill?.name);
 
   const selectedBrainProject = brainProjects.find((project) => project.id === selectedBrainProjectId);
-  const resourceBrainProject = selectedBrainProject
-    ?? brainProjects.find((project) => project.localWorkspaceId && project.localWorkspaceId === selectedWorkspace?.id);
+  const resourceBrainProject = brainProjects.find((project) => project.localWorkspaceId && project.localWorkspaceId === selectedWorkspace?.id)
+    ?? selectedBrainProject;
   const selectedBrainConversation = brainConversations.find((conversation) => conversation.id === selectedBrainConversationId);
   const isLegacySidebarSelection = Boolean(
     selectedSidebarRow?.startsWith("feature:")
