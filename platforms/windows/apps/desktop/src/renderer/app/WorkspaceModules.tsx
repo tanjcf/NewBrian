@@ -548,6 +548,7 @@ export function WorkspaceModules(ctx: any) {
       return parsed && typeof parsed === "object" ? parsed : {};
     } catch { return {}; }
   });
+  const activatedBrainThreadRef = useRef("");
   const [brainDraft, setBrainDraft] = useState("");
   const [brainMessageBusy, setBrainMessageBusy] = useState(false);
   const [brainFiles, setBrainFiles] = useState<any[]>([]);
@@ -809,7 +810,23 @@ export function WorkspaceModules(ctx: any) {
       const next = !mappedThreadId;
       return current === next ? current : next;
     });
-  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, setIsComposingNewThread, setSelectedThreadId]);
+    if (!mappedThreadId || !selectedWorkspace?.id || !api?.activateWorkspaceThread) {
+      activatedBrainThreadRef.current = "";
+      return;
+    }
+    const activationKey = `${selectedWorkspace.id}:${mappedThreadId}`;
+    if (activatedBrainThreadRef.current === activationKey) return;
+    activatedBrainThreadRef.current = activationKey;
+    void api.activateWorkspaceThread({
+      workspaceId: selectedWorkspace.id,
+      threadId: mappedThreadId
+    }).then((threadSnapshot) => {
+      if (activatedBrainThreadRef.current === activationKey) syncSnapshot(threadSnapshot, mappedThreadId);
+    }).catch((error) => {
+      if (activatedBrainThreadRef.current === activationKey) activatedBrainThreadRef.current = "";
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
+  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, selectedWorkspace?.id, api, syncSnapshot, setErrorMessage, setIsComposingNewThread, setSelectedThreadId]);
   useEffect(() => {
     if (!selectedBrainConversationId || isComposingNewThread || !selectedThreadId) return;
     setBrainConversationThreads((current) => current[selectedBrainConversationId] === selectedThreadId
