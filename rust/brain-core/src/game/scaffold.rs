@@ -1,6 +1,7 @@
 use super::util::{pipeline_state_json, sanitize_project_name, write_text_atomic};
 use crate::path_policy::ProjectBoundary;
 use serde_json::{json, Value};
+use std::fs;
 use std::path::Path;
 
 const WEB_PACKAGE: &str = r#"{
@@ -111,6 +112,12 @@ pub fn scaffold_unreal_project(
     payload: &Value,
     request_id: &str,
 ) -> Result<Value, &'static str> {
+    // These are fixed project-relative directories. Create them before the
+    // atomic writer asks the boundary to canonicalize their parents; a
+    // missing parent is not a path escape and must be safely materialized.
+    for directory in ["Config", "Content", "Docs/BRAIN", ".brain-game"] {
+        fs::create_dir_all(boundary.root().join(directory)).map_err(|_| "BRAIN_GAME_WRITE_FAILED")?;
+    }
     let project_name = payload
         .get("project_name")
         .and_then(Value::as_str)
