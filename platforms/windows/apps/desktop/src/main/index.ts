@@ -4854,8 +4854,10 @@ function startDesktopBootstrapInitialization() {
   return desktopBootstrapPromise;
 }
 async function startDesktopBootstrapAfterAuth() {
-  await syncAuthenticatedDesktopControlPlane();
-  desktopControlPlaneHeartbeat.start();
+  // Control-plane synchronization is intentionally manual until the remote
+  // service is production-ready. Use the explicit refresh/update action to
+  // call syncAuthenticatedDesktopControlPlane instead of touching the network
+  // during login or on a background timer.
   await startDesktopBootstrapInitialization();
   const nextCatalog = await ensureWorkspaceCatalogConda(await readWorkspaceCatalog());
   await ensureCatalogState(nextCatalog);
