@@ -102,6 +102,7 @@ import { CodexStorage } from "./codex-storage.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
+import { GameRuntimeService } from "./game-runtime-service.js";
 import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
@@ -3310,6 +3311,61 @@ function registerGoalRuntimeTools(
       timeUsedSeconds: input.timeUsedSeconds
     });
     return snapshotOutput();
+  });
+}
+
+/** Exposes the game-production Tools workspace to the native Agent Loop. */
+function registerGameRuntimeTools(
+  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>,
+  projectId: string,
+  projectRoot: string
+) {
+  if (!projectId.trim() || !projectRoot.trim()) return;
+  const game = new GameRuntimeService((binding) => getRustCoreService().acquire(binding));
+  const binding = { projectId, projectRoot };
+  targetRuntime.registerExternalTool({
+    name: "game.level.create",
+    title: "创建并保存游戏关卡",
+    description: "通过右侧游戏制作 Rust Tools 创建并保存真实关卡；不要用 shell 或编造关卡数据。",
+    namespace: "game",
+    kind: "write",
+    risk: "medium",
+    requiresApproval: true,
+    inputSchema: { type: "object", properties: {
+      title: { type: "string", description: "关卡显示名称" },
+      umap: { type: "string", description: "关卡文件名，可省略" }
+    }, required: ["title"], additionalProperties: false }
+  }, async (input) => {
+    const title = String(input.title || "").trim();
+    if (!title) throw new TypeError("title is required");
+    const current = await game.levelEditorGet(binding);
+    const safeId = title.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/gu, "-").replace(/^-+|-+$/g, "") || `level-${Date.now()}`;
+    const level = {
+      id: `${safeId}-${Date.now()}`,
+      title,
+      umap: String(input.umap || `${safeId}.umap`),
+      actors: []
+    };
+    const state = {
+      ...current.state,
+      selectedLevelIndex: current.state.levels.length,
+      levels: [...current.state.levels, level]
+    };
+    const saved = await game.levelEditorSave(binding, state);
+    return { ok: true, output: JSON.stringify({ title, path: saved.path, level: saved.state.levels.at(-1), count: saved.state.levels.length }) };
+  });
+  targetRuntime.registerExternalTool({
+    name: "game.content.inspect",
+    title: "读取游戏 Content 资源",
+    description: "通过右侧游戏制作 Rust Tools 读取真实 Content 树和关卡，不使用 shell，不编造数据。",
+    namespace: "game",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    inputSchema: { type: "object", properties: { maxEntries: { type: "integer", minimum: 1, maximum: 2000 } }, additionalProperties: false }
+  }, async (input) => {
+    const tree = await game.contentTree(binding, Number(input.maxEntries || 500));
+    return { ok: true, output: JSON.stringify({ root: tree.root, exists: tree.exists, count: tree.entries.length, entries: tree.entries }) };
   });
 }
 
@@ -8470,6 +8526,9 @@ function registerIpc() {
     configureRuntime: async (targetRuntime, workspace, thread) => {
       registerDesktopArtifactRenderer(targetRuntime, workspace.path);
       registerWorkspaceMediaAgentTools(targetRuntime);
+      if (workspace.brainWorkspaceKey === "game") {
+        registerGameRuntimeTools(targetRuntime, workspace.id, workspace.path);
+      }
       // Stock/market questions can be asked from any BRAIN conversation, not
       // only from the Quant workspace. Keep the read-only AKShare route
       // available everywhere so the model never falls back to web search for
