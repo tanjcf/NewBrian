@@ -659,12 +659,8 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     const sceneProjects = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
     if (!sceneProjects.length) {
-      // 当前场景无本地项目时，清掉其他场景残留的线程选中，避免中间栏/右侧仍显示旧上下文。
-      if (selectedWorkspace?.id && resolveCatalogBrainWorkspaceKey(selectedWorkspace) !== selectedBrainWorkspaceKey) {
-        setSelectedWorkspaceId("");
-        setSelectedThreadId("");
-        setIsComposingNewThread(true);
-      }
+      // 无项目的场景只显示空状态。不要在这里清空全局工作区/线程：
+      // 父层的工作区同步会把它恢复回来，清空与恢复会形成渲染更新循环。
       return;
     }
     if (selectedWorkspace?.id && sceneProjects.some((workspace) => workspace.id === selectedWorkspace.id)) return;
