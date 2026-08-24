@@ -161,6 +161,9 @@ test("executeMediaGenerationTurn prefers Auto tools then falls back on 404", asy
       if (String(url).includes("/auto/tools/invoke")) {
         return new Response("missing", { status: 404 });
       }
+      if (String(url).endsWith("/auto/tools")) {
+        return new Response("missing", { status: 404 });
+      }
       return new Response(JSON.stringify({
         id: "01LEGACY000000000000000001",
         kind: "image",
@@ -173,6 +176,27 @@ test("executeMediaGenerationTurn prefers Auto tools then falls back on 404", asy
   assert.ok(calls.some((item) => item.includes("/auto/tools/invoke")));
   assert.ok(calls.some((item) => item.includes("/images/generations")));
   assert.match(result.content, /legacy\.png/);
+});
+
+test("domain 404 from an available Auto media route never falls back to legacy video", async () => {
+  const calls: string[] = [];
+  await assert.rejects(() => executeMediaGenerationTurn({
+    gatewayBaseUrl: "http://127.0.0.1:8790/v1",
+    bearerToken: "secret",
+    kind: "video",
+    model: "hy3",
+    prompt: "青石谷清晨入口宣传片",
+    requestId: "req-domain-404",
+    toolName: "video_generate",
+    fetchImpl: (async (url) => {
+      calls.push(String(url));
+      if (String(url).endsWith("/auto/tools")) {
+        return new Response(JSON.stringify({ tools: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ detail: "video generation model is not available" }), { status: 404 });
+    }) as typeof fetch
+  }), /video generation model is not available/);
+  assert.equal(calls.some((url) => /\/videos(?:$|\?)/.test(url)), false);
 });
 
 test("executeMediaGenerationTurn keeps client-hinted video on Spring Auto tools", async () => {

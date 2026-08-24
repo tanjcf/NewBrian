@@ -420,9 +420,25 @@ export async function runAutoMediaTool(
   }
   const payload = await readJson(response);
   if (response.status === 404) {
-    const err = new Error("AUTO_MEDIA_TOOL_UNAVAILABLE");
-    (err as Error & { code?: string }).code = "AUTO_MEDIA_TOOL_UNAVAILABLE";
-    throw err;
+    // A domain 404 (for example, no authorised video model) must not be
+    // mistaken for an old Spring build without Auto tools. Probe the tool
+    // catalogue to distinguish those cases before considering legacy routes.
+    const routeProbe = await fetchImpl(`${base}/auto/tools`, {
+      method: "GET",
+      headers: withSpringCorrelationHeaders({
+        Authorization: `Bearer ${input.bearerToken}`,
+        Accept: "application/json"
+      }, correlation),
+      signal: input.signal
+    }).catch(() => null);
+    if (!routeProbe || routeProbe.status === 404) {
+      const err = new Error("AUTO_MEDIA_TOOL_UNAVAILABLE");
+      (err as Error & { code?: string }).code = "AUTO_MEDIA_TOOL_UNAVAILABLE";
+      throw err;
+    }
+    const record = asRecord(payload);
+    const message = String(record?.message ?? record?.detail ?? record?.error ?? "Not Found");
+    throw new Error(`Auto 媒体工具失败（404）：${message}`);
   }
   if (!response.ok && response.status !== 202) {
     const record = asRecord(payload);

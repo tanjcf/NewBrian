@@ -818,6 +818,23 @@ export function WorkspaceModules(ctx: any) {
     // BRAIN conversations are backed by their own native threads. Never leave
     // the previously selected project thread active while this effect runs.
     const mappedThreadId = String(brainConversationThreads[selectedBrainConversationId] || "").trim();
+    const mappedThreadBelongsToWorkspace = !mappedThreadId
+      || Boolean(selectedWorkspace?.threads?.some((thread: any) => thread.id === mappedThreadId));
+    if (!mappedThreadBelongsToWorkspace) {
+      // A scene/project switch must invalidate the old conversation-to-thread
+      // mapping before activation. Otherwise the new project tries to activate
+      // a thread that only exists in the outgoing project.
+      setBrainConversationThreads((current) => {
+        if (!current[selectedBrainConversationId]) return current;
+        const next = { ...current };
+        delete next[selectedBrainConversationId];
+        return next;
+      });
+      activatedBrainThreadRef.current = "";
+      setSelectedThreadId("");
+      setIsComposingNewThread(true);
+      return;
+    }
     // Guard same-id updates: setSelectedThreadId(same) used to re-activate the
     // thread and re-enter this effect via snapshot updates (chat jump + busy cursor).
     setSelectedThreadId((current) => (current === mappedThreadId ? current : mappedThreadId));

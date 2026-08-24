@@ -51,6 +51,16 @@ test("scene switching clears outgoing composer Skill and never submits into anot
   assert.doesNotMatch(source, /boundWorkspaceId \|\| activeWorkspaceId/);
 });
 
+test("never activates a conversation thread that belongs to the outgoing project", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /mappedThreadBelongsToWorkspace/);
+  assert.match(source, /selectedWorkspace\?\.threads\?\.some/);
+  assert.match(source, /delete next\[selectedBrainConversationId\]/);
+  const guard = source.indexOf("if (!mappedThreadBelongsToWorkspace)");
+  const activation = source.indexOf("void api.activateWorkspaceThread", guard);
+  assert.ok(guard >= 0 && activation > guard);
+});
+
 test("switchBrainWorkspace persists the outgoing scene catalog before restoring the target scene", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /rememberBrainWorkspaceCatalog\(current, current\.selectedWorkspaceKey,/);
