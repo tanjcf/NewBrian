@@ -3324,16 +3324,21 @@ function registerGameRuntimeTools(
   const game = new GameRuntimeService((binding) => getRustCoreService().acquire(binding));
   const binding = { projectId, projectRoot };
   targetRuntime.registerExternalTool({
-    name: "game.project.scaffold_web",
-    title: "创建可运行 Web 游戏工程",
-    description: "通过右侧游戏制作 Rust Tools 生成真实可运行、可交互的 Web 游戏工程和本地试玩入口。用户要求最终能运行时必须调用本工具。",
+    name: "game.project.scaffold_unreal",
+    title: "创建 UE5 游戏工程",
+    description: "通过右侧游戏制作 Rust Tools 生成真实 UE5 .uproject、Config、Content 和 BRAIN 管线文件。不要生成 Web 工程；用户要求运行时必须使用 UE5 Editor。",
     namespace: "game",
     kind: "write",
     risk: "medium",
     requiresApproval: true,
-    inputSchema: { type: "object", properties: {}, additionalProperties: false }
-  }, async () => {
-    const result = await game.scaffoldWeb(binding);
+    inputSchema: { type: "object", properties: {
+      projectName: { type: "string", description: "UE5 工程名称" },
+      engineAssociation: { type: "string", description: "UE5 版本，例如 5.4" }
+    }, required: ["projectName"], additionalProperties: false }
+  }, async (input) => {
+    const projectName = String(input.projectName || "BrainGame").trim();
+    const engineAssociation = String(input.engineAssociation || "5.4").trim();
+    const result = await game.scaffoldUnreal(binding, { projectName, engineAssociation });
     return { ok: true, output: JSON.stringify(result) };
   });
   targetRuntime.registerExternalTool({
