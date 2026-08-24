@@ -4741,7 +4741,7 @@ function renderSidebarModule() {
       }
       if (selectedBrainWorkspaceKey === "video") {
         if (["script", "storyboard", "generate", "tracks", "mux", "export"].includes(brainSceneTab)) {
-          return <VideoPipelineShell projectId={selectedBrainProject?.id} activeStep={brainSceneTab as "script" | "storyboard" | "generate" | "tracks" | "mux" | "export"} />;
+          return <VideoPipelineShell projectId={selectedBrainProject?.id} files={brainFiles} activeStep={brainSceneTab as "script" | "storyboard" | "generate" | "tracks" | "mux" | "export"} />;
         }
         return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "视频制作");
       }

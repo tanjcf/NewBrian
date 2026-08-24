@@ -12,6 +12,7 @@ type ToolRuntime = {
 };
 
 export type VideoGenerationResult = { url: string; providerResult: unknown };
+export type AudioGenerationResult = { bytes: Buffer; mimeType: string; providerResult: unknown };
 
 type VideoPipelineState = {
   script: string;
@@ -35,6 +36,7 @@ export type VideoAgentToolDependencies = {
   timeline: VideoTimelineService;
   render: VideoRenderService;
   generateVideo: (input: { prompt: string; model?: string }) => Promise<VideoGenerationResult>;
+  generateSpeech?: (input: { text: string; model?: string; voice?: string }) => Promise<AudioGenerationResult>;
   fetchImpl?: typeof fetch;
 };
 
@@ -90,6 +92,45 @@ async function persistGeneratedVideo(deps: VideoAgentToolDependencies, url: stri
     sizeBytes: fileStat.size, contentHash: `sha256:${createHash("sha256").update(bytes).digest("hex")}`, storageKey: relativePath
   });
   return { file, relativePath };
+}
+
+async function persistAudioBytes(deps: VideoAgentToolDependencies, bytes: Buffer, mimeType: string, logicalStem: string) {
+  if (!bytes.length || bytes.length > 128 * 1024 * 1024) throw new Error("BRAIN_VIDEO_AUDIO_INVALID");
+  const root = await realpath(deps.projectRoot);
+  const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("ogg") ? "ogg" : "mp3";
+  const relativePath = `media/audio/${logicalStem}-${Date.now()}.${extension}`;
+  const target = resolve(root, relativePath);
+  const boundary = root.endsWith(sep) ? root : `${root}${sep}`;
+  if (!target.startsWith(boundary)) throw new Error("BRAIN_VIDEO_MEDIA_PATH_INVALID");
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, bytes);
+  const ownerId = await deps.ownerId();
+  const file = deps.storage.registerFile({
+    ownerId, projectId: deps.projectId, logicalName: basename(relativePath), mimeType, sizeBytes: bytes.length,
+    contentHash: `sha256:${createHash("sha256").update(bytes).digest("hex")}`, storageKey: relativePath
+  });
+  return { file, relativePath };
+}
+
+function createAmbientWav(durationMs: number) {
+  const sampleRate = 32_000;
+  const samples = Math.max(1, Math.round(sampleRate * durationMs / 1000));
+  const pcm = Buffer.alloc(samples * 2);
+  let noise = 0x13579bdf;
+  for (let index = 0; index < samples; index += 1) {
+    noise = (Math.imul(noise, 1_103_515_245) + 12_345) | 0;
+    const time = index / sampleRate;
+    const fade = Math.min(1, time / 0.8, (durationMs / 1000 - time) / 0.8);
+    const pad = Math.sin(time * Math.PI * 2 * 220) * 0.09 + Math.sin(time * Math.PI * 2 * 329.63) * 0.045;
+    const wind = ((noise >>> 16) / 32768 - 1) * 0.018;
+    pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, (pad + wind) * Math.max(0, fade))) * 32767), index * 2);
+  }
+  const wav = Buffer.alloc(44 + pcm.length);
+  wav.write("RIFF", 0); wav.writeUInt32LE(36 + pcm.length, 4); wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+  wav.write("data", 36); wav.writeUInt32LE(pcm.length, 40); pcm.copy(wav, 44);
+  return wav;
 }
 
 /** Register video-scene tools on the project-scoped Agent runtime. */
@@ -161,6 +202,33 @@ export function registerVideoAgentTools(runtime: ToolRuntime, deps: VideoAgentTo
   });
 
   runtime.registerExternalTool({
+    name: "video.audio.speech", title: "生成并加入真实配音", description: "通过 Spring 音频模型生成真实配音文件，登记到右侧工程并加入音频轨。",
+    namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
+    inputSchema: { type: "object", properties: { text: { type: "string" }, model: { type: "string" }, voice: { type: "string" }, startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 }, volume: { type: "number", minimum: 0, maximum: 2 } }, required: ["text", "startMs", "durationMs"], additionalProperties: false }
+  }, async (input) => {
+    if (!deps.generateSpeech) throw new Error("BRAIN_VIDEO_SPEECH_UNAVAILABLE");
+    const generated = await deps.generateSpeech({ text: text(input.text), model: text(input.model) || undefined, voice: text(input.voice) || undefined });
+    const persisted = await persistAudioBytes(deps, generated.bytes, generated.mimeType, "narration");
+    const ownerId = await deps.ownerId();
+    deps.timeline.ensureTimeline(ownerId, deps.projectId, { title: "未命名时间线", width: 1920, height: 1080, fps: 30 });
+    const timeline = deps.timeline.addClip(ownerId, deps.projectId, { trackType: "audio", sourceFileId: persisted.file.id, startMs: Number(input.startMs), durationMs: Number(input.durationMs), sourceInMs: 0, volume: Number(input.volume ?? 1) });
+    return { ok: true, output: JSON.stringify({ provider: generated.providerResult, file: persisted.file, timeline }) };
+  });
+
+  runtime.registerExternalTool({
+    name: "video.audio.ambient", title: "生成并加入环境音乐", description: "生成真实 WAV 环境音文件（含淡入淡出），登记到右侧工程并加入音频轨。",
+    namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
+    inputSchema: { type: "object", properties: { durationMs: { type: "integer", minimum: 500, maximum: 600000 }, startMs: { type: "integer", minimum: 0 }, volume: { type: "number", minimum: 0, maximum: 2 } }, required: ["durationMs", "startMs"], additionalProperties: false }
+  }, async (input) => {
+    const durationMs = Number(input.durationMs);
+    const persisted = await persistAudioBytes(deps, createAmbientWav(durationMs), "audio/wav", "ambient");
+    const ownerId = await deps.ownerId();
+    deps.timeline.ensureTimeline(ownerId, deps.projectId, { title: "未命名时间线", width: 1920, height: 1080, fps: 30 });
+    const timeline = deps.timeline.addClip(ownerId, deps.projectId, { trackType: "audio", sourceFileId: persisted.file.id, startMs: Number(input.startMs), durationMs, sourceInMs: 0, volume: Number(input.volume ?? 0.2) });
+    return { ok: true, output: JSON.stringify({ file: persisted.file, timeline }) };
+  });
+
+  runtime.registerExternalTool({
     name: "video.shot.generate", title: "生成并登记真实视频镜头", description: "调用 Spring video_generate，下载真实 MP4 到当前工程，登记文件、更新 Rust 分镜并加入右侧视频轨。不得使用模拟素材。",
     namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: { shotIndex: { type: "integer", minimum: 0, maximum: 99 }, prompt: { type: "string" }, model: { type: "string" }, startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 } }, required: ["shotIndex", "prompt", "startMs", "durationMs"], additionalProperties: false }
@@ -188,7 +256,8 @@ export function registerVideoAgentTools(runtime: ToolRuntime, deps: VideoAgentTo
     const timeline = deps.timeline.getTimeline(ownerId, deps.projectId);
     const files = new Map(deps.storage.listFiles(ownerId, deps.projectId).map((file) => [file.id, file]));
     const mediaRelativePaths = timeline.clips.filter((clip) => clip.trackType === "video").map((clip) => files.get(clip.sourceFileId)?.storageKey || "").filter(Boolean);
-    const result = await deps.render.start(ownerId, { projectId: deps.projectId, projectRoot: deps.projectRoot, timeline, outputRelativePath: text(input.outputRelativePath), mediaRelativePaths });
+    const audioClips = timeline.clips.filter((clip) => clip.trackType === "audio").map((clip) => ({ relativePath: files.get(clip.sourceFileId)?.storageKey || "", startMs: clip.startMs, volume: clip.volume })).filter((clip) => clip.relativePath);
+    const result = await deps.render.start(ownerId, { projectId: deps.projectId, projectRoot: deps.projectRoot, timeline, outputRelativePath: text(input.outputRelativePath), mediaRelativePaths, audioClips });
     return { ok: true, output: JSON.stringify(result) };
   });
 

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import type { BrainVideoPipelineState } from "@codex-forge/protocol/brain-video-runtime";
+import type { ProjectFileOption } from "./ProjectFilePicker";
 
 export type VideoPipelineStep = "script" | "storyboard" | "generate" | "tracks" | "mux" | "export";
 
 export type VideoPipelineShellProps = {
   projectId?: string;
   activeStep?: VideoPipelineStep;
+  files?: ProjectFileOption[];
 };
 
 type Shot = {
@@ -45,7 +47,7 @@ async function pollVideoRender(renderId: string, onTick: (status: string) => voi
   throw new Error("视频渲染超时");
 }
 
-export function VideoPipelineShell({ projectId, activeStep }: VideoPipelineShellProps) {
+export function VideoPipelineShell({ projectId, activeStep, files = [] }: VideoPipelineShellProps) {
   const [localStep, setLocalStep] = useState<VideoPipelineStep>("generate");
   const [shotIndex, setShotIndex] = useState(0);
   const [script, setScript] = useState("【主题】产品宣传片 · 桌面硬件\n【时长】约 12 秒 · 3 镜 · 16:9\n\n【旁白】\n镜1：从细节看见品质。\n镜2：和团队一起高效协作。\n镜3：选择 BRAIN，把想法做成片。");
@@ -53,6 +55,7 @@ export function VideoPipelineShell({ projectId, activeStep }: VideoPipelineShell
   const [readyShots, setReadyShots] = useState<string[]>([]);
   const [transitions, setTransitions] = useState(["淡入淡出 · 0.3s", "硬切"]);
   const [status, setStatus] = useState("本地草稿");
+  const [previewUrl, setPreviewUrl] = useState("");
   const pane = activeStep ?? localStep;
   const shot = shots[shotIndex] ?? shots[0]!;
 
@@ -68,6 +71,13 @@ export function VideoPipelineShell({ projectId, activeStep }: VideoPipelineShell
       setStatus("已从 Rust 工程加载");
     }).catch((error: unknown) => setStatus(`加载失败：${error instanceof Error ? error.message : String(error)}`));
   }, [projectId]);
+
+  useEffect(() => {
+    const output = [...files].reverse().find((file) => String(file.mimeType || "").startsWith("video/") && /(?:^|\/)exports?\//iu.test(String(file.relativePath || file.storageKey || "")))
+      ?? [...files].reverse().find((file) => String(file.mimeType || "").startsWith("video/"));
+    if (!projectId || !output?.id || !window.codecn?.getBrainFilePreviewUrl) { setPreviewUrl(""); return; }
+    void window.codecn.getBrainFilePreviewUrl({ projectId, fileId: output.id }).then(setPreviewUrl).catch(() => setPreviewUrl(""));
+  }, [projectId, files]);
 
   const state = (): BrainVideoPipelineState => ({
     script,
@@ -284,6 +294,7 @@ export function VideoPipelineShell({ projectId, activeStep }: VideoPipelineShell
         {pane === "export" && (
           <div className="brain-video-pipe__section">
             <h3>导出</h3><p>选择成片格式，可选附带工程包。</p>
+            {previewUrl ? <div className="brain-video-pipe__preview"><strong>真实成片预览</strong><video controls preload="metadata" data-testid="brain-video-final-preview" src={previewUrl} /></div> : null}
             <div className="brain-video-pipe__export-grid">
               <label>视频格式<select><option>MP4 · H.264</option><option>MP4 · H.265</option><option>WebM · VP9</option><option>MOV · ProRes</option><option>GIF</option></select></label>
               <label>分辨率 / 帧率<select><option>720p · 30fps</option><option>1080p · 30fps</option><option>1080p · 24fps</option><option>4K · 30fps</option></select></label>

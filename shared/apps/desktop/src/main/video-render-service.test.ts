@@ -103,6 +103,34 @@ test("video render supports multi-clip concat demuxer", async () => {
   }
 });
 
+test("video render mixes delayed audio and burns persisted subtitles", async () => {
+  const calls: any[] = [];
+  const root = mkdtempSync(join(tmpdir(), "brain-video-audio-"));
+  try {
+    const service = new VideoRenderService({
+      acquireRustCore: async () => ({ request: async (input: any) => { calls.push(input); return { status: "completed", result: { success: true } } as any; } }),
+      confirmRender: async () => true,
+      platform: "win32"
+    });
+    await service.start("owner", {
+      projectId: "p1", projectRoot: root,
+      timeline: { ...timeline, clips: [{ id: "s1", trackType: "subtitle", sourceFileId: "", startMs: 0, durationMs: 2_000, sourceInMs: 0, volume: 1, text: "青石谷清晨" }] },
+      outputRelativePath: "renders/out.mp4", mediaRelativePaths: ["media/input.mp4"],
+      audioClips: [{ relativePath: "media/narration.mp3", startMs: 500, volume: 0.8 }]
+    });
+    const args = calls[1].payload.args as string[];
+    assert.ok(args.includes("media/narration.mp3"));
+    assert.match(args[args.indexOf("-filter_complex") + 1]!, /adelay=500\|500,volume=0\.8/);
+    const subtitleFilter = args[args.indexOf("-vf") + 1]!;
+    assert.match(subtitleFilter, /subtitles=/);
+    const subtitlePath = subtitleFilter.match(/'([^']+)'/)?.[1];
+    assert.ok(subtitlePath);
+    assert.match(readFileSync(join(root, subtitlePath!), "utf8"), /青石谷清晨/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("video render can synthesize lavfi media when allowed", async () => {
   const calls: any[] = [];
   const service = new VideoRenderService({

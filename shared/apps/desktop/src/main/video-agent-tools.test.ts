@@ -54,6 +54,8 @@ test("registers the complete project-scoped video Agent tool surface", () => {
     "video.timeline.configure",
     "video.subtitle.import",
     "video.timeline.add_clip",
+    "video.audio.speech",
+    "video.audio.ambient",
     "video.shot.generate",
     "video.render.start",
     "video.render.status"

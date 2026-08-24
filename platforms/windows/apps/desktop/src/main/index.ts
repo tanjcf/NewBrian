@@ -8601,6 +8601,27 @@ function registerIpc() {
               const url = extractMediaUrlsFromResult(result.job.resultJson)[0];
               if (!url) throw new Error("BRAIN_VIDEO_GENERATION_OUTPUT_MISSING");
               return { url, providerResult: { job: result.job, via: result.via } };
+            },
+            generateSpeech: async ({ text, model, voice }) => {
+              const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+              let baseUrl = forcedMediaBase || (!app.isPackaged ? "http://127.0.0.1:8790/v1" : await readGatewayBaseUrl());
+              const authState = await readDesktopAuthState();
+              const authSelection = selectModelRequestAuth(authState, "");
+              let bearerToken = authSelection.bearerToken;
+              if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) bearerToken = "codecn-e2e";
+              if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
+              if (!bearerToken) throw new Error("配音生成需要已登录的网关凭证。");
+              const endpoint = `${baseUrl.replace(/\/+$/u, "").replace(/\/v1$/iu, "")}/v1/audio/speech`;
+              const response = await fetch(endpoint, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${bearerToken}`, "Content-Type": "application/json", Accept: "audio/mpeg,audio/wav" },
+                body: JSON.stringify({ model: model || "minimax-speech-2.8-hd", input: text, voice: voice || "minimax_55e81114-ce7e-4ca1", response_format: "mp3" })
+              });
+              if (!response.ok) throw new Error(`BRAIN_VIDEO_SPEECH_FAILED:${response.status}:${(await response.text()).slice(0, 500)}`);
+              const bytes = Buffer.from(await response.arrayBuffer());
+              const mimeType = String(response.headers.get("content-type") || "audio/mpeg").split(";")[0] || "audio/mpeg";
+              if (!bytes.length) throw new Error("BRAIN_VIDEO_SPEECH_EMPTY");
+              return { bytes, mimeType, providerResult: { endpoint: "/v1/audio/speech", model: model || "minimax-speech-2.8-hd", byteLength: bytes.length } };
             }
           });
         }

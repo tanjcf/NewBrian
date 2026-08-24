@@ -14,6 +14,7 @@ export interface VideoRenderOptions {
   timeline: BrainVideoTimeline;
   outputRelativePath: string;
   mediaRelativePaths?: string[];
+  audioClips?: Array<{ relativePath: string; startMs: number; volume: number }>;
   /** When true and no media clips exist, synthesize a short black MP4 via lavfi. */
   allowSyntheticMedia?: boolean;
   acquireRustCore: (binding: { projectId: string; projectRoot: string; workspaceType: "video" }) => Promise<VideoRenderRustClient>;
@@ -26,7 +27,7 @@ export interface VideoRenderOptions {
 }
 export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "resolveFfmpegExecutable" | "platform" | "storage">;
 
-function buildVideoFfmpegArgs(media: string[], output: string, concatListRelative?: string): string[] {
+function buildVideoFfmpegArgs(media: string[], output: string, concatListRelative?: string, audioClips: Array<{ relativePath: string; startMs: number; volume: number }> = [], subtitleRelative?: string): string[] {
   if (!media.length) {
     return [
       "-y",
@@ -39,10 +40,19 @@ function buildVideoFfmpegArgs(media: string[], output: string, concatListRelativ
       output
     ];
   }
-  if (media.length === 1) {
-    return ["-y", "-i", media[0]!, "-c:v", "libx264", "-c:a", "aac", output];
+  const args = media.length === 1
+    ? ["-y", "-i", media[0]!]
+    : ["-y", "-f", "concat", "-safe", "0", "-i", concatListRelative!];
+  for (const clip of audioClips) args.push("-i", clip.relativePath);
+  if (subtitleRelative) args.push("-vf", `subtitles='${subtitleRelative.replaceAll("'", "\\'")}'`);
+  if (audioClips.length) {
+    const chains = audioClips.map((clip, index) => `[${index + 1}:a]adelay=${clip.startMs}|${clip.startMs},volume=${clip.volume}[audio${index}]`);
+    const inputs = audioClips.map((_, index) => `[audio${index}]`).join("");
+    chains.push(`${inputs}amix=inputs=${audioClips.length}:duration=longest:normalize=0[aout]`);
+    args.push("-filter_complex", chains.join(";"), "-map", "0:v:0", "-map", "[aout]");
   }
-  return ["-y", "-f", "concat", "-safe", "0", "-i", concatListRelative!, "-c:v", "libx264", "-c:a", "aac", output];
+  args.push("-c:v", "libx264", "-c:a", "aac", "-shortest", output);
+  return args;
 }
 
 type Session = {
@@ -60,6 +70,15 @@ const now = () => new Date().toISOString();
 const record = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const decode = (value: unknown) => typeof value === "string" ? Buffer.from(value, "base64").toString("utf8") : "";
 const TERMINAL = new Set<BrainVideoRenderState["status"]>(["SUCCEEDED", "FAILED", "CANCELLED"]);
+const srtTime = (milliseconds: number) => {
+  const value = Math.max(0, Math.round(milliseconds));
+  const hours = Math.floor(value / 3_600_000);
+  const minutes = Math.floor(value % 3_600_000 / 60_000);
+  const seconds = Math.floor(value % 60_000 / 1_000);
+  const millis = value % 1_000;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
+};
+const renderSrt = (clips: Array<{ startMs: number; endMs: number; text: string }>) => clips.map((clip, index) => `${index + 1}\n${srtTime(clip.startMs)} --> ${srtTime(clip.endMs)}\n${clip.text.trim()}\n`).join("\n");
 
 function safeRelativePath(value: string, code: string) {
   const normalized = value.replaceAll("\\", "/");
@@ -91,6 +110,11 @@ export class VideoRenderService {
     const output = safeRelativePath(input.outputRelativePath, "BRAIN_VIDEO_OUTPUT_PATH_INVALID");
     if (!/\.mp4$/iu.test(output)) throw new Error("BRAIN_VIDEO_OUTPUT_FORMAT_UNSUPPORTED");
     const media = (input.mediaRelativePaths || []).map((item) => safeRelativePath(item, "BRAIN_VIDEO_MEDIA_NOT_FOUND"));
+    const audioClips = (input.audioClips || []).map((clip) => ({
+      relativePath: safeRelativePath(clip.relativePath, "BRAIN_VIDEO_AUDIO_NOT_FOUND"),
+      startMs: Math.max(0, Math.round(Number(clip.startMs) || 0)),
+      volume: Math.max(0, Math.min(2, Number(clip.volume) || 0))
+    }));
     if (!media.length && !input.allowSyntheticMedia) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
     let concatListRelative: string | undefined;
     if (media.length > 1) {
@@ -102,7 +126,15 @@ export class VideoRenderService {
       const body = media.map((path) => `file '../${path.replaceAll("'", "'\\''")}'`).join("\n");
       await writeFile(listAbsolute, `${body}\n`, "utf8");
     }
-    const args = buildVideoFfmpegArgs(media, output, concatListRelative);
+    let subtitleRelative: string | undefined;
+    const subtitleClips = input.timeline.clips.filter((clip) => clip.trackType === "subtitle" && String(clip.text || "").trim());
+    if (subtitleClips.length) {
+      subtitleRelative = `.brain-video/subtitles-${renderId}.srt`;
+      const body = renderSrt(subtitleClips.map((clip) => ({ startMs: clip.startMs, endMs: clip.startMs + clip.durationMs, text: String(clip.text || "") })));
+      await mkdir(dirname(resolve(input.projectRoot, subtitleRelative)), { recursive: true });
+      await writeFile(resolve(input.projectRoot, subtitleRelative), body, "utf8");
+    }
+    const args = buildVideoFfmpegArgs(media, output, concatListRelative, audioClips, subtitleRelative);
     const command = `${executable} ${args.join(" ")}`;
     if (!(await this.options.confirmRender({ projectId: input.projectId, command, outputRelativePath: output }))) throw new Error("BRAIN_VIDEO_RENDER_DECLINED");
     await this.options.prepareOutput?.(input.projectRoot, output);

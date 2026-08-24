@@ -4,6 +4,7 @@ export type ProjectFileOption = {
   originalName?: string;
   relativePath?: string;
   storageKey?: string;
+  mimeType?: string;
 };
 
 function fileLabel(file: ProjectFileOption): string {
