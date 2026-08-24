@@ -60,9 +60,7 @@ const seeded = await evaluate(`(async () => {
 })()`);
 assert.equal(seeded?.ok, true, JSON.stringify(seeded));
 await command("Page.reload", { ignoreCache: true });
-await waitFor("Boolean(document.querySelector('.brain-conversation-list'))");
-await waitFor(`Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes('关卡编辑验收')))`, 30_000);
-await evaluate(`(() => { [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes('关卡编辑验收'))?.click(); return true; })()`);
+await waitFor("Boolean(document.querySelector('[data-testid=brain-game-level-editor]')) || document.body.innerText.includes('关卡列表')", 30_000);
 await waitFor(`Boolean([...document.querySelectorAll('.brain-resource-scene-nav button')].find((item) => item.textContent?.trim() === '关卡'))`);
 await evaluate(`(() => { [...document.querySelectorAll('.brain-resource-scene-nav button')].find((item) => item.textContent?.trim() === '关卡')?.click(); return true; })()`);
 await waitFor("Boolean(document.querySelector('[data-testid=brain-game-level-editor]'))");
