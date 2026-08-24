@@ -8617,11 +8617,16 @@ function registerIpc() {
                 headers: { Authorization: `Bearer ${bearerToken}`, "Content-Type": "application/json", Accept: "audio/mpeg,audio/wav" },
                 body: JSON.stringify({ model: model || "minimax-speech-2.8-hd", input: text, voice: voice || "minimax_55e81114-ce7e-4ca1", response_format: "mp3" })
               });
-              if (!response.ok) throw new Error(`BRAIN_VIDEO_SPEECH_FAILED:${response.status}:${(await response.text()).slice(0, 500)}`);
-              const bytes = Buffer.from(await response.arrayBuffer());
-              const mimeType = String(response.headers.get("content-type") || "audio/mpeg").split(";")[0] || "audio/mpeg";
-              if (!bytes.length) throw new Error("BRAIN_VIDEO_SPEECH_EMPTY");
-              return { bytes, mimeType, providerResult: { endpoint: "/v1/audio/speech", model: model || "minimax-speech-2.8-hd", byteLength: bytes.length } };
+              if (response.ok) {
+                const bytes = Buffer.from(await response.arrayBuffer());
+                const mimeType = String(response.headers.get("content-type") || "audio/mpeg").split(";")[0] || "audio/mpeg";
+                if (bytes.length) return { bytes, mimeType, providerResult: { endpoint: "/v1/audio/speech", model: model || "minimax-speech-2.8-hd", byteLength: bytes.length } };
+              }
+              const remoteDetail = response.ok ? "empty response" : `${response.status}:${(await response.text()).slice(0, 300)}`;
+              const offline = await novelTtsService.synthesizeToFile({ text, voiceId: voice || "zh_female_1", voiceLabel: "视频旁白" });
+              if (!offline.ok || !offline.audioPath) throw new Error(`BRAIN_VIDEO_SPEECH_FAILED:${remoteDetail}:${offline.detail || "offline unavailable"}`);
+              const bytes = await fs.readFile(offline.audioPath);
+              return { bytes, mimeType: offline.mimeType || "audio/wav", providerResult: { endpoint: "/v1/audio/speech", remoteFailure: remoteDetail, fallback: offline.provider, runtime: offline.runtime, durationMs: offline.durationMs, byteLength: bytes.length } };
             }
           });
         }

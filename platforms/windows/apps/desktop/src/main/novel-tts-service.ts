@@ -17,6 +17,7 @@ export type NovelTtsSynthesizeResult = {
   runtime?: "gpu" | "cpu";
   playingInMain?: boolean;
   durationMs?: number;
+  audioPath?: string;
 };
 
 type NovelTtsServiceDependencies = {
@@ -109,6 +110,16 @@ export class NovelTtsService {
       ok: false,
       detail: kokoro.detail || "离线语音不可用，将尝试系统朗读。"
     };
+  }
+
+  /** Generate a durable WAV source for project workflows without starting playback. */
+  async synthesizeToFile(input: NovelTtsSynthesizeInput): Promise<NovelTtsSynthesizeResult> {
+    const text = trimText(input.text);
+    if (!text) return { ok: false, detail: "没有可生成的内容。" };
+    const voice = resolveNovelTtsVoice(input.voiceId);
+    const result = await this.kokoroEngine.synthesize({ text, voiceId: voice.id });
+    if (!result.ok || !result.audioPath) return { ok: false, detail: result.detail || "离线配音生成失败。" };
+    return { ok: true, audioPath: result.audioPath, mimeType: "audio/wav", provider: result.provider || "kokoro-zh-offline", runtime: result.runtime, durationMs: result.durationMs };
   }
 
   cancel() {
