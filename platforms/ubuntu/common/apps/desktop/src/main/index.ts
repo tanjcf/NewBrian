@@ -9420,6 +9420,7 @@ function registerIpc() {
     readWorkspaceCatalog,
     quant: quantSimulationService,
     queryQuantMarketOverview: (limit) => desktopMarketOverviewClient.queryOverview(limit),
+    queryQuantMarketScreener: (criteria) => desktopMarketOverviewClient.queryScreener(criteria),
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
     platform: process.platform,

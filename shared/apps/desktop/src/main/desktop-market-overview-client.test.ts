@@ -46,3 +46,19 @@ test("market overview rejects incomplete section payloads", async () => {
   });
   await assert.rejects(() => client.queryOverview(), /section industries is invalid/u);
 });
+
+test("market screener posts criteria to the authenticated Spring endpoint", async () => {
+  let body = "";
+  const client = new DesktopMarketOverviewClient({
+    readGatewayOrigin: async () => "http://127.0.0.1:8790",
+    readAccessToken: async () => "desktop-token",
+    createHeaders: () => ({ Authorization: "Bearer desktop-token" }),
+    fetchImpl: async (_input, init) => {
+      body = String(init?.body || "");
+      return new Response(JSON.stringify({ ok: true, data: { dataset: "stock_zh_a_spot_em", fetchedAt: "2026-08-24T10:00:00+08:00", criteria: {}, items: [{ code: "600519" }] } }), { status: 200 });
+    }
+  });
+  const result = await client.queryScreener({ maxPe: 25, limit: 30 });
+  assert.deepEqual(JSON.parse(body), { maxPe: 25, limit: 30 });
+  assert.equal(result.items[0]?.code, "600519");
+});

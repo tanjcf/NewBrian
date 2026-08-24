@@ -119,6 +119,10 @@ export function QuantWorkspace({
   const [marketOverviewView, setMarketOverviewView] = useState<MarketOverviewView>("indices");
   const [marketOverviewStatus, setMarketOverviewStatus] = useState("点击刷新后读取真实大盘数据");
   const [marketOverviewBusy, setMarketOverviewBusy] = useState(false);
+  const [screenerCriteria, setScreenerCriteria] = useState({ minPrice: "", maxPrice: "", minChangePercent: "0", minTurnoverRate: "", maxPe: "", maxPb: "" });
+  const [screenerResult, setScreenerResult] = useState<any>(null);
+  const [screenerStatus, setScreenerStatus] = useState("尚未运行选股");
+  const [screenerBusy, setScreenerBusy] = useState(false);
   const latest = bars.at(-1);
   const watchlistGroups = Array.isArray(ui.watchlistGroups) && ui.watchlistGroups.length
     ? ui.watchlistGroups
@@ -193,6 +197,18 @@ export function QuantWorkspace({
     if (!/^\d{6}$/u.test(code)) return;
     setUi((current) => ({ ...current, symbol: code }));
   };
+  const runScreener = async () => {
+    if (!projectId || !window.codecn?.queryQuantMarketScreener) { setScreenerStatus("选股服务尚未连接"); return; }
+    const criteria = Object.fromEntries(Object.entries(screenerCriteria).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)]));
+    setScreenerBusy(true); setScreenerStatus("正在读取 AKShare A 股快照…");
+    try { const result = await window.codecn.queryQuantMarketScreener({ projectId, criteria: { ...criteria, limit: 30 } }); setScreenerResult(result); setScreenerStatus(`已筛选 ${Array.isArray(result?.items) ? result.items.length : 0} 只真实股票`); }
+    catch (error) { setScreenerResult(null); setScreenerStatus(`选股失败：${error instanceof Error ? error.message : String(error)}`); }
+    finally { setScreenerBusy(false); }
+  };
+  useEffect(() => {
+    if (!window.codecn?.onQuantScreenerUpdated) return;
+    return window.codecn.onQuantScreenerUpdated((payload: any) => { if (!payload?.result) return; setScreenerResult(payload.result); setScreenerStatus(`AI 已筛选 ${Array.isArray(payload.result.items) ? payload.result.items.length : 0} 只真实股票`); });
+  }, [projectId, workspaceId]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -612,6 +628,13 @@ export function QuantWorkspace({
       <div className="brain-quant-fill-list">{portfolioActivity.fills?.length ? [...portfolioActivity.fills].reverse().map((fill: any) => <article key={fill.id}><strong>{fill.side === "buy" ? "买入" : "卖出"} {fill.symbol}</strong><span>{fill.quantity} 股 × ¥{Number(fill.price).toFixed(2)}</span><em>{String(fill.createdAt).replace("T", " ").slice(0, 19)}</em></article>) : <small>暂无手动成交</small>}</div>
     </section> : null}
     {activeView === "strategy" ? <section className="brain-quant-skills" data-testid="brain-quant-strategy">
+      <header><h3>Skill 选股器</h3><span>Spring → AKShare 全 A 股快照，与对话 quant.screener.run 共用数据源</span></header>
+      <div className="brain-quant-screener-form">
+        {([['minPrice','最低价'],['maxPrice','最高价'],['minChangePercent','最低涨幅%'],['minTurnoverRate','最低换手%'],['maxPe','最高PE'],['maxPb','最高PB']] as const).map(([key, label]) => <label key={key}>{label}<input type="number" value={screenerCriteria[key]} onChange={(event) => setScreenerCriteria((current) => ({ ...current, [key]: event.target.value }))}/></label>)}
+        <button type="button" className="primary" disabled={screenerBusy} onClick={() => void runScreener()}>{screenerBusy ? "选股中…" : "运行真实选股"}</button>
+      </div>
+      <small className="brain-quant-order-status">{screenerStatus}{screenerResult?.dataset ? ` · ${screenerResult.dataset}` : ""}</small>
+      {Array.isArray(screenerResult?.items) && screenerResult.items.length ? <div className="brain-quant-screener-results">{screenerResult.items.map((item: any) => <button key={item.code} type="button" onClick={() => setUi((current) => ({ ...current, symbol: item.code }))}><strong>{item.name} <small>{item.code}</small></strong><span>¥{formatMarketNumber(item.price)} <em className={item.changePercent >= 0 ? "positive" : "negative"}>{item.changePercent >= 0 ? "+" : ""}{formatMarketNumber(item.changePercent)}%</em></span><small>换手 {formatMarketNumber(item.turnoverRate)}% · PE {formatMarketNumber(item.pe)} · PB {formatMarketNumber(item.pb)}</small></button>)}</div> : null}
       <header><h3>Skill 量化模拟</h3><span>对话/工作台选择 Skill → 按真 K 线自动买卖 → 这里比较收益</span></header>
       <div className="brain-quant-schedule-form">
         {skillPicker}

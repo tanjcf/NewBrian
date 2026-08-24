@@ -326,6 +326,7 @@ contextBridge.exposeInMainWorld("codecn", {
   createQuantSession: (input: { projectId: string; initialCash?: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSessionCreate, input),
   queryQuantBars: (input: { projectId: string; query: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantBarsQuery, input),
   queryQuantMarketOverview: (input: { projectId: string; limit?: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantMarketOverview, input),
+  queryQuantMarketScreener: (input: { projectId: string; criteria: Record<string, unknown> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantMarketScreener, input),
   executeQuantOrder: (input: { projectId: string; order: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantOrderExecute, input),
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),

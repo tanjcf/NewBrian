@@ -17789,6 +17789,14 @@ textarea {
 .brain-quant-market-overview-list > button small { color: var(--text-secondary, #777); font-size: 10px; }
 .brain-quant-market-overview-list > button > small { grid-column: 1 / -1; }
 .brain-quant-market-overview-list > button em { font-size: 12px; font-style: normal; }
+.brain-quant-screener-form { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.brain-quant-screener-form label { display: grid; gap: 4px; color: var(--text-secondary, #777); font-size: 11px; }
+.brain-quant-screener-form input { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--border-subtle, #ddd); border-radius: 6px; }
+.brain-quant-screener-form button { min-height: 34px; align-self: end; }
+.brain-quant-screener-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; margin: 10px 0 18px; }
+.brain-quant-screener-results button { display: grid; gap: 5px; padding: 9px; text-align: left; border: 1px solid var(--border-subtle, #ddd); border-radius: 7px; background: var(--surface-base, #fafaf8); color: inherit; }
+.brain-quant-screener-results span { display: flex; justify-content: space-between; font-size: 12px; }
+.brain-quant-screener-results small { color: var(--text-secondary, #777); font-size: 10px; }
 .brain-quant-equity-chart { min-height: 142px; display: grid; place-items: center; border: 1px solid var(--border-subtle, #ddd); border-radius: 8px; background: var(--surface-raised, #fff); color: #2563eb; overflow: hidden; }
 .brain-quant-equity-chart svg { width: 100%; height: 142px; }
 .brain-quant-equity-chart small { color: var(--text-secondary, #777); }

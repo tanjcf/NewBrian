@@ -931,6 +931,7 @@ export const desktopIpcChannels = {
     modelReasoningDelta: "phase1:model-reasoning-delta",
     snapshotUpdate: "phase1:snapshot-update",
     quantMarketUpdated: "phase1:quant-market-updated",
+    quantScreenerUpdated: "phase1:quant-screener-updated",
     quantPortfolioUpdated: "phase1:quant-portfolio-updated",
     openWorkspaceFilePreview: "phase1:open-workspace-file-preview"
   },

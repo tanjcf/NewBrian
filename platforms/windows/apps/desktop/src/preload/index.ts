@@ -229,6 +229,7 @@ contextBridge.exposeInMainWorld("codecn", {
   createQuantSession: (input: { projectId: string; initialCash?: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSessionCreate, input),
   queryQuantBars: (input: { projectId: string; query: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantBarsQuery, input),
   queryQuantMarketOverview: (input: { projectId: string; limit?: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantMarketOverview, input),
+  queryQuantMarketScreener: (input: { projectId: string; criteria: Record<string, unknown> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantMarketScreener, input),
   executeQuantOrder: (input: { projectId: string; order: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantOrderExecute, input),
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),
@@ -574,6 +575,11 @@ contextBridge.exposeInMainWorld("codecn", {
     const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; query: unknown; bars: unknown[] }) => listener(payload);
     ipcRenderer.on(desktopIpcChannels.events.quantMarketUpdated, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantMarketUpdated, handler);
+  },
+  onQuantScreenerUpdated: (listener: (payload: { projectId: string; result: unknown }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; result: unknown }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.quantScreenerUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantScreenerUpdated, handler);
   },
   onQuantPortfolioUpdated: (listener: (payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => listener(payload);

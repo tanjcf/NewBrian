@@ -58,6 +58,7 @@ interface BrainWorkspaceIpcDependencies {
   resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
   queryQuantMarketOverview?: (limit: number) => Promise<unknown>;
+  queryQuantMarketScreener?: (criteria: Record<string, unknown>) => Promise<unknown>;
   video?: VideoTimelineService;
   videoRender?: VideoRenderService;
   music?: MusicTimelineService;
@@ -1116,6 +1117,13 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
         throw new TypeError("limit must be an integer between 1 and 100");
       }
       return dependencies.queryQuantMarketOverview(requestedLimit);
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantMarketScreener, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant market screener");
+      await authorizeQuantProject(input);
+      if (!dependencies.queryQuantMarketScreener) throw new Error("MARKET_SCREENER_UNAVAILABLE");
+      const criteria = requireRecord(input.criteria, "Quant market screener criteria");
+      return dependencies.queryQuantMarketScreener(criteria);
     });
     ipcMain.handle(brainWorkspaceIpcChannels.quantOrderExecute, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant order");

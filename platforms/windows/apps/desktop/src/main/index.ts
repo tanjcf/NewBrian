@@ -3350,6 +3350,24 @@ function registerQuantRuntimeTools(
     return { ok: true, output: JSON.stringify({ symbol: input.symbol, count: bars.length, bars }) };
   });
   targetRuntime.registerExternalTool({
+    name: "quant.screener.run", title: "运行真实 A 股选股器",
+    description: "使用 Spring → AKShare 真实 A 股快照按价格、涨跌幅、成交量、换手率、市盈率、市净率和市值选股，并同步右侧选股结果。不得用 Web Search 或模拟数据代替。",
+    namespace: "quant", kind: "read", risk: "low", requiresApproval: false,
+    inputSchema: { type: "object", properties: {
+      minPrice: { type: "number" }, maxPrice: { type: "number" },
+      minChangePercent: { type: "number" }, maxChangePercent: { type: "number" },
+      minVolume: { type: "number" }, minTurnoverRate: { type: "number" },
+      maxPe: { type: "number" }, maxPb: { type: "number" }, minMarketCap: { type: "number" },
+      limit: { type: "integer", minimum: 1, maximum: 100 }
+    }, additionalProperties: false }
+  }, async (input) => {
+    const result = await desktopMarketOverviewClient.queryScreener(input);
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantScreenerUpdated, { projectId: workspaceId, result });
+    }
+    return { ok: true, output: JSON.stringify(result) };
+  });
+  targetRuntime.registerExternalTool({
     name: "quant.portfolio.summary",
     title: "读取模拟组合",
     description: "读取当前量化模拟组合，不执行真实交易。",
@@ -7757,6 +7775,7 @@ function registerIpc() {
     dataAnalysis: brainDataAnalysis,
     quant: quantSimulationService,
     queryQuantMarketOverview: (limit) => desktopMarketOverviewClient.queryOverview(limit),
+    queryQuantMarketScreener: (criteria) => desktopMarketOverviewClient.queryScreener(criteria),
     video: videoTimelineService,
     music: musicTimelineService,
     musicMedia: musicMediaService,

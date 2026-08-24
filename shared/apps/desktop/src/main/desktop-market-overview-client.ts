@@ -13,6 +13,13 @@ export type MarketOverview = {
   limitUps: MarketOverviewSection;
 };
 
+export type MarketScreenerResult = {
+  dataset: string;
+  fetchedAt: string;
+  criteria: Record<string, number>;
+  items: Array<Record<string, unknown>>;
+};
+
 export interface DesktopMarketOverviewClientDependencies {
   readGatewayOrigin: () => Promise<string>;
   readAccessToken: () => Promise<string>;
@@ -75,5 +82,23 @@ export class DesktopMarketOverviewClient {
       }
     }
     return data as MarketOverview;
+  }
+
+  async queryScreener(criteria: Record<string, unknown>): Promise<MarketScreenerResult> {
+    const accessToken = (await this.dependencies.readAccessToken()).trim();
+    if (!accessToken) throw new DesktopMarketOverviewError("MARKET_SCREENER_AUTH_REQUIRED", "Desktop session is required before market screening.");
+    const gatewayOrigin = (await this.dependencies.readGatewayOrigin()).replace(/\/+$/u, "");
+    const response = await this.fetchImpl(`${gatewayOrigin}/api/desktop/v1/market-screener`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8", ...this.dependencies.createHeaders({ accessToken }) },
+      body: JSON.stringify(criteria)
+    });
+    if (!response.ok) throw new DesktopMarketOverviewError(`MARKET_SCREENER_HTTP_${response.status}`, `Market screener failed with HTTP ${response.status}.`);
+    const payload = await response.json() as { ok?: boolean; data?: unknown; message?: string };
+    const data = payload.data as Record<string, unknown> | undefined;
+    if (!payload.ok || !data || typeof data.dataset !== "string" || !Array.isArray(data.items)) {
+      throw new DesktopMarketOverviewError("MARKET_SCREENER_INVALID_RESPONSE", String(payload.message || "Market screener response is invalid."));
+    }
+    return data as MarketScreenerResult;
   }
 }
