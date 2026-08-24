@@ -74,8 +74,7 @@ export function VideoPipelineShell({ projectId, activeStep, files = [] }: VideoP
 
   useEffect(() => {
     const videoFiles = files.filter((file) => String(file.mimeType || "").startsWith("video/"));
-    const output = videoFiles.find((file) => /final-pass\.mp4$/iu.test(String(file.relativePath || file.storageKey || file.logicalName || "")))
-      ?? videoFiles.find((file) => /(?:^|\/)exports?\//iu.test(String(file.relativePath || file.storageKey || "")))
+    const output = videoFiles.find((file) => /(?:^|\/)exports?\//iu.test(String(file.relativePath || file.storageKey || "")))
       ?? videoFiles[0];
     if (!projectId || !output?.id || !window.codecn?.getBrainFilePreviewUrl) { setPreviewUrl(""); return; }
     void window.codecn.getBrainFilePreviewUrl({ projectId, fileId: output.id }).then(setPreviewUrl).catch(() => setPreviewUrl(""));
