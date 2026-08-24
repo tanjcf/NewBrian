@@ -4,11 +4,12 @@ import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
 import { osKeyCombo, osPressEnter } from "./scene-test-os-input.mjs";
 const execFileAsync = promisify(execFile);
 const prompt = `在当前游戏项目中创建一个名为“青石谷入口”的新关卡，保存到真实项目；然后读取当前项目的关卡和 Content 资源，返回实际写入路径和数量。不要编造关卡、资产或试玩数据。`;
-const client = await createSceneTestCdpClient(9555);
+const client = await createSceneTestCdpClient(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555));
 const actions = [];
 try {
   await client.waitForAppReady();
   if (await client.getSelectedWorkspaceKey() !== "game") await client.switchWorkspace("game");
+  const beforeText = await client.evaluate("document.body?.innerText || ''");
   await client.mouseClickButtonText("新对话");
   actions.push({ type: "ui-click", target: "新对话" });
   await client.waitFor(`(() => [...document.querySelectorAll('textarea,[contenteditable="true"]')].some((n) => n.offsetWidth > 0 && n.offsetHeight > 0))()`);
@@ -23,8 +24,14 @@ try {
   let state;
   while (Date.now() < deadline) {
     state = await client.evaluate(`(() => ({ text: document.body?.innerText?.slice(-12000) || '', busy: Boolean(document.querySelector('[data-generating="true"],.is-generating,button[aria-label*="停止"]')) || /正在思考|进行中|正在继续执行|等待批准/u.test(document.body?.innerText?.slice(-12000) || '') }))()`);
-    if (!state.busy && state.text.includes("青石谷入口")) break;
+    const delta = state.text.slice(Math.max(0, beforeText.length - 120));
+    const mentions = (delta.match(/青石谷入口/gu) || []).length;
+    const hasAssistantResult = mentions > 1 && /工具调用|工具结果|已处理|已保存到|写入工程|调用/u.test(delta);
+    if (!state.busy && hasAssistantResult) break;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  console.log(JSON.stringify({ caseId: "VISIBLE-GAME-PROMPT-LEVEL", actions, completed: !state?.busy && state?.text?.includes("青石谷入口"), tail: state?.text?.slice(-3000) }, null, 2));
+  const delta = state?.text?.slice(Math.max(0, beforeText.length - 120)) || "";
+  const mentions = (delta.match(/青石谷入口/gu) || []).length;
+  const completed = !state?.busy && mentions > 1 && /工具调用|工具结果|已处理|已保存到|写入工程|调用/u.test(delta);
+  console.log(JSON.stringify({ caseId: "VISIBLE-GAME-PROMPT-LEVEL", actions, completed, mentions, tail: state?.text?.slice(-3000) }, null, 2));
 } finally { await client.close(); }
