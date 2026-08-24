@@ -1013,18 +1013,7 @@ function renderSettingsWorkspace() {
                 <section className="codex-settings-section">
                   <h4>权限</h4>
                   <div className="codex-setting-list">
-                    <button type="button" className="codex-setting-row" aria-pressed={desktopPreferences.configuration.requireApprovalForShell && !desktopPreferences.permissions?.fullAccess} onClick={() => {
-                      setComposerPermission?.("approval");
-                      updateDesktopPreferences((current) => ({
-                        ...current,
-                        configuration: { ...current.configuration, requireApprovalForShell: true },
-                        permissions: { ...(current.permissions || {}), fullAccess: false }
-                      }));
-                    }}>
-                      <span><strong>默认权限</strong><em>默认情况下，codecn 可以读取并编辑其工作区中的文件。必要时，它可以请求额外的访问权限</em></span>
-                      <SettingsSwitch enabled={desktopPreferences.configuration.requireApprovalForShell && !desktopPreferences.permissions?.fullAccess} />
-                    </button>
-                    <button type="button" className="codex-setting-row" aria-pressed={!desktopPreferences.configuration.requireApprovalForShell && !desktopPreferences.permissions?.fullAccess} onClick={() => {
+                    <button type="button" className="codex-setting-row" aria-pressed={!desktopPreferences.permissions?.fullAccess} onClick={() => {
                       setComposerPermission?.("agent");
                       updateDesktopPreferences((current) => ({
                         ...current,
@@ -1032,15 +1021,15 @@ function renderSettingsWorkspace() {
                         permissions: { ...(current.permissions || {}), fullAccess: false }
                       }));
                     }}>
-                      <span><strong>自动审核</strong><em>codecn 可以读取和编辑其工作区中的文件。codecn 会自动审核额外访问权限请求。</em></span>
-                      <SettingsSwitch enabled={!desktopPreferences.configuration.requireApprovalForShell && !desktopPreferences.permissions?.fullAccess} />
+                      <span><strong>替我审批</strong><em>codecn 可以读取和编辑工作区文件，并自动审核额外访问权限请求。</em></span>
+                      <SettingsSwitch enabled={!desktopPreferences.permissions?.fullAccess} />
                     </button>
                     <button type="button" className="codex-setting-row" aria-pressed={Boolean(desktopPreferences.permissions?.fullAccess)} onClick={() => {
                       const fullAccess = !desktopPreferences.permissions?.fullAccess;
-                      setComposerPermission?.(fullAccess ? "full" : "approval");
+                      setComposerPermission?.(fullAccess ? "full" : "agent");
                       updateDesktopPreferences((current) => ({
                         ...current,
-                        configuration: { ...current.configuration, requireApprovalForShell: !fullAccess },
+                        configuration: { ...current.configuration, requireApprovalForShell: false },
                         permissions: { ...(current.permissions || { fullAccess: false }), fullAccess }
                       }));
                     }}>

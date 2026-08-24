@@ -336,12 +336,13 @@ function WorkspacePptxViewer({ dataUrl, anchors = [], annotationActive = false, 
 const RESEARCH_WRITING_SKILL = "government-research-writing";
 const RESEARCH_WRITING_PRODUCT_ENABLED = true;
 const COMPOSER_PERMISSION_OPTIONS = [
-  { id: "approval", name: "请求批准", detail: "编辑外部文件和使用互联网时询问", icon: "shield-question" },
-  { id: "agent", name: "替我审批", detail: "仅对检测到的风险操作请求批准", icon: "shield-bolt" },
+  { id: "agent", name: "替我审批", detail: "自动审核操作，仅拦截明确高风险动作", icon: "shield-bolt" },
   { id: "full", name: "完全访问", detail: "可不受限制地访问互联网和本机文件", icon: "shield-unlock" }
 ] as const;
 
 function permissionOption(permission: string) {
+  // Old threads/preferences can still contain `approval`; migrate their
+  // presentation and the next submitted turn to the agent-managed tier.
   return COMPOSER_PERMISSION_OPTIONS.find((option) => option.id === permission) ?? COMPOSER_PERMISSION_OPTIONS[0];
 }
 
@@ -3317,9 +3318,7 @@ export function WorkspaceModules(ctx: any) {
   const approvalRiskLabel = approvalTool?.risk === "high" ? "高风险" : approvalTool?.risk === "medium" ? "中风险" : approvalTool?.risk === "low" ? "低风险" : "需要确认";
   const approvalScopeLabel = composerPermission === "full"
     ? "完全访问"
-    : composerPermission === "agent"
-      ? "替我审批"
-      : "请求批准";
+    : "替我审批";
   const handleApprovalResponse = async (approved: boolean) => {
     if (!api) return;
     setApprovalResponding(true);
@@ -6228,11 +6227,11 @@ function renderChatModule() {
               </button>
               <div className="composer-picker-wrap">
                 <button type="button" onClick={() => setComposerMenu((current) => current === "permission" ? null : "permission")}>
-                  ☝ {composerPermission === "full" ? "完全访问" : composerPermission === "approval" ? "请求批准" : "替我审批"}<SidebarIcon name="chevron-down" />
+                  ☝ {composerPermission === "full" ? "完全访问" : "替我审批"}<SidebarIcon name="chevron-down" />
                 </button>
                 {composerMenu === "permission" ? (
                   <div className="composer-picker-menu composer-permission-menu">
-                    {[{ id: "approval", name: "请求批准", detail: "编辑外部文件和使用互联网时询问" }, { id: "agent", name: "替我审批", detail: "仅对检测到的风险操作请求批准" }, { id: "full", name: "完全访问", detail: "可不受限制地访问互联网和本机文件" }].map((option) => (
+                    {[{ id: "agent", name: "替我审批", detail: "自动审核操作，仅拦截明确高风险动作" }, { id: "full", name: "完全访问", detail: "可不受限制地访问互联网和本机文件" }].map((option) => (
                       <button key={`legacy-permission-${option.id}`} type="button" onClick={() => { setComposerPermission(option.id); setComposerMenu(null); }}>
                         <span aria-hidden="true">{composerPermission === option.id ? "✓" : ""}</span>
                         <span><strong>{option.name}</strong><small>{option.detail}</small></span>

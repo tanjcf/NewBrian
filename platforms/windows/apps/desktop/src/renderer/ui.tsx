@@ -295,12 +295,12 @@ export function App() {
   useEffect(() => {
     if (desktopPreferences.permissions?.fullAccess) {
       setComposerPermission("full");
-    } else if (desktopPreferences.configuration?.requireApprovalForShell) {
-      setComposerPermission("approval");
     } else {
+      // The product exposes only two user-facing levels. Treat the removed
+      // legacy "approval" preference as agent-managed approval on load.
       setComposerPermission("agent");
     }
-  }, [desktopPreferences.permissions?.fullAccess, desktopPreferences.configuration?.requireApprovalForShell]);
+  }, [desktopPreferences.permissions?.fullAccess]);
   selectedWorkspaceIdRef.current = selectedWorkspaceId;
   selectedThreadIdRef.current = selectedThreadId;
   chatMessagesRef.current = chatMessages;
