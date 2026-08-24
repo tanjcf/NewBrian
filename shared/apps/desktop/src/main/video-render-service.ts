@@ -97,7 +97,9 @@ export class VideoRenderService {
       concatListRelative = `.brain-video/concat-${renderId}.txt`;
       const listAbsolute = resolve(input.projectRoot, concatListRelative);
       await mkdir(dirname(listAbsolute), { recursive: true });
-      const body = media.map((path) => `file '${path.replaceAll("'", "'\\''")}'`).join("\n");
+      // FFmpeg resolves concat entries relative to the concat list itself,
+      // which lives under .brain-video rather than the project root.
+      const body = media.map((path) => `file '../${path.replaceAll("'", "'\\''")}'`).join("\n");
       await writeFile(listAbsolute, `${body}\n`, "utf8");
     }
     const args = buildVideoFfmpegArgs(media, output, concatListRelative);

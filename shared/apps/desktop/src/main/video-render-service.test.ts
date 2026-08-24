@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -92,7 +92,12 @@ test("video render supports multi-clip concat demuxer", async () => {
       mediaRelativePaths: ["media/clips/a.mp4", "media/clips/b.mp4"]
     });
     assert.equal(calls[1].payload.args[2], "concat");
-    assert.ok(String(calls[1].payload.args[6]).includes(".brain-video/concat-"));
+    const concatRelative = String(calls[1].payload.args[6]);
+    assert.ok(concatRelative.includes(".brain-video/concat-"));
+    assert.equal(
+      readFileSync(join(root, concatRelative), "utf8"),
+      "file '../media/clips/a.mp4'\nfile '../media/clips/b.mp4'\n"
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
