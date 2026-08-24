@@ -139,6 +139,28 @@ export function registerVideoAgentTools(runtime: ToolRuntime, deps: VideoAgentTo
   });
 
   runtime.registerExternalTool({
+    name: "video.timeline.add_clip", title: "添加工程素材到时间线", description: "将右侧工程中已登记的真实视频或音频文件挂入时间线；用于重启恢复或重排素材，不会伪造文件。",
+    namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
+    inputSchema: { type: "object", properties: {
+      fileId: { type: "string" }, trackType: { type: "string", enum: ["video", "audio"] },
+      startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 },
+      sourceInMs: { type: "integer", minimum: 0 }, volume: { type: "number", minimum: 0, maximum: 2 }
+    }, required: ["fileId", "trackType", "startMs", "durationMs"], additionalProperties: false }
+  }, async (input) => {
+    const ownerId = await deps.ownerId();
+    const file = deps.storage.getFile(ownerId, deps.projectId, text(input.fileId));
+    const trackType = text(input.trackType) as "video" | "audio";
+    const expectedMimePrefix = trackType === "video" ? "video/" : "audio/";
+    if (!file.mimeType.toLowerCase().startsWith(expectedMimePrefix)) throw new Error("BRAIN_VIDEO_CLIP_MEDIA_TYPE_MISMATCH");
+    deps.timeline.ensureTimeline(ownerId, deps.projectId, { title: "未命名时间线", width: 1920, height: 1080, fps: 30 });
+    const timeline = deps.timeline.addClip(ownerId, deps.projectId, {
+      trackType, sourceFileId: file.id, startMs: Number(input.startMs), durationMs: Number(input.durationMs),
+      sourceInMs: Number(input.sourceInMs ?? 0), volume: Number(input.volume ?? 1)
+    });
+    return { ok: true, output: JSON.stringify({ file, timeline }) };
+  });
+
+  runtime.registerExternalTool({
     name: "video.shot.generate", title: "生成并登记真实视频镜头", description: "调用 Spring video_generate，下载真实 MP4 到当前工程，登记文件、更新 Rust 分镜并加入右侧视频轨。不得使用模拟素材。",
     namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: { shotIndex: { type: "integer", minimum: 0, maximum: 99 }, prompt: { type: "string" }, model: { type: "string" }, startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 } }, required: ["shotIndex", "prompt", "startMs", "durationMs"], additionalProperties: false }

@@ -53,6 +53,7 @@ test("registers the complete project-scoped video Agent tool surface", () => {
     "video.pipeline.save",
     "video.timeline.configure",
     "video.subtitle.import",
+    "video.timeline.add_clip",
     "video.shot.generate",
     "video.render.start",
     "video.render.status"
@@ -60,6 +61,35 @@ test("registers the complete project-scoped video Agent tool surface", () => {
   assert.equal(tools.get("video.project.inspect")?.definition.requiresApproval, false);
   assert.equal(tools.get("video.pipeline.save")?.definition.requiresApproval, true);
   assert.equal(tools.get("video.shot.generate")?.definition.namespace, "video");
+});
+
+test("timeline add clip accepts only an existing project file with a matching media type", async () => {
+  const tools = new Map<string, RegisteredTool>();
+  const added: unknown[] = [];
+  registerVideoAgentTools({
+    unregisterExternalTools() {},
+    registerExternalTool(definition, execute) { tools.set(String(definition.name), { definition, execute }); }
+  }, {
+    ownerId: async () => "owner-a", projectId: "project-a", projectRoot: "C:\\video-project",
+    storage: {
+      getFile: (_ownerId: string, _projectId: string, fileId: string) => ({ id: fileId, mimeType: "video/mp4", storageKey: "media/shot.mp4" }),
+      listFiles: () => []
+    } as never,
+    videoRuntime: {} as never,
+    timeline: {
+      ensureTimeline: () => ({}),
+      addClip: (_ownerId: string, _projectId: string, clip: unknown) => { added.push(clip); return { clips: [clip] }; }
+    } as never,
+    render: {} as never,
+    generateVideo: async () => { throw new Error("not used"); }
+  });
+  const result = await tools.get("video.timeline.add_clip")!.execute({ fileId: "file-a", trackType: "video", startMs: 0, durationMs: 4_000 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(added, [{ trackType: "video", sourceFileId: "file-a", startMs: 0, durationMs: 4_000, sourceInMs: 0, volume: 1 }]);
+  await assert.rejects(
+    tools.get("video.timeline.add_clip")!.execute({ fileId: "file-a", trackType: "audio", startMs: 0, durationMs: 4_000 }),
+    /BRAIN_VIDEO_CLIP_MEDIA_TYPE_MISMATCH/
+  );
 });
 
 test("pipeline tool persists normalized script and shots through VideoRuntimeService", async () => {
