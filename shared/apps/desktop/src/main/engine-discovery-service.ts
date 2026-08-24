@@ -2,7 +2,7 @@ import { access, constants } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-export type EngineId = "ffmpeg" | "ffprobe" | "node" | "godot" | "epic-launcher";
+export type EngineId = "ffmpeg" | "ffprobe" | "node" | "godot" | "epic-launcher" | "unreal-editor";
 
 export interface EngineDiscoveryDependencies {
   platform: NodeJS.Platform;
@@ -42,7 +42,7 @@ function commandVersion(deps: EngineDiscoveryDependencies, executable: string, a
   }
 }
 
-/** Discovers ffmpeg/node/godot/epic without installing. */
+/** Discovers local runtimes and game editors without installing them. */
 export class EngineDiscoveryService {
   private readonly deps: EngineDiscoveryDependencies;
 
@@ -63,6 +63,7 @@ export class EngineDiscoveryService {
     if (engineId === "epic-launcher") return this.deps.platform === "win32"
       ? "C:\\Program Files (x86)\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe"
       : "";
+    if (engineId === "unreal-editor") return "";
     return "";
   }
 
@@ -77,6 +78,20 @@ export class EngineDiscoveryService {
     if (engineId === "epic-launcher") {
       const custom = process.env.BRAIN_EPIC_LAUNCHER_EXECUTABLE?.trim();
       return custom ? [custom] : this.managedExecutable("epic-launcher") ? [this.managedExecutable("epic-launcher")] : [];
+    }
+    if (engineId === "unreal-editor" && this.deps.platform === "win32") {
+      const candidates = [this.deps.environment.BRAIN_UNREAL_EDITOR_EXECUTABLE?.trim() || ""];
+      // Epic stores the installed root in the registry; enumerate every
+      // installed UE version and derive the actual editor executable.
+      try {
+        const registry = this.deps.lookupCommand("reg.exe", ["query", "HKLM\\SOFTWARE\\EpicGames\\Unreal Engine", "/s"]);
+        const text = String(registry.stdout ?? "");
+        for (const root of text.matchAll(/InstalledDirectory\s+REG_SZ\s+(.+)\s*$/gim)) {
+          candidates.push(join(root[1].trim(), "Engine", "Binaries", "Win64", "UnrealEditor.exe"));
+        }
+      } catch { /* registry unavailable; explicit env/PATH candidates still work */ }
+      candidates.push("UnrealEditor.exe", "D:\\UE5\\UE_5.4\\Engine\\Binaries\\Win64\\UnrealEditor.exe", "D:\\UE5\\UE_5.7\\Engine\\Binaries\\Win64\\UnrealEditor.exe");
+      return [...new Set(candidates.filter(Boolean))];
     }
     return [];
   }
@@ -101,7 +116,7 @@ export class EngineDiscoveryService {
   }
 
   async discoverAll(): Promise<ResolvedEngine[]> {
-    const engines: EngineId[] = ["ffmpeg", "ffprobe", "node", "godot", "epic-launcher"];
+    const engines: EngineId[] = ["ffmpeg", "ffprobe", "node", "godot", "epic-launcher", "unreal-editor"];
     const resolved: ResolvedEngine[] = [];
     for (const engineId of engines) {
       const item = await this.resolve(engineId);

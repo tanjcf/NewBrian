@@ -127,7 +127,7 @@ pub fn scaffold_unreal_project(
         .get("engine_association")
         .and_then(Value::as_str)
         .unwrap_or("5.4");
-    let uproject_rel = format!("{project_name}.uproproject");
+    let uproject_rel = format!("{project_name}.uproject");
     write_text_atomic(
         boundary,
         Path::new(&uproject_rel),
