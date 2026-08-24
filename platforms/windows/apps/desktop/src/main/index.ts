@@ -3324,6 +3324,19 @@ function registerGameRuntimeTools(
   const game = new GameRuntimeService((binding) => getRustCoreService().acquire(binding));
   const binding = { projectId, projectRoot };
   targetRuntime.registerExternalTool({
+    name: "game.project.scaffold_web",
+    title: "创建可运行 Web 游戏工程",
+    description: "通过右侧游戏制作 Rust Tools 生成真实可运行、可交互的 Web 游戏工程和本地试玩入口。用户要求最终能运行时必须调用本工具。",
+    namespace: "game",
+    kind: "write",
+    risk: "medium",
+    requiresApproval: true,
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => {
+    const result = await game.scaffoldWeb(binding);
+    return { ok: true, output: JSON.stringify(result) };
+  });
+  targetRuntime.registerExternalTool({
     name: "game.level.create",
     title: "创建并保存游戏关卡",
     description: "通过右侧游戏制作 Rust Tools 创建并保存真实关卡；不要用 shell 或编造关卡数据。",

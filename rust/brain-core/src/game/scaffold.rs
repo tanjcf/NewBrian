@@ -15,7 +15,7 @@ const WEB_PACKAGE: &str = r#"{
 const WEB_SERVER: &str = r#"import { createServer } from "node:http";
 createServer((_, response) => {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  response.end("<!doctype html><title>BRAIN Web Game</title><main data-testid=game-page>BRAIN Web 游戏模板</main>");
+  response.end(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>青石谷试炼</title><style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:radial-gradient(circle at top,#315b4c,#111b18 70%);color:#f6eed8;font-family:system-ui}.game{width:min(720px,90vw);text-align:center;padding:40px;border:1px solid #9ec8aa55;border-radius:24px;background:#0d1714dd;box-shadow:0 24px 80px #0008}button{font-size:22px;padding:18px 36px;border:0;border-radius:999px;background:#d9b66f;color:#241c0e;cursor:pointer}button:active{transform:scale(.96)}#score{font-size:56px;margin:12px}small{opacity:.72}</style><main class="game" data-testid="game-page"><h1>青石谷试炼</h1><p>点击灵石积累修为</p><div id="score" data-testid="score">0</div><button id="play" data-testid="play-button">采集灵石</button><p><small>每次点击 +1 修为</small></p></main><script>let score=0;document.querySelector('#play').addEventListener('click',()=>{score+=1;document.querySelector('#score').textContent=String(score)});</script></html>`);
 }).listen(5173, "127.0.0.1");
 "#;
 

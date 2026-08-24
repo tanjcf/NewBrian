@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
 import { osKeyCombo, osPressEnter } from "./scene-test-os-input.mjs";
 const execFileAsync = promisify(execFile);
-const prompt = `请只使用右侧游戏制作 Tools 操作当前游戏项目：创建一个名为“青石谷入口”的新关卡并保存到真实项目；然后通过右侧游戏制作 Tools 读取当前项目的关卡和 Content 资源，返回实际写入路径和数量。不要使用 shell，不要编造关卡、资产或试玩数据。`;
+const prompt = `请只使用右侧游戏制作 Tools 操作当前游戏项目：创建一个名为“青石谷入口”的新关卡并保存；生成一个真实可运行、可交互的 Web 小游戏工程；再通过右侧游戏制作 Tools 读取关卡与 Content 资源并说明试玩入口。不要使用 shell，不要只输出代码，不要编造关卡、资产或试玩数据。`;
 const client = await createSceneTestCdpClient(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555));
 const actions = [];
 try {
