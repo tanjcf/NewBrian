@@ -10,6 +10,7 @@ try {
   await client.waitForAppReady();
   if (await client.getSelectedWorkspaceKey() !== "game") await client.switchWorkspace("game");
   const beforeText = await client.evaluate("document.body?.innerText || ''");
+  await client.mouseClickButtonText("新对话");
   await client.mouseClickSelector('[data-testid="composer-permission-button"]');
   const agentOptionVisible = await client.waitFor("Boolean(document.querySelector('[data-testid=permission-option-agent]'))", 5_000).then(() => true).catch(() => false);
   if (agentOptionVisible) await client.mouseClickSelector('[data-testid="permission-option-agent"]');
@@ -17,8 +18,7 @@ try {
     const alreadyAgent = await client.evaluate("document.querySelector('[data-testid=\"composer-permission-button\"]')?.textContent?.includes('替我审批')");
     if (!alreadyAgent) throw new Error("Visible composer permission mode is not agent approval");
   }
-  await client.mouseClickButtonText("新对话");
-  actions.push({ type: "ui-click", target: "替我审批" }, { type: "ui-click", target: "新对话" });
+  actions.push({ type: "ui-click", target: "新对话" }, { type: "ui-click", target: "替我审批" });
   await client.waitFor(`(() => [...document.querySelectorAll('textarea,[contenteditable="true"]')].some((n) => n.offsetWidth > 0 && n.offsetHeight > 0))()`);
   const composer = await client.evaluate(`(() => { const n = [...document.querySelectorAll('textarea,[contenteditable="true"]')].find((x) => x.offsetWidth > 0 && x.offsetHeight > 0); if (!n) return null; n.setAttribute('data-visible-game-prompt','true'); return n.tagName === 'TEXTAREA' ? 'textarea[data-visible-game-prompt="true"]' : '[contenteditable="true"][data-visible-game-prompt="true"]'; })()`);
   await client.mouseClickSelector(composer);
