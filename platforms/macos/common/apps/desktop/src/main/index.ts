@@ -33,6 +33,7 @@ import { confirmBrainSceneUiAction } from "./brain-scene-auto-confirm.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
+import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -197,6 +198,11 @@ const desktopMarketBarsClient = new DesktopMarketBarsClient({
     accessToken,
     device: collectDesktopDeviceFingerprint()
   })
+});
+const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({ accessToken, device: collectDesktopDeviceFingerprint() })
 });
 const opsMarketDataUrl = resolveBrainMarketDataUrl();
 const quantSimulationService = new QuantSimulationService(
@@ -9390,6 +9396,7 @@ function registerIpc() {
     storage: brainWorkspaceStorage,
     readWorkspaceCatalog,
     quant: quantSimulationService,
+    queryQuantMarketOverview: (limit) => desktopMarketOverviewClient.queryOverview(limit),
     ingestDocument: (input) => documentWorkerProcess.ingest(input),
     acquireRustCore: (binding) => getRustCoreService().acquire(binding),
     platform: process.platform,

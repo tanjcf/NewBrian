@@ -383,6 +383,7 @@ export const brainWorkspaceIpcChannels = {
   gamePreviewStop: "brain:game:preview-stop",
   quantSessionCreate: "brain:quant:session-create",
   quantBarsQuery: "brain:quant:bars-query",
+  quantMarketOverview: "brain:quant:market-overview",
   quantOrderExecute: "brain:quant:order-execute",
   quantSnapshot: "brain:quant:snapshot",
   quantActivity: "brain:quant:activity",

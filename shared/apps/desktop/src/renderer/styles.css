@@ -17776,6 +17776,19 @@ textarea {
 .brain-quant-account-grid strong { font-size: 17px; }
 .brain-quant-section-title { display: flex; align-items: center; justify-content: space-between; }
 .brain-quant-section-title h3 { margin: 0; font-size: 14px; }
+.brain-quant-market-overview { display: grid; gap: 10px; margin: 0 28px 16px; padding: 14px; border: 1px solid var(--border-subtle, #ddd); border-radius: 9px; background: var(--surface-raised, #fff); }
+.brain-quant-market-overview .brain-quant-section-title button, .brain-quant-market-overview .brain-quant-watchlist-groups button { min-height: 30px; padding: 0 10px; border: 1px solid var(--border-subtle, #ddd); border-radius: 6px; background: var(--surface-raised, #fff); color: inherit; }
+.brain-quant-market-overview .brain-quant-watchlist-groups { display: flex; flex-wrap: wrap; gap: 6px; }
+.brain-quant-market-overview .brain-quant-watchlist-groups button.active { border-color: #287c62; color: #287c62; }
+.brain-quant-market-overview-status { color: var(--text-secondary, #777); line-height: 1.5; }
+.brain-quant-market-overview-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; }
+.brain-quant-market-overview-list > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; padding: 10px; text-align: left; border: 1px solid var(--border-subtle, #ddd); border-radius: 7px; background: var(--surface-base, #fafaf8); color: inherit; }
+.brain-quant-market-overview-list > button:disabled { cursor: default; opacity: 1; }
+.brain-quant-market-overview-list > button span { display: flex; min-width: 0; gap: 6px; align-items: baseline; }
+.brain-quant-market-overview-list > button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brain-quant-market-overview-list > button small { color: var(--text-secondary, #777); font-size: 10px; }
+.brain-quant-market-overview-list > button > small { grid-column: 1 / -1; }
+.brain-quant-market-overview-list > button em { font-size: 12px; font-style: normal; }
 .brain-quant-equity-chart { min-height: 142px; display: grid; place-items: center; border: 1px solid var(--border-subtle, #ddd); border-radius: 8px; background: var(--surface-raised, #fff); color: #2563eb; overflow: hidden; }
 .brain-quant-equity-chart svg { width: 100%; height: 142px; }
 .brain-quant-equity-chart small { color: var(--text-secondary, #777); }

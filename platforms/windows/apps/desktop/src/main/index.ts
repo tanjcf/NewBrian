@@ -156,6 +156,7 @@ import { createAgentHostQuitCoordinator } from "./agent-host-quit-coordinator.js
 import { OfficialGovernmentWebService } from "./official-government-web-service.js";
 import { registerOfficialGovernmentWebTools } from "./official-government-web-tools.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
+import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
 import { RustCoreService } from "./rust-core-service.js";
@@ -701,6 +702,14 @@ const videoRenderService = new VideoRenderService({
   }
 });
 const desktopMarketBarsClient = new DesktopMarketBarsClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
+});
+const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
@@ -7747,6 +7756,7 @@ function registerIpc() {
     readWorkspaceCatalog,
     dataAnalysis: brainDataAnalysis,
     quant: quantSimulationService,
+    queryQuantMarketOverview: (limit) => desktopMarketOverviewClient.queryOverview(limit),
     video: videoTimelineService,
     music: musicTimelineService,
     musicMedia: musicMediaService,

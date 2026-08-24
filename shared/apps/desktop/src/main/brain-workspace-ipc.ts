@@ -57,6 +57,7 @@ interface BrainWorkspaceIpcDependencies {
   resolveOwnerId: () => Promise<string> | string;
   resolveWorkspaceRoot: (workspaceId: string) => Promise<string>;
   quant?: QuantSimulationService;
+  queryQuantMarketOverview?: (limit: number) => Promise<unknown>;
   video?: VideoTimelineService;
   videoRender?: VideoRenderService;
   music?: MusicTimelineService;
@@ -1105,6 +1106,16 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     ipcMain.handle(brainWorkspaceIpcChannels.quantBarsQuery, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant bars");
       return dependencies.quant!.queryBarsAsync(await authorizeQuantProject(input), input.query as any);
+    });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantMarketOverview, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant market overview");
+      await authorizeQuantProject(input);
+      if (!dependencies.queryQuantMarketOverview) throw new Error("MARKET_OVERVIEW_UNAVAILABLE");
+      const requestedLimit = input.limit === undefined ? 20 : Number(input.limit);
+      if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) {
+        throw new TypeError("limit must be an integer between 1 and 100");
+      }
+      return dependencies.queryQuantMarketOverview(requestedLimit);
     });
     ipcMain.handle(brainWorkspaceIpcChannels.quantOrderExecute, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant order");

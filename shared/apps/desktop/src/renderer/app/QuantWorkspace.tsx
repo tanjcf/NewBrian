@@ -22,6 +22,14 @@ type QuantUiState = {
 };
 
 const DATE_RANGE_PRESET = "end-today-start-12m";
+const MARKET_OVERVIEW_VIEWS = [
+  { id: "indices", label: "大盘指数" },
+  { id: "industries", label: "行业板块" },
+  { id: "concepts", label: "概念板块" },
+  { id: "fundFlows", label: "资金流向" },
+  { id: "limitUps", label: "涨停池" }
+] as const;
+type MarketOverviewView = typeof MARKET_OVERVIEW_VIEWS[number]["id"];
 
 const defaultQuantUi: QuantUiState = {
   symbol: "600519",
@@ -107,6 +115,10 @@ export function QuantWorkspace({
   const [drillHint, setDrillHint] = useState("");
   const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
   const [watchlistStatus, setWatchlistStatus] = useState("");
+  const [marketOverview, setMarketOverview] = useState<Record<string, any> | null>(null);
+  const [marketOverviewView, setMarketOverviewView] = useState<MarketOverviewView>("indices");
+  const [marketOverviewStatus, setMarketOverviewStatus] = useState("点击刷新后读取真实大盘数据");
+  const [marketOverviewBusy, setMarketOverviewBusy] = useState(false);
   const latest = bars.at(-1);
   const watchlistGroups = Array.isArray(ui.watchlistGroups) && ui.watchlistGroups.length
     ? ui.watchlistGroups
@@ -150,6 +162,36 @@ export function QuantWorkspace({
     const next = Object.fromEntries(entries.filter((entry) => entry[1]));
     setWatchlistQuotes(next);
     setWatchlistStatus(Object.keys(next).length ? `已更新 ${Object.keys(next).length} 只 · 真实行情` : "暂无可用行情");
+  };
+
+  const refreshMarketOverview = async () => {
+    if (!projectId || !window.codecn?.queryQuantMarketOverview) {
+      setMarketOverviewStatus("当前项目尚未连接大盘服务");
+      return;
+    }
+    setMarketOverviewBusy(true);
+    setMarketOverviewStatus("正在通过 Spring 读取 AKShare…");
+    try {
+      const result = await window.codecn.queryQuantMarketOverview({ projectId, limit: 20 });
+      setMarketOverview(result && typeof result === "object" ? result as Record<string, any> : null);
+      setMarketOverviewStatus("已读取真实大盘数据");
+    } catch (error) {
+      setMarketOverview(null);
+      setMarketOverviewStatus(`大盘服务暂不可用：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setMarketOverviewBusy(false);
+    }
+  };
+
+  const marketSection = marketOverview?.[marketOverviewView] as any;
+  const marketItems = Array.isArray(marketSection?.items) ? marketSection.items : [];
+  const formatMarketNumber = (value: unknown, digits = 2) => typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })
+    : "--";
+  const chooseTradableMarketSymbol = (value: unknown) => {
+    const code = String(value || "").trim();
+    if (!/^\d{6}$/u.test(code)) return;
+    setUi((current) => ({ ...current, symbol: code }));
   };
 
   useEffect(() => {
@@ -521,6 +563,20 @@ export function QuantWorkspace({
           </button>;
         })}
       </div>
+    </section>
+    <section className="brain-quant-market-overview" data-testid="brain-quant-market-overview">
+      <div className="brain-quant-section-title"><h3>大盘与板块</h3><button type="button" disabled={marketOverviewBusy} onClick={() => void refreshMarketOverview()}>{marketOverviewBusy ? "刷新中…" : "刷新大盘"}</button></div>
+      <div className="brain-quant-watchlist-groups">
+        {MARKET_OVERVIEW_VIEWS.map((view) => <button key={view.id} type="button" className={marketOverviewView === view.id ? "active" : ""} onClick={() => setMarketOverviewView(view.id)}>{view.label}</button>)}
+      </div>
+      <small className="brain-quant-market-overview-status">{marketOverviewStatus}{marketSection?.dataset ? ` · ${marketSection.dataset}` : ""}{marketSection?.fetchedAt ? ` · ${String(marketSection.fetchedAt).replace("T", " ").slice(0, 19)}` : ""}</small>
+      {marketSection?.error ? <div className="brain-quant-empty">该数据集读取失败：{String(marketSection.error)}</div> : null}
+      {!marketSection?.error && marketItems.length ? <div className="brain-quant-market-overview-list">
+        {marketItems.map((item: any, index: number) => <button key={`${marketOverviewView}-${item.code || item.name || index}`} type="button" onClick={() => chooseTradableMarketSymbol(item.code)} disabled={marketOverviewView !== "limitUps" || !/^\d{6}$/u.test(String(item.code || ""))}>
+          <span><strong>{item.name || item.code || "--"}</strong><small>{item.code || ""}</small></span>
+          {marketOverviewView === "fundFlows" ? <><em className={Number(item.mainNetInflow) >= 0 ? "positive" : "negative"}>{formatMarketNumber(item.mainNetInflow, 0)}</em><small>主力净流入 · {formatMarketNumber(item.mainNetInflowPercent)}%</small></> : <><em className={Number(item.changePercent) >= 0 ? "positive" : "negative"}>{typeof item.changePercent === "number" ? `${item.changePercent >= 0 ? "+" : ""}${formatMarketNumber(item.changePercent)}%` : "--"}</em><small>{marketOverviewView === "limitUps" ? `${item.industry || "未分类"}${item.limitUpCount ? ` · ${item.limitUpCount}连板` : ""}` : item.leadingStock ? `领涨 ${item.leadingStock}` : typeof item.price === "number" ? `最新 ${formatMarketNumber(item.price)}` : ""}</small></>}
+        </button>)}
+      </div> : !marketSection?.error ? <div className="brain-quant-empty">{marketOverview ? "该数据集暂无记录" : "尚未请求大盘数据"}</div> : null}
     </section>
     <section className="brain-quant-grid">
       <QuantMarketChart
