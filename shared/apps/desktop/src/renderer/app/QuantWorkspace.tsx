@@ -105,6 +105,8 @@ export function QuantWorkspace({
   const [skillRunBusy, setSkillRunBusy] = useState(false);
   const [dayPathBar, setDayPathBar] = useState<any | null>(null);
   const [drillHint, setDrillHint] = useState("");
+  const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
+  const [watchlistStatus, setWatchlistStatus] = useState("");
   const latest = bars.at(-1);
   const watchlistGroups = Array.isArray(ui.watchlistGroups) && ui.watchlistGroups.length
     ? ui.watchlistGroups
@@ -112,6 +114,48 @@ export function QuantWorkspace({
   const activeWatchlistGroup = watchlistGroups.find((group) => group.id === ui.activeWatchlistGroupId)
     || watchlistGroups[0];
   const isSymbolWatched = Boolean(activeWatchlistGroup?.symbols.includes(symbol));
+
+  const refreshWatchlistQuotes = async () => {
+    if (!projectId || !window.codecn?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
+      setWatchlistQuotes({});
+      return;
+    }
+    setWatchlistStatus("正在读取真实行情…");
+    const entries = await Promise.all(activeWatchlistGroup.symbols.map(async (item) => {
+      try {
+        const result = await window.codecn.queryQuantBars({
+          projectId,
+          query: { symbol: item, interval: "1d", adjustment: "none", startDate: startDate || undefined, endDate: endDate || undefined }
+        });
+        const bars = Array.isArray(result) ? result.filter((bar) => typeof bar?.close === "number") : [];
+        const latestBar = bars.at(-1);
+        const previousBar = bars.at(-2);
+        if (!latestBar) return [item, null] as const;
+        return [item, {
+          symbol: item,
+          timestamp: latestBar.timestamp,
+          price: latestBar.close,
+          changePercent: typeof latestBar.changePercent === "number"
+            ? latestBar.changePercent
+            : previousBar?.close ? ((latestBar.close - previousBar.close) / previousBar.close) * 100 : 0,
+          volume: latestBar.volume,
+          high: latestBar.high,
+          low: latestBar.low,
+          source: latestBar.source?.provider || "行情网关"
+        }] as const;
+      } catch {
+        return [item, null] as const;
+      }
+    }));
+    const next = Object.fromEntries(entries.filter((entry) => entry[1]));
+    setWatchlistQuotes(next);
+    setWatchlistStatus(Object.keys(next).length ? `已更新 ${Object.keys(next).length} 只 · 真实行情` : "暂无可用行情");
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void refreshWatchlistQuotes();
+  }, [hydrated, projectId, activeWatchlistGroup?.id, activeWatchlistGroup?.symbols.join(","), startDate, endDate]);
 
   const updateWatchlistGroups = (update: (groups: Array<{ id: string; name: string; symbols: string[] }>) => Array<{ id: string; name: string; symbols: string[] }>) => {
     setUi((current) => {
@@ -466,6 +510,16 @@ export function QuantWorkspace({
       <div className="brain-quant-watchlist-symbols">
         {activeWatchlistGroup?.symbols.length ? activeWatchlistGroup.symbols.map((item) => <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>{item}</button>) : <small>当前分组暂无股票</small>}
         {isSymbolWatched ? <button type="button" onClick={removeCurrentFromWatchlist}>移出当前分组</button> : <button type="button" onClick={addCurrentToWatchlist}>加入当前分组</button>}
+      </div>
+      <div className="brain-quant-watchlist-monitor-head"><strong>分组监控</strong><span>{watchlistStatus}</span><button type="button" onClick={() => void refreshWatchlistQuotes()}>刷新监控</button></div>
+      <div className="brain-quant-watchlist-monitor">
+        {activeWatchlistGroup?.symbols.map((item) => {
+          const quote = watchlistQuotes[item];
+          return <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>
+            <strong>{item}</strong>
+            {quote ? <><span>¥{Number(quote.price).toFixed(2)}</span><em className={quote.changePercent >= 0 ? "positive" : "negative"}>{quote.changePercent >= 0 ? "+" : ""}{Number(quote.changePercent).toFixed(2)}%</em><small>量 {Number(quote.volume).toLocaleString()}</small></> : <small>暂无真实数据</small>}
+          </button>;
+        })}
       </div>
     </section>
     <section className="brain-quant-grid">
