@@ -40,6 +40,19 @@ export type VideoAgentToolDependencies = {
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown) => String(value ?? "").trim();
+const TRUSTED_COS_HOST = /(?:^|\.)(?:cos\.[a-z0-9-]+\.myqcloud\.com|cos\.[a-z0-9-]+\.tencentcos\.cn)$/i;
+
+async function fetchGeneratedMedia(deps: VideoAgentToolDependencies, parsed: URL): Promise<Response> {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  try {
+    return await fetchImpl(parsed);
+  } catch (error) {
+    if (parsed.protocol !== "https:" || !TRUSTED_COS_HOST.test(parsed.hostname)) throw error;
+    const fallback = new URL(parsed);
+    fallback.protocol = "http:";
+    return fetchImpl(fallback);
+  }
+}
 
 function normalizePipeline(value: unknown): VideoPipelineState {
   const input = record(value);
@@ -57,7 +70,7 @@ function normalizePipeline(value: unknown): VideoPipelineState {
 async function persistGeneratedVideo(deps: VideoAgentToolDependencies, url: string, shotIndex: number) {
   const parsed = new URL(url);
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("BRAIN_VIDEO_MEDIA_URL_INVALID");
-  const response = await (deps.fetchImpl ?? fetch)(parsed);
+  const response = await fetchGeneratedMedia(deps, parsed);
   if (!response.ok) throw new Error(`BRAIN_VIDEO_MEDIA_DOWNLOAD_FAILED:${response.status}`);
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > 512 * 1024 * 1024) throw new Error("BRAIN_VIDEO_MEDIA_TOO_LARGE");
