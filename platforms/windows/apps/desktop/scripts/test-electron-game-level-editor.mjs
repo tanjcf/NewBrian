@@ -68,7 +68,7 @@ await waitFor("Boolean(document.querySelector('[data-testid=brain-game-level-emp
 assert.equal(await evaluate("!document.body.innerText.includes('山门解谜')"), true, "must not show demo levels");
 
 await waitFor("document.querySelector('button.level-add')?.disabled === false", 15_000);
-await evaluate("document.querySelector('button.level-add')?.click()");
+await evaluate("(() => { const button = [...document.querySelectorAll('button.level-add')].find((item) => item.offsetWidth > 0 && item.offsetHeight > 0 && !item.disabled); button?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return Boolean(button); })()");
 await waitFor("document.body.innerText.includes('LVL_New_1') || document.body.innerText.includes('新关卡')", 15_000);
 
 await evaluate("[...document.querySelectorAll('button')].find((item) => item.textContent?.includes('保存关卡状态'))?.click()");
