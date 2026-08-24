@@ -24,12 +24,9 @@ const steps: Array<{ key: MusicDawStep; label: string }> = [
   { key: "export", label: "导出" }
 ];
 
-const seedTracks: Track[] = [
-  { id: "vocal", name: "人声", clip: "Vocal · Verse → Chorus", start: 8, width: 62, muted: false },
-  { id: "guzheng", name: "古筝", clip: "Guzheng pad", start: 0, width: 88, muted: false },
-  { id: "drums", name: "鼓组", clip: "Drums · Chorus", start: 42, width: 48, muted: false },
-  { id: "strings", name: "弦乐", clip: "Strings swell", start: 20, width: 70, muted: false }
-];
+// Do not seed prototype tracks.  A DAW without a bound project must be empty;
+// tracks only appear after they are loaded from or generated into the project.
+const seedTracks: Track[] = [];
 
 const markers = [
   { name: "Verse", left: 8 },
@@ -39,9 +36,9 @@ const markers = [
 
 export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
   const [localStep, setLocalStep] = useState<MusicDawStep>("tracks");
-  const [title, setTitle] = useState("青丘行");
-  const [lyrics, setLyrics] = useState("[Verse]\n青山远黛 狐影成双\n烟霞深处 谁唱旧章\n\n[Chorus]\n一剑光寒 破晓青丘");
-  const [style, setStyle] = useState<unknown>("Epic Chinese orchestral, guzheng, cinematic drums, female vocal, 86 BPM");
+  const [title, setTitle] = useState("");
+  const [lyrics, setLyrics] = useState("");
+  const [style, setStyle] = useState<unknown>("");
   const [dawTracks, setDawTracks] = useState(seedTracks);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState<string[]>([]);
@@ -198,10 +195,10 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
     <section className="brain-music-daw" aria-label="音乐多轨工作台" data-testid="brain-music-daw-shell">
       <header className="brain-music-daw__header">
         <div>
-          <strong>青丘主题曲 · 音轨切片重合成</strong>
+          <strong>{title || "音乐工作台"}</strong>
           <span>{projectId ? `工程 ${projectId}` : "未绑定工程"} · {status}</span>
         </div>
-        <span className="brain-music-daw__summary">4 stems · 2:04 · 86 BPM</span>
+        <span className="brain-music-daw__summary">{dawTracks.length ? `${dawTracks.length} 音轨` : "暂无音轨"}</span>
       </header>
 
       <nav className="brain-music-daw__steps" aria-label="音乐功能">
@@ -241,7 +238,7 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
                 }
                 setStatus("请通过生成整曲或导入媒体添加真实音轨；不会创建空壳演示轨");
               }}>＋ 音轨</button>
-              <span>0:00 / 2:04 · 86 BPM</span>
+              <span>{dawTracks.length ? `${dawTracks.length} 音轨` : "暂无音轨"}</span>
             </div>
             {timeline()}
             {tracks()}
@@ -286,7 +283,7 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
               <label><input type="checkbox" defaultChecked /> 切片重合成</label>
               <label><input type="checkbox" /> stems.zip</label>
             </div>
-            <p>将导出 · 青丘行.mp3 + 青丘行_slice_remix.mp3</p>
+            <p>{title ? `将导出 · ${title}.mp3` : "填写标题并生成真实音频后导出"}</p>
             <button type="button" className="brain-music-daw__primary" onClick={() => void exportMix()}>保存并导出</button>
           </div>
         )}
