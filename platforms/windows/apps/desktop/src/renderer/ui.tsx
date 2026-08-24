@@ -231,7 +231,10 @@ export function App() {
     liveModelContentRef.current = liveModelContent;
   }, [liveModelContent]);
   const [liveReasoningSummaries, setLiveReasoningSummaries] = useState<Record<string, string>>({});
-  const [composerPermission, setComposerPermission] = useState<"full" | "approval" | "agent">("full");
+  // Start in the least-interactive safe mode.  Previously this started as
+  // `full` and was corrected by an effect after the first render, so a fast
+  // first submission could unexpectedly require extra approvals.
+  const [composerPermission, setComposerPermission] = useState<"full" | "approval" | "agent">("agent");
   const [composerWorkspaceContext, setComposerWorkspaceContext] = useState(true);
   const [selectedWorkspaceId, setSelectedWorkspaceIdState] = useState("");
   const [selectedThreadId, setSelectedThreadIdState] = useState("");
