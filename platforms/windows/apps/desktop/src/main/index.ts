@@ -7890,14 +7890,20 @@ function registerIpc() {
     ensureEngine: ensureDesktopEngine,
     ensureEnginesForScene: (workspaceKey) => ensureEnginesForWorkspaceKey(workspaceKey, ensureDesktopEngine),
     runSceneMediaGeneration: async (input) => {
-      let baseUrl = await readGatewayBaseUrl();
+      // Media tools must use the same local Spring instance as the visible
+      // development desktop. The control-plane model origin may point at a
+      // remote/older gateway that does not expose auto media routes.
+      const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+      let baseUrl = forcedMediaBase || (!app.isPackaged
+        ? "http://127.0.0.1:8790/v1"
+        : await readGatewayBaseUrl());
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
       }
-      if (authSelection.useGatewayBaseUrl) baseUrl = await readGatewayBaseUrl();
+      if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
       if (!bearerToken) throw new Error("媒体生成需要已登录的网关凭证。");
       if (!baseUrl) throw new Error("媒体生成需要已配置的模型网关地址。");
       const result = await executeMediaGenerationTurn({
@@ -8642,14 +8648,22 @@ function registerIpc() {
     }),
     runAgentLoop: (input) => modelChatAgentLoopService.run(input as never) as never,
     runMediaGeneration: async (input) => {
-      let baseUrl = await readGatewayBaseUrl();
+      // Keep chat-triggered media generation on the same development Spring
+      // instance as scene-triggered generation. Otherwise the model path can
+      // reach a remote/older gateway and incorrectly fall back to /videos.
+      const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+      let baseUrl = forcedMediaBase || (!app.isPackaged
+        ? "http://127.0.0.1:8790/v1"
+        : await readGatewayBaseUrl());
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
       }
-      if (authSelection.useGatewayBaseUrl) baseUrl = await readGatewayBaseUrl();
+      if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
+        baseUrl = await readGatewayBaseUrl();
+      }
       if (!bearerToken) {
         throw new Error("媒体生成需要已登录的网关凭证。");
       }

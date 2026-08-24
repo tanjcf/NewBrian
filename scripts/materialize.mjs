@@ -66,6 +66,16 @@ const metadata = {
 await writeFile(path.join(temporary, ".codecn-source.json"), `${JSON.stringify(metadata, null, 2)}\n`);
 
 async function publishMaterializedTree() {
+  // A Windows materialized workspace normally contains installed dependencies
+  // and may be open in Electron. Recursively deleting it can spend minutes
+  // traversing node_modules before eventually hitting a locked file. Overlay
+  // managed source in place instead; source-copy filters never write
+  // node_modules/release/tmp, so installed runtime dependencies stay intact.
+  if (target === "windows" && existsSync(output)) {
+    await cp(temporary, output, { recursive: true, force: true });
+    await rm(temporary, { recursive: true, force: true });
+    return "inplace";
+  }
   try {
     await rm(output, { recursive: true, force: true });
     await rename(temporary, output);
