@@ -27,7 +27,7 @@ export interface VideoRenderOptions {
 }
 export type VideoRenderInput = Omit<VideoRenderOptions, "acquireRustCore" | "confirmRender" | "prepareOutput" | "validateOutput" | "resolveFfmpegExecutable" | "platform" | "storage">;
 
-function buildVideoFfmpegArgs(media: string[], output: string, concatListRelative?: string, audioClips: Array<{ relativePath: string; startMs: number; volume: number }> = [], subtitleRelative?: string): string[] {
+function buildVideoFfmpegArgs(media: string[], output: string, concatListRelative?: string, audioClips: Array<{ relativePath: string; startMs: number; volume: number }> = [], subtitleRelative?: string, videoSettings?: { width: number; height: number; fps: number }): string[] {
   if (!media.length) {
     return [
       "-y",
@@ -44,7 +44,14 @@ function buildVideoFfmpegArgs(media: string[], output: string, concatListRelativ
     ? ["-y", "-i", media[0]!]
     : ["-y", "-f", "concat", "-safe", "0", "-i", concatListRelative!];
   for (const clip of audioClips) args.push("-i", clip.relativePath);
-  if (subtitleRelative) args.push("-vf", `subtitles='${subtitleRelative.replaceAll("'", "\\'")}'`);
+  const videoFilters: string[] = [];
+  if (videoSettings) {
+    videoFilters.push(`scale=${videoSettings.width}:${videoSettings.height}:force_original_aspect_ratio=decrease`);
+    videoFilters.push(`pad=${videoSettings.width}:${videoSettings.height}:(ow-iw)/2:(oh-ih)/2`);
+    videoFilters.push(`fps=${videoSettings.fps}`);
+  }
+  if (subtitleRelative) videoFilters.push(`subtitles='${subtitleRelative.replaceAll("'", "\\'")}'`);
+  if (videoFilters.length) args.push("-vf", videoFilters.join(","));
   if (audioClips.length) {
     const chains = audioClips.map((clip, index) => `[${index + 1}:a]adelay=${clip.startMs}|${clip.startMs},volume=${clip.volume}[audio${index}]`);
     const inputs = audioClips.map((_, index) => `[audio${index}]`).join("");
@@ -134,7 +141,11 @@ export class VideoRenderService {
       await mkdir(dirname(resolve(input.projectRoot, subtitleRelative)), { recursive: true });
       await writeFile(resolve(input.projectRoot, subtitleRelative), body, "utf8");
     }
-    const args = buildVideoFfmpegArgs(media, output, concatListRelative, audioClips, subtitleRelative);
+    const args = buildVideoFfmpegArgs(media, output, concatListRelative, audioClips, subtitleRelative, {
+      width: input.timeline.width,
+      height: input.timeline.height,
+      fps: input.timeline.fps
+    });
     const command = `${executable} ${args.join(" ")}`;
     if (!(await this.options.confirmRender({ projectId: input.projectId, command, outputRelativePath: output }))) throw new Error("BRAIN_VIDEO_RENDER_DECLINED");
     await this.options.prepareOutput?.(input.projectRoot, output);

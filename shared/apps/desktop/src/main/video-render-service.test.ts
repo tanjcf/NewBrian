@@ -122,6 +122,8 @@ test("video render mixes delayed audio and burns persisted subtitles", async () 
     assert.ok(args.includes("media/narration.mp3"));
     assert.match(args[args.indexOf("-filter_complex") + 1]!, /adelay=500\|500,volume=0\.8/);
     const subtitleFilter = args[args.indexOf("-vf") + 1]!;
+    assert.match(subtitleFilter, /scale=1920:1080/);
+    assert.match(subtitleFilter, /fps=30/);
     assert.match(subtitleFilter, /subtitles=/);
     const subtitlePath = subtitleFilter.match(/'([^']+)'/)?.[1];
     assert.ok(subtitlePath);
