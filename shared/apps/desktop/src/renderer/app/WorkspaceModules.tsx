@@ -539,6 +539,16 @@ export function WorkspaceModules(ctx: any) {
   const [brainRecentProjects, setBrainRecentProjects] = useState<any[]>([]);
   const [brainConversations, setBrainConversations] = useState<any[]>([]);
   const [brainMessages, setBrainMessages] = useState<any[]>([]);
+  // Each BRAIN conversation owns one native codeCN thread. Keeping this mapping
+  // prevents the Composer from reusing whichever project thread was selected last.
+  const [brainConversationThreads, setBrainConversationThreads] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem("codecn.brain.conversation-threads");
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch { return {}; }
+  });
+  const activatedBrainThreadRef = useRef("");
   const [brainDraft, setBrainDraft] = useState("");
   const [brainMessageBusy, setBrainMessageBusy] = useState(false);
   const [brainFiles, setBrainFiles] = useState<any[]>([]);
@@ -770,6 +780,9 @@ export function WorkspaceModules(ctx: any) {
     }));
   }, [selectedBrainProjectId, selectedBrainConversationId]);
   useEffect(() => {
+    try { localStorage.setItem("codecn.brain.conversation-threads", JSON.stringify(brainConversationThreads)); } catch { /* best effort */ }
+  }, [brainConversationThreads]);
+  useEffect(() => {
     void refreshBrainConversations(selectedBrainProjectId)
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)));
   }, [selectedBrainProjectId, selectedBrainWorkspaceKey, refreshBrainConversations]);
@@ -787,9 +800,39 @@ export function WorkspaceModules(ctx: any) {
       if (current?.startsWith("project-thread:") || current?.startsWith("chat:")) return current;
       return current === row ? current : row;
     });
-    // BRAIN 对话与「新建聊天」绝对定位 composer 互斥，避免输入框浮在右栏关卡编辑器上。
-    setIsComposingNewThread(false);
-  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, setIsComposingNewThread]);
+    // BRAIN conversations are backed by their own native threads. Never leave
+    // the previously selected project thread active while this effect runs.
+    const mappedThreadId = String(brainConversationThreads[selectedBrainConversationId] || "").trim();
+    // Guard same-id updates: setSelectedThreadId(same) used to re-activate the
+    // thread and re-enter this effect via snapshot updates (chat jump + busy cursor).
+    setSelectedThreadId((current) => (current === mappedThreadId ? current : mappedThreadId));
+    setIsComposingNewThread((current) => {
+      const next = !mappedThreadId;
+      return current === next ? current : next;
+    });
+    if (!mappedThreadId || !selectedWorkspace?.id || !api?.activateWorkspaceThread) {
+      activatedBrainThreadRef.current = "";
+      return;
+    }
+    const activationKey = `${selectedWorkspace.id}:${mappedThreadId}`;
+    if (activatedBrainThreadRef.current === activationKey) return;
+    activatedBrainThreadRef.current = activationKey;
+    void api.activateWorkspaceThread({
+      workspaceId: selectedWorkspace.id,
+      threadId: mappedThreadId
+    }).then((threadSnapshot) => {
+      if (activatedBrainThreadRef.current === activationKey) syncSnapshot(threadSnapshot, mappedThreadId);
+    }).catch((error) => {
+      if (activatedBrainThreadRef.current === activationKey) activatedBrainThreadRef.current = "";
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
+  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, selectedWorkspace?.id, api, syncSnapshot, setErrorMessage, setIsComposingNewThread, setSelectedThreadId]);
+  useEffect(() => {
+    if (!selectedBrainConversationId || isComposingNewThread || !selectedThreadId) return;
+    setBrainConversationThreads((current) => current[selectedBrainConversationId] === selectedThreadId
+      ? current
+      : { ...current, [selectedBrainConversationId]: selectedThreadId });
+  }, [selectedBrainConversationId, selectedThreadId, isComposingNewThread]);
   useEffect(() => {
     let disposed = false;
     if (!selectedBrainConversationId || !window.codecn?.listBrainMessages) {
@@ -4370,7 +4413,6 @@ function renderSidebarModule() {
   );
 
   const renderComposerPortal = (children: any) => {
-    if (isBrainConversationSelection && brainChatComposerHost) return createPortal(children, brainChatComposerHost);
     if (isNewChatMode && newChatComposerHost) return createPortal(children, newChatComposerHost);
     return children;
   };
@@ -4391,11 +4433,20 @@ function renderSidebarModule() {
       const attachmentNote = hasAttachments
         ? `\n\n[附件：${(draft?.images ?? composerImages).map((item: any) => item.name).join("、")}]`
         : "";
-      const userMessage = await window.codecn.appendBrainMessage({
+      // The native codeCN Thread is the execution source of truth.  Do not
+      // persist the user turn into the separate BRAIN conversation before
+      // sending it, otherwise one turn is written to two message stores.
+      // Keep an optimistic projection for the BRAIN panel only; the durable
+      // assistant projection is appended after the native turn completes.
+      const userMessage = {
+        id: `brain-local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         conversationId: selectedBrainConversationId,
-        role: "user",
-        content: content + attachmentNote
-      });
+        role: "user" as const,
+        content: content + attachmentNote,
+        createdAt: new Date().toISOString(),
+        sourceRefsJson: "[]",
+        requestId: ""
+      };
       const history = [...brainMessages, userMessage];
       setBrainMessages(history);
       setBrainDraft("");
@@ -4422,12 +4473,45 @@ function renderSidebarModule() {
       if (executionWorkspaceId !== selectedWorkspace?.id) {
         setSelectedWorkspaceId(executionWorkspaceId);
       }
+      let executionThreadId = String(selectedThread?.id || "").trim();
+      const executionWorkspace = workspaceCatalog.find((item: any) => item.id === executionWorkspaceId);
+      if (!executionThreadId || !executionWorkspace?.threads?.some((item: any) => item.id === executionThreadId)) {
+        const previousIds = new Set((executionWorkspace?.threads ?? []).map((item: any) => item.id));
+        const nextCatalog = await api.addWorkspaceThread({
+          workspaceId: executionWorkspaceId,
+          title: content.slice(0, 36) || "BRAIN 对话",
+          summary: "从 BRAIN 工作台对话自动创建的模型线程。",
+          scope: executionWorkspaceId === "workspace:internal-chat" ? "chat" : "project"
+        });
+        const nextWorkspace = nextCatalog.find((item: any) => item.id === executionWorkspaceId);
+        const createdThread = nextWorkspace?.threads?.find((item: any) => !previousIds.has(item.id));
+        executionThreadId = String(createdThread?.id || "").trim();
+        if (!executionThreadId) throw new Error("无法为当前 BRAIN 对话创建模型线程。");
+        setWorkspaceCatalog(nextCatalog);
+        setSelectedThreadId(executionThreadId);
+        const threadSnapshot = await api.activateWorkspaceThread({
+          workspaceId: executionWorkspaceId,
+          threadId: executionThreadId
+        });
+        syncSnapshot(threadSnapshot, executionThreadId);
+      }
       setChatStatus("BRAIN 正在处理…");
       const requestId = `brain-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const rustConversation = (window.codecn as any)?.rustConversation as undefined | ((input: any) => Promise<any>);
+      if (rustConversation) {
+        const rustBase = { projectId: executionWorkspaceId, workspaceType: "chat" };
+        const rustThread = await rustConversation({ ...rustBase, operation: "conversation.thread.get", payload: { thread_id: executionThreadId } }).catch(() => null);
+        if (!rustThread || rustThread.status !== "completed") {
+          await rustConversation({ ...rustBase, operation: "conversation.thread.create", payload: { thread_id: executionThreadId, title: content.slice(0, 36) || "BRAIN 对话" } }).catch(() => undefined);
+        }
+        await rustConversation({ ...rustBase, operation: "conversation.thread.activate", payload: { thread_id: executionThreadId } }).catch(() => undefined);
+        await rustConversation({ ...rustBase, operation: "conversation.turn.begin", payload: { thread_id: executionThreadId, turn_id: requestId } }).catch(() => undefined);
+        await rustConversation({ ...rustBase, operation: "conversation.turn.append_message", payload: { thread_id: executionThreadId, role: "user", content: userMessage.content } }).catch(() => undefined);
+      }
       const result = await api.chatWithModel({
         requestId,
         workspaceId: executionWorkspaceId,
-        threadId: selectedThread?.id,
+        threadId: executionThreadId,
         ...modelConfig,
         apiKey: "",
         disableResponseStorage: !desktopPreferences.configuration.saveResponses,
@@ -4444,16 +4528,20 @@ function renderSidebarModule() {
             ? [selectedComposerSkill.name]
             : [],
         composerModes: draft?.modes ?? [...composerModes],
-        messages: history
-          .filter((message) => message.role === "user" || message.role === "assistant")
-          .map((message) => ({
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            createdAt: message.createdAt
-          }))
+        // The active codeCN Thread already owns prior turns. Send only the
+        // new turn here; replaying BRAIN history caused duplicate messages.
+        messages: [{
+          id: userMessage.id,
+          role: "user",
+          content: userMessage.content,
+          createdAt: userMessage.createdAt
+        }]
       });
       const finalContent = String(result?.content || "").trim() || "本轮没有生成可见回复。";
+      if (rustConversation) {
+        await rustConversation({ projectId: executionWorkspaceId, workspaceType: "chat", operation: "conversation.turn.append_message", payload: { thread_id: executionThreadId, role: "assistant", content: finalContent } }).catch(() => undefined);
+        await rustConversation({ projectId: executionWorkspaceId, workspaceType: "chat", operation: "conversation.turn.finish", payload: { thread_id: executionThreadId } }).catch(() => undefined);
+      }
       const assistantMessage = await window.codecn.appendBrainMessage({
         conversationId: selectedBrainConversationId,
         role: "assistant",
@@ -4465,7 +4553,16 @@ function renderSidebarModule() {
       await refreshBrainConversations(selectedBrainProjectId);
       setChatStatus("BRAIN 回复成功。");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      const detail = error instanceof Error ? error.message : String(error);
+      setErrorMessage(detail);
+      if (window.codecn?.appendBrainMessage && selectedBrainConversationId) {
+        const failureMessage = await window.codecn.appendBrainMessage({
+          conversationId: selectedBrainConversationId,
+          role: "assistant",
+          content: `请求未能完成：${detail}`
+        }).catch(() => null);
+        if (failureMessage) setBrainMessages((current) => [...current, failureMessage]);
+      }
       setChatStatus("BRAIN 请求失败；已发送的用户消息仍保存在本地。");
     } finally {
       setBrainMessageBusy(false);
@@ -4473,15 +4570,10 @@ function renderSidebarModule() {
   }
 
   function submitComposerRequest(draft?: Parameters<typeof askModel>[0]) {
-    if (isBrainConversationSelection) {
-      void sendBrainMessage(draft ? {
-        question: draft.question,
-        images: draft.images,
-        skill: draft.skill,
-        modes: draft.modes
-      } : undefined);
-      return;
-    }
+    // BRAIN uses the native codeCN Composer/Thread path. The former
+    // sendBrainMessage path created a second conversation lifecycle and
+    // bypassed native turn, approval, tool, rollout, and recovery semantics.
+    // BRAIN context is supplied by the selected workspace/thread instead.
     void askModel(draft);
   }
 
@@ -4494,6 +4586,21 @@ function renderSidebarModule() {
             <strong>{selectedBrainConversation?.title || "新对话"}</strong>
           </div>
           <small>{selectedBrainProject?.name || "本地项目"} · 本地保存</small>
+          <div className="brain-chat-header-actions">
+            <button type="button" onClick={() => {
+              setActiveFeature("new-chat");
+              setNewThreadScope("chat");
+              setIsComposingNewThread(true);
+              setQuestion("");
+            }}>新建对话</button>
+            <button type="button" onClick={() => setProjectsCollapsed(false)}>项目管理</button>
+            {selectedThread && selectedWorkspace ? <>
+              <button type="button" onClick={() => void handleThreadMenuAction("pin", selectedWorkspace, selectedThread)}>
+                {pinnedThreadIds.has(selectedThread.id) ? "取消置顶" : "置顶"}
+              </button>
+              <button type="button" onClick={() => void handleThreadMenuAction("archive", selectedWorkspace, selectedThread)}>归档</button>
+            </> : null}
+          </div>
         </header>
         <div className="brain-chat-message-scroll">
           {!brainMessages.length ? (
@@ -4525,66 +4632,6 @@ function renderSidebarModule() {
         <div className="brain-chat-composer-slot" ref={setBrainChatComposerHost} />
       </main>
     );
-  }
-
-  async function generateBrainWorkspaceSection(input: {
-    title: string;
-    description: string;
-    prompts: string[];
-    jsonKeys?: string[];
-    existingContent?: string;
-    focusPrompt?: string;
-    format?: "markdown" | "json";
-  }) {
-    const boundWorkspaceId = String(selectedBrainProject?.localWorkspaceId || "").trim();
-    const activeWorkspaceId = String(selectedWorkspace?.id || "").trim();
-    const executionWorkspaceId = activeWorkspaceId && (!boundWorkspaceId || activeWorkspaceId === boundWorkspaceId)
-      ? activeWorkspaceId
-      : boundWorkspaceId || activeWorkspaceId;
-    if (!api?.chatWithModel || !executionWorkspaceId) {
-      throw new Error("当前没有可用的模型执行工作区，无法 AI 生成。");
-    }
-    const jsonKeys = input.jsonKeys?.length ? input.jsonKeys : input.prompts;
-    const jsonFields = input.format === "json"
-      ? `\n只输出一个 JSON 对象，键名必须使用：${jsonKeys.map((key) => `"${key}"`).join("、")}。每个键对应一段可直接编辑的中文策划正文。不要 Markdown 代码块，不要解释。`
-      : "";
-    const userContent = [
-      `请为当前游戏项目「${selectedBrainProject?.name || "未命名项目"}」生成「${input.title}」章节初稿。`,
-      `章节说明：${input.description}`,
-      input.focusPrompt
-        ? `本轮重点完善：${input.focusPrompt}。其他要点可简要带过，但 JSON/Markdown 结构仍需完整。`
-        : `必须覆盖这些要点：${input.prompts.join("、")}`,
-      input.existingContent?.trim() ? `可参考现有内容并完善：\n${input.existingContent.trim()}` : "",
-      input.format === "json"
-        ? jsonFields
-        : "输出 Markdown 正文，不要前言、总结或解释性段落。"
-    ].filter(Boolean).join("\n\n");
-    const result = await api.chatWithModel({
-      requestId: `brain-section-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-      workspaceId: executionWorkspaceId,
-      threadId: selectedThread?.id,
-      ...modelConfig,
-      apiKey: "",
-      disableResponseStorage: true,
-      permissionMode: composerPermission,
-      systemPrompt: [
-        modelConfig.systemPrompt,
-        `当前 BRAIN 工作台：${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}`,
-        `当前本地项目：${selectedBrainProject?.name || "未命名项目"}`,
-        "你是资深游戏策划。输出应可直接写入项目策划文档，并服务于后续代码与关卡实现。"
-      ].filter(Boolean).join("\n\n"),
-      selectedSkillNames: [],
-      composerModes: [...composerModes],
-      messages: [{
-        id: `section-user-${Date.now()}`,
-        role: "user",
-        content: userContent,
-        createdAt: new Date().toISOString()
-      }]
-    });
-    const content = String(result?.content || "").trim();
-    if (!content) throw new Error("模型没有返回可用内容。");
-    return content;
   }
 
   function renderBrainResourcePanel() {
@@ -4630,43 +4677,15 @@ function renderSidebarModule() {
         if (brainSceneTab === "level") return <GameLevelEditor projectId={selectedBrainProject?.id} />;
         if (["project", "assets"].includes(brainSceneTab)) return <GameWorkspace projectId={selectedBrainProject?.id} conversationId={selectedBrainConversationId || undefined} />;
         if (brainSceneTab === "design") {
-          return <WorkspaceSectionEditor
-            projectId={selectedBrainProject?.id}
-            workspaceKey="game"
-            sectionKey="design"
-            title="游戏策划"
-            description="定义核心体验、循环、规则与版本范围"
-            prompts={["核心体验", "核心循环", "玩家目标", "版本范围"]}
-            onGenerate={(focusPrompt) => generateBrainWorkspaceSection({
-              title: "游戏策划",
-              description: "定义核心体验、循环、规则与版本范围",
-              prompts: ["核心体验", "核心循环", "玩家目标", "版本范围"],
-              focusPrompt,
-              format: "markdown"
-            })}
-          />;
+          return <WorkspaceSectionEditor projectId={selectedBrainProject?.id} workspaceKey="game" sectionKey="design" title="游戏策划" description="定义核心体验、循环、规则与版本范围" prompts={["核心体验", "核心循环", "玩家目标", "版本范围"]} />;
         }
-        const gameSections: Record<string, { title: string; description: string; sectionKey: string; prompts: string[]; jsonKeys: string[] }> = {
-          world: { title: "角色与世界观", description: "维护世界规则、角色关系、势力与剧情线", sectionKey: "world", prompts: ["世界规则", "角色关系", "势力阵营", "剧情线"], jsonKeys: ["worldRules", "characters", "factions", "storylines"] },
-          combat: { title: "战斗设计", description: "管理玩家操作、敌人机制、数值目标与验证标准", sectionKey: "combat", prompts: ["玩家操作", "敌人机制", "数值目标", "验证标准"], jsonKeys: ["playerActions", "enemyMechanics", "numbers", "validation"] }
+        const gameSections: Record<string, { title: string; description: string; sectionKey: string }> = {
+          world: { title: "角色与世界观", description: "维护世界规则、角色关系、势力与剧情线", sectionKey: "world" },
+          combat: { title: "战斗设计", description: "管理玩家操作、敌人机制、数值目标与验证标准", sectionKey: "combat" }
         };
         const section = gameSections[brainSceneTab];
         return section
-          ? <GameDesignPanel
-              projectId={selectedBrainProject?.id}
-              workspaceKey="game"
-              sectionKey={section.sectionKey}
-              title={section.title}
-              description={section.description}
-              onGenerate={(focusPrompt) => generateBrainWorkspaceSection({
-                title: section.title,
-                description: section.description,
-                prompts: section.prompts,
-                jsonKeys: section.jsonKeys,
-                focusPrompt,
-                format: "json"
-              })}
-            />
+          ? <GameDesignPanel projectId={selectedBrainProject?.id} workspaceKey="game" sectionKey={section.sectionKey} title={section.title} description={section.description} />
           : renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "游戏制作");
       }
       if (selectedBrainWorkspaceKey === "video") {
@@ -5911,7 +5930,11 @@ function renderChatModule() {
                   void cancelCurrentModelRequest?.();
                   return;
                 }
-                if (!api || composerModelOptions.length === 0 || (!question.trim() && composerImages.length === 0)) return;
+                // The native Composer supports the configured `auto` model even
+                // while the optional model catalogue is still loading. Do not
+                // silently swallow the user's message just because that list is
+                // temporarily empty.
+                if (!api || (!question.trim() && composerImages.length === 0)) return;
                 void submitComposerRequest();
               }}
               onContextMenu={(event) => {
@@ -6289,7 +6312,7 @@ function renderChatModule() {
               <button
                 className={`send-btn${(isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0 ? " stop-btn" : ""}`}
                 data-testid="composer-send-button"
-                    disabled={!api || composerModelOptions.length === 0 || (!(isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0)}
+                    disabled={!api || (!(isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0)}
                 type="button"
                     title={(isGlobalModelBusy || brainMessageBusy) ? "当前对话正在处理中" : "发送"}
                 onClick={() => {
@@ -8049,14 +8072,7 @@ function renderWorkspaceModules() {
       return renderSettingsWorkspace();
     }
 
-    const mainModule = isBrainConversationSelection
-      ? <>
-          {renderBrainChatModule()}
-          <div className="brain-composer-portal-source" aria-hidden="true">
-            {renderChatModule()}
-          </div>
-        </>
-      : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
+    const mainModule = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection
         ? renderChatModule()
