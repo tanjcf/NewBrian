@@ -17,6 +17,8 @@ type QuantUiState = {
   /** One-time migration tag so legacy short ranges pick up the 12-month default once. */
   dateRangePreset?: string;
   notes: Array<{ id: string; title: string; content: string; symbol?: string; createdAt: string }>;
+  watchlistGroups: Array<{ id: string; name: string; symbols: string[] }>;
+  activeWatchlistGroupId: string;
 };
 
 const DATE_RANGE_PRESET = "end-today-start-12m";
@@ -29,6 +31,8 @@ const defaultQuantUi: QuantUiState = {
   endDate: "",
   quantity: 100,
   notes: [],
+  watchlistGroups: [{ id: "default", name: "默认自选", symbols: ["600519"] }],
+  activeWatchlistGroupId: "default",
   dateRangePreset: DATE_RANGE_PRESET
 };
 
@@ -102,6 +106,44 @@ export function QuantWorkspace({
   const [dayPathBar, setDayPathBar] = useState<any | null>(null);
   const [drillHint, setDrillHint] = useState("");
   const latest = bars.at(-1);
+  const watchlistGroups = Array.isArray(ui.watchlistGroups) && ui.watchlistGroups.length
+    ? ui.watchlistGroups
+    : defaultQuantUi.watchlistGroups;
+  const activeWatchlistGroup = watchlistGroups.find((group) => group.id === ui.activeWatchlistGroupId)
+    || watchlistGroups[0];
+  const isSymbolWatched = Boolean(activeWatchlistGroup?.symbols.includes(symbol));
+
+  const updateWatchlistGroups = (update: (groups: Array<{ id: string; name: string; symbols: string[] }>) => Array<{ id: string; name: string; symbols: string[] }>) => {
+    setUi((current) => {
+      const currentGroups = Array.isArray(current.watchlistGroups) && current.watchlistGroups.length
+        ? current.watchlistGroups
+        : defaultQuantUi.watchlistGroups;
+      return { ...current, watchlistGroups: update(currentGroups) };
+    });
+  };
+
+  const addCurrentToWatchlist = () => {
+    const normalized = symbol.trim();
+    if (!normalized || !activeWatchlistGroup) return;
+    updateWatchlistGroups((groups) => groups.map((group) => group.id === activeWatchlistGroup.id && !group.symbols.includes(normalized)
+      ? { ...group, symbols: [...group.symbols, normalized] }
+      : group));
+  };
+
+  const removeCurrentFromWatchlist = () => {
+    if (!activeWatchlistGroup) return;
+    updateWatchlistGroups((groups) => groups.map((group) => group.id === activeWatchlistGroup.id
+      ? { ...group, symbols: group.symbols.filter((item) => item !== symbol) }
+      : group));
+  };
+
+  const createWatchlistGroup = () => {
+    const name = window.prompt("自选股分组名称", "新分组")?.trim();
+    if (!name) return;
+    const id = `watchlist-${Date.now()}`;
+    updateWatchlistGroups((groups) => [...groups, { id, name, symbols: [] }]);
+    setUi((current) => ({ ...current, activeWatchlistGroupId: id }));
+  };
 
   useEffect(() => {
     setDayPathBar(null);
@@ -415,6 +457,16 @@ export function QuantWorkspace({
       <label>开始日期<input type="date" value={startDate} onChange={(event) => setUi((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label>结束日期<input type="date" value={endDate} onChange={(event) => setUi((current) => ({ ...current, endDate: event.target.value }))} /></label>
       <button type="button" onClick={() => setQueryVersion((value) => value + 1)}>查询行情</button>
+    </section>
+    <section className="brain-quant-watchlist" data-testid="brain-quant-watchlist">
+      <div className="brain-quant-section-title"><h3>自选股</h3><button type="button" onClick={createWatchlistGroup}>新建分组</button></div>
+      <div className="brain-quant-watchlist-groups">
+        {watchlistGroups.map((group) => <button key={group.id} type="button" className={group.id === activeWatchlistGroup?.id ? "active" : ""} onClick={() => setUi((current) => ({ ...current, activeWatchlistGroupId: group.id, symbol: group.symbols[0] || current.symbol }))}>{group.name} <em>{group.symbols.length}</em></button>)}
+      </div>
+      <div className="brain-quant-watchlist-symbols">
+        {activeWatchlistGroup?.symbols.length ? activeWatchlistGroup.symbols.map((item) => <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>{item}</button>) : <small>当前分组暂无股票</small>}
+        {isSymbolWatched ? <button type="button" onClick={removeCurrentFromWatchlist}>移出当前分组</button> : <button type="button" onClick={addCurrentToWatchlist}>加入当前分组</button>}
+      </div>
     </section>
     <section className="brain-quant-grid">
       <QuantMarketChart
