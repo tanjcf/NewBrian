@@ -33,6 +33,25 @@ export function filterWorkspaceCatalogByScene(
   return workspaces.filter((workspace) => resolveCatalogBrainWorkspaceKey(workspace) === sceneKey);
 }
 
+/**
+ * Resolve an execution workspace without ever borrowing a project from another
+ * BRAIN scene. A missing scene project is an explicit empty state, not a reason
+ * to fall back to the globally active workspace.
+ */
+export function resolveSceneExecutionWorkspace<T extends Pick<WorkspaceCatalogItem, "id" | "brainWorkspaceKey">>(
+  workspaces: readonly T[],
+  sceneKey: BrainWorkspaceKey,
+  boundWorkspaceId: string | null | undefined,
+  activeWorkspaceId: string | null | undefined
+): T | undefined {
+  const boundId = String(boundWorkspaceId || "").trim();
+  const activeId = String(activeWorkspaceId || "").trim();
+  const belongsToScene = (workspace: T | undefined) =>
+    workspace && resolveCatalogBrainWorkspaceKey(workspace) === sceneKey ? workspace : undefined;
+  return belongsToScene(workspaces.find((workspace) => workspace.id === boundId))
+    ?? belongsToScene(workspaces.find((workspace) => workspace.id === activeId));
+}
+
 export function catalogWorkspaceRecencyMs(workspace: Pick<WorkspaceCatalogItem, "threads">) {
   let latest = 0;
   for (const thread of workspace.threads ?? []) {

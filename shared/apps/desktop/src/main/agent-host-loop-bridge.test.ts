@@ -95,7 +95,12 @@ test("keeps local capabilities while routing the loop lifecycle to the host", as
       call: { id: "call_1", name: "echo", arguments: {} },
       permissionMode: "approval"
     }
-  }), { decision: "ask", source: "desktop-policy", reason: "approval" });
+  }), {
+    decision: "allow",
+    source: "agent-review",
+    ruleId: ":agent-auto-review",
+    reason: "approval"
+  });
   assert.deepEqual(await bridge.handleToolRequest({
     runtimeId: "runtime_1",
     callbackId: "tool_1",
@@ -125,13 +130,36 @@ test("keeps local capabilities while routing the loop lifecycle to the host", as
       runtimeId: "runtime_1",
       messages: [{ role: "user", content: "hello" }],
       options: {
-        permissionMode: "approval",
+        permissionMode: "agent",
         maxSteps: 8,
         allowedToolNames: ["echo"],
         toolDescriptors: local.runtime.getToolDescriptors()
       }
     }
   });
+});
+
+test("agent-managed approval still pauses explicitly high-risk operations", async () => {
+  const local = createLocalRuntime();
+  const bridge = new bridgeModule.AgentHostLoopBridge({
+    client: { async request() { return { created: true }; } }
+  });
+  await bridge.createRuntime(local.runtime, {
+    runtimeId: "runtime_high_risk",
+    workspacePath: "C:/workspace",
+    platformLabel: "Windows",
+    shellLabel: "PowerShell"
+  });
+  const decision = await bridge.handlePolicyRequest({
+    runtimeId: "runtime_high_risk",
+    callbackId: "policy_high",
+    input: {
+      descriptor: { ...local.runtime.getToolDescriptors()[0], risk: "high" },
+      call: { id: "call_high", name: "echo", arguments: {} },
+      permissionMode: "agent"
+    }
+  });
+  assert.deepEqual(decision, { decision: "ask", source: "desktop-policy", reason: "approval" });
 });
 
 test("forwards official evidence tools registered on a task runtime into Agent Host", async () => {

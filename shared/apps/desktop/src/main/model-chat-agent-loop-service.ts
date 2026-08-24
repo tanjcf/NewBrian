@@ -862,7 +862,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
     const ordinaryChatFastPath = !governmentEnabled && !nativeArtifactRequested && !resilientGoalMode;
     let softStoppedDueToMaxSteps = false;
     const startLoop = (messages: AgentMessage[]) => input.runtime.startAgentLoop(messages, {
-      permissionMode: input.modelInput.permissionMode ?? "approval",
+      permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent",
       // Government writing delegates outline/draft rendering to dedicated stages. Keep the
       // exploratory material-reading loop bounded so a model cannot burn dozens of steps
       // updating the plan without ever presenting the required outline decision.
@@ -1379,7 +1379,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
           ? { targetPath, title, content: artifactContent }
           : { targetPath, format, title, content: artifactContent };
         const createResult = await input.runtime.invokeTool(createTool, createArgs, {
-          permissionMode: input.modelInput.permissionMode ?? "approval", approved: true
+          permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
         });
         const createEvent = { type: "tool_result", payload: { callId: `native-${format}-${Date.now()}`, name: createTool, result: createResult } };
         input.runtime.sessionMachine.events.push(createEvent);
@@ -1391,7 +1391,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         flushDurableBoundary();
         if (!createResult.ok) throw new Error(`Native ${format.toUpperCase()} creation failed: ${createResult.output ?? "unknown error"}`);
         const inspectResult = await input.runtime.invokeTool("artifact.inspect", { targetPath }, {
-          permissionMode: input.modelInput.permissionMode ?? "approval", approved: true
+          permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
         });
         const inspectEvent = { type: "tool_result", payload: { callId: `native-${format}-inspect-${Date.now()}`, name: "artifact.inspect", result: inspectResult } };
         input.runtime.sessionMachine.events.push(inspectEvent);

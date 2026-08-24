@@ -12,7 +12,13 @@ const validInput = {
 test("normalizes a valid bounded model chat request", () => {
   const parsed = parseModelChatInput(validInput);
   assert.equal(parsed.messages[0]?.content, "hello");
-  assert.equal(parsed.permissionMode, undefined);
+  assert.equal(parsed.permissionMode, "agent");
+});
+
+test("migrates the removed approval tier to agent-managed approval", () => {
+  assert.equal(parseModelChatInput({ ...validInput, permissionMode: "approval" }).permissionMode, "agent");
+  assert.equal(parseModelChatInput({ ...validInput, permissionMode: "agent" }).permissionMode, "agent");
+  assert.equal(parseModelChatInput({ ...validInput, permissionMode: "full" }).permissionMode, "full");
 });
 
 test("rejects malformed and oversized model chat requests", () => {

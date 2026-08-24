@@ -28,7 +28,7 @@ import { projectPersistedActivities } from "./persisted-activity-policy";
 import { groupActivitiesByUserMessage, resolveActiveReasoningRequestId } from "./thread-activity-policy";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import { resolveLocalArtifactHref } from "./local-file-link";
-import { chatWorkspaces, crossSceneRecentProjects, filterWorkspaceCatalogByScene, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveUserVisibleThreadSelection } from "./workspace-visibility";
+import { chatWorkspaces, crossSceneRecentProjects, filterWorkspaceCatalogByScene, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection } from "./workspace-visibility";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
@@ -642,6 +642,24 @@ export function WorkspaceModules(ctx: any) {
     });
     setSelectedBrainProjectId(nextCatalog.projectId);
     setSelectedBrainConversationId(nextCatalog.conversationId);
+    // Composer choices belong to the outgoing scene/thread. Keeping them here
+    // can load a game project Skill into a video conversation.
+    setSelectedComposerSkill(null);
+    setSelectedComposerTools([]);
+    setComposerSkillContext("");
+    setComposerModes([]);
+    const nextWorkspace = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, workspaceKey)[0];
+    if (nextWorkspace) {
+      setSelectedWorkspaceId(nextWorkspace.id);
+      const nextThreadId = resolveUserVisibleThreadSelection(nextWorkspace.threads, null)?.id || "";
+      setSelectedThreadId(nextThreadId);
+      setIsComposingNewThread(!nextThreadId);
+    } else {
+      // The parent may retain its last global workspace selection, but it must
+      // not retain an executable thread for the newly selected empty scene.
+      setSelectedThreadId("");
+      setIsComposingNewThread(true);
+    }
     if (nextCatalog.conversationId) {
       setSelectedSidebarRow(`brain-conversation:${nextCatalog.conversationId}`);
     } else if (nextCatalog.projectId) {
@@ -656,7 +674,7 @@ export function WorkspaceModules(ctx: any) {
     setSearchFilePreview(null);
     setPreviewMode("empty");
     setPreviewPlacement("hidden");
-  }, [activeFeature, selectedBrainProjectId, selectedBrainConversationId, setActiveFeature, setPreviewMode, setPreviewPlacement, setSearchFilePreview]);
+  }, [activeFeature, selectedBrainProjectId, selectedBrainConversationId, setActiveFeature, setComposerModes, setComposerSkillContext, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedComposerSkill, setSelectedComposerTools, setSelectedThreadId, setSelectedWorkspaceId, visibleWorkspaceCatalog]);
   useEffect(() => {
     const sceneProjects = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
     if (!sceneProjects.length) {
@@ -4422,6 +4440,19 @@ function renderSidebarModule() {
     const hasAttachments = (draft?.images?.length ?? composerImages.length) > 0;
     if ((!content && !hasAttachments) || brainMessageBusy || !selectedBrainConversationId || !selectedBrainProjectId) return;
     if (!window.codecn?.appendBrainMessage) return;
+    const executionWorkspace = resolveSceneExecutionWorkspace(
+      normalizeWorkspaceCatalog(workspaceCatalog),
+      selectedBrainWorkspaceKey,
+      selectedBrainProject?.localWorkspaceId,
+      selectedWorkspace?.id
+    );
+    const executionWorkspaceId = executionWorkspace?.id || "";
+    if (!api?.chatWithModel || !executionWorkspaceId) {
+      const message = `当前“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景尚未创建或绑定项目，未向其他场景发送。`;
+      setErrorMessage(message);
+      setChatStatus(message);
+      return;
+    }
     setBrainMessageBusy(true);
     setErrorMessage("");
     try {
@@ -4453,23 +4484,10 @@ function renderSidebarModule() {
         content: ""
       });
 
-      const executionWorkspaceId = (() => {
-        const boundWorkspaceId = String(selectedBrainProject?.localWorkspaceId || "").trim();
-        const activeWorkspaceId = String(selectedWorkspace?.id || "").trim();
-        if (activeWorkspaceId && (!boundWorkspaceId || activeWorkspaceId === boundWorkspaceId)) {
-          return activeWorkspaceId;
-        }
-        return boundWorkspaceId || activeWorkspaceId;
-      })();
-      if (!api?.chatWithModel || !executionWorkspaceId) {
-        setChatStatus("消息已保存在本地；当前没有可用的模型执行工作区。");
-        return;
-      }
       if (executionWorkspaceId !== selectedWorkspace?.id) {
         setSelectedWorkspaceId(executionWorkspaceId);
       }
       let executionThreadId = String(selectedThread?.id || "").trim();
-      const executionWorkspace = workspaceCatalog.find((item: any) => item.id === executionWorkspaceId);
       if (!executionThreadId || !executionWorkspace?.threads?.some((item: any) => item.id === executionThreadId)) {
         const previousIds = new Set((executionWorkspace?.threads ?? []).map((item: any) => item.id));
         const nextCatalog = await api.addWorkspaceThread({
@@ -4569,6 +4587,27 @@ function renderSidebarModule() {
     // sendBrainMessage path created a second conversation lifecycle and
     // bypassed native turn, approval, tool, rollout, and recovery semantics.
     // BRAIN context is supplied by the selected workspace/thread instead.
+    const sceneWorkspace = resolveSceneExecutionWorkspace(
+      normalizeWorkspaceCatalog(workspaceCatalog),
+      selectedBrainWorkspaceKey,
+      selectedBrainProject?.localWorkspaceId,
+      selectedWorkspace?.id
+    );
+    if (!sceneWorkspace) {
+      const message = `当前“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景尚未创建或绑定项目，请先新建该场景项目。为避免上下文串场，本次请求未发送。`;
+      setErrorMessage(message);
+      setChatStatus(message);
+      return;
+    }
+    if (sceneWorkspace.id !== selectedWorkspace?.id) {
+      setSelectedWorkspaceId(sceneWorkspace.id);
+      const threadId = resolveUserVisibleThreadSelection(sceneWorkspace.threads, null)?.id || "";
+      setSelectedThreadId(threadId);
+      setIsComposingNewThread(!threadId);
+      const message = `已切换到“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景项目，请再次发送。`;
+      setChatStatus(message);
+      return;
+    }
     void askModel(draft);
   }
 

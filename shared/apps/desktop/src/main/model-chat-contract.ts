@@ -68,7 +68,9 @@ export function parseModelChatInput(value: unknown): ModelChatInput {
     reviewModel: text(input.reviewModel, "Review model", 512) ?? "",
     reasoningEffort: input.reasoningEffort,
     disableResponseStorage: input.disableResponseStorage,
-    permissionMode: input.permissionMode,
+    // `approval` is a removed legacy UI tier. Preserve wire compatibility for
+    // old persisted turns while executing them with agent-managed approval.
+    permissionMode: input.permissionMode === "full" ? "full" : "agent",
     systemPrompt: text(input.systemPrompt, "System prompt", 1_048_576) ?? "",
     toolContext: text(input.toolContext, "Tool context", 1_048_576, true),
     selectedSkillNames,

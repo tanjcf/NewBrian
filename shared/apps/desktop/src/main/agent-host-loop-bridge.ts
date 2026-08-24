@@ -130,7 +130,7 @@ function toHostedToolDescriptor(descriptor: LocalToolDescriptor) {
 
 function loopOptions(runtime: LocalRuntime, options: Record<string, unknown>) {
   return {
-    permissionMode: options.permissionMode ?? "approval",
+    permissionMode: options.permissionMode === "full" ? "full" : "agent",
     maxSteps: options.maxSteps,
     allowedToolNames: options.allowedToolNames,
     toolDescriptors: runtime.getToolDescriptors().map(toHostedToolDescriptor)
@@ -234,12 +234,29 @@ export class AgentHostLoopBridge {
     };
     return withCallbackProgressHeartbeat(
       callback.reportProgress,
-      async () =>
-        entry.localRuntime.evaluateToolPolicy(
+      async () => {
+        const permissionMode = input.permissionMode === "full" ? "full" : "agent";
+        const evaluated = await entry.localRuntime.evaluateToolPolicy(
           input.descriptor,
           input.call.arguments,
-          input.permissionMode
-        ),
+          permissionMode
+        ) as { decision?: string; source?: string; ruleId?: string; reason?: string };
+        // "替我审批" is an active auto-review tier: low/medium requests that
+        // policy classified as `ask` are approved by the agent. Hard denies
+        // and explicitly high-risk operations still stop at the user boundary.
+        if (permissionMode === "agent"
+          && evaluated?.decision === "ask"
+          && String(input.descriptor.risk || "low").toLowerCase() !== "high") {
+          return {
+            ...evaluated,
+            decision: "allow",
+            source: "agent-review",
+            ruleId: evaluated.ruleId || ":agent-auto-review",
+            reason: evaluated.reason || "Agent-managed approval accepted a low/medium-risk operation."
+          };
+        }
+        return evaluated;
+      },
       callback.progressHeartbeatMs
     );
   }

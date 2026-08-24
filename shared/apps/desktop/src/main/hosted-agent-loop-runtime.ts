@@ -107,7 +107,7 @@ export class HostedAgentLoopRuntime {
   }
 
   private createLoop(options: HostedLoopOptions) {
-    const permissionMode = options.permissionMode ?? "approval";
+    const permissionMode = options.permissionMode === "full" ? "full" : "agent";
     const toolRegistry = createToolRegistry(
       this.options.runtimeId,
       options.toolDescriptors ?? [],

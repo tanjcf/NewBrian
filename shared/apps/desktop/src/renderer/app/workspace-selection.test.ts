@@ -39,6 +39,18 @@ test("switchBrainWorkspace restores sidebar selection from target scene catalog"
   assert.doesNotMatch(source, /switchBrainWorkspace[\s\S]*setBrainConversations\(\[\]\)/);
 });
 
+test("scene switching clears outgoing composer Skill and never submits into another scene", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const switchSource = source.slice(source.indexOf("const switchBrainWorkspace"), source.indexOf("useEffect(() => {\n    const sceneProjects"));
+  const submitSource = source.slice(source.indexOf("function submitComposerRequest"), source.indexOf("function renderBrainChatModule"));
+  assert.match(switchSource, /setSelectedComposerSkill\(null\)/);
+  assert.match(switchSource, /setSelectedComposerTools\(\[\]\)/);
+  assert.match(switchSource, /setSelectedThreadId\(""\)/);
+  assert.match(submitSource, /resolveSceneExecutionWorkspace/);
+  assert.match(submitSource, /本次请求未发送/);
+  assert.doesNotMatch(source, /boundWorkspaceId \|\| activeWorkspaceId/);
+});
+
 test("switchBrainWorkspace persists the outgoing scene catalog before restoring the target scene", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /rememberBrainWorkspaceCatalog\(current, current\.selectedWorkspaceKey,/);

@@ -107,8 +107,11 @@ export async function executeMediaGenerationTurn(
     kind: input.kind,
     toolName: input.toolName
   });
-  const preferServerTools = input.mediaExecution !== "client"
-    && toolName != null
+  // image_generate/video_generate are server-owned Spring Auto tools. An
+  // orchestrator's historical `execution: client` hint describes who starts
+  // the call; it must not bypass Auto and send the desktop to legacy
+  // /images/generations or /videos routes.
+  const preferServerTools = toolName != null
     && (input.kind === "image" || input.kind === "video");
   const rememberJobId = (job: GenerationJobSnapshot) => {
     const mediaJobId = String(job.id || "").trim();

@@ -175,6 +175,38 @@ test("executeMediaGenerationTurn prefers Auto tools then falls back on 404", asy
   assert.match(result.content, /legacy\.png/);
 });
 
+test("executeMediaGenerationTurn keeps client-hinted video on Spring Auto tools", async () => {
+  const calls: string[] = [];
+  const result = await executeMediaGenerationTurn({
+    gatewayBaseUrl: "http://127.0.0.1:8790/v1",
+    bearerToken: "secret",
+    kind: "video",
+    model: "hy3",
+    prompt: "青石谷清晨入口宣传片",
+    requestId: "req-client-hint",
+    mediaExecution: "client",
+    toolName: "video_generate",
+    fetchImpl: (async (url, init) => {
+      calls.push(`${String(init?.method || "GET").toUpperCase()} ${url}`);
+      if (String(url).includes("/auto/tools/invoke")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          job_id: "job-client-hint",
+          tool: "video_generate",
+          state: "SUCCEEDED",
+          result_json: JSON.stringify({ url: "https://cdn.example/qingshigu.mp4" }),
+          reply: "视频已生成 https://cdn.example/qingshigu.mp4"
+        }), { status: 200 });
+      }
+      return new Response("legacy route must not be called", { status: 500 });
+    }) as typeof fetch
+  });
+  assert.equal(result.via, "auto_tools");
+  assert.match(result.content, /qingshigu\.mp4/);
+  assert.ok(calls.some((item) => item.includes("/auto/tools/invoke")));
+  assert.equal(calls.some((item) => /\/videos(?:\s|$|\?)/.test(item)), false);
+});
+
 test("runMediaGenerationJob posts then polls until succeeded", async () => {
   const calls: string[] = [];
   const fetchImpl = async (url: string, init?: RequestInit) => {
