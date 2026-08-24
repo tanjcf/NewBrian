@@ -105,6 +105,8 @@ import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { GameRuntimeService } from "./game-runtime-service.js";
 import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
+import { VideoRuntimeService } from "./video-runtime-service.js";
+import { registerVideoAgentTools } from "./video-agent-tools.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { MusicMediaService } from "./music-media-service.js";
 import { MusicRenderService } from "./music-render-service.js";
@@ -231,6 +233,7 @@ import {
 import {
   executeMediaGenerationTurn
 } from "./media-generation-turn.js";
+import { extractMediaUrlsFromResult } from "./media-generation-gateway.js";
 import {
   formatBridgedImageText,
   resolvePreferredBridgeVisionModelFromEnv,
@@ -8552,6 +8555,55 @@ function registerIpc() {
       registerWorkspaceMediaAgentTools(targetRuntime);
       if (workspace.brainWorkspaceKey === "game") {
         registerGameRuntimeTools(targetRuntime, workspace.id, workspace.path);
+      }
+      if (workspace.brainWorkspaceKey === "video") {
+        const ownerId = await resolveBrainLocalOwnerId();
+        const videoProject = brainWorkspaceStorage.listProjects({
+          ownerId,
+          workspaceKey: "video"
+        }).find((project) => project.localWorkspaceId === workspace.id);
+        if (videoProject) {
+          registerVideoAgentTools(targetRuntime, {
+            ownerId: resolveBrainLocalOwnerId,
+            projectId: videoProject.id,
+            projectRoot: workspace.path,
+            storage: brainWorkspaceStorage,
+            videoRuntime: new VideoRuntimeService((binding) => getRustCoreService().acquire(binding)),
+            timeline: videoTimelineService,
+            render: videoRenderService,
+            generateVideo: async ({ prompt, model }) => {
+              const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+              let baseUrl = forcedMediaBase || (!app.isPackaged
+                ? "http://127.0.0.1:8790/v1"
+                : await readGatewayBaseUrl());
+              const authState = await readDesktopAuthState();
+              const authSelection = selectModelRequestAuth(authState, "");
+              let bearerToken = authSelection.bearerToken;
+              if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+                bearerToken = "codecn-e2e";
+              }
+              if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
+                baseUrl = await readGatewayBaseUrl();
+              }
+              if (!bearerToken) throw new Error("视频生成需要已登录的网关凭证。");
+              if (!baseUrl) throw new Error("视频生成需要已配置的模型网关地址。");
+              const result = await executeMediaGenerationTurn({
+                gatewayBaseUrl: baseUrl,
+                bearerToken,
+                kind: "video",
+                model: model || "",
+                prompt,
+                requestId: `video-agent-${videoProject.id}-${Date.now()}`,
+                workspaceId: workspace.id,
+                threadId: thread.id,
+                toolName: "video_generate"
+              });
+              const url = extractMediaUrlsFromResult(result.job.resultJson)[0];
+              if (!url) throw new Error("BRAIN_VIDEO_GENERATION_OUTPUT_MISSING");
+              return { url, providerResult: { job: result.job, via: result.via } };
+            }
+          });
+        }
       }
       // Stock/market questions can be asked from any BRAIN conversation, not
       // only from the Quant workspace. Keep the read-only AKShare route
