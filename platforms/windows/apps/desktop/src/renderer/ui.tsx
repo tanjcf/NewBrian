@@ -838,37 +838,10 @@ export function App() {
     });
   }, [api]);
   useEffect(() => {
-    if (!api?.getAppUpdateStatus || !isAuthenticated) return;
-    let canceled = false;
-    const refresh = async () => {
-      try {
-        const status = await api.getAppUpdateStatus();
-        if (!canceled) setAppUpdateStatus(status);
-      } catch {
-        // Offline or gateway unavailable: keep last known status.
-      }
-    };
-    const refreshIfVisible = () => {
-      if (!shouldRefreshAppUpdateOnWindowSignal({
-        isAuthenticated: true,
-        documentHidden: document.hidden
-      })) {
-        return;
-      }
-      void refresh();
-    };
-    void refresh();
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, APP_UPDATE_STATUS_POLL_MS);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", refreshIfVisible);
-    return () => {
-      canceled = true;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
-    };
+    // App/control-plane status is refreshed only by an explicit update action.
+    // Automatic polling is disabled while the remote control plane is not a
+    // production-ready user-facing feature.
+    return;
   }, [api, isAuthenticated]);
   async function startDesktopAppUpdate() {
     if (!api?.startAppUpdate || appUpdateBusy) return;
