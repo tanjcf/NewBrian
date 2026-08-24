@@ -68,7 +68,10 @@ await waitFor("Boolean(document.querySelector('[data-testid=brain-game-level-emp
 assert.equal(await evaluate("!document.body.innerText.includes('山门解谜')"), true, "must not show demo levels");
 
 await waitFor("document.querySelector('button.level-add')?.disabled === false", 15_000);
-await evaluate("(() => { const button = [...document.querySelectorAll('button.level-add')].find((item) => item.offsetWidth > 0 && item.offsetHeight > 0 && !item.disabled); button?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return Boolean(button); })()");
+const addRect = await evaluate("(() => { const button = [...document.querySelectorAll('button.level-add')].find((item) => item.offsetWidth > 0 && item.offsetHeight > 0 && !item.disabled); if (!button) return null; const rect = button.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; })()");
+assert.ok(addRect, "visible enabled level add button was not found");
+await command("Input.dispatchMouseEvent", { type: "mousePressed", x: addRect.x, y: addRect.y, button: "left", clickCount: 1 });
+await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: addRect.x, y: addRect.y, button: "left", clickCount: 1 });
 await waitFor("document.body.innerText.includes('LVL_New_1') || document.body.innerText.includes('新关卡')", 15_000);
 
 await evaluate("[...document.querySelectorAll('button')].find((item) => item.textContent?.includes('保存关卡状态'))?.click()");
