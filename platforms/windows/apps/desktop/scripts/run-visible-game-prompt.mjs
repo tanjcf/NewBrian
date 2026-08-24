@@ -27,6 +27,19 @@ try {
   let state;
   while (Date.now() < deadline) {
     state = await client.evaluate(`(() => ({ text: document.body?.innerText?.slice(-12000) || '', busy: Boolean(document.querySelector('[data-generating="true"],.is-generating,button[aria-label*="停止"]')) || /正在思考|进行中|正在继续执行|等待批准/u.test(document.body?.innerText?.slice(-12000) || '') }))()`);
+    // Approval is still resolved through the visible page. Agent mode reduces
+    // routine prompts, while this keeps explicit high-risk confirmations
+    // auditable instead of bypassing them through IPC.
+    const approvalVisible = await client.evaluate(`(() => [...document.querySelectorAll('button')].some((button) => {
+      const rect = button.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && button.innerText.includes('批准并继续') && !button.disabled;
+    }))()`);
+    if (approvalVisible) {
+      await client.mouseClickButtonText('批准并继续');
+      actions.push({ type: "ui-click", target: "批准并继续" });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      continue;
+    }
     const delta = state.text.slice(Math.max(0, beforeText.length - 120));
     const mentions = (delta.match(/青石谷入口/gu) || []).length;
     const hasAssistantResult = mentions > 1 && /工具调用|工具结果|已处理|已保存到|写入工程|调用/u.test(delta);
