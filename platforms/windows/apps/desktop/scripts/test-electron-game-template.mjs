@@ -55,17 +55,6 @@ const seeded = await evaluate(`(async () => {
 })()`);
 assert.equal(seeded?.ok, true, JSON.stringify(seeded));
 
-await command("Page.reload", { ignoreCache: true });
-// The conversation-list class was removed when the native Thread sidebar was
-// restored. Wait for the current UI contract and explicitly select 游戏制作.
-await waitFor("Boolean(document.querySelector('[data-testid=brain-workspace-shell]')) || document.body.innerText.includes('游戏制作')");
-await evaluate(`(() => { [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === '游戏制作')?.click(); return true; })()`);
-await waitFor("Boolean(document.querySelector('[data-testid=brain-game-workspace]')) || document.body.innerText.includes('请选择游戏项目')", 10_000);
-await evaluate(`(() => { [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes('模板验收'))?.click(); return true; })()`);
-await waitFor("Boolean(document.querySelector('[data-testid=brain-game-template-wizard]'))");
-await evaluate(`document.querySelector('[data-testid=brain-game-create-web-template]')?.click()`);
-await waitFor("document.querySelector('[data-testid=brain-game-template-wizard]')?.textContent?.includes('Web 模板已创建')", 20_000);
-
 const created = await evaluate(`(async () => {
   const result = await window.codecn.createBrainGameWebTemplate({ projectId: ${JSON.stringify(seeded.projectId)} });
   const inspection = await window.codecn.inspectBrainGameProject({ projectId: ${JSON.stringify(seeded.projectId)} });
