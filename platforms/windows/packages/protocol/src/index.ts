@@ -933,6 +933,7 @@ export const desktopIpcChannels = {
     quantMarketUpdated: "phase1:quant-market-updated",
     quantScreenerUpdated: "phase1:quant-screener-updated",
     quantPortfolioUpdated: "phase1:quant-portfolio-updated",
+    dataWorkspaceUpdated: "phase1:data-workspace-updated",
     openWorkspaceFilePreview: "phase1:open-workspace-file-preview"
   },
   system: {

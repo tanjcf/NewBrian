@@ -265,6 +265,7 @@ contextBridge.exposeInMainWorld("codecn", {
   listDataXlsxSheets: (input: { projectId: string; fileId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetXlsxSheets, input),
   readDataRows: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetRows, input),
   summarizeData: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisSummarize, input),
+  aggregateData: (input: { projectId: string; datasetId: string; groupBy: string[]; metrics: Array<{ column: string; operation: "sum" | "count" | "avg" | "min" | "max"; as?: string }>; topN?: number; orderBy?: { metric: string; direction: "asc" | "desc" }; periodColumn?: string; compareMetric?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisAggregate, input),
   listDataAnalyses: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisList, input),
   listSoftwareScripts: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareScriptsList, input),
   startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStart, input),
@@ -585,6 +586,11 @@ contextBridge.exposeInMainWorld("codecn", {
     const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => listener(payload);
     ipcRenderer.on(desktopIpcChannels.events.quantPortfolioUpdated, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantPortfolioUpdated, handler);
+  },
+  onDataWorkspaceUpdated: (listener: (payload: { projectId: string; reason?: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; reason?: string }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.dataWorkspaceUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.dataWorkspaceUpdated, handler);
   },
   getTerminalSession: (): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.getSession),
   writeTerminalInput: (input: string): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.writeInput, input),

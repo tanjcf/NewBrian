@@ -96,6 +96,7 @@ const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ ke
   ],
   data: [
     { key: "analysis", label: "Julius" }, { key: "import", label: "数据导入" },
+    { key: "table", label: "数据表格" }, { key: "clean", label: "数据清洗" },
     { key: "chart", label: "图表" }, { key: "flow", label: "决策 Flow" }
   ],
   software: [
@@ -553,6 +554,7 @@ export function WorkspaceModules(ctx: any) {
   const [brainDraft, setBrainDraft] = useState("");
   const [brainMessageBusy, setBrainMessageBusy] = useState(false);
   const [brainFiles, setBrainFiles] = useState<any[]>([]);
+  const [dataWorkspaceRefreshToken, setDataWorkspaceRefreshToken] = useState(0);
   const [brainTasks, setBrainTasks] = useState<any[]>([]);
   const [brainArtifacts, setBrainArtifacts] = useState<any[]>([]);
   const [brainAnnotations, setBrainAnnotations] = useState<any[]>([]);
@@ -922,7 +924,14 @@ export function WorkspaceModules(ctx: any) {
       if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
     });
     return () => { disposed = true; };
-  }, [selectedBrainProjectId, selectedBrainConversationId]);
+  }, [selectedBrainProjectId, selectedBrainConversationId, dataWorkspaceRefreshToken]);
+  useEffect(() => {
+    if (!window.codecn?.onDataWorkspaceUpdated) return;
+    return window.codecn.onDataWorkspaceUpdated((payload: { projectId?: string }) => {
+      if (payload?.projectId && selectedBrainProjectId && payload.projectId !== selectedBrainProjectId) return;
+      setDataWorkspaceRefreshToken((value) => value + 1);
+    });
+  }, [selectedBrainProjectId]);
   useEffect(() => {
     setDocumentAnnotationActive(false);
     setDocumentAnnotationCandidate(null);
@@ -4752,10 +4761,10 @@ function renderSidebarModule() {
         return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "音乐创作");
       }
       if (selectedBrainWorkspaceKey === "data") {
-        if (brainSceneTab === "analysis") return <DataJuliusShell projectId={selectedBrainProject?.id} />;
+        if (brainSceneTab === "analysis") return <DataJuliusShell projectId={selectedBrainProject?.id} files={brainFiles} refreshToken={dataWorkspaceRefreshToken} />;
         if (brainSceneTab === "flow") return <FlowWorkspace projectId={selectedBrainProject?.id} />;
-        if (["import", "chart"].includes(brainSceneTab)) {
-          return <DataWorkspace projectId={selectedBrainProject?.id} files={brainFiles} selectedFileId={activeBrainDocumentFileId} onSelectFile={setActiveBrainDocumentFileId} activeView={brainSceneTab as "import" | "chart"} />;
+        if (["import", "table", "clean", "chart"].includes(brainSceneTab)) {
+          return <DataWorkspace projectId={selectedBrainProject?.id} files={brainFiles} selectedFileId={activeBrainDocumentFileId} onSelectFile={setActiveBrainDocumentFileId} activeView={brainSceneTab as "import" | "table" | "clean" | "chart"} refreshToken={dataWorkspaceRefreshToken} />;
         }
         return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "数据与决策");
       }

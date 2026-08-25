@@ -37,18 +37,21 @@ export function DataWorkspace({
   files = [],
   selectedFileId = "",
   onSelectFile,
-  activeView = "import"
+  activeView = "import",
+  refreshToken = 0
 }: {
   projectId?: string;
   files?: ProjectFileOption[];
   selectedFileId?: string;
   onSelectFile?: (fileId: string) => void;
   activeView?: "import" | "table" | "clean" | "analysis" | "chart";
+  refreshToken?: number;
 }) {
   const { state: ui, setState: setUi, hydrated } = useWorkspaceSceneState(projectId, "data", defaultDataUi);
   const [datasets, setDatasets] = useState<any[]>([]);
   const [rows, setRows] = useState<Record<string, string[][]>>({});
   const [analysis, setAnalysis] = useState<any>(null);
+  const [aggregate, setAggregate] = useState<any>(null);
   const [status, setStatus] = useState("正在加载数据集");
   const [localFileId, setLocalFileId] = useState("");
   const [xlsxSheets, setXlsxSheets] = useState<string[]>([]);
@@ -93,15 +96,18 @@ export function DataWorkspace({
       }
       setStatus("数据集已加载");
     }).catch(() => setStatus("数据集暂不可用"));
-  }, [projectId, hydrated]);
+  }, [projectId, hydrated, refreshToken]);
 
   useEffect(() => {
     if (!projectId || !selectedId || !window.codecn?.listDataAnalyses) return;
     void window.codecn.listDataAnalyses({ projectId, datasetId: selectedId }).then((items: any[]) => {
-      const latest = Array.isArray(items) ? items[0] : null;
-      if (latest?.result) setAnalysis(latest.result);
+      const latest = Array.isArray(items) ? items : [];
+      const summary = latest.find((item) => item?.result?.operation === "summary") || latest[0];
+      const grouped = latest.find((item) => item?.result?.operation === "aggregate");
+      if (summary?.result?.operation === "summary") setAnalysis(summary.result);
+      if (grouped?.result?.operation === "aggregate") setAggregate(grouped.result);
     }).catch(() => undefined);
-  }, [projectId, selectedId]);
+  }, [projectId, selectedId, refreshToken]);
   useEffect(() => {
     if (onSelectFile) return;
     const fallback = files.find(isDataFile)?.id || files[0]?.id || "";
@@ -139,6 +145,7 @@ export function DataWorkspace({
       setRows((items) => ({ ...items, [result.dataset.id]: result.rows || [] }));
       setUi((current) => ({ ...current, selectedDatasetId: result.dataset.id }));
       setAnalysis(null);
+      setAggregate(null);
       setStatus(`已导入 ${result.rows?.length || 0} 行`);
     }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "CSV 导入失败"));
   };
@@ -150,12 +157,33 @@ export function DataWorkspace({
       setStatus("分析结果已保存");
     }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "分析失败"));
   };
+  const runAggregate = () => {
+    if (!projectId || !selected || !window.codecn?.aggregateData) return;
+    const columnKeys = selected.columns.map((column: any) => column.key);
+    const numericKey = columnKeys.find((key: string) => selected.columns.find((column: any) => column.key === key)?.type === "number");
+    const dimensionKey = columnKeys.find((key: string) => selected.columns.find((column: any) => column.key === key)?.type !== "number");
+    const periodKey = columnKeys.find((key: string) => /quarter|month|date|period|季度|月份|日期/iu.test(key));
+    if (!numericKey || !dimensionKey) { setStatus("当前数据集缺少可用于聚合的维度列或数值列"); return; }
+    setStatus("正在生成分组聚合");
+    void window.codecn.aggregateData({
+      projectId,
+      datasetId: selected.id,
+      groupBy: [dimensionKey],
+      metrics: [{ column: numericKey, operation: "sum" }],
+      topN: 10,
+      orderBy: { metric: `sum_${numericKey}`, direction: "desc" },
+      ...(periodKey ? { periodColumn: periodKey, compareMetric: numericKey } : {})
+    }).then((result: any) => {
+      setAggregate(result?.result || null);
+      setStatus("分组聚合已保存");
+    }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "聚合失败"));
+  };
 
   return (
     <main className="brain-data-module" data-testid="brain-data-workspace">
       <header className="brain-video-header">
         <div><span>数据与决策</span><strong>{activeView === "import" ? "数据导入" : activeView === "table" ? "数据表格" : activeView === "clean" ? "数据清洗" : activeView === "analysis" ? "数据分析" : "数据图表"}</strong></div>
-        <small data-testid="brain-data-status">{analysis?.columns?.length ? "分析结果已保存" : status} · 分析结果可复现</small>
+        <small data-testid="brain-data-status">{aggregate?.rows?.length || analysis?.columns?.length ? "分析结果已保存" : status} · 分析结果可复现</small>
       </header>
       {activeView === "import" ? <section className="brain-data-summary">
         <ProjectFilePicker
@@ -169,17 +197,30 @@ export function DataWorkspace({
         {xlsxSheets.length > 1 ? <select aria-label="选择工作表" value={xlsxSheet} onChange={(event) => setUi((current) => ({ ...current, xlsxSheet: event.target.value }))}>{xlsxSheets.map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}</select> : null}
         <button type="button" data-testid="brain-data-import" onClick={importCsv}>导入表格</button>
         {selected ? <button type="button" data-testid="brain-data-analysis" onClick={runAnalysis}>运行摘要</button> : null}
+        {selected ? <button type="button" data-testid="brain-data-aggregate" onClick={runAggregate}>分组聚合</button> : null}
         {selected && points.length ? <select aria-label="图表类型" value={chartType} onChange={(event) => setUi((current) => ({ ...current, chartType: event.target.value as DataChartType }))}><option value="line">折线图</option><option value="bar">柱状图</option><option value="scatter">散点图</option></select> : null}
       </section> : null}
       {activeView !== "import" ? <section className="brain-data-summary">
-        <select data-testid="brain-data-dataset-select" value={selected?.id || ""} onChange={(event) => { setUi((current) => ({ ...current, selectedDatasetId: event.target.value })); setAnalysis(null); setPage(0); }}>
+        <select data-testid="brain-data-dataset-select" value={selected?.id || ""} onChange={(event) => { setUi((current) => ({ ...current, selectedDatasetId: event.target.value })); setAnalysis(null); setAggregate(null); setPage(0); }}>
           <option value="">选择数据集</option>
           {datasets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
         {activeView === "table" ? <input aria-label="筛选数据" placeholder="筛选行内容" value={query} onChange={(event) => { setUi((current) => ({ ...current, query: event.target.value })); setPage(0); }} /> : null}
         {activeView === "analysis" ? <button type="button" data-testid="brain-data-analysis" disabled={!selected} onClick={runAnalysis}>运行摘要</button> : null}
+        {activeView === "analysis" ? <button type="button" data-testid="brain-data-aggregate" disabled={!selected} onClick={runAggregate}>分组聚合</button> : null}
         {activeView === "chart" ? <select aria-label="图表类型" value={chartType} onChange={(event) => setUi((current) => ({ ...current, chartType: event.target.value as DataChartType }))}><option value="line">折线图</option><option value="bar">柱状图</option><option value="scatter">散点图</option></select> : null}
       </section> : null}
+      {(activeView === "analysis" || activeView === "import") && aggregate?.rows?.length ? (
+        <section className="brain-data-summary" data-testid="brain-data-aggregate-result">
+          <strong>分组聚合 TopN</strong>
+          {aggregate.rows.map((row: any, index: number) => (
+            <span key={`${index}-${JSON.stringify(row)}`}>{Object.entries(row).map(([key, value]) => `${key}=${value}`).join(" · ")}</span>
+          ))}
+          {aggregate.periodComparison?.length ? aggregate.periodComparison.map((item: any, index: number) => (
+            <span key={`period-${index}`}>环比 {Object.values(item.keys).join("/")} · {item.changePercent}%</span>
+          )) : null}
+        </section>
+      ) : null}
       {(activeView === "analysis" || activeView === "import") && analysis?.columns?.length ? (
         <section className="brain-data-summary" data-testid="brain-data-analysis-result">
           <strong>数值摘要</strong>
@@ -191,7 +232,7 @@ export function DataWorkspace({
       {activeView === "clean" ? <section className="brain-data-quality" data-testid="brain-data-quality"><header><strong>数据质量检查</strong><small>基于当前数据集逐行计算，不修改源文件</small></header><div><article><span>空白单元格</span><strong>{quality.blankCells}</strong></article><article><span>重复行</span><strong>{quality.duplicateRows}</strong></article><article><span>无效数值</span><strong>{quality.invalidNumericCells}</strong></article></div>{selected ? <p>{quality.blankCells || quality.duplicateRows || quality.invalidNumericCells ? "发现质量问题。可在对话中要求 BRAIN 生成清洗规则和新版本，原始数据保持不变。" : "未发现空白、重复或无效数值。"}</p> : <p>请先选择数据集。</p>}</section> : null}
       {activeView === "import" || activeView === "table" ? <section className="brain-data-list">
         {datasets.map((dataset) => (
-          <article className={`brain-data-card${selected?.id === dataset.id ? " active" : ""}`} key={dataset.id} onClick={() => { setUi((current) => ({ ...current, selectedDatasetId: dataset.id })); setAnalysis(null); setPage(0); }}>
+          <article className={`brain-data-card${selected?.id === dataset.id ? " active" : ""}`} key={dataset.id} onClick={() => { setUi((current) => ({ ...current, selectedDatasetId: dataset.id })); setAnalysis(null); setAggregate(null); setPage(0); }}>
             <header><strong>{dataset.name}</strong><small>{dataset.rowCount.toLocaleString()} 行 · {dataset.columns.length} 列</small></header>
             <div className="brain-data-columns">{dataset.columns.map((column: any) => <span key={column.key}>{column.label}<em>{column.type}</em></span>)}</div>
           </article>

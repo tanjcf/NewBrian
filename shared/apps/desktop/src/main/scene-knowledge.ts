@@ -24,7 +24,7 @@ const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[
   ] },
   data: { title: "数据与决策", sections: [
     { title: "能力", keywords: ["数据", "CSV", "Excel", "分析", "图表", "Julius", "Flow"], content: "导入CSV/Excel、浏览数据集、生成摘要分析、绘制图表和运行决策 Flow。分析结论必须引用实际数据集和筛选条件。" },
-    { title: "工具接口", keywords: ["dataset", "import", "summarize", "flow"], content: "通过数据集导入、行读取、分析摘要、图表和 Flow 工具操作右侧 tools；大数据操作要说明范围、耗时和失败原因。" }
+    { title: "工具接口", keywords: ["dataset", "import", "summarize", "aggregate", "cook", "flow", "data.file.import_local"], content: "必须调用右侧数据 Tools，不能只写方案。data.file.import_local：把本机 CSV/XLSX 绝对路径复制进工程 data/raw/ 并登记文件（可 autoImportDataset）。data.file.list / data.project.inspect：查看文件与数据集。data.dataset.import_csv / import_xlsx：导入真实数据集到右侧。data.analysis.summarize / aggregate：数值摘要与分组聚合，结果同步 Julius。data.dataset.read_rows：核对表格行。data.analysis.save / data.analysis.cook：保存洞察并导出 Docs/BRAIN/analysis.json。Flow 工具用于决策摘要。" }
   ] },
   software: { title: "软件与自动化", sections: [
     { title: "能力", keywords: ["终端", "代码", "测试", "部署", "Flow", "文件"], content: "查看项目文件、运行受控终端、编辑代码、执行测试、部署和自动化 Flow。涉及外部副作用时遵循审批和工作区边界。" },

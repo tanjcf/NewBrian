@@ -107,6 +107,7 @@ import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { VideoRuntimeService } from "./video-runtime-service.js";
 import { registerVideoAgentTools } from "./video-agent-tools.js";
+import { registerDataAgentTools } from "./data-agent-tools.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { MusicMediaService } from "./music-media-service.js";
 import { MusicRenderService } from "./music-render-service.js";
@@ -116,6 +117,7 @@ import { ManagedEngineInstallerService, runBoundedEnvironmentCommand } from "./m
 import { ensureDesktopEnginesInitialized, ensureEnginesForWorkspaceKey } from "./engine-bootstrap-service.js";
 import { DataImportService } from "./data-import-service.js";
 import { DataAnalysisService } from "./data-analysis-service.js";
+import { DataRuntimeService } from "./data-runtime-service.js";
 import { registerDataImportIpc } from "./data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantSkillPackageService } from "./quant-skill-package-service.js";
@@ -8627,6 +8629,35 @@ function registerIpc() {
               if (!offline.ok || !offline.audioPath) throw new Error(`BRAIN_VIDEO_SPEECH_FAILED:${remoteDetail}:${offline.detail || "offline unavailable"}`);
               const bytes = await fs.readFile(offline.audioPath);
               return { bytes, mimeType: offline.mimeType || "audio/wav", providerResult: { endpoint: "/v1/audio/speech", remoteFailure: remoteDetail, fallback: offline.provider, runtime: offline.runtime, durationMs: offline.durationMs, byteLength: bytes.length } };
+            }
+          });
+        }
+      }
+      if (workspace.brainWorkspaceKey === "data") {
+        const ownerId = await resolveBrainLocalOwnerId();
+        const dataProject = brainWorkspaceStorage.listProjects({
+          ownerId,
+          workspaceKey: "data"
+        }).find((project) => project.localWorkspaceId === workspace.id);
+        if (dataProject) {
+          const resolveDataWorkspaceRoot = async (workspaceId: string) => {
+            const local = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
+            if (!local) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_AUTHORIZED");
+            const root = await fs.realpath(local.path);
+            if (!(await fs.stat(root)).isDirectory()) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_DIRECTORY");
+            return root;
+          };
+          const dataImports = new DataImportService(brainWorkspaceStorage, resolveDataWorkspaceRoot);
+          registerDataAgentTools(targetRuntime, {
+            ownerId: resolveBrainLocalOwnerId,
+            projectId: dataProject.id,
+            projectRoot: workspace.path,
+            storage: brainWorkspaceStorage,
+            imports: dataImports,
+            analysis: new DataAnalysisService(brainWorkspaceStorage, dataImports),
+            dataRuntime: new DataRuntimeService((binding) => getRustCoreService().acquire(binding)),
+            notifyUi: (payload) => {
+              mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
             }
           });
         }

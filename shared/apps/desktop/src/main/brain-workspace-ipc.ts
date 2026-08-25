@@ -1013,6 +1013,33 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   ipcMain.handle(brainWorkspaceIpcChannels.dataDatasetSave, async (_event, value: unknown) => { const dataset = parseDataset(value); return dependencies.storage.saveDataset({ ownerId: await ownerId(), dataset }); });
   if (dependencies.dataAnalysis) {
     ipcMain.handle(brainWorkspaceIpcChannels.dataAnalysisSummarize, async (_event, value: unknown) => { const input = requireRecord(value, "Data analysis summarize"); rejectUnexpectedKeys(input, ["projectId", "datasetId"], "Data analysis summarize"); return dependencies.dataAnalysis!.summarize(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.datasetId, "datasetId")); });
+    ipcMain.handle(brainWorkspaceIpcChannels.dataAnalysisAggregate, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Data analysis aggregate");
+      rejectUnexpectedKeys(input, ["projectId", "datasetId", "groupBy", "metrics", "topN", "orderBy", "periodColumn", "compareMetric"], "Data analysis aggregate");
+      const groupBy = Array.isArray(input.groupBy) ? input.groupBy.map((item) => requireString(item, "groupBy")) : [];
+      const metrics = Array.isArray(input.metrics) ? input.metrics.map((item) => {
+        const metric = requireRecord(item, "metric");
+        rejectUnexpectedKeys(metric, ["column", "operation", "as"], "metric");
+        const operation = requireString(metric.operation, "operation");
+        if (!["sum", "count", "avg", "min", "max"].includes(operation)) throw new TypeError("metric.operation is unsupported.");
+        return { column: requireString(metric.column, "column"), operation: operation as "sum" | "count" | "avg" | "min" | "max", ...(metric.as === undefined ? {} : { as: requireString(metric.as, "as") }) };
+      }) : [];
+      const orderBy = input.orderBy === undefined ? undefined : (() => {
+        const ordering = requireRecord(input.orderBy, "orderBy");
+        rejectUnexpectedKeys(ordering, ["metric", "direction"], "orderBy");
+        const direction = requireString(ordering.direction, "direction");
+        if (direction !== "asc" && direction !== "desc") throw new TypeError("orderBy.direction is unsupported.");
+        return { metric: requireString(ordering.metric, "metric"), direction };
+      })();
+      return dependencies.dataAnalysis!.aggregate(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.datasetId, "datasetId"), {
+        groupBy,
+        metrics,
+        ...(typeof input.topN === "number" ? { topN: input.topN } : {}),
+        ...(orderBy ? { orderBy } : {}),
+        ...(input.periodColumn === undefined ? {} : { periodColumn: requireString(input.periodColumn, "periodColumn") }),
+        ...(input.compareMetric === undefined ? {} : { compareMetric: requireString(input.compareMetric, "compareMetric") })
+      });
+    });
     ipcMain.handle(brainWorkspaceIpcChannels.dataAnalysisList, async (_event, value: unknown) => { const input = requireRecord(value, "Data analysis list"); rejectUnexpectedKeys(input, ["projectId", "datasetId"], "Data analysis list"); return dependencies.dataAnalysis!.list(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.datasetId, "datasetId")); });
   }
   ipcMain.handle(brainWorkspaceIpcChannels.softwareScriptsList, async (_event, value: unknown) => { const input = parseProjectGet(value); const owner = await ownerId(); const project = dependencies.storage.getProject(owner, input.projectId); if (project.primaryWorkspaceKey !== "software") throw new Error("BRAIN_SOFTWARE_WORKSPACE_REQUIRED"); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED"); const root = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId); return discoverSoftwareScripts(root); });

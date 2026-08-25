@@ -420,6 +420,7 @@ export const brainWorkspaceIpcChannels = {
   ,dataDatasetXlsxSheets: "brain:data:dataset-xlsx-sheets"
   ,dataDatasetRows: "brain:data:dataset-rows"
   ,dataAnalysisSummarize: "brain:data:analysis-summarize"
+  ,dataAnalysisAggregate: "brain:data:analysis-aggregate"
   ,dataAnalysisList: "brain:data:analysis-list"
   ,softwareScriptsList: "brain:software:scripts-list"
   ,softwareTaskStart: "brain:software:task-start"
