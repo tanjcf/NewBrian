@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-expect-error Node's strip-types runner loads this source file directly.
-import { markThreadActiveInCatalog, markThreadApprovalSettlingInCatalog, mostRecentlyActiveThread, sortThreadsByRecentActivity } from "./thread-order.ts";
+import { clearStaleThreadApprovalInCatalog, markThreadActiveInCatalog, markThreadApprovalSettlingInCatalog, mostRecentlyActiveThread, sortThreadsByRecentActivity } from "./thread-order.ts";
 
 test("orders threads by most recent runtime activity instead of catalog position", () => {
   const threads = [
@@ -47,4 +47,21 @@ test("approval settle keeps catalog as an array so App can call .find", () => {
   assert.equal(updated.find((item) => item.id === "workspace")?.threads[0]?.statusLabel, "执行中");
   assert.equal(updated.find((item) => item.id === "workspace")?.threads[1]?.status, "idle");
   assert.deepEqual(markThreadApprovalSettlingInCatalog({ workspaces: catalog } as never, "workspace", "waiting", true), []);
+});
+
+test("clearing stale approval only touches the target thread", () => {
+  const catalog = [
+    {
+      id: "ws-game",
+      threads: [{ id: "game-thread", status: "awaiting-approval", statusLabel: "等待批准" }]
+    },
+    {
+      id: "ws-software",
+      threads: [{ id: "software-thread", status: "awaiting-approval", statusLabel: "等待批准" }]
+    }
+  ];
+  const updated = clearStaleThreadApprovalInCatalog(catalog, "ws-game", "game-thread");
+  assert.equal(updated.find((item) => item.id === "ws-game")?.threads[0]?.status, "idle");
+  assert.equal(updated.find((item) => item.id === "ws-game")?.threads[0]?.statusLabel, "");
+  assert.equal(updated.find((item) => item.id === "ws-software")?.threads[0]?.status, "awaiting-approval");
 });

@@ -92,79 +92,104 @@ export class WorkspaceFileService {
   }
 
   async preview(input: { workspaceId: string; filePath: string }) {
-    const workspace = await this.requireWorkspace(input.workspaceId);
-    const { targetPath, relativePath } = await this.dependencies.resolveFile(workspace.path, input.filePath);
-    const stat = await fs.stat(targetPath);
-    const extension = extname(targetPath).toLowerCase();
-    const maxBytes = 40 * 1024 * 1024;
-    if (stat.size > maxBytes) throw new Error("文件超过 40 MB，无法在侧栏中预览。");
-    const buffer = await fs.readFile(targetPath);
-    if (extension === ".pdf") {
+    try {
+      const workspace = await this.requireWorkspace(input.workspaceId);
+      const { targetPath, relativePath } = await this.dependencies.resolveFile(workspace.path, input.filePath);
+      const stat = await fs.stat(targetPath);
+      const extension = extname(targetPath).toLowerCase();
+      const maxBytes = 40 * 1024 * 1024;
+      if (stat.size > maxBytes) {
+        return {
+          ok: false as const,
+          error: "文件超过 40 MB，无法在侧栏中预览。",
+          reason: "read_failed" as const,
+          path: relativePath,
+          name: basename(targetPath)
+        };
+      }
+      const buffer = await fs.readFile(targetPath);
+      if (extension === ".pdf") {
+        return {
+          kind: "pdf" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: "application/pdf" as const,
+          size: stat.size,
+          dataUrl: `data:application/pdf;base64,${buffer.toString("base64")}`
+        };
+      }
+      if (extension === ".docx") {
+        const result = await mammoth.convertToHtml({ buffer });
+        return {
+          kind: "docx" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const,
+          size: stat.size,
+          html: result.value
+        };
+      }
+      if (extension === ".pptx") {
+        return {
+          kind: "pptx" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" as const,
+          size: stat.size,
+          dataUrl: `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${buffer.toString("base64")}`
+        };
+      }
+      if (isHtmlArtifactExtension(extension)) {
+        const normalizedRelative = relativePath.replace(/\\/g, "/");
+        return {
+          kind: "html" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: "text/html" as const,
+          size: stat.size,
+          content: buffer.toString("utf8"),
+          previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
+        };
+      }
+      if (isImageArtifactExtension(extension)) {
+        const normalizedRelative = relativePath.replace(/\\/g, "/");
+        return {
+          kind: "image" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: mimeTypeForArtifactPath(targetPath),
+          size: stat.size,
+          previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
+        };
+      }
+      if (isVideoArtifactExtension(extension)) {
+        const normalizedRelative = relativePath.replace(/\\/g, "/");
+        return {
+          kind: "video" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: mimeTypeForArtifactPath(targetPath),
+          size: stat.size,
+          previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
+        };
+      }
       return {
-        kind: "pdf" as const,
+        ok: false as const,
+        error: "此文件类型不支持文档侧栏预览。",
+        reason: "preview_unsupported" as const,
         path: relativePath,
-        name: basename(targetPath),
-        mimeType: "application/pdf" as const,
-        size: stat.size,
-        dataUrl: `data:application/pdf;base64,${buffer.toString("base64")}`
+        name: basename(targetPath)
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false as const,
+        error: message,
+        reason: (/文件不存在|ENOENT|not found|无法预览/i.test(message) ? "missing_file" : "read_failed") as const,
+        path: input.filePath,
+        name: basename(input.filePath)
       };
     }
-    if (extension === ".docx") {
-      const result = await mammoth.convertToHtml({ buffer });
-      return {
-        kind: "docx" as const,
-        path: relativePath,
-        name: basename(targetPath),
-        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const,
-        size: stat.size,
-        html: result.value
-      };
-    }
-    if (extension === ".pptx") {
-      return {
-        kind: "pptx" as const,
-        path: relativePath,
-        name: basename(targetPath),
-        mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" as const,
-        size: stat.size,
-        dataUrl: `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${buffer.toString("base64")}`
-      };
-    }
-    if (isHtmlArtifactExtension(extension)) {
-      const normalizedRelative = relativePath.replace(/\\/g, "/");
-      return {
-        kind: "html" as const,
-        path: relativePath,
-        name: basename(targetPath),
-        mimeType: "text/html" as const,
-        size: stat.size,
-        content: buffer.toString("utf8"),
-        previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
-      };
-    }
-    if (isImageArtifactExtension(extension)) {
-      const normalizedRelative = relativePath.replace(/\\/g, "/");
-      return {
-        kind: "image" as const,
-        path: relativePath,
-        name: basename(targetPath),
-        mimeType: mimeTypeForArtifactPath(targetPath),
-        size: stat.size,
-        previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
-      };
-    }
-    if (isVideoArtifactExtension(extension)) {
-      const normalizedRelative = relativePath.replace(/\\/g, "/");
-      return {
-        kind: "video" as const,
-        path: relativePath,
-        name: basename(targetPath),
-        mimeType: mimeTypeForArtifactPath(targetPath),
-        size: stat.size,
-        previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
-      };
-    }
-    throw new Error("此文件类型不支持文档侧栏预览。");
   }
 
   async open(input: { workspaceId: string; filePath: string }) {

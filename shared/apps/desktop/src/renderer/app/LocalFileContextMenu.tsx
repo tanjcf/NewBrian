@@ -48,15 +48,25 @@ export function LocalFileContextMenu({ menu, workspaceId, onClose }: {
 
   const performFileAction = async (action: "open-vscode" | "open-with" | "copy-contents" | "reveal") => {
     if (!window.codecn) return;
-    const result = await window.codecn.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action });
-    if (action === "copy-contents" && result.ok && typeof result.content === "string") await navigator.clipboard.writeText(result.content);
-    onClose();
+    try {
+      const result = await window.codecn.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action });
+      if (action === "copy-contents" && result.ok && typeof result.content === "string") await navigator.clipboard.writeText(result.content);
+    } catch {
+      // Soft-fail: missing files must not crash the renderer ErrorBoundary.
+    } finally {
+      onClose();
+    }
   };
 
   const openWithSystemTool = async (tool: SystemToolState) => {
     if (!window.codecn) return;
-    await window.codecn.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action: "open-tool", toolId: tool.id });
-    onClose();
+    try {
+      await window.codecn.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action: "open-tool", toolId: tool.id });
+    } catch {
+      // Soft-fail: missing files must not crash the renderer ErrorBoundary.
+    } finally {
+      onClose();
+    }
   };
 
   const visualStudio = systemTools.find((tool) => tool.id === "vscode" && tool.available);

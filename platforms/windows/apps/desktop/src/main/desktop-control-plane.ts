@@ -31,6 +31,18 @@ export function isLoopbackGatewayBaseUrl(value: unknown): boolean {
   }
 }
 
+/** Domains that used to be package defaults but are parked/blocked and cannot reach the model gateway. */
+export function isRetiredGatewayBaseUrl(value: unknown): boolean {
+  const raw = String(value ?? "").trim();
+  if (!raw) return false;
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return host === "test.wangjietech.com" || host === "api.wangjietech.com" || host === "www.wangjietech.com";
+  } catch {
+    return /wangjietech\.com/i.test(raw);
+  }
+}
+
 export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledBaseUrl: unknown): string {
   const configured = String(configuredBaseUrl ?? "").trim();
   const bundled = String(bundledBaseUrl ?? "").trim();
@@ -38,7 +50,12 @@ export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledB
   // loopback when a non-local bundled endpoint is available. Local developers
   // can still force localhost via CODECN_MODEL_BASE_URL.
   if (!configured) return bundled;
-  if (isLoopbackGatewayBaseUrl(configured) && bundled && !isLoopbackGatewayBaseUrl(bundled)) {
+  if (
+    (isLoopbackGatewayBaseUrl(configured) || isRetiredGatewayBaseUrl(configured))
+    && bundled
+    && !isLoopbackGatewayBaseUrl(bundled)
+    && !isRetiredGatewayBaseUrl(bundled)
+  ) {
     return bundled;
   }
   return configured;
@@ -65,7 +82,7 @@ export function resolveEffectiveGatewayBaseUrl(input: {
     ? bundled
     : (input.isPackaged ? input.productionBaseUrl : bundled || input.productionBaseUrl);
   const migrated = migrateLegacyGatewayBaseUrl(input.configuredBaseUrl, migrationTarget);
-  if (input.isPackaged && isLoopbackGatewayBaseUrl(migrated)) {
+  if (input.isPackaged && (isLoopbackGatewayBaseUrl(migrated) || isRetiredGatewayBaseUrl(migrated))) {
     return input.productionBaseUrl;
   }
   return migrated || (input.isPackaged ? input.productionBaseUrl : migrationTarget);

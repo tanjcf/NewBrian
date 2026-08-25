@@ -246,7 +246,7 @@ export function registerDataAgentTools(runtime: ToolRuntime, deps: DataAgentTool
   runtime.registerExternalTool({
     name: "data.analysis.summarize",
     title: "运行数值摘要",
-    description: "对指定数据集运行可复现的数值摘要（最小/最大/平均/中位/标准差），结果写入右侧分析记录。",
+    description: "对指定数据集用本机 Python/pandas 分块做数值摘要（min/max/mean/median/stddev）。只返回统计结果，不回传全表；适合十万～千万行。大模型只负责把工具 JSON 封装成洞察文案。",
     namespace: "data",
     kind: "write",
     risk: "low",
@@ -267,7 +267,7 @@ export function registerDataAgentTools(runtime: ToolRuntime, deps: DataAgentTool
   runtime.registerExternalTool({
     name: "data.analysis.aggregate",
     title: "分组聚合统计",
-    description: "按指定维度分组聚合（sum/count/avg/min/max），支持 TopN、占比与周期环比；结果写入右侧 Julius/分析面板。",
+    description: "用本机 Python/pandas 分块做分组聚合（sum/count/avg/min/max），支持 TopN、占比与周期环比。只返回聚合结果表，不加载全量行到模型上下文。",
     namespace: "data",
     kind: "write",
     risk: "low",
@@ -327,7 +327,7 @@ export function registerDataAgentTools(runtime: ToolRuntime, deps: DataAgentTool
   runtime.registerExternalTool({
     name: "data.dataset.read_rows",
     title: "读取数据集行",
-    description: "读取指定数据集的真实行数据，默认最多 50 行，用于表格浏览或筛选核对。",
+    description: "抽样读取数据集行（默认最多 50 行，上限 200），仅用于预览核对；大表分析请用 data.analysis.summarize / aggregate（Python）。",
     namespace: "data",
     kind: "read",
     risk: "low",
@@ -351,7 +351,7 @@ export function registerDataAgentTools(runtime: ToolRuntime, deps: DataAgentTool
   runtime.registerExternalTool({
     name: "data.analysis.save",
     title: "保存 Julius 分析状态",
-    description: "把数据集名、洞察和区域环比写入右侧 Julius 分析状态（Rust analysis-editor）。",
+    description: "把洞察文案与聚合摘要写入 Julius（只存聚合/抽样，不存全表）。洞察应由模型根据 summarize/aggregate 的 JSON 封装生成。",
     namespace: "data",
     kind: "write",
     risk: "medium",
@@ -374,15 +374,13 @@ export function registerDataAgentTools(runtime: ToolRuntime, deps: DataAgentTool
     let rows: unknown[] = [];
     const datasetId = text(input.datasetId);
     if (datasetId) {
-      const analyses = datasetId ? deps.storage.listDataAnalyses(ownerId, deps.projectId, datasetId) : [];
+      const analyses = deps.storage.listDataAnalyses(ownerId, deps.projectId, datasetId);
       const aggregate = Array.isArray(analyses)
-        ? analyses.find((item: { result?: { operation?: string; periodComparison?: unknown[] } }) => item?.result?.operation === "aggregate")
+        ? analyses.find((item: { result?: { operation?: string; periodComparison?: unknown[]; rows?: unknown[] } }) => item?.result?.operation === "aggregate")
         : null;
-      if (aggregate?.result) regionRows = regionRowsFromAggregate(aggregate.result as { periodComparison?: Array<{ keys: Record<string, string>; changePercent: number }> });
-      try {
-        rows = (await deps.imports.readRows(ownerId, { projectId: deps.projectId, datasetId })).slice(0, 32);
-      } catch {
-        rows = [];
+      if (aggregate?.result) {
+        regionRows = regionRowsFromAggregate(aggregate.result as { periodComparison?: Array<{ keys: Record<string, string>; changePercent: number }> });
+        rows = Array.isArray(aggregate.result.rows) ? aggregate.result.rows.slice(0, 64) : [];
       }
     }
     const state: BrainDataAnalysisState = {
@@ -423,10 +421,13 @@ export function registerDataAgentTools(runtime: ToolRuntime, deps: DataAgentTool
       let rows: unknown[] = [];
       const datasetId = text(input.datasetId);
       if (datasetId) {
-        try {
-          rows = (await deps.imports.readRows(ownerId, { projectId: deps.projectId, datasetId })).slice(0, 32);
-        } catch {
-          rows = [];
+        const analyses = deps.storage.listDataAnalyses(ownerId, deps.projectId, datasetId);
+        const aggregate = Array.isArray(analyses)
+          ? analyses.find((item: { result?: { operation?: string; rows?: unknown[]; periodComparison?: unknown[] } }) => item?.result?.operation === "aggregate")
+          : null;
+        if (aggregate?.result) {
+          regionRows = regionRowsFromAggregate(aggregate.result as { periodComparison?: Array<{ keys: Record<string, string>; changePercent: number }> });
+          rows = Array.isArray(aggregate.result.rows) ? aggregate.result.rows.slice(0, 64) : [];
         }
       }
       state = {

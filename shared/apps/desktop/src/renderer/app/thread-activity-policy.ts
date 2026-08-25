@@ -21,6 +21,40 @@ export function resolveActiveReasoningRequestId(input: {
   return String(input.activeThreadRequestIds[threadId] || "");
 }
 
+/**
+ * Process-global snapshot.approval must only drive UI for the thread that
+ * still has an in-flight request. Catalog `awaiting-approval` alone is sticky
+ * across restarts/scenes and must not let the focused thread steal another
+ * thread's approval banner or sidebar highlight.
+ */
+export function resolveSelectedThreadOwnsLiveApproval(input: {
+  selectedThreadId?: string;
+  activeThreadRequestIds: Readonly<Record<string, string>>;
+  selectedThreadAwaitingApproval?: boolean;
+}): boolean {
+  const threadId = input.selectedThreadId?.trim();
+  if (!threadId) return false;
+  return Boolean(input.activeThreadRequestIds[threadId]);
+}
+
+/**
+ * Sidebar / project-list "等待批准" highlight for the focused thread only when
+ * that same thread owns the live approval. A foreign snapshot.approval must
+ * not paint the currently selected thread.
+ */
+export function resolvePendingApprovalThreadKey(input: {
+  workspaceId?: string;
+  threadId?: string;
+  snapshotHasApproval: boolean;
+  selectedThreadOwnsLiveApproval: boolean;
+}): string {
+  const workspaceId = input.workspaceId?.trim();
+  const threadId = input.threadId?.trim();
+  if (!workspaceId || !threadId) return "";
+  if (!input.snapshotHasApproval || !input.selectedThreadOwnsLiveApproval) return "";
+  return `${workspaceId}:${threadId}`;
+}
+
 type DisplayMessage = {
   id: string;
   role: string;
@@ -28,16 +62,56 @@ type DisplayMessage = {
   excludeFromModelContext?: boolean;
 };
 
-function hasCanonicalAssistantForOptimisticStub(
-  canonical: DisplayMessage[],
-  optimisticCreatedAt: string | undefined
+function findPrecedingUserMessage<T extends { id: string; role: string }>(
+  messages: T[],
+  messageId: string
+): T | undefined {
+  const index = messages.findIndex((message) => message.id === messageId);
+  if (index <= 0) return undefined;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (messages[i].role === "user") return messages[i];
+  }
+  return undefined;
+}
+
+function findDurableAssistantForUserTurn<T extends DisplayMessage>(
+  canonical: T[],
+  userMessageId: string | undefined
+): T | undefined {
+  if (!userMessageId) return undefined;
+  const userIndex = canonical.findIndex((message) => message.id === userMessageId);
+  if (userIndex < 0) return undefined;
+  for (let i = userIndex + 1; i < canonical.length; i += 1) {
+    const message = canonical[i];
+    if (message.role === "user") return undefined;
+    if (
+      message.role === "assistant"
+      && !message.excludeFromModelContext
+      && !String(message.id || "").startsWith("local-assistant-")
+    ) {
+      return message;
+    }
+  }
+  return undefined;
+}
+
+function hasCanonicalAssistantForOptimisticStub<T extends DisplayMessage>(
+  canonical: T[],
+  current: T[],
+  stub: T
 ): boolean {
-  const startedAt = Date.parse(optimisticCreatedAt ?? "") || 0;
+  const precedingUser = findPrecedingUserMessage(current, stub.id);
+  if (precedingUser) {
+    return Boolean(findDurableAssistantForUserTurn(canonical, precedingUser.id));
+  }
+  // No preceding user in the optimistic list: fall back to nearest durable
+  // assistant created at/after this stub, but never treat an older turn as a match
+  // when a user boundary is available.
+  const startedAt = Date.parse(stub.createdAt ?? "") || 0;
   return canonical.some((message) => {
     if (message.role !== "assistant" || message.excludeFromModelContext) return false;
     if (String(message.id || "").startsWith("local-assistant-")) return false;
     const createdAt = Date.parse(message.createdAt ?? "") || 0;
-    // Durable success lands at/after the streaming stub started; ignore older turns.
     return createdAt >= startedAt - 1_000;
   });
 }
@@ -97,32 +171,54 @@ export function reconcileThreadDisplayMessages<T extends DisplayMessageWithProgr
     if (!(message.id.startsWith("local-user-") || message.id.startsWith("local-assistant-"))) return false;
     if ((Date.parse(message.createdAt ?? "") || 0) < optimisticGraceBoundary) return false;
     // Streaming stubs keep a local-assistant-* id; success persists assistant-turn-*.
-    // Drop the stub once the durable assistant arrives or UI will render the answer twice.
+    // Drop the stub only when THIS turn's durable assistant arrives — never because
+    // an older turn's assistant is still within a 1s time window.
     if (
       message.id.startsWith("local-assistant-")
       && !message.excludeFromModelContext
-      && hasCanonicalAssistantForOptimisticStub(mergedCanonical, message.createdAt)
+      && hasCanonicalAssistantForOptimisticStub(mergedCanonical, current, message)
     ) {
       return false;
     }
     return true;
   });
   // When a durable assistant-turn replaces a richer local-assistant stub, fold the
-  // streamed body/error summary into the durable row instead of discarding it.
+  // streamed body/error summary into that turn's durable row only.
   const droppedLocalAssistants = current.filter((message) =>
     message.id.startsWith("local-assistant-")
     && !canonicalIds.has(message.id)
     && !optimisticTail.includes(message)
   );
   if (droppedLocalAssistants.length) {
+    const foldByDurableId = new Map<string, T>();
+    for (const local of droppedLocalAssistants) {
+      const precedingUser = findPrecedingUserMessage(current, local.id);
+      let durable = findDurableAssistantForUserTurn(mergedCanonical, precedingUser?.id);
+      if (!durable) {
+        const startedAt = Date.parse(local.createdAt ?? "") || 0;
+        durable = mergedCanonical
+          .filter((message) =>
+            message.role === "assistant"
+            && !message.excludeFromModelContext
+            && !String(message.id || "").startsWith("local-assistant-")
+            && (Date.parse(message.createdAt ?? "") || 0) >= startedAt - 1_000
+          )
+          .sort((left, right) =>
+            (Date.parse(left.createdAt ?? "") || 0) - (Date.parse(right.createdAt ?? "") || 0)
+          )[0];
+      }
+      if (!durable) continue;
+      const existing = foldByDurableId.get(durable.id);
+      if (
+        !existing
+        || String(local.content ?? "").length > String(existing.content ?? "").length
+        || String(local.reasoningSummary ?? "").length > String(existing.reasoningSummary ?? "").length
+      ) {
+        foldByDurableId.set(durable.id, local);
+      }
+    }
     mergedCanonical = mergedCanonical.map((message) => {
-      if (message.role !== "assistant") return message;
-      if (String(message.id || "").startsWith("local-assistant-")) return message;
-      const local = droppedLocalAssistants.find((candidate) => {
-        const startedAt = Date.parse(candidate.createdAt ?? "") || 0;
-        const createdAt = Date.parse(message.createdAt ?? "") || 0;
-        return createdAt >= startedAt - 1_000;
-      });
+      const local = foldByDurableId.get(message.id);
       if (!local) return message;
       const localHasRicherProgress =
         String(local.content ?? "").length > String(message.content ?? "").length

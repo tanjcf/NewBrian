@@ -5,7 +5,9 @@ const {
   groupActivitiesByUserMessage,
   isComposerThreadRunning,
   reconcileThreadDisplayMessages,
-  resolveActiveReasoningRequestId
+  resolveActiveReasoningRequestId,
+  resolvePendingApprovalThreadKey,
+  resolveSelectedThreadOwnsLiveApproval
 } = await import(
   new URL("./thread-activity-policy.ts", import.meta.url).href
 ) as typeof import("./thread-activity-policy.js");
@@ -47,6 +49,40 @@ test("live reasoning request id stays on the selected thread", () => {
     selectedThreadId: "",
     activeThreadRequestIds: { "thread-a": "request-a" }
   }), "");
+});
+
+test("selected thread does not own another thread's live approval via ask-busy alone", () => {
+  assert.equal(resolveSelectedThreadOwnsLiveApproval({
+    selectedThreadId: "software-thread",
+    activeThreadRequestIds: { "game-thread": "request-game" },
+    selectedThreadAwaitingApproval: false
+  }), false);
+
+  assert.equal(resolveSelectedThreadOwnsLiveApproval({
+    selectedThreadId: "software-thread",
+    activeThreadRequestIds: {},
+    selectedThreadAwaitingApproval: true
+  }), false);
+
+  assert.equal(resolveSelectedThreadOwnsLiveApproval({
+    selectedThreadId: "game-thread",
+    activeThreadRequestIds: { "game-thread": "request-game" },
+    selectedThreadAwaitingApproval: false
+  }), true);
+
+  assert.equal(resolvePendingApprovalThreadKey({
+    workspaceId: "ws-software",
+    threadId: "software-thread",
+    snapshotHasApproval: true,
+    selectedThreadOwnsLiveApproval: false
+  }), "");
+
+  assert.equal(resolvePendingApprovalThreadKey({
+    workspaceId: "ws-game",
+    threadId: "game-thread",
+    snapshotHasApproval: true,
+    selectedThreadOwnsLiveApproval: true
+  }), "ws-game:game-thread");
 });
 
 test("keeps a newly submitted user message when a stale snapshot does not contain it yet", () => {

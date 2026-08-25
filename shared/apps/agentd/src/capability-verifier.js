@@ -21,15 +21,31 @@ export async function verifySpreadsheetResult(output) {
   return { status: "verified", checks: ["provider-result-structure"] };
 }
 
+function officePathHint(pathValue) {
+  const path = String(pathValue || "").toLowerCase();
+  if (path.endsWith(".pdf")) return "pdf";
+  if (path.endsWith(".docx")) return "docx";
+  if (path.endsWith(".pptx")) return "pptx";
+  if (path.endsWith(".xlsx")) return "xlsx";
+  return "";
+}
+
 export async function verifyBuiltinArtifactResult(output) {
   if (!output || typeof output !== "object") return { status: "failed", reason: "Provider output is not an object." };
   if (output.ok === false) return { status: "failed", reason: "Provider reported failure." };
   const artifact = output.artifact;
   const providerVerified = artifact?.verified === true;
-  const inspectedPdf = artifact?.type === "application/pdf"
-    && Number(artifact?.size) > 0
+  const size = Number(artifact?.size) || 0;
+  const type = String(artifact?.type || "").toLowerCase();
+  const format = String(artifact?.format || officePathHint(artifact?.path)).toLowerCase();
+  const inspectedPdf = type === "application/pdf"
+    && size > 0
     && Number(artifact?.pages) > 0;
-  if (!artifact?.path || (!providerVerified && !inspectedPdf)) {
+  const inspectedOffice = size > 0 && (
+    format === "docx" || format === "pptx" || format === "xlsx" || format === "pdf"
+    || /wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet|application\/pdf|application\/octet-stream/.test(type)
+  ) && Boolean(officePathHint(artifact?.path) || ["docx", "pptx", "xlsx", "pdf"].includes(format));
+  if (!artifact?.path || (!providerVerified && !inspectedPdf && !inspectedOffice)) {
     return {
       status: "failed",
       reason: `Provider did not return a verified artifact. keys=${Object.keys(output).join(",")} artifact=${JSON.stringify(output.artifact ?? null)}`
@@ -39,7 +55,9 @@ export async function verifyBuiltinArtifactResult(output) {
     status: "verified",
     checks: providerVerified
       ? ["artifact-path", "provider-artifact-verification"]
-      : ["artifact-path", "pdf-signature", "pdf-page-count"]
+      : inspectedPdf
+        ? ["artifact-path", "pdf-signature", "pdf-page-count"]
+        : ["artifact-path", "office-size-and-extension"]
   };
 }
 

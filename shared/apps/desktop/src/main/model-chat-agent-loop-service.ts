@@ -1389,7 +1389,27 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
           emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
         }, createEvent);
         flushDurableBoundary();
-        if (!createResult.ok) throw new Error(`Native ${format.toUpperCase()} creation failed: ${createResult.output ?? "unknown error"}`);
+        if (!createResult.ok) {
+          const failEvent = {
+            type: "tool_result",
+            payload: {
+              callId: `native-${format}-skip-${Date.now()}`,
+              name: createTool,
+              result: {
+                ok: false,
+                output: `Native ${format.toUpperCase()} creation skipped after failure: ${createResult.output ?? "unknown error"}`
+              }
+            }
+          };
+          input.runtime.sessionMachine.events.push(failEvent);
+          this.dependencies.projectEvent({
+            requestId: input.modelInput.requestId, workspacePath: input.workspacePath, writtenArtifacts,
+            getRuns: () => (input.runtime.getSnapshot() as { runs?: unknown }).runs,
+            emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
+          }, failEvent);
+          flushDurableBoundary();
+          continue;
+        }
         const inspectResult = await input.runtime.invokeTool("artifact.inspect", { targetPath }, {
           permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
         });
@@ -1402,7 +1422,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         }, inspectEvent);
         flushDurableBoundary();
         if (!inspectResult.ok || !inspectResult.artifact?.size) {
-          throw new Error(`Native ${format.toUpperCase()} verification failed: ${inspectResult.output ?? "unknown error"}`);
+          continue;
         }
         if (!writtenArtifacts.some((artifact) => artifact.path === inspectResult.artifact?.path)) {
           writtenArtifacts.push({ path: inspectResult.artifact.path, size: inspectResult.artifact.size, changeType: createResult.artifact?.changeType ?? "created" });

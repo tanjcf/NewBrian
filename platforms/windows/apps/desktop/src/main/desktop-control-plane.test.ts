@@ -36,6 +36,19 @@ test("replaces loopback gateway with the bundled production endpoint", async () 
     migrateLegacyGatewayBaseUrl("https://gateway.example/v1", "http://120.48.151.202:8790/v1"),
     "https://gateway.example/v1"
   );
+  assert.equal(
+    migrateLegacyGatewayBaseUrl("https://test.wangjietech.com/v1", "http://120.48.151.202:8790/v1"),
+    "http://120.48.151.202:8790/v1"
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: "https://api.wangjietech.com/v1",
+      bundledBaseUrl: "https://api.wangjietech.com/v1",
+      isPackaged: true,
+      productionBaseUrl: "http://120.48.151.202:8790/v1"
+    }),
+    "http://120.48.151.202:8790/v1"
+  );
   // Packaged installs never keep loopback even when the bundled resource is also loopback.
   assert.equal(
     resolveEffectiveGatewayBaseUrl({

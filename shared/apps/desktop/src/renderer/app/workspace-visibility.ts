@@ -61,6 +61,19 @@ export function catalogWorkspaceRecencyMs(workspace: Pick<WorkspaceCatalogItem, 
   return latest;
 }
 
+/**
+ * codeCN sidebar project order: newest catalog entries first, pinned above the rest.
+ * Catalog persistence appends newly created workspaces, so reverse before a stable pin-sort.
+ */
+export function orderSidebarProjects<T extends Pick<WorkspaceCatalogItem, "id">>(
+  workspaces: readonly T[],
+  pinnedWorkspaceIds: ReadonlySet<string> = new Set()
+): T[] {
+  return [...workspaces]
+    .reverse()
+    .sort((left, right) => Number(pinnedWorkspaceIds.has(right.id)) - Number(pinnedWorkspaceIds.has(left.id)));
+}
+
 export function crossSceneRecentProjects(
   workspaces: readonly WorkspaceCatalogItem[],
   currentSceneKey: BrainWorkspaceKey,

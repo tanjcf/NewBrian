@@ -182,8 +182,51 @@ export function registerWorkspaceIpcHandlers(services: WorkspaceIpcServices) {
     if (typeof query !== "string") throw new TypeError("Workspace search query must be a string.");
     return services.search(query);
   });
-  ipcMain.handle(desktopIpcChannels.workspaceFiles.read, (_event, input: unknown) => services.readFile(parseWorkspaceFile(input)));
-  ipcMain.handle(desktopIpcChannels.workspaceFiles.preview, (_event, input: unknown) => services.previewFile(parseWorkspaceFile(input)));
-  ipcMain.handle(desktopIpcChannels.workspaceFiles.open, (_event, input: unknown) => services.openFile(parseWorkspaceFile(input)));
-  ipcMain.handle(desktopIpcChannels.workspaceFiles.performAction, (_event, input: unknown) => services.performFileAction(parseWorkspaceFileAction(input)));
+  ipcMain.handle(desktopIpcChannels.workspaceFiles.read, async (_event, input: unknown) => {
+    try {
+      return await services.readFile(parseWorkspaceFile(input));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        error: message,
+        reason: /文件不存在|ENOENT|not found|无法预览/i.test(message) ? "missing_file" : "read_failed",
+        content: "",
+        binary: false,
+        size: 0,
+        path: typeof (input as { filePath?: unknown })?.filePath === "string" ? (input as { filePath: string }).filePath : ""
+      };
+    }
+  });
+  ipcMain.handle(desktopIpcChannels.workspaceFiles.preview, async (_event, input: unknown) => {
+    try {
+      return await services.previewFile(parseWorkspaceFile(input));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const filePath = typeof (input as { filePath?: unknown })?.filePath === "string"
+        ? (input as { filePath: string }).filePath
+        : "";
+      return {
+        ok: false,
+        error: message,
+        reason: /文件不存在|ENOENT|not found|无法预览/i.test(message) ? "missing_file" : "read_failed",
+        path: filePath,
+        name: filePath.split(/[\\/]/).pop() || filePath
+      };
+    }
+  });
+  ipcMain.handle(desktopIpcChannels.workspaceFiles.open, async (_event, input: unknown) => {
+    try {
+      return await services.openFile(parseWorkspaceFile(input));
+    } catch (error) {
+      return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle(desktopIpcChannels.workspaceFiles.performAction, async (_event, input: unknown) => {
+    try {
+      return await services.performFileAction(parseWorkspaceFileAction(input));
+    } catch (error) {
+      return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+    }
+  });
 }

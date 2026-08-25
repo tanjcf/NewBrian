@@ -328,6 +328,7 @@ textarea {
 .workspace-frame {
   min-height: 0;
   display: grid;
+  position: relative;
   grid-template-columns: clamp(280px, 24vw, 372px) minmax(360px, 0.92fr) minmax(420px, 1.08fr);
 }
 
@@ -11064,26 +11065,96 @@ textarea {
   background: #7aa2e8;
 }
 
-.brain-resource-panel > header {
-  min-height: 62px;
+.brain-resource-panel > header,
+.brain-resource-panel > .brain-resource-header {
+  min-height: 58px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #e7eaee;
+  padding: 0 16px;
+  background: #fff;
+}
+
+.brain-resource-header-copy {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  border-bottom: 1px solid #e7eaee;
-  padding: 8px 16px;
 }
 
-.brain-resource-panel > header strong {
+.brain-resource-panel > header strong,
+.brain-resource-header-copy strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
 }
 
-.brain-resource-panel > header small {
+.brain-resource-panel > header small,
+.brain-resource-header-copy small {
   color: #8b93a0;
   font-size: 11px;
+}
+
+.brain-resource-header .preview-header-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Match codeCN preview-center-module expand: card fills the main column. */
+.brain-resource-panel.center {
+  width: auto;
+  min-width: 0;
+  min-height: 100%;
+  border: 1px solid var(--line, #e7eaee);
+  border-radius: 18px;
+  background: #fbfbfc;
+  overflow: hidden;
+  grid-template-rows: 58px auto auto minmax(0, 1fr);
+}
+
+.brain-resource-panel.center > .brain-resource-header {
+  padding: 0 18px;
+  background: #fff;
+}
+
+.workspace-frame:has(> .brain-resource-panel.center) > .brain-resource-panel.center {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.codex-shell:not(.sidebar-collapsed) .workspace-frame:has(> .brain-resource-panel.center) {
+  grid-template-columns: clamp(280px, 24vw, 372px) minmax(360px, 1fr) !important;
+}
+
+.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel.center) {
+  grid-template-columns: minmax(360px, 1fr) !important;
+}
+
+/* codeCN restores the right panel from the chat topbar — not a floating rail. */
+.brain-resource-restore-rail {
+  display: none !important;
+}
+
+/* While Tools owns the right column, hide the generic preview "显示侧栏" topbar twin. */
+.task-topbar-actions .preview-header-actions.topbar > .preview-panel-toggle {
+  display: none;
+}
+
+.task-topbar-actions.brain-tools-collapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.task-topbar-actions .brain-tools-restore-toggle {
+  display: inline-flex;
 }
 
 .brain-resource-panel > nav {
@@ -14579,6 +14650,15 @@ textarea {
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
+/* codeCN: reveal project actions on row hover / focus; keep them usable on the active project. */
+.codex-sidebar .project-header:hover .project-hover-actions,
+.codex-sidebar .project-header:focus-within .project-hover-actions,
+.codex-sidebar .project-group.active .project-header:hover .project-hover-actions,
+.codex-sidebar .project-group.active .project-header:focus-within .project-hover-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .research-intake-card {
   position: absolute;
   left: 0;
@@ -14788,17 +14868,6 @@ textarea {
   opacity: 1;
   pointer-events: auto;
   transition: transform 120ms ease;
-}
-
-.codex-sidebar .project-group.active .project-hover-actions {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.codex-sidebar .project-header:hover .project-hover-actions,
-.codex-sidebar .project-header:focus-within .project-hover-actions {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 /* Keep the conversation chrome close to the reference: no unsolicited toolbar pills. */
@@ -16201,6 +16270,54 @@ textarea {
 
 .new-chat-task .new-chat-project-row em {
   font-size: 14px !important;
+}
+
+/* Fuse composer + project/mode/branch strip into one card (fixes floating gray bar). */
+.new-chat-task .new-chat-composer-shell {
+  width: min(728px, 100%) !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-radius: 18px !important;
+  background: #fff !important;
+  box-shadow: 0 16px 34px rgba(24, 31, 42, 0.09) !important;
+  overflow: visible !important;
+}
+
+.new-chat-task .new-chat-composer-shell .new-chat-composer-slot {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+.new-chat-task .new-chat-composer-shell .new-chat-composer-slot .composer-card,
+.new-chat-task .new-chat-composer-shell .new-chat-composer .composer-card,
+.new-chat-task .new-chat-composer-shell .brain-chat-composer .composer-card {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border: 1px solid #e1e3e7 !important;
+  border-bottom-color: transparent !important;
+  border-radius: 17px 17px 0 0 !important;
+  box-shadow: none !important;
+  background: #fff !important;
+}
+
+.new-chat-task .new-chat-composer-shell .new-chat-composer-slot .composer-card::before,
+.new-chat-task .new-chat-composer-shell .composer-card::before {
+  border-radius: 18px 18px 0 0 !important;
+  border-bottom-color: transparent !important;
+}
+
+.new-chat-task .new-chat-composer-shell .new-chat-project-row {
+  width: 100% !important;
+  height: 42px !important;
+  margin: 0 !important;
+  border: 1px solid #e1e3e7 !important;
+  border-top: 1px solid #eceef1 !important;
+  border-radius: 0 0 18px 18px !important;
+  background: #f4f4f4 !important;
+  box-shadow: none !important;
+  padding: 0 14px !important;
 }
 
 .new-chat-task .new-chat-integrations {
@@ -18379,7 +18496,8 @@ textarea {
   grid-row: 1;
 }
 
-.workspace-frame:has(> .brain-resource-panel) > .brain-chat-module {
+.workspace-frame:has(> .brain-resource-panel) > .brain-chat-module,
+.workspace-frame:has(> .brain-resource-panel) > .task-column {
   grid-column: 2;
   grid-row: 1;
 }
@@ -18396,7 +18514,9 @@ textarea {
 }
 
 .workspace-frame.sidebar-collapsed:has(> .brain-resource-panel) > .brain-chat-module,
-.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel) > .brain-chat-module {
+.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel) > .brain-chat-module,
+.workspace-frame.sidebar-collapsed:has(> .brain-resource-panel) > .task-column,
+.codex-shell.sidebar-collapsed .workspace-frame:has(> .brain-resource-panel) > .task-column {
   grid-column: 1;
 }
 

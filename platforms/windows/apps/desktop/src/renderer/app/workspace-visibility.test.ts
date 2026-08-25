@@ -158,3 +158,24 @@ test("defaults unbound catalog items to document and filters by scene", () => {
     ["quant-1", "game-1"]
   );
 });
+
+test("orders sidebar projects newest-first with pinned workspaces on top", () => {
+  const sceneCatalog = [
+    workspace({ id: "older", name: "Older", brainWorkspaceKey: "software", threads: [] }),
+    workspace({ id: "newer", name: "Newer", brainWorkspaceKey: "software", threads: [] }),
+    workspace({ id: "pinned-old", name: "Pinned", brainWorkspaceKey: "software", threads: [] })
+  ];
+
+  assert.deepEqual(
+    visibility.orderSidebarProjects(sceneCatalog).map((item) => item.id),
+    ["pinned-old", "newer", "older"]
+  );
+  assert.deepEqual(
+    visibility.orderSidebarProjects(sceneCatalog, new Set(["pinned-old"])).map((item) => item.id),
+    ["pinned-old", "newer", "older"]
+  );
+  assert.deepEqual(
+    visibility.orderSidebarProjects(sceneCatalog, new Set(["older"])).map((item) => item.id),
+    ["older", "pinned-old", "newer"]
+  );
+});

@@ -86,11 +86,45 @@ test("falls back to outputs/ when a generated artifact is opened by basename", a
     await fs.mkdir(join(projectRoot, "outputs"), { recursive: true });
     await fs.writeFile(join(projectRoot, "outputs", "龟途-第1章.md"), "# ok", "utf8");
 
-    assert.deepEqual(previewPathFallbacks("龟途-第1章.md"), ["outputs/龟途-第1章.md"]);
-    assert.deepEqual(previewPathFallbacks("outputs/龟途-第1章.md"), []);
+    assert.deepEqual(previewPathFallbacks("龟途-第1章.md"), [
+      "outputs/龟途-第1章.md",
+      "files/龟途-第1章.md",
+      "artifacts/龟途-第1章.md",
+      "docs/龟途-第1章.md",
+      "notes/龟途-第1章.md"
+    ]);
+    assert.ok(previewPathFallbacks("outputs/龟途-第1章.md").includes("龟途-第1章.md"));
 
     const result = await resolveExistingFileInsideRoot(projectRoot, "龟途-第1章.md");
     assert.equal(result.relativePath.replace(/\\/g, "/"), "outputs/龟途-第1章.md");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("finds explore-style notes by basename under nested folders", async () => {
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  try {
+    const projectRoot = join(tempRoot, "project");
+    await fs.mkdir(join(projectRoot, "notes", "e2e"), { recursive: true });
+    await fs.writeFile(join(projectRoot, "notes", "e2e", "explore-e2e-note-1787639474072.txt"), "场景学习探索E2E验收", "utf8");
+
+    const result = await resolveExistingFileInsideRoot(projectRoot, "explore-e2e-note-1787639474072.txt");
+    assert.equal(result.relativePath.replace(/\\/g, "/"), "notes/e2e/explore-e2e-note-1787639474072.txt");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("uses a generic missing-file hint for plain text notes", async () => {
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  try {
+    const projectRoot = join(tempRoot, "project");
+    await fs.mkdir(projectRoot);
+    await assert.rejects(
+      resolveExistingFileInsideRoot(projectRoot, "explore-e2e-note.txt"),
+      /请确认文件已写入当前项目目录后重试/
+    );
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

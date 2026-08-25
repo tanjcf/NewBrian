@@ -113,11 +113,16 @@ export function classifyArtifactPreviewPayload(file: {
 }
 
 export function classifyFilePreviewError(error: unknown): FilePreviewIssue {
-  const message = error instanceof Error ? error.message : String(error || "未知错误");
+  const raw = error instanceof Error ? error.message : String(error || "未知错误");
+  const message = raw
+    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "")
+    .replace(/^Error invoking remote method "[^"]+":\s*(?:Error:\s*)?/i, "")
+    .trim() || "未知错误";
   if (/文件不存在|ENOENT|not found|无法预览/i.test(message)) {
     return {
       ok: false,
       reason: "missing_file",
+      // Brief auto-retry covers write→preview races; manual 重试预览 also re-reads from disk.
       retryable: true,
       message: message || "文件不存在，无法预览。"
     };
@@ -138,7 +143,54 @@ export function classifyFilePreviewError(error: unknown): FilePreviewIssue {
   };
 }
 
+/** Normalize soft IPC failures (`{ ok:false, reason, error }`) into FilePreviewIssue. */
+export function classifySoftFilePreviewFailure(soft: {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  reason?: string;
+}): FilePreviewIssue {
+  const message = String(soft.error || soft.message || "文件预览失败。").trim() || "文件预览失败。";
+  const reason = String(soft.reason || "").trim();
+  if (reason === "missing_file" || /文件不存在|ENOENT|not found|无法预览/i.test(message)) {
+    return {
+      ok: false,
+      reason: "missing_file",
+      retryable: true,
+      message
+    };
+  }
+  if (reason === "empty_file" || reason === "empty_artifact") {
+    return {
+      ok: false,
+      reason: reason as FilePreviewIssueReason,
+      retryable: true,
+      message
+    };
+  }
+  if (reason === "preview_unsupported" || reason === "binary_file") {
+    return {
+      ok: false,
+      reason: reason as FilePreviewIssueReason,
+      retryable: false,
+      message
+    };
+  }
+  if (reason === "read_failed") {
+    return {
+      ok: false,
+      reason: "read_failed",
+      retryable: false,
+      message
+    };
+  }
+  return classifyFilePreviewError(new Error(message));
+}
+
 export function formatFilePreviewStatus(issue: FilePreviewIssue, reportId?: string) {
+  if (issue.reason === "missing_file") {
+    return /文件不存在|无法预览/.test(issue.message) ? issue.message : `文件不存在，无法预览。${issue.message}`;
+  }
   const suffix = reportId ? `（诊断 ${reportId}）` : "";
   return `文件预览异常：${issue.message}${suffix}`;
 }

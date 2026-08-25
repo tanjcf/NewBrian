@@ -4,7 +4,7 @@ type SceneSection = { title: string; keywords: string[]; content: string };
 
 const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[] }> = {
   explore: { title: "场景学习探索", sections: [
-    { title: "通用 Brain", keywords: ["探索", "学习", "场景"], content: "这是原生 Brain 的无专用场景模式。对话、项目、线程、Skill、知识检索和工具调用均按通用能力工作；明确进入量化、游戏、视频等业务场景时，再切换到对应场景。" }
+    { title: "通用 Brain", keywords: ["探索", "学习", "场景", "文件", "产物", "任务", "项目"], content: "这是 codeCN 原生工作台模式。右侧不挂业务场景专属 Tools，只保留项目资源：文件、产物、任务。对话、项目、线程、Skill、知识检索和通用工具调用按原生能力工作；进入量化、游戏、视频等业务场景时，再切换到对应场景并使用其右侧专属 Tools。" }
   ] },
   quant: { title: "量化交易", sections: [
     { title: "能力", keywords: ["行情", "股票", "K线", "量柱", "组合", "策略"], content: "查询真实行情、查看K线与成交量、组合持仓、策略回测和风险分析。默认不连接真实券商，不执行真实下单。" },
@@ -24,7 +24,7 @@ const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[
   ] },
   data: { title: "数据与决策", sections: [
     { title: "能力", keywords: ["数据", "CSV", "Excel", "分析", "图表", "Julius", "Flow"], content: "导入CSV/Excel、浏览数据集、生成摘要分析、绘制图表和运行决策 Flow。分析结论必须引用实际数据集和筛选条件。" },
-    { title: "工具接口", keywords: ["dataset", "import", "summarize", "aggregate", "cook", "flow", "data.file.import_local"], content: "必须调用右侧数据 Tools，不能只写方案。data.file.import_local：把本机 CSV/XLSX 绝对路径复制进工程 data/raw/ 并登记文件（可 autoImportDataset）。data.file.list / data.project.inspect：查看文件与数据集。data.dataset.import_csv / import_xlsx：导入真实数据集到右侧。data.analysis.summarize / aggregate：数值摘要与分组聚合，结果同步 Julius。data.dataset.read_rows：核对表格行。data.analysis.save / data.analysis.cook：保存洞察并导出 Docs/BRAIN/analysis.json。Flow 工具用于决策摘要。" }
+    { title: "工具接口", keywords: ["dataset", "import", "summarize", "aggregate", "cook", "flow", "data.file.import_local", "python", "pandas"], content: "分工：Python/pandas 做统计，大模型只做格式封装。data.file.import_local 登记 CSV；data.analysis.summarize / aggregate 由本机 Python 分块计算，工具只返回摘要 JSON（适配十万～千万行），禁止把全表读进对话。data.dataset.read_rows 仅抽样预览。根据 summarize/aggregate 返回写 insight，再 data.analysis.save / data.analysis.cook 导出 Docs/BRAIN/analysis.json。不要用 shell 手写分析脚本来绕过 data.* 工具。" }
   ] },
   software: { title: "软件与自动化", sections: [
     { title: "能力", keywords: ["终端", "代码", "测试", "部署", "Flow", "文件"], content: "查看项目文件、运行受控终端、编辑代码、执行测试、部署和自动化 Flow。涉及外部副作用时遵循审批和工作区边界。" },

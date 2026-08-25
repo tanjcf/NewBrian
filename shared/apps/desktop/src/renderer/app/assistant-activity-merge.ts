@@ -95,26 +95,39 @@ export function resolveEffectiveApproval(input: {
   liveActivities?: AssistantActivityLike[] | null;
   /** True after the user clicked approve/reject and snapshot.approval was cleared. */
   approvalDecisionPending?: boolean;
+  /**
+   * When false, ignore process-global snapshot.approval (owned by another thread)
+   * and do not synthesize a banner from sticky catalog awaiting-approval alone.
+   */
+  selectedThreadOwnsLiveApproval?: boolean;
+  /** True when this thread still has an in-flight request id. */
+  selectedThreadHasLiveRequest?: boolean;
 }): { message: string; requiresConfirmation: boolean } | null {
   if (input.approvalDecisionPending && !input.snapshotApproval) {
     return null;
   }
-  if (input.snapshotApproval) {
+  const ownsLiveApproval = input.selectedThreadOwnsLiveApproval !== false;
+  if (input.snapshotApproval && ownsLiveApproval) {
     return {
       message: input.snapshotApproval.message || "运行此命令需要你的确认",
       requiresConfirmation: input.snapshotApproval.requiresConfirmation !== false
     };
   }
   const liveApproval = findLivePendingApprovalActivity(input.liveActivities);
-  if (liveApproval) {
+  if (liveApproval && ownsLiveApproval) {
     return {
       message: String(liveApproval.detail || liveApproval.command || "运行此命令需要你的确认"),
       requiresConfirmation: true
     };
   }
-  // Only synthesize from catalog status when live activities cannot yet confirm,
-  // and never after a completed/failed run already replaced the pending row.
-  if (input.selectedThreadAwaitingApproval && !(input.liveActivities && input.liveActivities.length)) {
+  // Catalog-only synthesis is sticky across restarts and other scenes; only keep
+  // it while this thread still owns a live request and has no activity rows yet.
+  if (
+    ownsLiveApproval
+    && input.selectedThreadHasLiveRequest
+    && input.selectedThreadAwaitingApproval
+    && !(input.liveActivities && input.liveActivities.length)
+  ) {
     return {
       message: input.selectedThreadMessage || "当前线程有工具调用等待批准",
       requiresConfirmation: true

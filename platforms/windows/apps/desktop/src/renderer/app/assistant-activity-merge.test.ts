@@ -133,6 +133,38 @@ test("resolveEffectiveApproval stays cleared while approve click is in flight", 
   }), null);
 });
 
+test("resolveEffectiveApproval ignores foreign snapshot approval for another thread", () => {
+  assert.equal(resolveEffectiveApproval({
+    snapshotApproval: { id: "a-foreign", message: "确认执行 shell" },
+    selectedThreadOwnsLiveApproval: false,
+    selectedThreadAwaitingApproval: false,
+    liveActivities: []
+  }), null);
+});
+
+test("resolveEffectiveApproval does not synthesize sticky catalog awaiting without a live request", () => {
+  assert.equal(resolveEffectiveApproval({
+    snapshotApproval: null,
+    selectedThreadOwnsLiveApproval: true,
+    selectedThreadAwaitingApproval: true,
+    selectedThreadHasLiveRequest: false,
+    selectedThreadMessage: "原生工具调用等待批准",
+    liveActivities: []
+  }), null);
+});
+
+test("resolveEffectiveApproval synthesizes catalog awaiting only while this thread request is live", () => {
+  const decision = resolveEffectiveApproval({
+    snapshotApproval: null,
+    selectedThreadOwnsLiveApproval: true,
+    selectedThreadAwaitingApproval: true,
+    selectedThreadHasLiveRequest: true,
+    selectedThreadMessage: "原生工具调用等待批准",
+    liveActivities: []
+  });
+  assert.equal(decision?.message, "原生工具调用等待批准");
+});
+
 test("markApprovalActivitiesSettling replaces sticky 等待批准 after approve", () => {
   const settled = markApprovalActivitiesSettling([{
     type: "run",

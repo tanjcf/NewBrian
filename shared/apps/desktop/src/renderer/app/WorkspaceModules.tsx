@@ -10,6 +10,7 @@ import {
   buildFilePreviewDiagnosticContext,
   classifyArtifactPreviewPayload,
   classifyFilePreviewError,
+  classifySoftFilePreviewFailure,
   classifyTextPreviewPayload,
   FILE_PREVIEW_MAX_ATTEMPTS,
   filePreviewRetryDelayMs,
@@ -25,10 +26,15 @@ import { sanitizeVisibleModelContent } from "../../shared/model-content-visibili
 import { builtinPluginCatalog } from "../../shared/builtin-plugins";
 import { executionKindDescription, executionKindLabel } from "../../shared/plugin-execution";
 import { projectPersistedActivities } from "./persisted-activity-policy";
-import { groupActivitiesByUserMessage, resolveActiveReasoningRequestId } from "./thread-activity-policy";
+import {
+  groupActivitiesByUserMessage,
+  resolveActiveReasoningRequestId,
+  resolvePendingApprovalThreadKey,
+  resolveSelectedThreadOwnsLiveApproval
+} from "./thread-activity-policy";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import { resolveLocalArtifactHref } from "./local-file-link";
-import { chatWorkspaces, crossSceneRecentProjects, filterWorkspaceCatalogByScene, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection } from "./workspace-visibility";
+import { chatWorkspaces, crossSceneRecentProjects, filterWorkspaceCatalogByScene, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection } from "./workspace-visibility";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
@@ -72,7 +78,8 @@ const brainWorkspaceIcon = (workspaceKey: string) =>
   brainWorkspaceModes.find((workspace) => workspace.workspaceKey === workspaceKey)?.icon || "folder";
 
 const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ key: string; label: string }>> = {
-  explore: [{ key: "knowledge", label: "场景知识" }, { key: "tools", label: "可用工具" }],
+  // 场景学习探索 = codeCN 原生工作台：右侧只保留项目资源（文件/产物/任务），无业务场景专属 Tools 页签。
+  explore: [],
   quant: [
     { key: "market", label: "行情" },
     { key: "portfolio", label: "组合" },
@@ -117,7 +124,7 @@ import {
 } from "./composer-picker-menu-position";
 import { respondToDelegatedAgentApproval } from "./delegated-agent-approval";
 import { summarizeDelegatedAgents } from "./delegated-agent-summary";
-import { markThreadApprovalSettlingInCatalog } from "./thread-order";
+import { clearStaleThreadApprovalInCatalog, markThreadApprovalSettlingInCatalog } from "./thread-order";
 import {
   findLivePendingApprovalActivity,
   markApprovalActivitiesSettling,
@@ -570,8 +577,12 @@ export function WorkspaceModules(ctx: any) {
     serialized: (() => { try { return localStorage.getItem(BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
     legacyWorkspaceKey: (() => { try { return localStorage.getItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })()
   }));
-  const initialWorkspaceSceneTab = brainWorkspaceCapabilityTabs[initialBrainWorkspaceSelection.current.selection.selectedWorkspaceKey]?.[0]?.key || "market";
-  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "scene">(() => initialWorkspaceSceneTab === "files" ? "files" : "scene");
+  const initialWorkspaceSceneTab = brainWorkspaceCapabilityTabs[initialBrainWorkspaceSelection.current.selection.selectedWorkspaceKey]?.[0]?.key || "files";
+  const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "scene">(() =>
+    initialWorkspaceSceneTab === "files" || !brainWorkspaceCapabilityTabs[initialBrainWorkspaceSelection.current.selection.selectedWorkspaceKey]?.length
+      ? "files"
+      : "scene"
+  );
   const [brainSceneTab, setBrainSceneTab] = useState(initialWorkspaceSceneTab);
   const brainResourcePanelRef = useRef<HTMLElement | null>(null);
   const [brainResourceWidth, setBrainResourceWidth] = useState(() => {
@@ -582,6 +593,8 @@ export function WorkspaceModules(ctx: any) {
       return 480;
     }
   });
+  /** side = 右侧 Tools；center = 放大占主区；hidden = 收起 */
+  const [brainResourcePlacement, setBrainResourcePlacement] = useState<"side" | "center" | "hidden">("side");
   const [brainWorkspaceSelection, setBrainWorkspaceSelection] = useState(initialBrainWorkspaceSelection.current.selection);
   const [brainWorkspaceMigrated, setBrainWorkspaceMigrated] = useState(initialBrainWorkspaceSelection.current.migrated);
   const selectedBrainWorkspaceKey = brainWorkspaceSelection.selectedWorkspaceKey;
@@ -593,9 +606,11 @@ export function WorkspaceModules(ctx: any) {
   const [brainWorkspaceAvailability, setBrainWorkspaceAvailability] = useState<"loading" | "ready" | "unavailable">("loading");
   const brainWorkspaceMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const firstCapability = brainWorkspaceCapabilityTabs[selectedBrainWorkspaceKey]?.[0]?.key || "files";
+    const capabilityTabs = brainWorkspaceCapabilityTabs[selectedBrainWorkspaceKey] || [];
+    const firstCapability = capabilityTabs[0]?.key || "files";
     setBrainSceneTab(firstCapability);
-    setBrainResourceTab(firstCapability === "files" ? "files" : "scene");
+    // 无场景专属 Tools（如场景学习探索）时，右侧回到 codeCN 原生：文件/产物/任务。
+    setBrainResourceTab(!capabilityTabs.length || firstCapability === "files" ? "files" : "scene");
   }, [selectedBrainWorkspaceKey]);
   useEffect(() => {
     if (!window.codecn?.ensureBrainEnginesForScene) return;
@@ -650,7 +665,7 @@ export function WorkspaceModules(ctx: any) {
     setSelectedComposerTools([]);
     setComposerSkillContext("");
     setComposerModes([]);
-    const nextWorkspace = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, workspaceKey)[0];
+    const nextWorkspace = orderSidebarProjects(filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, workspaceKey))[0];
     if (nextWorkspace) {
       setSelectedWorkspaceId(nextWorkspace.id);
       const nextThreadId = resolveUserVisibleThreadSelection(nextWorkspace.threads, null)?.id || "";
@@ -676,6 +691,7 @@ export function WorkspaceModules(ctx: any) {
     setSearchFilePreview(null);
     setPreviewMode("empty");
     setPreviewPlacement("hidden");
+    setBrainResourcePlacement("side");
   }, [activeFeature, selectedBrainProjectId, selectedBrainConversationId, setActiveFeature, setComposerModes, setComposerSkillContext, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedComposerSkill, setSelectedComposerTools, setSelectedThreadId, setSelectedWorkspaceId, visibleWorkspaceCatalog]);
   useEffect(() => {
     const sceneProjects = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
@@ -685,7 +701,7 @@ export function WorkspaceModules(ctx: any) {
       return;
     }
     if (selectedWorkspace?.id && sceneProjects.some((workspace) => workspace.id === selectedWorkspace.id)) return;
-    const next = sceneProjects[0];
+    const next = orderSidebarProjects(sceneProjects)[0];
     setSelectedWorkspaceId(next.id);
     // BRAIN conversation selection owns the active thread. Do not let scene-project
     // bootstrap overwrite it, or the chat scroll/context thrash on every catalog tick.
@@ -855,7 +871,17 @@ export function WorkspaceModules(ctx: any) {
       workspaceId: selectedWorkspace.id,
       threadId: mappedThreadId
     }).then((threadSnapshot) => {
-      if (activatedBrainThreadRef.current === activationKey) syncSnapshot(threadSnapshot, mappedThreadId);
+      if (activatedBrainThreadRef.current !== activationKey) return;
+      syncSnapshot(threadSnapshot, mappedThreadId);
+      // Activation without a live approval must not keep sticky awaiting-approval
+      // from another turn/scene; clear only this thread's catalog badge.
+      if (!threadSnapshot?.approval) {
+        setWorkspaceCatalog((current: any) => clearStaleThreadApprovalInCatalog(
+          current,
+          selectedWorkspace.id,
+          mappedThreadId
+        ));
+      }
     }).catch((error) => {
       if (activatedBrainThreadRef.current === activationKey) activatedBrainThreadRef.current = "";
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -928,7 +954,13 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     if (!window.codecn?.onDataWorkspaceUpdated) return;
     return window.codecn.onDataWorkspaceUpdated((payload: { projectId?: string }) => {
-      if (payload?.projectId && selectedBrainProjectId && payload.projectId !== selectedBrainProjectId) return;
+      const projectId = String(payload?.projectId || "").trim();
+      if (projectId && selectedBrainProjectId && projectId !== selectedBrainProjectId) return;
+      if (projectId && !selectedBrainProjectId) {
+        // Explore/new-chat writes may create the first brain project for the
+        // active local folder; select it so 文件/产物/任务 refresh against it.
+        setSelectedBrainProjectId(projectId);
+      }
       setDataWorkspaceRefreshToken((value) => value + 1);
     });
   }, [selectedBrainProjectId]);
@@ -2062,6 +2094,11 @@ export function WorkspaceModules(ctx: any) {
       errorMessage: input.issue.message
     });
     console.error("[file-preview]", input.issue.reason, context);
+    // Expected missing outputs should stay in-panel; do not mint desktop-error diagnostics.
+    if (input.issue.reason === "missing_file") {
+      setChatStatus(formatFilePreviewStatus(input.issue));
+      return "";
+    }
     let reportId = "";
     try {
       const result = await api?.reportRendererDiagnostic?.({
@@ -2088,6 +2125,9 @@ export function WorkspaceModules(ctx: any) {
       void reportFilePreviewIssue({ filePath: filePath || "", workspaceId, issue, attempt: 1, artifact: false });
       return;
     }
+    if (location?.workspaceId && location.workspaceId !== selectedWorkspace?.id) {
+      setSelectedWorkspaceId(location.workspaceId);
+    }
     setActiveFeature("new-chat");
     setIsComposingNewThread(false);
     setPreviewMode("workspace");
@@ -2111,6 +2151,7 @@ export function WorkspaceModules(ctx: any) {
       loading: true,
       error: undefined,
       blankReason: undefined,
+      workspaceId,
       ...location
     };
     activeArtifactPathRef.current = tabKey;
@@ -2126,6 +2167,7 @@ export function WorkspaceModules(ctx: any) {
     const requestSequence = ++filePreviewRequestSequence.current;
     const requestPath = openPath;
     const requestTabKey = tabKey;
+    const requestWorkspaceId = workspaceId;
     const artifact = /\.(pdf|docx|pptx|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi)$/i.test(requestPath);
     const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
     const stillActiveForRequest = () => {
@@ -2141,8 +2183,14 @@ export function WorkspaceModules(ctx: any) {
         if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current)) return;
         try {
           const file = artifact
-            ? await api.previewWorkspaceFile({ workspaceId, filePath: requestPath })
-            : await api.readWorkspaceFile({ workspaceId, filePath: requestPath });
+            ? await api.previewWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath })
+            : await api.readWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath });
+          if (file && (file as { ok?: boolean }).ok === false) {
+            lastIssue = classifySoftFilePreviewFailure(file as { ok?: boolean; error?: string; message?: string; reason?: string });
+            if (!lastIssue.retryable || attempt === FILE_PREVIEW_MAX_ATTEMPTS) break;
+            await sleep(filePreviewRetryDelayMs(attempt));
+            continue;
+          }
           lastFile = file;
           const diagnosis = artifact ? classifyArtifactPreviewPayload(file) : classifyTextPreviewPayload(file);
           if (diagnosis.ok) {
@@ -2155,6 +2203,7 @@ export function WorkspaceModules(ctx: any) {
               error: undefined,
               blankReason: undefined,
               diagnosticId: undefined,
+              workspaceId: requestWorkspaceId,
               ...location
             };
             activeArtifactPathRef.current = canonicalPath;
@@ -2192,7 +2241,7 @@ export function WorkspaceModules(ctx: any) {
       };
       const reportId = await reportFilePreviewIssue({
         filePath: requestPath,
-        workspaceId,
+        workspaceId: requestWorkspaceId,
         issue,
         attempt: FILE_PREVIEW_MAX_ATTEMPTS,
         artifact,
@@ -2211,6 +2260,7 @@ export function WorkspaceModules(ctx: any) {
         content: lastFile?.content ?? "",
         binary: lastFile?.binary,
         size: lastFile?.size,
+        workspaceId: requestWorkspaceId,
         ...location
       };
       setArtifactTabs((tabs) => {
@@ -2222,10 +2272,10 @@ export function WorkspaceModules(ctx: any) {
       });
       setSearchFilePreview(failedTab);
       if (issue.reason === "preview_unsupported" || issue.reason === "binary_file" || issue.reason === "read_failed") {
-        void api.openWorkspaceFile({ workspaceId, filePath: requestPath }).catch(() => undefined);
+        void api.openWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath }).catch(() => undefined);
       }
     })();
-  }, [api, reportFilePreviewIssue, selectedWorkspace?.id, setActiveFeature, setActiveTreePath, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview]);
+  }, [api, reportFilePreviewIssue, selectedWorkspace?.id, setActiveFeature, setActiveTreePath, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedWorkspaceId]);
 
   useEffect(() => {
     if (!api?.onOpenWorkspaceFilePreview) return;
@@ -3266,8 +3316,7 @@ export function WorkspaceModules(ctx: any) {
   };
   const sidebarTaskEntries = sortSidebarEntries(sidebarOrganizeMode === "list" ? allSidebarTasks : standaloneChats);
   const visibleSidebarTaskEntries = sidebarTasksExpanded ? sidebarTaskEntries : sidebarTaskEntries.slice(0, 8);
-  const orderedSidebarProjects = [...sceneVisibleWorkspaceCatalog]
-    .sort((left, right) => Number(pinnedWorkspaceIds.has(right.id)) - Number(pinnedWorkspaceIds.has(left.id)));
+  const orderedSidebarProjects = orderSidebarProjects(sceneVisibleWorkspaceCatalog, pinnedWorkspaceIds);
   const visibleSidebarProjects = sidebarProjectsExpanded ? orderedSidebarProjects : orderedSidebarProjects.slice(0, 5);
   const selectedProjectWorkspace = sceneVisibleWorkspaceCatalog.find((workspace: any) => workspace.id === selectedWorkspace?.id)
     || visibleWorkspaceCatalog.find((workspace: any) => workspace.id === selectedWorkspace?.id);
@@ -3278,8 +3327,19 @@ export function WorkspaceModules(ctx: any) {
     : `我们该在 ${selectedProjectWorkspace?.name ?? "workspace"} 中做什么？`;
   const selectedThreadKey = selectedWorkspace && selectedThread ? `${selectedWorkspace.id}:${selectedThread.id}` : "";
   const activeSessionStatus = snapshot?.session?.status ?? "idle";
-  const pendingApprovalThreadKey = snapshot?.approval ? selectedThreadKey : "";
   const selectedThreadAwaitingApproval = selectedThread?.status === "awaiting-approval";
+  // Snapshot approval is process-global; only the owning thread may claim it.
+  const selectedThreadOwnsLiveApproval = resolveSelectedThreadOwnsLiveApproval({
+    selectedThreadId: selectedThread?.id,
+    activeThreadRequestIds: activeThreadRequestIds || {},
+    selectedThreadAwaitingApproval
+  });
+  const pendingApprovalThreadKey = resolvePendingApprovalThreadKey({
+    workspaceId: selectedWorkspace?.id,
+    threadId: selectedThread?.id,
+    snapshotHasApproval: Boolean(snapshot?.approval),
+    selectedThreadOwnsLiveApproval
+  });
   const [delegatedAgents, setDelegatedAgents] = useState<any[]>([]);
   const [delegatedAgentAction, setDelegatedAgentAction] = useState("");
   const [delegatedAgentDetailsOpen, setDelegatedAgentDetailsOpen] = useState(false);
@@ -3329,13 +3389,13 @@ export function WorkspaceModules(ctx: any) {
       setDelegatedAgentAction("");
     }
   };
-  // Snapshot approval/pendingTool are process-global; only trust them for the
-  // selected thread when that thread is itself running or catalog-awaiting.
-  const selectedThreadOwnsLiveApproval = Boolean(
-    isAskingModel || selectedThreadAwaitingApproval
+  const selectedThreadHasLiveRequest = Boolean(
+    selectedThread?.id && (activeThreadRequestIds || {})[selectedThread.id]
   );
   const effectiveApproval = resolveEffectiveApproval({
     snapshotApproval: selectedThreadOwnsLiveApproval ? (snapshot?.approval || null) : null,
+    selectedThreadOwnsLiveApproval,
+    selectedThreadHasLiveRequest,
     // While respondApproval is in flight we already cleared the card; ignore sticky
     // catalog/live "等待批准" rows until the IPC call finishes — unless the returned
     // snapshot already carries the next approval (handled after respond resolves).
@@ -4237,7 +4297,9 @@ function renderSidebarModule() {
                           try {
                             const nextCatalog = await api.removeWorkspace({ workspaceId: workspace.id });
                             setWorkspaceCatalog(nextCatalog);
-                            const fallback = nextCatalog[0];
+                            const fallback = orderSidebarProjects(
+                              filterWorkspaceCatalogByScene(normalizeWorkspaceCatalog(nextCatalog), selectedBrainWorkspaceKey)
+                            )[0];
                             if (selectedWorkspace?.id === workspace.id) {
                               const fallbackThreadId = fallback?.threads[0]?.id ?? "";
                               setSelectedWorkspaceId(fallback?.id ?? "");
@@ -4694,12 +4756,13 @@ function renderSidebarModule() {
     );
   }
 
-  function renderBrainResourcePanel() {
+  function renderBrainResourcePanel(placement: "side" | "center" = "side") {
     const taskStatusLabel: Record<string, string> = {
       QUEUED: "等待中", RUNNING: "运行中", SUCCEEDED: "已完成", FAILED: "失败", CANCELLED: "已取消"
     };
     const capabilityTabs = brainWorkspaceCapabilityTabs[selectedBrainWorkspaceKey] || [];
     const showCapability = (tabKey: string) => {
+      setBrainResourcePlacement((current) => current === "hidden" ? "side" : current);
       setBrainSceneTab(tabKey);
       if (tabKey === "files") {
         setBrainResourceTab("files");
@@ -4707,12 +4770,29 @@ function renderSidebarModule() {
       }
       setBrainResourceTab("scene");
     };
+    const isCenter = placement === "center";
+    // Mirror codeCN preview: center ↔ side, and hide → restore from the chat topbar toggle.
+    const toggleBrainExpanded = () => {
+      setBrainResourcePlacement((current) => (current === "center" ? "side" : "center"));
+    };
+    const collapseBrainPanel = () => {
+      setBrainResourcePlacement("hidden");
+      if (isCenter) {
+        setPreviewMode("empty");
+        setPreviewPlacement("hidden");
+      }
+    };
     const selectBrainDocumentFile = (file: any, openPreview = true) => {
       setActiveBrainDocumentFileId(file.id);
       setDocumentAnnotationActive(false);
       setDocumentAnnotationCandidate(null);
       setDocumentAnnotationInstruction("");
-      if (openPreview) openLocalFilePreview(file.storageKey);
+      if (openPreview) {
+        const workspaceId = selectedBrainProject?.localWorkspaceId
+          || resourceBrainProject?.localWorkspaceId
+          || selectedWorkspace?.id;
+        openLocalFilePreview(file.storageKey, workspaceId ? { workspaceId } : undefined);
+      }
       setBrainDocumentAnchors([]);
       if (selectedBrainProjectId && window.codecn?.ingestBrainFile) {
         void window.codecn.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: file.id })
@@ -4730,8 +4810,9 @@ function renderSidebarModule() {
       if (selectedBrainWorkspaceKey === "quant") {
         return <QuantWorkspace projectId={resourceBrainProject?.id} workspaceId={resourceBrainProject?.localWorkspaceId || selectedWorkspace?.id} compact activeView={brainSceneTab as "market" | "portfolio" | "strategy" | "radar" | "research"} />;
       }
+      // 场景学习探索无业务专属 Tools 页；右侧仅展示 codeCN 原生文件/产物/任务。
       if (selectedBrainWorkspaceKey === "explore") {
-        return renderPendingCapability(brainSceneTab === "tools" ? "可用工具" : "场景知识");
+        return null;
       }
       if (selectedBrainWorkspaceKey === "game") {
         if (brainSceneTab === "level") return <GameLevelEditor projectId={selectedBrainProject?.id} />;
@@ -4826,33 +4907,59 @@ function renderSidebarModule() {
       return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "工作台");
     };
     return (
-      <aside className="brain-resource-panel" ref={attachBrainResourcePanel}>
-        <button
-          type="button"
-          className="brain-resource-resize-handle"
-          aria-label="调整右侧面板宽度"
-          title="拖动调整右侧面板宽度"
-          onPointerDown={resizeBrainResourcePanel}
-          onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-            event.preventDefault();
-            setBrainResourceWidth((current) => Math.max(320, Math.min(760, current + (event.key === "ArrowLeft" ? 24 : -24))));
-          }}
-        />
-        <header>
-          <strong>{selectedBrainProject?.name || "项目资源"}</strong>
-          <small>仅保存在本机</small>
+      <aside className={`brain-resource-panel${isCenter ? " center" : ""}`} ref={isCenter ? undefined : attachBrainResourcePanel} data-placement={placement}>
+        {isCenter ? null : (
+          <button
+            type="button"
+            className="brain-resource-resize-handle"
+            aria-label="调整右侧面板宽度"
+            title="拖动调整右侧面板宽度"
+            onPointerDown={resizeBrainResourcePanel}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              setBrainResourceWidth((current) => Math.max(320, Math.min(760, current + (event.key === "ArrowLeft" ? 24 : -24))));
+            }}
+          />
+        )}
+        <header className="brain-resource-header">
+          <div className="brain-resource-header-copy">
+            <strong>{selectedBrainProject?.name || "项目资源"}</strong>
+            <small>仅保存在本机</small>
+          </div>
+          <div className={`preview-header-actions ${isCenter ? "expanded" : "sidebar"}`} aria-label="工作区操作">
+            <button
+              className="preview-icon-button"
+              type="button"
+              title={isCenter ? "缩回侧栏" : "展开预览"}
+              aria-label={isCenter ? "缩回侧栏" : "展开预览"}
+              onClick={toggleBrainExpanded}
+            >
+              <SidebarIcon name={isCenter ? "minimize" : "maximize"} />
+            </button>
+            <button
+              className="preview-icon-button preview-panel-toggle"
+              type="button"
+              title="隐藏侧栏"
+              aria-label="隐藏侧栏"
+              onClick={collapseBrainPanel}
+            >
+              <span className="preview-panel-glyph visible"><SidebarIcon name="panel-right" /></span>
+            </button>
+          </div>
         </header>
         <nav className="brain-resource-global-nav" aria-label="通用功能">
-          <button type="button" className={brainResourceTab === "files" ? "active" : ""} onClick={() => setBrainResourceTab("files")}>文件 <em>{brainFiles.length}</em></button>
-          <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => setBrainResourceTab("artifacts")}>产物 <em>{brainArtifacts.length}</em></button>
-          <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => setBrainResourceTab("tasks")}>任务 <em>{brainTasks.length}</em></button>
+          <button type="button" className={brainResourceTab === "files" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("files"); }}>文件 <em>{brainFiles.length}</em></button>
+          <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("artifacts"); }}>产物 <em>{brainArtifacts.length}</em></button>
+          <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("tasks"); }}>任务 <em>{brainTasks.length}</em></button>
         </nav>
-        <nav className="brain-resource-scene-nav" aria-label="当前工作台功能">
-          {capabilityTabs.map((tab) => (
-            <button key={tab.key} type="button" className={brainResourceTab === "scene" && brainSceneTab === tab.key ? "active" : ""} onClick={() => showCapability(tab.key)}>{tab.label}</button>
-          ))}
-        </nav>
+        {capabilityTabs.length ? (
+          <nav className="brain-resource-scene-nav" aria-label="当前工作台功能">
+            {capabilityTabs.map((tab) => (
+              <button key={tab.key} type="button" className={brainResourceTab === "scene" && brainSceneTab === tab.key ? "active" : ""} onClick={() => showCapability(tab.key)}>{tab.label}</button>
+            ))}
+          </nav>
+        ) : null}
         <div className={`brain-resource-list${brainResourceTab === "scene" ? " scene-plugin" : ""}`}>
           {brainResourceTab === "scene" ? renderSceneCapability() : null}
           {brainResourceTab === "files" ? brainFiles.map((file) => (
@@ -4913,8 +5020,20 @@ function renderChatModule() {
               <SidebarIcon name="more" />
             </button>
           </div>
-          <div className="task-topbar-actions">
+          <div className={`task-topbar-actions${brainResourcePlacement === "hidden" && previewPlacement !== "side" ? " brain-tools-collapsed" : ""}`}>
             {renderPreviewHeaderActions("topbar")}
+            {/* codeCN: when the right panel is hidden, the panel-right toggle returns on the chat topbar. */}
+            {activeFeature === "new-chat" && brainResourcePlacement === "hidden" && previewPlacement !== "side" ? (
+              <button
+                className="preview-icon-button preview-panel-toggle brain-tools-restore-toggle"
+                type="button"
+                title="显示侧栏"
+                aria-label="显示侧栏"
+                onClick={() => setBrainResourcePlacement("side")}
+              >
+                <span className="preview-panel-glyph hidden"><SidebarIcon name="panel-right" /></span>
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -4923,6 +5042,7 @@ function renderChatModule() {
           {isNewChatMode ? (
             <div className="new-chat-canvas">
               <h1>{newChatTitle}</h1>
+              <div className="new-chat-composer-shell">
               <div className="new-chat-composer-slot" ref={setNewChatComposerHost} />
               <div className={`new-chat-project-row ${newThreadScope === "chat" ? "chat-scope" : "project-scope"}`} ref={newChatProjectRowRef}>
                 <div className="new-chat-project-picker">
@@ -5010,6 +5130,7 @@ function renderChatModule() {
                     </div>
                   ) : null}
                 </div>
+              </div>
               </div>
               <div className="new-chat-integrations" aria-label="连接常用应用">
                 <button type="button" onClick={openIntegrationSettings}>
@@ -5766,7 +5887,7 @@ function renderChatModule() {
           </div>
         ) : null}
 
-        {renderComposerPortal(<footer className={`composer-area${isNewChatMode && !isBrainConversationSelection ? " new-chat-composer" : ""}${isBrainConversationSelection ? " brain-chat-composer" : ""}${composerImages.length ? " has-images" : ""}${ttsFollow ? " has-tts-follow" : ""}`}>
+        {renderComposerPortal(<footer className={`composer-area${isNewChatMode ? " new-chat-composer" : ""}${!isNewChatMode && isBrainConversationSelection ? " brain-chat-composer" : ""}${composerImages.length ? " has-images" : ""}${ttsFollow ? " has-tts-follow" : ""}`}>
           {ttsFollow ? (
             <div className="novel-tts-follow-cue novel-tts-follow-cue--dock" data-tts-follow={ttsFollow.messageId || "preview"} aria-live="polite">
               <strong>正在朗读</strong>
@@ -6549,13 +6670,23 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     <div className="artifact-more-menu" role="menu">
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
-                        const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
-                        if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
+                        try {
+                          const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
+                          if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
+                        } catch (error) {
+                          setChatStatus(error instanceof Error ? error.message : "文件无法打开");
+                        }
                       }}>用系统应用打开</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
-                        const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path, action: "reveal" });
-                        if (result && !result.ok) setChatStatus(result.detail || "无法在文件夹中显示");
+                        try {
+                          if (!selectedWorkspace?.id) throw new Error("当前工作区不可用。");
+                          const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace.id, filePath: searchFilePreview.path, action: "reveal" });
+                          if (result?.detail) setChatStatus(result.detail);
+                          else if (result && !result.ok) setChatStatus("无法在文件夹中显示");
+                        } catch (error) {
+                          setChatStatus(error instanceof Error ? error.message : "无法在文件夹中显示");
+                        }
                       }}>在文件夹中显示</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
@@ -6568,8 +6699,13 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                       }}>复制路径</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
-                        const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path, action: "open-vscode" });
-                        if (result && !result.ok) setChatStatus(result.detail || "无法用 VS Code 打开");
+                        try {
+                          if (!selectedWorkspace?.id) throw new Error("当前工作区不可用。");
+                          const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace.id, filePath: searchFilePreview.path, action: "open-vscode" });
+                          if (result && !result.ok) setChatStatus(result.detail || "无法用 VS Code 打开");
+                        } catch (error) {
+                          setChatStatus(error instanceof Error ? error.message : "无法用 VS Code 打开");
+                        }
                       }}>用 VS Code 打开</button>
                     </div>
                   ) : null}
@@ -6630,7 +6766,19 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 <strong>{searchFilePreview.error || "预览内容为空"}</strong>
                 {searchFilePreview.blankReason ? <span>原因代码：{searchFilePreview.blankReason}</span> : null}
                 {searchFilePreview.diagnosticId ? <span>诊断编号：{searchFilePreview.diagnosticId}</span> : null}
-                <button type="button" className="artifact-retry-button" onClick={() => openLocalFilePreview(searchFilePreview.tabPath || searchFilePreview.path, searchFilePreview.line ? { line: searchFilePreview.line, endLine: searchFilePreview.endLine } : undefined)}>重试预览</button>
+                <button
+                  type="button"
+                  className="artifact-retry-button"
+                  onClick={() => openLocalFilePreview(
+                    searchFilePreview.tabPath || searchFilePreview.path,
+                    {
+                      ...(searchFilePreview.line ? { line: searchFilePreview.line, endLine: searchFilePreview.endLine } : {}),
+                      ...(searchFilePreview.workspaceId ? { workspaceId: searchFilePreview.workspaceId } : {})
+                    }
+                  )}
+                >
+                  重试预览
+                </button>
               </div>
             ) : searchFilePreview.kind === "pdf" ? (
               <WorkspacePdfViewer
@@ -8132,7 +8280,11 @@ function renderWorkspaceModules() {
       return renderSettingsWorkspace();
     }
 
-    const mainModule = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
+    const brainToolsCentered = activeFeature === "new-chat" && brainResourcePlacement === "center" && previewPlacement !== "side";
+    const brainToolsSide = activeFeature === "new-chat" && brainResourcePlacement === "side" && previewPlacement !== "side";
+    const mainModule = brainToolsCentered
+      ? renderBrainResourcePanel("center")
+      : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection
         ? renderChatModule()
@@ -8171,7 +8323,7 @@ function renderWorkspaceModules() {
         {renderSidebarModule()}
         {mainModule}
         {/* 七场景右侧专业面板：不依赖必须已选中 BRAIN 对话；仅在打开通用文件侧栏时临时让位。 */}
-        {activeFeature === "new-chat" && previewPlacement !== "side" ? renderBrainResourcePanel() : null}
+        {brainToolsSide ? renderBrainResourcePanel("side") : null}
         {previewPlacement === "side" && activeFeature === "new-chat" ? renderPreviewModule("side") : null}
         {renderSearchDialog()}
         {workspaceFileMenu && selectedWorkspace?.id ? <LocalFileContextMenu

@@ -4,7 +4,7 @@ param(
   [string]$BaseAsar = "",
   [string]$TargetAsar = "",
   [string]$BaseVersion = "1.2.7",
-  [string]$TargetVersion = "1.3.0",
+  [string]$TargetVersion = "1.4.0",
   [string]$OutDir = "",
   [switch]$SkipMsiApplicator,
   [switch]$RebuildBspatch

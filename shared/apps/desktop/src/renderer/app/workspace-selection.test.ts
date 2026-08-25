@@ -61,6 +61,15 @@ test("never activates a conversation thread that belongs to the outgoing project
   assert.ok(guard >= 0 && activation > guard);
 });
 
+test("approval UI ownership stays on the owning thread and clears stale catalog per thread", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /resolveSelectedThreadOwnsLiveApproval/);
+  assert.match(source, /resolvePendingApprovalThreadKey/);
+  assert.match(source, /clearStaleThreadApprovalInCatalog/);
+  assert.doesNotMatch(source, /pendingApprovalThreadKey = snapshot\?\.approval \? selectedThreadKey/);
+  assert.doesNotMatch(source, /selectedThreadOwnsLiveApproval = Boolean\(\s*isAskingModel/);
+});
+
 test("switchBrainWorkspace persists the outgoing scene catalog before restoring the target scene", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /rememberBrainWorkspaceCatalog\(current, current\.selectedWorkspaceKey,/);
@@ -122,14 +131,15 @@ test("uses the Claude Code projects-section as the scene-bound left catalog", ()
   assert.doesNotMatch(source, /brain-projects-section/);
   assert.doesNotMatch(source, /legacy-workspace-section/);
   assert.match(source, /filterWorkspaceCatalogByScene/);
+  assert.match(source, /orderSidebarProjects/);
   assert.match(source, /crossSceneRecentProjects|data-testid="brain-recent-projects"/);
   assert.match(source, /data-testid="new-chat-button"/);
   assert.match(source, /setNewThreadScope\("project"\)/);
   assert.match(source, /brainWorkspaceKey:\s*selectedBrainWorkspaceKey/);
   assert.match(source, /新建空白项目/);
   assert.match(source, /暂无聊天/);
-  assert.match(source, /brain-project-list/);
-  assert.match(source, /brain-conversation-list/);
+  assert.match(source, /project-hover-actions/);
+  assert.match(source, /project-list/);
 });
 
 test("keeps quant conversation in the center and renders market tools in the right resource panel", () => {
@@ -137,12 +147,19 @@ test("keeps quant conversation in the center and renders market tools in the rig
   const workspaceRenderer = source.slice(source.indexOf("function renderWorkspaceModules"));
   const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
 
-  assert.match(workspaceRenderer, /isBrainConversationSelection\s*\?\s*renderBrainChatModule\(\)/);
-  assert.match(workspaceRenderer, /activeFeature === "new-chat" && previewPlacement !== "side" \? renderBrainResourcePanel\(\)/);
+  assert.match(workspaceRenderer, /brainToolsSide \? renderBrainResourcePanel\("side"\)/);
+  assert.match(workspaceRenderer, /brainToolsCentered/);
+  assert.match(workspaceRenderer, /renderBrainResourcePanel\("center"\)/);
   assert.doesNotMatch(workspaceRenderer, /selectedBrainWorkspaceKey === "quant"\s*\?\s*<QuantWorkspace/);
   assert.match(resourcePanel, /selectedBrainWorkspaceKey === "quant"/);
   assert.match(resourcePanel, /<QuantWorkspace[^>]+compact/);
   assert.match(resourcePanel, /brain-resource-resize-handle/);
+  assert.match(resourcePanel, /展开预览|缩回侧栏/);
+  assert.match(resourcePanel, /隐藏侧栏/);
+  assert.match(resourcePanel, /SidebarIcon name=\{isCenter \? "minimize" : "maximize"\}/);
+  assert.match(resourcePanel, /panel-right/);
+  assert.match(source, /brain-tools-restore-toggle|显示侧栏/);
+  assert.doesNotMatch(source, /brain-resource-restore-rail/);
 });
 
 test("switching scenes restores the right-hand scene panel instead of the generic files side preview", () => {
@@ -164,6 +181,21 @@ test("matches the approved prototype with separate global and workspace capabili
     "行情", "组合", "策略", "雷达", "项目与文件", "游戏策划", "脚本", "时间线",
     "歌词", "混音", "数据导入", "决策 Flow", "终端", "部署", "大纲", "审校与导出"
   ]) assert.ok(source.includes(`label: "${label}"`), `missing prototype capability: ${label}`);
+});
+
+test("explore scene restores original codeCN right panel without fake scene tools", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const tabsBlock = source.slice(source.indexOf("const brainWorkspaceCapabilityTabs"), source.indexOf("import { WorkspaceHtmlViewer"));
+  const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
+
+  assert.match(tabsBlock, /explore:\s*\[\s*\]/);
+  assert.doesNotMatch(tabsBlock, /label:\s*"场景知识"/);
+  assert.doesNotMatch(tabsBlock, /label:\s*"可用工具"/);
+  assert.match(resourcePanel, /capabilityTabs\.length \?/);
+  assert.match(resourcePanel, /selectedBrainWorkspaceKey === "explore"[\s\S]*?return null/);
+  assert.match(resourcePanel, /文件 <em>\{brainFiles\.length\}<\/em>/);
+  assert.match(resourcePanel, /产物 <em>\{brainArtifacts\.length\}<\/em>/);
+  assert.match(resourcePanel, /任务 <em>\{brainTasks\.length\}<\/em>/);
 });
 
 test("never substitutes fabricated market bars when the provider is empty or unavailable", () => {

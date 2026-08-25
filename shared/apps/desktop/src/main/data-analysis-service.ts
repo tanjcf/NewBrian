@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.ts";
 import type { DataImportService } from "./data-import-service.ts";
+import { runPythonDatasetStats } from "./data-python-analysis.ts";
 
 export interface DataAnalysisResult { datasetId: string; operation: "summary"; inputHash: string; rowCount: number; columns: Array<{ key: string; count: number; missingCount: number; min: number | null; max: number | null; mean: number | null; median: number | null; standardDeviation: number | null }>; createdAt: string; }
 
@@ -193,17 +194,66 @@ export function summarizeNumericColumns(input: { datasetId: string; contentHash:
   return { datasetId: input.datasetId, operation: "summary", inputHash, rowCount: input.rows.length, columns, createdAt: input.createdAt };
 }
 
+const NODE_FALLBACK_MAX_ROWS = 20_000;
+
 export class DataAnalysisService {
   private readonly storage: BrainWorkspaceStorage;
   private readonly imports: DataImportService;
   constructor(storage: BrainWorkspaceStorage, imports: DataImportService) { this.storage = storage; this.imports = imports; }
+
+  private async analyzeWithPythonOrNode<T extends DataAnalysisResult | DataAggregateResult>(
+    ownerId: string,
+    projectId: string,
+    datasetId: string,
+    python: () => Promise<T>,
+    node: (rows: string[][]) => T
+  ) {
+    const dataset = this.storage.listDatasets(ownerId, projectId).find((item) => item.id === datasetId);
+    if (!dataset) throw new Error("BRAIN_DATASET_NOT_FOUND");
+    const source = await this.imports.resolveDatasetFilePath(ownerId, { projectId, datasetId });
+    const isCsv = /\.csv$/iu.test(`${source.file.storageKey} ${source.file.logicalName}`);
+    if (isCsv) {
+      try {
+        return await python();
+      } catch (error) {
+        if ((dataset.rowCount || 0) > NODE_FALLBACK_MAX_ROWS) throw error;
+      }
+    }
+    if ((dataset.rowCount || 0) > NODE_FALLBACK_MAX_ROWS) {
+      throw new Error("BRAIN_DATA_PYTHON_REQUIRED_FOR_LARGE_DATASET");
+    }
+    const rows = await this.imports.readRows(ownerId, { projectId, datasetId });
+    return node(rows);
+  }
+
   async summarize(ownerId: string, projectId: string, datasetId: string) {
     const dataset = this.storage.listDatasets(ownerId, projectId).find((item) => item.id === datasetId);
     if (!dataset) throw new Error("BRAIN_DATASET_NOT_FOUND");
-    const rows = await this.imports.readRows(ownerId, { projectId, datasetId });
-    const result = summarizeNumericColumns({ datasetId, contentHash: dataset.contentHash, columns: dataset.columns, rows, createdAt: new Date().toISOString() });
+    const result = await this.analyzeWithPythonOrNode(
+      ownerId,
+      projectId,
+      datasetId,
+      async () => {
+        const source = await this.imports.resolveDatasetFilePath(ownerId, { projectId, datasetId });
+        return await runPythonDatasetStats({
+          operation: "summary",
+          path: source.path,
+          datasetId,
+          contentHash: dataset.contentHash,
+          columns: dataset.columns
+        }) as DataAnalysisResult;
+      },
+      (rows) => summarizeNumericColumns({
+        datasetId,
+        contentHash: dataset.contentHash,
+        columns: dataset.columns,
+        rows,
+        createdAt: new Date().toISOString()
+      })
+    );
     return this.storage.saveDataAnalysis({ ownerId, projectId, datasetId, operation: result.operation, inputHash: result.inputHash, result, createdAt: result.createdAt });
   }
+
   async aggregate(ownerId: string, projectId: string, datasetId: string, input: {
     groupBy: string[];
     metrics: DataAggregateMetric[];
@@ -214,20 +264,39 @@ export class DataAnalysisService {
   }) {
     const dataset = this.storage.listDatasets(ownerId, projectId).find((item) => item.id === datasetId);
     if (!dataset) throw new Error("BRAIN_DATASET_NOT_FOUND");
-    const rows = await this.imports.readRows(ownerId, { projectId, datasetId });
-    const result = aggregateDataset({
+    const result = await this.analyzeWithPythonOrNode(
+      ownerId,
+      projectId,
       datasetId,
-      contentHash: dataset.contentHash,
-      columns: dataset.columns,
-      rows,
-      groupBy: input.groupBy,
-      metrics: input.metrics,
-      topN: input.topN,
-      orderBy: input.orderBy,
-      periodColumn: input.periodColumn,
-      compareMetric: input.compareMetric,
-      createdAt: new Date().toISOString()
-    });
+      async () => {
+        const source = await this.imports.resolveDatasetFilePath(ownerId, { projectId, datasetId });
+        return await runPythonDatasetStats({
+          operation: "aggregate",
+          path: source.path,
+          datasetId,
+          contentHash: dataset.contentHash,
+          groupBy: input.groupBy,
+          metrics: input.metrics,
+          ...(typeof input.topN === "number" ? { topN: input.topN } : {}),
+          ...(input.orderBy ? { orderBy: input.orderBy } : {}),
+          ...(input.periodColumn ? { periodColumn: input.periodColumn } : {}),
+          ...(input.compareMetric ? { compareMetric: input.compareMetric } : {})
+        }) as DataAggregateResult;
+      },
+      (rows) => aggregateDataset({
+        datasetId,
+        contentHash: dataset.contentHash,
+        columns: dataset.columns,
+        rows,
+        groupBy: input.groupBy,
+        metrics: input.metrics,
+        topN: input.topN,
+        orderBy: input.orderBy,
+        periodColumn: input.periodColumn,
+        compareMetric: input.compareMetric,
+        createdAt: new Date().toISOString()
+      })
+    );
     return this.storage.saveDataAnalysis({
       ownerId,
       projectId,

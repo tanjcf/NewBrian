@@ -30,12 +30,27 @@ impl ProjectBoundary {
 
     pub fn writable(&self, relative: &Path) -> io::Result<PathBuf> {
         let candidate = self.lexical_candidate(relative)?;
-        let parent = candidate
+        // Parent dirs may not exist yet (e.g. Docs/BRAIN/analysis.json on first cook).
+        // Walk up to the nearest existing ancestor and require it stays inside the project.
+        let mut cursor = candidate
             .parent()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no parent"))?;
-        let canonical_parent = fs::canonicalize(parent)?;
-        self.require_inside(canonical_parent)?;
-        Ok(candidate)
+        loop {
+            if cursor.exists() {
+                let canonical_parent = fs::canonicalize(cursor)?;
+                self.require_inside(canonical_parent)?;
+                return Ok(candidate);
+            }
+            match cursor.parent() {
+                Some(parent) if parent != cursor => cursor = parent,
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "no existing ancestor for writable path",
+                    ));
+                }
+            }
+        }
     }
 
     fn lexical_candidate(&self, relative: &Path) -> io::Result<PathBuf> {
@@ -112,6 +127,20 @@ mod tests {
             .existing(Path::new("nested/report.txt"))
             .expect("inside")
             .starts_with(fs::canonicalize(&root).expect("root")));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn accepts_writable_path_when_nested_parents_are_missing() {
+        let root = temporary_root();
+        let boundary = ProjectBoundary::bind(&root).expect("bind root");
+        let target = boundary
+            .writable(Path::new("Docs/BRAIN/analysis.json"))
+            .expect("nested writable");
+        assert!(target.starts_with(&root) || target.starts_with(fs::canonicalize(&root).expect("root")));
+        fs::create_dir_all(target.parent().expect("parent")).expect("mkdir");
+        fs::write(&target, b"{}").expect("write");
+        assert!(boundary.existing(Path::new("Docs/BRAIN/analysis.json")).is_ok());
         fs::remove_dir_all(root).expect("cleanup");
     }
 

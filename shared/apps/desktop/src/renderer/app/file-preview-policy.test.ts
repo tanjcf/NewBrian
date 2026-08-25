@@ -5,6 +5,7 @@ import {
   buildFilePreviewDiagnosticContext,
   classifyArtifactPreviewPayload,
   classifyFilePreviewError,
+  classifySoftFilePreviewFailure,
   classifyTextPreviewPayload,
   filePreviewRetryDelayMs,
   findMatchingArtifactTab,
@@ -31,9 +32,32 @@ test("classifies missing files as retryable preview errors", () => {
   const missing = classifyFilePreviewError(new Error("文件不存在，无法预览：outputs/a.md"));
   assert.equal(missing.reason, "missing_file");
   assert.equal(missing.retryable, true);
+  const ipcWrapped = classifyFilePreviewError(
+    new Error("Error invoking remote method 'phase1:preview-workspace-file': Error: 文件不存在，无法预览：outputs/a.docx")
+  );
+  assert.equal(ipcWrapped.reason, "missing_file");
+  assert.equal(ipcWrapped.retryable, true);
+  assert.match(ipcWrapped.message, /^文件不存在/);
+  assert.doesNotMatch(ipcWrapped.message, /Error invoking remote method/);
   const other = classifyFilePreviewError(new Error("Permission denied"));
   assert.equal(other.reason, "read_failed");
   assert.equal(other.retryable, false);
+});
+
+test("classifies soft IPC preview failures without aborting retryable reasons", () => {
+  const missing = classifySoftFilePreviewFailure({
+    ok: false,
+    reason: "missing_file",
+    error: "文件不存在，无法预览：explore-e2e-note.txt"
+  });
+  assert.equal(missing.reason, "missing_file");
+  assert.equal(missing.retryable, true);
+  const unsupported = classifySoftFilePreviewFailure({
+    ok: false,
+    reason: "preview_unsupported",
+    error: "此文件类型不支持文档侧栏预览。"
+  });
+  assert.equal(unsupported.retryable, false);
 });
 
 test("detects empty artifact payloads", () => {

@@ -31,16 +31,41 @@ export function isLoopbackGatewayBaseUrl(value: unknown): boolean {
   }
 }
 
+/** Domains that used to be package defaults but are parked/blocked and cannot reach the model gateway. */
+export function isRetiredGatewayBaseUrl(value: unknown): boolean {
+  const raw = String(value ?? "").trim();
+  if (!raw) return false;
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return host === "test.wangjietech.com" || host === "api.wangjietech.com" || host === "www.wangjietech.com";
+  } catch {
+    return /wangjietech\.com/i.test(raw);
+  }
+}
+
 export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledBaseUrl: unknown): string {
   const configured = String(configuredBaseUrl ?? "").trim();
   const bundled = String(bundledBaseUrl ?? "").trim();
+  // Packaged MSI ships a production gateway. Never leave end-user configs on
+  // loopback when a non-local bundled endpoint is available. Local developers
+  // can still force localhost via CODECN_MODEL_BASE_URL.
   if (!configured) return bundled;
-  if (isLoopbackGatewayBaseUrl(configured) && bundled && !isLoopbackGatewayBaseUrl(bundled)) {
+  if (
+    (isLoopbackGatewayBaseUrl(configured) || isRetiredGatewayBaseUrl(configured))
+    && bundled
+    && !isLoopbackGatewayBaseUrl(bundled)
+    && !isRetiredGatewayBaseUrl(bundled)
+  ) {
     return bundled;
   }
   return configured;
 }
 
+/**
+ * Resolve the gateway URL used for model/auth traffic.
+ * Packaged installs never keep loopback unless CODECN_MODEL_BASE_URL explicitly
+ * forces a local gateway for developers.
+ */
 export function resolveEffectiveGatewayBaseUrl(input: {
   configuredBaseUrl?: unknown;
   bundledBaseUrl?: unknown;
@@ -50,12 +75,14 @@ export function resolveEffectiveGatewayBaseUrl(input: {
 }): string {
   const env = String(input.envBaseUrl ?? "").trim();
   if (env) return env;
+  const configured = String(input.configuredBaseUrl ?? "").trim();
+  if (!input.isPackaged && configured) return configured;
   const bundled = String(input.bundledBaseUrl ?? "").trim();
   const migrationTarget = bundled && !isLoopbackGatewayBaseUrl(bundled)
     ? bundled
     : (input.isPackaged ? input.productionBaseUrl : bundled || input.productionBaseUrl);
   const migrated = migrateLegacyGatewayBaseUrl(input.configuredBaseUrl, migrationTarget);
-  if (input.isPackaged && isLoopbackGatewayBaseUrl(migrated)) {
+  if (input.isPackaged && (isLoopbackGatewayBaseUrl(migrated) || isRetiredGatewayBaseUrl(migrated))) {
     return input.productionBaseUrl;
   }
   return migrated || (input.isPackaged ? input.productionBaseUrl : migrationTarget);
@@ -119,10 +146,11 @@ export async function syncDesktopControlPlane(input: {
 }): Promise<DesktopControlPlaneState> {
   const gatewayOrigin = new URL(input.gatewayOrigin).origin;
   const releasePlatform = (() => {
-    const raw = String(input.platform ?? input.headers?.["X-Desktop-Platform"] ?? "darwin").trim().toLowerCase();
+    const raw = String(input.platform ?? input.headers?.["X-Desktop-Platform"] ?? "").trim().toLowerCase();
+    if (raw === "darwin" || raw === "macos" || raw === "osx" || raw === "mac") return "macos";
     if (raw === "linux") return "linux";
     if (raw === "windows" || raw === "win32" || raw === "win") return "windows";
-    return "macos";
+    return "windows";
   })();
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -155,7 +183,9 @@ export async function syncDesktopControlPlane(input: {
         notes: appUpdate.notes,
         mandatory: appUpdate.mandatory === true,
         release_id: appUpdate.release_id,
-        channel: appUpdate.channel
+        channel: appUpdate.channel,
+        // Keep package_kind so clients can distinguish ulit.msi / ulit.zip / full MSI.
+        package_kind: appUpdate.package_kind ?? appUpdate.packageKind
       };
     }
   } catch {

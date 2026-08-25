@@ -1,5 +1,19 @@
 import { promises as fs } from "node:fs";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
+
+const SKIPPED_BASENAME_SEARCH_DIRS = new Set([
+  ".git",
+  "node_modules",
+  ".codecn",
+  ".desktop-profile",
+  "out",
+  "dist",
+  "build",
+  "target",
+  ".venv",
+  "venv",
+  "__pycache__"
+]);
 
 function isPathWithin(rootPath: string, targetPath: string) {
   const relativePath = relative(rootPath, targetPath);
@@ -15,16 +29,53 @@ function isMissingPathError(error: unknown) {
   );
 }
 
+function normalizeRequestedPath(requestedPath: string) {
+  return String(requestedPath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "");
+}
+
+function missingPreviewError(requestedPath: string) {
+  const posix = normalizeRequestedPath(requestedPath);
+  const name = basename(posix) || posix;
+  const looksLikeDocumentArtifact = /\.(pdf|docx)$/i.test(name)
+    || /(^|\/)outputs\//i.test(posix);
+  if (looksLikeDocumentArtifact) {
+    return new Error(
+      `文件不存在，无法预览：${requestedPath}。请确认已通过 document.create_pdf / document.create_docx / artifact.create 成功生成 outputs/ 下的文件后重试。`
+    );
+  }
+  return new Error(
+    `文件不存在，无法预览：${requestedPath}。请确认文件已写入当前项目目录后重试。`
+  );
+}
+
 /** Soft aliases when chat/UI opens a generated artifact by basename only. */
 export function previewPathFallbacks(requestedPath: string) {
-  const trimmed = String(requestedPath || "").trim();
+  const trimmed = normalizeRequestedPath(requestedPath);
   if (!trimmed || isAbsolute(trimmed)) return [] as string[];
-  const posix = trimmed.replace(/\\/g, "/").replace(/^\.\//, "");
-  if (!posix || posix === "." || posix === "..") return [];
-  const name = basename(posix);
+  if (!trimmed || trimmed === "." || trimmed === "..") return [];
+  const name = basename(trimmed);
   if (!name || name === "." || name === "..") return [];
-  if (posix.includes("/")) return [];
-  return [`outputs/${name}`];
+  if (trimmed.includes("/")) {
+    // Also try the bare basename under common roots when a nested relative path misses.
+    return [
+      name,
+      `outputs/${name}`,
+      `files/${name}`,
+      `artifacts/${name}`,
+      `docs/${name}`,
+      `notes/${name}`
+    ].filter((candidate, index, all) => candidate !== trimmed && all.indexOf(candidate) === index);
+  }
+  return [
+    `outputs/${name}`,
+    `files/${name}`,
+    `artifacts/${name}`,
+    `docs/${name}`,
+    `notes/${name}`
+  ];
 }
 
 async function resolveExistingFileOnce(rootPath: string, requestedPath: string, errorPath: string) {
@@ -46,9 +97,7 @@ async function resolveExistingFileOnce(rootPath: string, requestedPath: string, 
     ]);
   } catch (error) {
     if (isMissingPathError(error)) {
-      throw new Error(
-        `文件不存在，无法预览：${errorPath}。请确认已通过 document.create_pdf / document.create_docx / artifact.create 成功生成 outputs/ 下的文件后重试。`
-      );
+      throw missingPreviewError(errorPath);
     }
     throw error;
   }
@@ -59,6 +108,53 @@ async function resolveExistingFileOnce(rootPath: string, requestedPath: string, 
   const stat = await fs.stat(realTarget);
   if (!stat.isFile()) throw new Error("Selected path is not a file.");
   return { targetPath: realTarget, relativePath: relative(realRoot, realTarget) };
+}
+
+/** Bounded basename walk when exact/fallback candidates miss (e.g. explore notes). */
+export async function findBasenameUnderRoot(rootPath: string, fileName: string, options?: {
+  maxDepth?: number;
+  maxVisits?: number;
+}) {
+  const name = basename(normalizeRequestedPath(fileName));
+  if (!name || name === "." || name === "..") return null;
+  const maxDepth = Math.max(1, Math.min(6, options?.maxDepth ?? 4));
+  const maxVisits = Math.max(8, Math.min(400, options?.maxVisits ?? 200));
+  const normalizedRoot = resolve(rootPath);
+  let realRoot: string;
+  try {
+    realRoot = await fs.realpath(normalizedRoot);
+  } catch {
+    return null;
+  }
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: realRoot, depth: 0 }];
+  let visits = 0;
+  while (queue.length > 0 && visits < maxVisits) {
+    const current = queue.shift();
+    if (!current) break;
+    visits += 1;
+    let entries;
+    try {
+      entries = await fs.readdir(current.dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name === name && entry.isFile()) {
+        const absolute = join(current.dir, entry.name);
+        if (!isPathWithin(realRoot, absolute)) continue;
+        return {
+          targetPath: absolute,
+          relativePath: relative(realRoot, absolute)
+        };
+      }
+      if (!entry.isDirectory() || current.depth >= maxDepth) continue;
+      if (SKIPPED_BASENAME_SEARCH_DIRS.has(entry.name)) continue;
+      const nextDir = join(current.dir, entry.name);
+      if (!isPathWithin(realRoot, nextDir)) continue;
+      queue.push({ dir: nextDir, depth: current.depth + 1 });
+    }
+  }
+  return null;
 }
 
 export async function resolveExistingFileInsideRoot(rootPath: string, requestedPath: string) {
@@ -74,9 +170,17 @@ export async function resolveExistingFileInsideRoot(rootPath: string, requestedP
       }
     }
   }
+
+  const name = basename(normalizeRequestedPath(requestedPath));
+  if (name) {
+    const found = await findBasenameUnderRoot(rootPath, name);
+    if (found) {
+      // Re-validate through the same boundary checks used for direct paths.
+      return resolveExistingFileOnce(rootPath, found.relativePath, requestedPath);
+    }
+  }
+
   throw lastError instanceof Error
     ? lastError
-    : new Error(
-      `文件不存在，无法预览：${requestedPath}。请确认已通过 document.create_pdf / document.create_docx / artifact.create 成功生成 outputs/ 下的文件后重试。`
-    );
+    : missingPreviewError(requestedPath);
 }

@@ -9,7 +9,8 @@ const SCENE_LABELS = {
   music: "音乐创作",
   data: "数据与决策",
   software: "软件与自动化",
-  document: "文档创作"
+  document: "文档创作",
+  explore: "场景学习探索"
 };
 
 export { SCENE_LABELS };

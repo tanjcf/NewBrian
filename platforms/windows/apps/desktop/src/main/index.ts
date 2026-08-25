@@ -108,6 +108,8 @@ import { VideoRenderService } from "./video-render-service.js";
 import { VideoRuntimeService } from "./video-runtime-service.js";
 import { registerVideoAgentTools } from "./video-agent-tools.js";
 import { registerDataAgentTools } from "./data-agent-tools.js";
+import { registerDocumentAgentTools } from "./document-agent-tools.js";
+import { registerExploreAgentTools } from "./explore-agent-tools.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { MusicMediaService } from "./music-media-service.js";
 import { MusicRenderService } from "./music-render-service.js";
@@ -8145,62 +8147,91 @@ function registerIpc() {
     previewFile: (input) => workspaceFileService.preview(input),
     openFile: (input) => workspaceFileService.open(input),
     performFileAction: async (input) => {
-      const { targetPath } = await workspaceFileService.resolve(input);
-      if (input.action === "copy-contents") {
-        const stat = await fs.stat(targetPath);
-        if (stat.size > 2 * 1024 * 1024) return { ok: false, detail: "文件过大，无法复制全部内容。" };
-        return { ok: true, detail: "", content: await fs.readFile(targetPath, "utf8") };
-      }
-      if (input.action === "reveal") {
-        electronShell.showItemInFolder(targetPath);
-        return { ok: true, detail: "" };
-      }
-      if (input.action === "save-as") {
-        const selection = await dialog.showSaveDialog({
-          title: "下载副本",
-          defaultPath: join(app.getPath("downloads"), basename(targetPath)),
-          filters: [{ name: "所有文件", extensions: ["*"] }]
-        });
-        if (selection.canceled || !selection.filePath) return { ok: false, detail: "已取消下载。" };
-        await fs.copyFile(targetPath, selection.filePath);
-        return { ok: true, detail: `已保存到 ${selection.filePath}` };
-      }
-      if (input.action === "open-with") {
-        if (process.platform === "win32") {
-          await spawnDetachedAndConfirm("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", targetPath]);
-        } else {
-          const detail = await electronShell.openPath(targetPath);
-          if (detail) return { ok: false, detail };
+      try {
+        const { targetPath } = await workspaceFileService.resolve(input);
+        if (input.action === "copy-contents") {
+          const stat = await fs.stat(targetPath);
+          if (stat.size > 2 * 1024 * 1024) return { ok: false, detail: "文件过大，无法复制全部内容。" };
+          return { ok: true, detail: "", content: await fs.readFile(targetPath, "utf8") };
         }
-        return { ok: true, detail: "" };
-      }
-      if (input.action === "open-tool") {
-        const tool = getSystemTools().find((item) => item.id === input.toolId && item.available);
-        if (!tool) return { ok: false, detail: "未找到可用应用。" };
-        if (tool.id === "finder") {
+        if (input.action === "reveal") {
           electronShell.showItemInFolder(targetPath);
           return { ok: true, detail: "" };
         }
-        const command = resolveSystemToolCommand(tool);
-        if (!command) return { ok: false, detail: `未检测到 ${tool.label} 命令。` };
-        const targetDirectory = dirname(targetPath);
-        if (tool.id === "terminal" && process.platform === "win32") {
-          if (/^wt(?:\.exe)?$/i.test(command)) await spawnDetachedAndConfirm(command, ["-d", targetDirectory], { windowsHide: false });
-          else if (/powershell/i.test(command)) await spawnDetachedAndConfirm(command, ["-NoExit", "-Command", `Set-Location -LiteralPath '${targetDirectory.replace(/'/g, "''")}'`], { windowsHide: false });
-          else await spawnDetachedAndConfirm(command, ["/K", `cd /d "${targetDirectory.replace(/"/g, '""')}"`], { windowsHide: false });
-        } else if (tool.id === "git-bash") {
-          await spawnDetachedAndConfirm(command, ["--login", "-i"], { cwd: targetDirectory, windowsHide: false });
-        } else {
-          await spawnDetachedAndConfirm(command, [targetPath]);
+        if (input.action === "save-as") {
+          const selection = await dialog.showSaveDialog({
+            title: "下载副本",
+            defaultPath: join(app.getPath("downloads"), basename(targetPath)),
+            filters: [{ name: "所有文件", extensions: ["*"] }]
+          });
+          if (selection.canceled || !selection.filePath) return { ok: false, detail: "已取消下载。" };
+          await fs.copyFile(targetPath, selection.filePath);
+          return { ok: true, detail: `已保存到 ${selection.filePath}` };
         }
+        if (input.action === "open-with") {
+          if (process.platform === "win32") {
+            await spawnDetachedAndConfirm("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", targetPath]);
+          } else {
+            const detail = await electronShell.openPath(targetPath);
+            if (detail) return { ok: false, detail };
+          }
+          return { ok: true, detail: "" };
+        }
+        if (input.action === "open-tool") {
+          const tool = getSystemTools().find((item) => item.id === input.toolId && item.available);
+          if (!tool) return { ok: false, detail: "未找到可用应用。" };
+          if (tool.id === "finder") {
+            electronShell.showItemInFolder(targetPath);
+            return { ok: true, detail: "" };
+          }
+          const command = resolveSystemToolCommand(tool);
+          if (!command) return { ok: false, detail: `未检测到 ${tool.label} 命令。` };
+          const targetDirectory = dirname(targetPath);
+          if (tool.id === "terminal" && process.platform === "win32") {
+            if (/^wt(?:\.exe)?$/i.test(command)) await spawnDetachedAndConfirm(command, ["-d", targetDirectory], { windowsHide: false });
+            else if (/powershell/i.test(command)) await spawnDetachedAndConfirm(command, ["-NoExit", "-Command", `Set-Location -LiteralPath '${targetDirectory.replace(/'/g, "''")}'`], { windowsHide: false });
+            else await spawnDetachedAndConfirm(command, ["/K", `cd /d "${targetDirectory.replace(/"/g, '""')}"`], { windowsHide: false });
+          } else if (tool.id === "git-bash") {
+            await spawnDetachedAndConfirm(command, ["--login", "-i"], { cwd: targetDirectory, windowsHide: false });
+          } else {
+            await spawnDetachedAndConfirm(command, [targetPath]);
+          }
+          return { ok: true, detail: "" };
+        }
+        const locator = process.platform === "win32" ? "where.exe" : "which";
+        if (spawnSync(locator, ["code"], { encoding: "utf8", windowsHide: true }).status !== 0) {
+          return { ok: false, detail: "未检测到 Visual Studio Code。" };
+        }
+        await spawnDetachedAndConfirm("code", [targetPath]);
         return { ok: true, detail: "" };
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        if (input.action === "reveal" || input.action === "open-tool" || input.action === "open-with" || input.action === "open-vscode" || input.action === "save-as") {
+          try {
+            const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === input.workspaceId);
+            if (workspace?.path) {
+              const requested = isAbsolute(input.filePath) ? resolve(input.filePath) : resolve(workspace.path, input.filePath);
+              let folder = dirname(requested);
+              if (!existsSync(folder)) folder = join(workspace.path, "outputs");
+              if (!existsSync(folder)) folder = workspace.path;
+              const relativeFolder = relative(workspace.path, folder);
+              const inside = relativeFolder === "" || (!relativeFolder.startsWith("..") && !isAbsolute(relativeFolder));
+              if (inside && existsSync(folder) && input.action === "reveal") {
+                const openDetail = await electronShell.openPath(folder);
+                if (!openDetail) {
+                  return { ok: true, detail: `目标文件不存在，已打开所在文件夹。` };
+                }
+              }
+            }
+          } catch {
+            // Fall through to soft failure.
+          }
+        }
+        return {
+          ok: false,
+          detail: detail.replace("无法预览", input.action === "reveal" ? "无法在文件夹中显示" : "无法打开文件")
+        };
       }
-      const locator = process.platform === "win32" ? "where.exe" : "which";
-      if (spawnSync(locator, ["code"], { encoding: "utf8", windowsHide: true }).status !== 0) {
-        return { ok: false, detail: "未检测到 Visual Studio Code。" };
-      }
-      await spawnDetachedAndConfirm("code", [targetPath]);
-      return { ok: true, detail: "" };
     }
   });
   registerCollaborationIpcHandlers({
@@ -8656,6 +8687,51 @@ function registerIpc() {
             imports: dataImports,
             analysis: new DataAnalysisService(brainWorkspaceStorage, dataImports),
             dataRuntime: new DataRuntimeService((binding) => getRustCoreService().acquire(binding)),
+            notifyUi: (payload) => {
+              mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
+            }
+          });
+        }
+      }
+      if (workspace.brainWorkspaceKey === "document") {
+        const ownerId = await resolveBrainLocalOwnerId();
+        const documentProject = brainWorkspaceStorage.listProjects({
+          ownerId,
+          workspaceKey: "document"
+        }).find((project) => project.localWorkspaceId === workspace.id);
+        if (documentProject) {
+          registerDocumentAgentTools(targetRuntime, {
+            ownerId: resolveBrainLocalOwnerId,
+            projectId: documentProject.id,
+            projectRoot: workspace.path,
+            storage: brainWorkspaceStorage,
+            notifyUi: (payload) => {
+              // Reuse the resource-panel refresh channel so 文件/产物 counts update live.
+              mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
+            }
+          });
+        }
+      }
+      if (workspace.brainWorkspaceKey === "explore") {
+        const ownerId = await resolveBrainLocalOwnerId();
+        let exploreProject = brainWorkspaceStorage.listProjects({
+          ownerId,
+          workspaceKey: "explore"
+        }).find((project) => project.localWorkspaceId === workspace.id);
+        if (!exploreProject) {
+          exploreProject = brainWorkspaceStorage.createProject({
+            ownerId,
+            name: workspace.name || "场景学习探索",
+            primaryWorkspaceKey: "explore",
+            localWorkspaceId: workspace.id
+          });
+        }
+        if (exploreProject) {
+          registerExploreAgentTools(targetRuntime, {
+            ownerId: resolveBrainLocalOwnerId,
+            projectId: exploreProject.id,
+            projectRoot: workspace.path,
+            storage: brainWorkspaceStorage,
             notifyUi: (payload) => {
               mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
             }

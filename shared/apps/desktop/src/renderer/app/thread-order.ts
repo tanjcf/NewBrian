@@ -65,3 +65,18 @@ export function markThreadApprovalSettlingInCatalog<
     };
   });
 }
+
+/**
+ * Drop sticky awaiting-approval metadata for one thread when activation proves
+ * there is no live approval. Does not touch other workspaces/threads.
+ */
+export function clearStaleThreadApprovalInCatalog<
+  TThread extends ApprovalSettlingThread,
+  TWorkspace extends { id: string; threads?: TThread[] }
+>(
+  catalog: TWorkspace[] | null | undefined,
+  workspaceId: string,
+  threadId: string
+): TWorkspace[] {
+  return markThreadApprovalSettlingInCatalog(catalog, workspaceId, threadId, false);
+}
