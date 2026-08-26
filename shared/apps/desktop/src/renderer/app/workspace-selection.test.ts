@@ -48,6 +48,7 @@ test("scene switching clears outgoing composer Skill and never submits into anot
   assert.match(switchSource, /setSelectedThreadId\(""\)/);
   assert.match(submitSource, /resolveSceneExecutionWorkspace/);
   assert.match(submitSource, /本次请求未发送/);
+  assert.match(submitSource, /请再次发送/);
   assert.doesNotMatch(source, /boundWorkspaceId \|\| activeWorkspaceId/);
 });
 

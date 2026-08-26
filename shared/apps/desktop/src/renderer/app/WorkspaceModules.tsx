@@ -20,6 +20,7 @@ import {
   isStaleFilePreviewRequest,
   type FilePreviewIssue
 } from "./file-preview-policy";
+import { ComposerTextarea, type ComposerTextareaHandle } from "./ComposerTextarea";
 import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
@@ -558,6 +559,9 @@ export function WorkspaceModules(ctx: any) {
     } catch { return {}; }
   });
   const activatedBrainThreadRef = useRef("");
+  const composerTextareaRef = useRef<ComposerTextareaHandle | null>(null);
+  const composerLayoutDraftTimerRef = useRef<number | null>(null);
+  const [composerLayoutDraft, setComposerLayoutDraft] = useState("");
   const [brainDraft, setBrainDraft] = useState("");
   const [brainMessageBusy, setBrainMessageBusy] = useState(false);
   const [brainFiles, setBrainFiles] = useState<any[]>([]);
@@ -1079,8 +1083,15 @@ export function WorkspaceModules(ctx: any) {
   const [automationView, setAutomationView] = useState<"list" | "detail" | "new">("list");
   useEffect(() => {
     if (!selectedBrainConversationId || selectedSidebarRow !== `brain-conversation:${selectedBrainConversationId}`) return;
-    setBrainDraft(question);
-  }, [question, selectedBrainConversationId, selectedSidebarRow]);
+    const timer = window.setTimeout(() => {
+      const next = composerTextareaRef.current?.getValue() ?? composerLayoutDraft ?? question;
+      setBrainDraft((current) => (current === next ? current : next));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [composerLayoutDraft, question, selectedBrainConversationId, selectedSidebarRow]);
+  useEffect(() => {
+    setComposerLayoutDraft(question);
+  }, [question, selectedThreadId, selectedBrainConversationId, isComposingNewThread]);
   const [isListening, setIsListening] = useState(false);
   // The Web Speech API constructor exists in Electron but depends on a Google
   // speech backend that is not bundled, so it fails at runtime. Once a recognition
@@ -2502,17 +2513,11 @@ export function WorkspaceModules(ctx: any) {
     ? queuedComposerDraft
     : null;
   const focusComposerInputWithContent = (content: string) => {
+    composerTextareaRef.current?.setValue(content);
+    setComposerLayoutDraft(content);
+    setQuestion(content);
     window.requestAnimationFrame(() => {
-      const input = document.querySelector<HTMLTextAreaElement>("[data-testid=\"composer-input\"]");
-      if (!input) return;
-      input.focus();
-      const end = content.length;
-      try {
-        input.setSelectionRange(end, end);
-      } catch {
-        // Some hosts reject selection updates while the control is settling.
-      }
-      input.scrollTop = input.scrollHeight;
+      composerTextareaRef.current?.focus();
     });
   };
   const quoteQueuedComposerDraftIntoInput = (draft = visibleQueuedComposerDraft) => {
@@ -4515,7 +4520,43 @@ function renderSidebarModule() {
 
   const renderComposerPortal = (children: any) => {
     if (isNewChatMode && newChatComposerHost) return createPortal(children, newChatComposerHost);
+    if (isBrainConversationSelection && brainChatComposerHost) return createPortal(children, brainChatComposerHost);
     return children;
+  };
+
+  function readComposerQuestion(draft?: Parameters<typeof askModel>[0]) {
+    const fromDraft = String(draft?.question ?? "").trim();
+    if (fromDraft) return fromDraft;
+    return String(composerTextareaRef.current?.getValue() ?? question ?? "").trim();
+  }
+
+  function buildComposerSendDraft(draft?: Parameters<typeof askModel>[0]) {
+    const text = readComposerQuestion(draft);
+    return {
+      question: text,
+      images: draft?.images ?? composerImages,
+      tools: draft?.tools ?? selectedComposerTools,
+      skill: draft?.skill ?? selectedComposerSkill,
+      skillContext: draft?.skillContext ?? composerSkillContext,
+      modes: draft?.modes ?? composerModes
+    };
+  }
+
+  const handleComposerDraftChange = (value: string) => {
+    if (composerLayoutDraftTimerRef.current) window.clearTimeout(composerLayoutDraftTimerRef.current);
+    composerLayoutDraftTimerRef.current = window.setTimeout(() => {
+      setComposerLayoutDraft(value);
+    }, 120);
+  };
+
+  const handleComposerEnter = () => {
+    const draftText = readComposerQuestion();
+    if ((isGlobalModelBusy || brainMessageBusy) && !draftText && composerImages.length === 0) {
+      void cancelCurrentModelRequest?.();
+      return;
+    }
+    if (!api || (!draftText && composerImages.length === 0)) return;
+    void submitComposerRequest();
   };
 
   async function sendBrainMessage(draft?: {
@@ -4671,6 +4712,7 @@ function renderSidebarModule() {
   }
 
   function submitComposerRequest(draft?: Parameters<typeof askModel>[0]) {
+    const outbound = buildComposerSendDraft(draft);
     // BRAIN uses the native codeCN Composer/Thread path. The former
     // sendBrainMessage path created a second conversation lifecycle and
     // bypassed native turn, approval, tool, rollout, and recovery semantics.
@@ -4692,11 +4734,13 @@ function renderSidebarModule() {
       const threadId = resolveUserVisibleThreadSelection(sceneWorkspace.threads, null)?.id || "";
       setSelectedThreadId(threadId);
       setIsComposingNewThread(!threadId);
-      const message = `已切换到“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景项目，请再次发送。`;
-      setChatStatus(message);
+      setChatStatus(`已切换到“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景项目，请再次发送。`);
       return;
     }
-    void askModel(draft);
+    void askModel(outbound);
+    composerTextareaRef.current?.setValue("");
+    setQuestion("");
+    setComposerLayoutDraft("");
   }
 
   function renderBrainChatModule() {
@@ -5914,7 +5958,7 @@ function renderChatModule() {
             </button>
           ) : null}
           <div
-            className={`composer-card${isGlobalModelBusy || brainMessageBusy ? " busy" : ""}${composerDragActive ? " drag-active" : ""}${String(question || "").includes("\n") || String(question || "").length > 80 ? " composer-card--expanded" : ""}`}
+            className={`composer-card${isGlobalModelBusy || brainMessageBusy ? " busy" : ""}${composerDragActive ? " drag-active" : ""}${String(composerLayoutDraft || question || "").includes("\n") || String(composerLayoutDraft || question || "").length > 80 ? " composer-card--expanded" : ""}`}
             onDragEnter={(event) => {
               if (!Array.from(event.dataTransfer.types).includes("Files")) return;
               event.preventDefault();
@@ -6083,50 +6127,11 @@ function renderChatModule() {
                 })}
               </div>
             ) : null}
-            <textarea
-              data-testid="composer-input"
-              value={question}
-              disabled={false}
+            <ComposerTextarea
+              ref={composerTextareaRef}
+              resetKey={`${selectedThreadId || "none"}:${selectedBrainConversationId || "none"}:${isComposingNewThread ? "new" : "thread"}`}
+              initialValue={question}
               readOnly={researchWritingSession.enabled && Boolean(researchWritingSession.requestText)}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.nativeEvent.isComposing || event.key !== "Enter") return;
-                if (event.altKey) {
-                  event.preventDefault();
-                  const input = event.currentTarget;
-                  const start = input.selectionStart ?? question.length;
-                  const end = input.selectionEnd ?? question.length;
-                  const nextQuestion = `${question.slice(0, start)}\n${question.slice(end)}`;
-                  setQuestion(nextQuestion);
-                  window.requestAnimationFrame(() => {
-                    input.selectionStart = start + 1;
-                    input.selectionEnd = start + 1;
-                  });
-                  return;
-                }
-                if (event.shiftKey) return;
-                event.preventDefault();
-                if ((isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0) {
-                  void cancelCurrentModelRequest?.();
-                  return;
-                }
-                // The native Composer supports the configured `auto` model even
-                // while the optional model catalogue is still loading. Do not
-                // silently swallow the user's message just because that list is
-                // temporarily empty.
-                if (!api || (!question.trim() && composerImages.length === 0)) return;
-                void submitComposerRequest();
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                if (api) void api.showInputContextMenu();
-              }}
-              onPaste={(event) => {
-                const files = Array.from(event.clipboardData.files);
-                if (files.length === 0) return;
-                void addComposerFiles(files);
-              }}
               placeholder={
                 selectedComposerSkill?.name === RESEARCH_WRITING_SKILL
                   ? "描述您撰写或修改的文档，也可以上传材料..."
@@ -6136,6 +6141,18 @@ function renderChatModule() {
                     ? "可向 codeCN 询问任何事。输入 @ 使用插件或提及文件"
                     : "要求后续变更"
               }
+              onDraftChange={handleComposerDraftChange}
+              onEnter={handleComposerEnter}
+              onAltEnter={() => composerTextareaRef.current?.insertNewlineAtCursor()}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                if (api) void api.showInputContextMenu();
+              }}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData.files);
+                if (files.length === 0) return;
+                void addComposerFiles(files);
+              }}
             />
             {voiceInputAvailable && desktopPreferences?.dictation?.keepBarVisible ? (
               <div className="composer-dictation-bar">
@@ -6491,13 +6508,13 @@ function renderChatModule() {
                 ) : null}
               </div>
               <button
-                className={`send-btn${(isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0 ? " stop-btn" : ""}`}
+                className={`send-btn${(isGlobalModelBusy || brainMessageBusy) && !readComposerQuestion().trim() && composerImages.length === 0 ? " stop-btn" : ""}`}
                 data-testid="composer-send-button"
-                    disabled={!api || (!(isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0)}
+                    disabled={!api || (!(isGlobalModelBusy || brainMessageBusy) && !readComposerQuestion().trim() && composerImages.length === 0)}
                 type="button"
                     title={(isGlobalModelBusy || brainMessageBusy) ? "当前对话正在处理中" : "发送"}
                 onClick={() => {
-                  if ((isGlobalModelBusy || brainMessageBusy) && !question.trim() && composerImages.length === 0) {
+                  if ((isGlobalModelBusy || brainMessageBusy) && !readComposerQuestion().trim() && composerImages.length === 0) {
                     void cancelCurrentModelRequest?.();
                     return;
                   }
