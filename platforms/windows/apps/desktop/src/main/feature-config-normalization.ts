@@ -1,5 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { AutomationSpec, PluginSpec, SkillSpec } from "@codex-forge/protocol";
+import { isRepositoryPluginId, isRepositoryVirtualPath } from "./repository-plugin-paths.ts";
 
 export interface FeatureConfigShape {
   skills: SkillSpec[];
@@ -23,7 +24,13 @@ export function normalizeFeatureConfig(
 ): FeatureConfigShape {
   const isPortableFeaturePath = (value?: string) => {
     const trimmed = value?.trim();
-    if (!trimmed || trimmed === "builtin" || /^builtin:[a-z0-9-]+(?:\/[a-z0-9._\/-]+)?$/i.test(trimmed) || /^https?:\/\//i.test(trimmed)) return true;
+    if (
+      !trimmed
+      || trimmed === "builtin"
+      || isRepositoryVirtualPath(trimmed)
+      || /^builtin:[a-z0-9-]+(?:\/[a-z0-9._\/-]+)?$/i.test(trimmed)
+      || /^https?:\/\//i.test(trimmed)
+    ) return true;
     const resolved = resolve(trimmed);
     const relativeToWorkspaceState = relative(context.workspaceStateRoot, resolved);
     const relativeToWorkspace = relative(context.workspacePath, resolved);
@@ -33,6 +40,9 @@ export function normalizeFeatureConfig(
     );
   };
   const normalizePluginForCurrentInstall = (plugin: PluginSpec) => {
+    if (isRepositoryPluginId(plugin.id) || isRepositoryVirtualPath(plugin.source || "") || isRepositoryVirtualPath(plugin.manifestPath || "")) {
+      return plugin;
+    }
     if (!context.isPackaged || plugin.source === "builtin" || plugin.source?.startsWith("builtin:")) return plugin;
     const sourceOk = isPortableFeaturePath(plugin.source);
     const manifestOk = isPortableFeaturePath(plugin.manifestPath);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, mkdir, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -65,4 +65,29 @@ test("a failed upgrade preserves the installed version", async () => {
   const snapshot = await service.snapshot();
   assert.equal(snapshot["game-studio"].version, "1.0.0");
   assert.match(await readFile(join(root, "packages", "game-studio", "1.0.0", "skills", "phaser", "SKILL.md"), "utf8"), /1\.0\.0/);
+});
+
+test("upgrades on top of the previous version and preserves user-owned data", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codecn-plugins-"));
+  let value = await release("1.0.0");
+  const client = {
+    manifest: async () => value.manifest,
+    download: async () => value.download,
+    report: async () => ({})
+  };
+  const service = new PluginInstallationService({ root, client: client as never, deviceId: "device-001", clientVersion: "0.1.55" });
+  await service.install("game-studio");
+  await mkdir(join(root, "packages", "game-studio", "1.0.0", "data", "projects"), { recursive: true });
+  await writeFile(join(root, "packages", "game-studio", "1.0.0", "data", "projects", "demo.json"), "{\"saved\":true}\n", "utf8");
+  await service.setEnabled("game-studio", false);
+
+  value = await release("1.1.0");
+  const upgraded = await service.install("game-studio", "1.1.0");
+  assert.equal(upgraded.version, "1.1.0");
+  assert.equal(upgraded.state, "disabled");
+  assert.equal((await service.snapshot())["game-studio"].enabled, false);
+  assert.match(await readFile(join(root, "packages", "game-studio", "1.1.0", "skills", "phaser", "SKILL.md"), "utf8"), /1\.1\.0/);
+  assert.match(await readFile(join(root, "packages", "game-studio", "1.1.0", "data", "projects", "demo.json"), "utf8"), /saved/);
+  assert.match(await readFile(join(root, "user", "game-studio", "data", "projects", "demo.json"), "utf8"), /saved/);
+  await assert.rejects(() => access(join(root, "packages", "game-studio", "1.0.0")), /ENOENT/);
 });

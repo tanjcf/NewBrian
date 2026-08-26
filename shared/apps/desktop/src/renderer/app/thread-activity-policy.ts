@@ -101,19 +101,8 @@ function hasCanonicalAssistantForOptimisticStub<T extends DisplayMessage>(
   stub: T
 ): boolean {
   const precedingUser = findPrecedingUserMessage(current, stub.id);
-  if (precedingUser) {
-    return Boolean(findDurableAssistantForUserTurn(canonical, precedingUser.id));
-  }
-  // No preceding user in the optimistic list: fall back to nearest durable
-  // assistant created at/after this stub, but never treat an older turn as a match
-  // when a user boundary is available.
-  const startedAt = Date.parse(stub.createdAt ?? "") || 0;
-  return canonical.some((message) => {
-    if (message.role !== "assistant" || message.excludeFromModelContext) return false;
-    if (String(message.id || "").startsWith("local-assistant-")) return false;
-    const createdAt = Date.parse(message.createdAt ?? "") || 0;
-    return createdAt >= startedAt - 1_000;
-  });
+  if (!precedingUser) return false;
+  return Boolean(findDurableAssistantForUserTurn(canonical, precedingUser.id));
 }
 
 type DisplayMessageWithProgress = DisplayMessage & {
@@ -125,6 +114,64 @@ function preferLongerText(left: string | undefined, right: string | undefined) {
   const a = String(left ?? "");
   const b = String(right ?? "");
   return a.length >= b.length ? a : b;
+}
+
+/** Resolve the assistant row owned by one user turn — never scan by timestamp. */
+export function resolveTurnAssistantMessageId<T extends DisplayMessage>(
+  messages: T[],
+  input: {
+    streamRequestId: string;
+    userMessageId: string;
+  }
+): string | undefined {
+  const streamRequestId = input.streamRequestId.trim();
+  const userMessageId = input.userMessageId.trim();
+  if (messages.some((message) => message.id === streamRequestId)) return streamRequestId;
+  const durable = findDurableAssistantForUserTurn(messages, userMessageId);
+  if (durable) return durable.id;
+  return undefined;
+}
+
+/**
+ * Patch only the current turn's assistant row when merging a runtime snapshot.
+ * Never rewrite the previous turn's assistant when the durable row for this turn
+ * has not landed yet.
+ */
+export function patchRuntimeSnapshotMessagesForTurn<T extends DisplayMessageWithProgress>(input: {
+  snapshotMessages: T[];
+  currentMessages: T[];
+  streamRequestId: string;
+  userMessageId: string;
+  finalContent: string;
+  reasoningSummary?: string;
+}): T[] {
+  const messages = [...input.snapshotMessages];
+  const targetId = resolveTurnAssistantMessageId(input.currentMessages, {
+    streamRequestId: input.streamRequestId,
+    userMessageId: input.userMessageId
+  }) ?? resolveTurnAssistantMessageId(messages, {
+    streamRequestId: input.streamRequestId,
+    userMessageId: input.userMessageId
+  });
+  if (targetId) {
+    const index = messages.findIndex((message) => message.id === targetId);
+    if (index >= 0) {
+      messages[index] = {
+        ...messages[index],
+        content: input.finalContent,
+        reasoningSummary: input.reasoningSummary || messages[index].reasoningSummary
+      };
+      return messages;
+    }
+  }
+  messages.push({
+    id: input.streamRequestId,
+    role: "assistant",
+    content: input.finalContent,
+    reasoningSummary: input.reasoningSummary || "",
+    createdAt: new Date().toISOString()
+  } as T);
+  return messages;
 }
 
 /** Prefer in-memory streamed progress when durable snapshot still has an empty stub. */
@@ -193,20 +240,7 @@ export function reconcileThreadDisplayMessages<T extends DisplayMessageWithProgr
     const foldByDurableId = new Map<string, T>();
     for (const local of droppedLocalAssistants) {
       const precedingUser = findPrecedingUserMessage(current, local.id);
-      let durable = findDurableAssistantForUserTurn(mergedCanonical, precedingUser?.id);
-      if (!durable) {
-        const startedAt = Date.parse(local.createdAt ?? "") || 0;
-        durable = mergedCanonical
-          .filter((message) =>
-            message.role === "assistant"
-            && !message.excludeFromModelContext
-            && !String(message.id || "").startsWith("local-assistant-")
-            && (Date.parse(message.createdAt ?? "") || 0) >= startedAt - 1_000
-          )
-          .sort((left, right) =>
-            (Date.parse(left.createdAt ?? "") || 0) - (Date.parse(right.createdAt ?? "") || 0)
-          )[0];
-      }
+      const durable = findDurableAssistantForUserTurn(mergedCanonical, precedingUser?.id);
       if (!durable) continue;
       const existing = foldByDurableId.get(durable.id);
       if (

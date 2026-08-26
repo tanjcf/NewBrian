@@ -4,6 +4,7 @@ import test from "node:test";
 const {
   groupActivitiesByUserMessage,
   isComposerThreadRunning,
+  patchRuntimeSnapshotMessagesForTurn,
   reconcileThreadDisplayMessages,
   resolveActiveReasoningRequestId,
   resolvePendingApprovalThreadKey,
@@ -245,6 +246,72 @@ test("folds richer local-assistant stub into durable assistant-turn instead of w
       createdAt: "2026-01-01T00:00:05.000Z"
     }
   ]);
+});
+
+test("does not fold a new turn streaming stub into a prior turn assistant", () => {
+  const current = [
+    { id: "local-user-1", role: "user", content: "你会做ppt吗", createdAt: "2026-01-01T00:00:00.000Z" },
+    {
+      id: "assistant-turn-1",
+      role: "assistant",
+      content: "会的！我可以帮你制作 PowerPoint 演示文稿 (PPT)",
+      createdAt: "2026-01-01T00:00:05.000Z"
+    },
+    { id: "local-user-2", role: "user", content: "哈哈哈真有趣", createdAt: "2026-01-01T00:01:00.000Z" },
+    {
+      id: "local-assistant-2",
+      role: "assistant",
+      content: "新回复正在生成",
+      createdAt: "2026-01-01T00:01:01.000Z"
+    }
+  ];
+  const canonical = current.filter((message) => message.id !== "local-assistant-2");
+  const reconciled = reconcileThreadDisplayMessages(current, canonical);
+
+  assert.equal(
+    reconciled.find((message) => message.id === "assistant-turn-1")?.content,
+    "会的！我可以帮你制作 PowerPoint 演示文稿 (PPT)"
+  );
+  assert.ok(reconciled.some((message) => message.id === "local-assistant-2"));
+});
+
+test("patchRuntimeSnapshotMessagesForTurn does not overwrite prior assistant when current turn is missing", () => {
+  const snapshot = [
+    { id: "local-user-1", role: "user", content: "你会做ppt吗", createdAt: "2026-01-01T00:00:00.000Z" },
+    {
+      id: "assistant-turn-1",
+      role: "assistant",
+      content: "会的！我可以帮你制作 PowerPoint 演示文稿 (PPT)",
+      createdAt: "2026-01-01T00:00:05.000Z"
+    }
+  ];
+  const current = [
+    ...snapshot,
+    { id: "local-user-2", role: "user", content: "哈哈哈真有趣", createdAt: "2026-01-01T00:01:00.000Z" },
+    {
+      id: "local-assistant-abc",
+      role: "assistant",
+      content: "新回复正在生成",
+      createdAt: "2026-01-01T00:01:01.000Z"
+    }
+  ];
+  const patched = patchRuntimeSnapshotMessagesForTurn({
+    snapshotMessages: snapshot,
+    currentMessages: current,
+    streamRequestId: "local-assistant-abc",
+    userMessageId: "local-user-2",
+    finalContent: "哈哈哈，看来你对 PPT 功能挺感兴趣！",
+    reasoningSummary: ""
+  });
+
+  assert.equal(
+    patched.find((message) => message.id === "assistant-turn-1")?.content,
+    "会的！我可以帮你制作 PowerPoint 演示文稿 (PPT)"
+  );
+  assert.equal(
+    patched.find((message) => message.id === "local-assistant-abc")?.content,
+    "哈哈哈，看来你对 PPT 功能挺感兴趣！"
+  );
 });
 
 test("groups persisted commands under the user message from the same turn", () => {

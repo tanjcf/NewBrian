@@ -250,6 +250,15 @@ import {
 import { runGitUtf8 } from "./git-command.js";
 import { runBoundedExtractor } from "./bounded-extractor.js";
 import { applyApplicationSkillPolicy as applySkillPolicy } from "./application-skill-policy.js";
+import { resolveRepositoryVirtualPath } from "./repository-plugin-paths.js";
+import {
+  buildRepositoryPluginSpec,
+  discoverRepositorySkillSpecs,
+  mergeRepositoryPluginActivation,
+  mergeRepositoryPluginDeactivation,
+  mergeRepositoryPluginRemoval,
+  virtualizeActivatedRepositoryPlugin
+} from "./repository-plugin-feature-sync.js";
 import { registerSettingsIpcHandlers } from "./settings-ipc.js";
 import { registerUserKnowledgeIpcHandlers } from "./user-knowledge-ipc.js";
 import { registerDesktopIntegrationIpcComposition } from "./desktop-integration-ipc-composition.js";
@@ -538,6 +547,7 @@ const desktopDiagnosticsLogPath = join(workspaceStateRoot, "diagnostics.log");
 const desktopErrorOutbox = new DesktopErrorOutbox(join(workspaceStateRoot, "error-reports"));
 let rendererFailureRestartScheduled = false;
 const userSkillRoot = join(workspaceStateRoot, "skills");
+const pluginRepositoryRoot = join(app.getPath("userData"), "plugins");
 const userKnowledgeRoot = workspaceStateRoot;
 const authAuditLogPath = join(workspacePath, "tmp-auth-session.log");
 const bundledModelConfigPath = join(process.resourcesPath, "codecn.config.json");
@@ -2714,6 +2724,9 @@ function mergeBuiltinPluginSpecs(plugins: PluginSpec[]) {
     .concat(plugins.filter((plugin) => !builtinPluginCatalog.some((builtin) => builtin.id === plugin.id)));
 }
 function resolvePluginStoragePath(value: string) {
+  if (value.startsWith("repository://")) {
+    return resolveRepositoryVirtualPath(value, pluginRepositoryRoot);
+  }
   if (!value.startsWith("builtin:")) return resolve(value);
   const relativePath = value.slice("builtin:".length).replace(/\//g, sep);
   const resolved = resolve(builtinPluginsRoot, relativePath);
@@ -2884,7 +2897,9 @@ async function activatePlugin(plugin: PluginSpec): Promise<PluginSpec> {
   };
 }
 async function deactivatePlugin(plugin: PluginSpec) {
-  if (plugin.skillRoots?.length) await runtime.removeSkillRoots(plugin.skillRoots);
+  if (plugin.skillRoots?.length) {
+    await runtime.removeSkillRoots(plugin.skillRoots.map((root) => resolvePluginStoragePath(root)));
+  }
   if (plugin.mcpServerIds?.length) {
     const removing = new Set(plugin.mcpServerIds);
     await writeMcpServers((await readMcpServers()).filter((server) => !removing.has(server.id)));
@@ -2892,13 +2907,87 @@ async function deactivatePlugin(plugin: PluginSpec) {
     await syncMcpToolsToRuntime();
   }
 }
+async function activateRepositoryPluginFromInstall(pluginKey: string, version: string) {
+  const packageDir = join(pluginRepositoryRoot, "packages", pluginKey, version);
+  if (!existsSync(packageDir)) {
+    throw new Error(`Repository plugin package is missing: ${packageDir}`);
+  }
+  const existing = (await readFeatureConfig()).plugins.find((plugin) => plugin.id === `repository:${pluginKey}`);
+  if (existing && (existing.status === "enabled" || existing.status === "connected")) {
+    await deactivatePlugin(existing);
+  }
+  const baseSpec = buildRepositoryPluginSpec({ pluginKey, version });
+  const activated = await activatePlugin(baseSpec);
+  const skills = await discoverRepositorySkillSpecs({
+    pluginKey,
+    version,
+    packageDir,
+    skillRoots: activated.skillRoots ?? []
+  });
+  const plugin = virtualizeActivatedRepositoryPlugin({
+    pluginKey,
+    version,
+    packageDir,
+    activated
+  });
+  const config = mergeRepositoryPluginActivation(await readFeatureConfig(), { plugin, skills });
+  await writeFeatureConfig(config);
+  await applyApplicationSkillPolicy(runtime);
+}
+
+async function deactivateRepositoryPluginFromCatalog(pluginKey: string) {
+  const config = await readFeatureConfig();
+  const existing = config.plugins.find((plugin) => plugin.id === `repository:${pluginKey}`);
+  if (existing) await deactivatePlugin(existing);
+  await writeFeatureConfig(mergeRepositoryPluginDeactivation(config, pluginKey));
+  await applyApplicationSkillPolicy(runtime);
+}
+
+async function removeRepositoryPluginFromCatalog(pluginKey: string) {
+  const config = await readFeatureConfig();
+  const existing = config.plugins.find((plugin) => plugin.id === `repository:${pluginKey}`);
+  if (existing) await deactivatePlugin(existing);
+  await writeFeatureConfig(mergeRepositoryPluginRemoval(config, pluginKey));
+  await applyApplicationSkillPolicy(runtime);
+}
+
+async function reconcileLocalRepositoryPlugins() {
+  const statePath = join(pluginRepositoryRoot, "installed.json");
+  if (!existsSync(statePath)) return;
+  let parsed: { plugins?: Record<string, { version?: string; state?: string; enabled?: boolean }> };
+  try {
+    parsed = JSON.parse(await fs.readFile(statePath, "utf8")) as typeof parsed;
+  } catch {
+    return;
+  }
+  for (const [pluginKey, item] of Object.entries(parsed.plugins ?? {})) {
+    if (!item || item.state !== "installed" || item.enabled === false) continue;
+    const version = String(item.version || "").trim();
+    if (!version) continue;
+    try {
+      await activateRepositoryPluginFromInstall(pluginKey, version);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await appendDesktopDebugLog(`repository plugin reconcile failed (${pluginKey}): ${detail}`);
+    }
+  }
+}
+
 async function activateConfiguredPlugins() {
   const config = await readFeatureConfig();
   const nextPlugins: PluginSpec[] = [];
   for (const plugin of config.plugins) {
     if ((plugin.status === "connected" || plugin.status === "enabled") && plugin.manifestPath) {
       try {
-        nextPlugins.push(await activatePlugin(plugin));
+        const activated = await activatePlugin(plugin);
+        if (plugin.id.startsWith("repository:")) {
+          const pluginKey = plugin.id.slice("repository:".length);
+          const version = String(plugin.version || activated.version || "").trim();
+          const packageDir = join(pluginRepositoryRoot, "packages", pluginKey, version);
+          nextPlugins.push(virtualizeActivatedRepositoryPlugin({ pluginKey, version, packageDir, activated }));
+        } else {
+          nextPlugins.push(activated);
+        }
       } catch (error) {
         const lastError = error instanceof Error ? error.message : String(error);
         nextPlugins.push({ ...plugin, status: "disabled", lastError });
@@ -6398,16 +6487,31 @@ async function mergeDelegatedAgentResults(input: {
 }
 async function createBlankWorkspace(input: { name: string; brainWorkspaceKey?: string }) {
   const name = input.name.trim();
-  const folderName = name
+  const baseFolderName = name
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
     .replace(/[. ]+$/g, "")
     .trim();
-  if (!folderName) {
+  if (!baseFolderName) {
     throw new Error("Project name is required.");
   }
-  const projectPath = join(workspaceStateRoot, "projects", folderName);
-  await fs.mkdir(projectPath, { recursive: true });
-  return addWorkspace({ name, path: projectPath, brainWorkspaceKey: input.brainWorkspaceKey });
+  const catalog = await readWorkspaceCatalog();
+  const reservedPaths = new Set(catalog.workspaces.map((workspace) => workspace.path.toLowerCase()));
+  let folderName = baseFolderName;
+  for (let suffix = 1; suffix < 100; suffix += 1) {
+    if (suffix > 1) {
+      folderName = `${baseFolderName}-${suffix}`;
+    }
+    const projectPath = join(workspaceStateRoot, "projects", folderName);
+    if (reservedPaths.has(resolve(projectPath).toLowerCase())) {
+      continue;
+    }
+    await fs.mkdir(projectPath, { recursive: true });
+    const nextCatalog = await addWorkspace({ name, path: projectPath, brainWorkspaceKey: input.brainWorkspaceKey });
+    if (nextCatalog.workspaces.some((workspace) => workspace.path.toLowerCase() === resolve(projectPath).toLowerCase())) {
+      return nextCatalog;
+    }
+  }
+  throw new Error("Unable to create a unique project folder.");
 }
 async function renameWorkspace(input: { workspaceId: string; name: string }) {
   const name = input.name.trim();
@@ -7789,12 +7893,25 @@ async function waitForRemoteApprovalCompletion(requestId: string, signal: AbortS
 }
 
 function registerPluginRepositoryHandlers() {
-  registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: join(app.getPath("userData"), "plugins"), clientVersion: app.getVersion(), getConnection: async () => {
+  registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: pluginRepositoryRoot, clientVersion: app.getVersion(), getConnection: async () => {
       const authState = await readDesktopAuthState(), token = authState?.access_token?.trim() || "";
       if (!token) throw new Error("PLUGIN_AUTH_REQUIRED: 请先登录再使用插件仓库。");
       const device = collectDesktopDeviceFingerprint();
       const gatewayOrigin = await readGatewayOrigin();
       return { runtimeKey: `${gatewayOrigin}|${token}|${device.device_id}`, gatewayOrigin, headers: createDesktopAuthHeaders({ accessToken: token, device }), deviceId: device.device_id };
+    },
+    onInstalled: async ({ pluginKey, version }) => {
+      await activateRepositoryPluginFromInstall(pluginKey, version);
+    },
+    onSetEnabled: async ({ pluginKey, version, enabled }) => {
+      if (enabled) {
+        await activateRepositoryPluginFromInstall(pluginKey, version);
+        return;
+      }
+      await deactivateRepositoryPluginFromCatalog(pluginKey);
+    },
+    onRemoved: async ({ pluginKey }) => {
+      await removeRepositoryPluginFromCatalog(pluginKey);
     }
   });
 }
@@ -9113,6 +9230,7 @@ app.whenReady().then(async () => {
     registerWorkspaceMediaAgentTools();
     registerOfficialGovernmentWebTools(runtime, officialGovernmentWebService);
     await activateConfiguredPlugins();
+    await reconcileLocalRepositoryPlugins();
     await syncMcpToolsToRuntime();
     const restoredDelegatedTasks = runtime.restoreDelegatedTasks(codexStorage.listDelegatedAgentTasks());
     for (const restoredTask of restoredDelegatedTasks) {

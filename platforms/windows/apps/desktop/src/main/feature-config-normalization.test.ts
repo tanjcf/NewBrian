@@ -22,6 +22,17 @@ test("filters non-portable packaged plugin paths", () => {
   assert.deepEqual(result.plugins, []);
 });
 
+test("keeps repository plugin virtual paths in packaged installs", () => {
+  const result = normalizeFeatureConfig({ plugins: [{
+    id: "repository:game-studio", name: "Game Studio", summary: "", version: "1.0.0", status: "enabled",
+    source: "repository://packages/game-studio/1.0.0",
+    manifestPath: "repository://packages/game-studio/1.0.0/.codex-plugin/plugin.json",
+    capabilities: ["skills"], skillRoots: ["repository://packages/game-studio/1.0.0/skills"], mcpServerIds: []
+  }] }, context);
+  assert.equal(result.plugins[0]?.id, "repository:game-studio");
+  assert.equal(result.plugins[0]?.skillRoots?.[0], "repository://packages/game-studio/1.0.0/skills");
+});
+
 test("keeps packaged builtin plugin contribution paths", () => {
   const result = normalizeFeatureConfig({ plugins: [{
     id: "plugin-pdf", name: "PDF", summary: "PDF", status: "enabled",

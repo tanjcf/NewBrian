@@ -52,6 +52,15 @@ test("scene switching clears outgoing composer Skill and never submits into anot
   assert.doesNotMatch(source, /boundWorkspaceId \|\| activeWorkspaceId/);
 });
 
+test("binds document project selection to local workspace without hijacking project-thread rows", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /bindBrainProjectToWorkspace\(/);
+  assert.match(source, /resolveBrainProjectForWorkspace/);
+  assert.match(source, /shouldSyncBrainConversationThread/);
+  assert.match(source, /String\(selectedSidebarRow \|\| ""\)\.startsWith\("project:"\)/);
+  assert.match(source, /setSelectedSidebarRow\(`project:\$\{workspace\.id\}`\)/);
+});
+
 test("never activates a conversation thread that belongs to the outgoing project", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /mappedThreadBelongsToWorkspace/);

@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { dirname, join, normalize } from "node:path";
 import type { PluginInstallState, PluginOperationResult } from "@codex-forge/protocol";
 import type { PluginInstallationReport, PluginManifest } from "./plugin-repository-client.js";
-
+import {
+  migrateRepositoryPluginUserData,
+  removeRepositoryPluginVersionDir
+} from "./repository-plugin-user-data.ts";
 type AtomicFileModule = typeof import("./atomic-file.js");
 type PluginVerifierModule = typeof import("./plugin-package-verifier.js");
 const loadAtomicFile = () => import(new URL("./atomic-file.ts", import.meta.url).href) as Promise<AtomicFileModule>;
@@ -64,6 +67,9 @@ export class PluginInstallationService {
     return this.serial(pluginKey, async () => {
       this.requireKey(pluginKey);
       const operationId = randomUUID();
+      const state = await this.readState();
+      const previous = state.plugins[pluginKey];
+      const previousVersion = previous && previous.state !== "removed" ? String(previous.version || "").trim() : "";
       const manifest = await this.client.manifest(pluginKey, version);
       const downloaded = await this.client.download(pluginKey, manifest.version);
       const verified = await this.verifyPluginPackage({
@@ -76,6 +82,8 @@ export class PluginInstallationService {
       });
       const staging = join(this.root, "staging", operationId);
       const target = join(this.root, "packages", pluginKey, manifest.version);
+      const isSameVersion = previousVersion === manifest.version;
+      const preserveEnabled = previous?.enabled ?? true;
       try {
         await fs.rm(staging, { recursive: true, force: true });
         await fs.mkdir(staging, { recursive: true });
@@ -86,16 +94,32 @@ export class PluginInstallationService {
           await fs.mkdir(dirname(destination), { recursive: true });
           await fs.writeFile(destination, await entry.async("nodebuffer"));
         }
+        if (previousVersion && previousVersion !== manifest.version) {
+          await migrateRepositoryPluginUserData({
+            pluginsRoot: this.root,
+            pluginKey,
+            previousVersion,
+            targetPackageDir: staging
+          });
+        } else if (isSameVersion) {
+          await migrateRepositoryPluginUserData({
+            pluginsRoot: this.root,
+            pluginKey,
+            targetPackageDir: staging
+          });
+        }
         await fs.mkdir(dirname(target), { recursive: true });
         await fs.rm(target, { recursive: true, force: true });
         await fs.rename(staging, target);
-        const state = await this.readState();
+        if (previousVersion && previousVersion !== manifest.version) {
+          await removeRepositoryPluginVersionDir({ pluginsRoot: this.root, pluginKey, version: previousVersion });
+        }
         state.plugins[pluginKey] = {
           plugin_key: pluginKey,
           version: manifest.version,
           content_hash: verified.contentHash,
-          state: "installed",
-          enabled: true,
+          state: preserveEnabled ? "installed" : "disabled",
+          enabled: preserveEnabled,
           updated_at: new Date().toISOString()
         };
         await this.writeState(state);
@@ -145,6 +169,13 @@ export class PluginInstallationService {
 
   async snapshot() {
     return (await this.readState()).plugins;
+  }
+
+  async getInstalled(pluginKey: string) {
+    this.requireKey(pluginKey);
+    const item = (await this.readState()).plugins[pluginKey];
+    if (!item || item.state === "removed") return null;
+    return item;
   }
 
   private report(pluginKey: string, item: InstalledPlugin) {

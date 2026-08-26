@@ -12,7 +12,7 @@ import { useDesktopCore } from "./app/useDesktopCore";
 import { SidebarIcon } from "./app/SidebarIcon";
 import { markThreadActiveInCatalog } from "./app/thread-order";
 import { compactModelAttachment } from "./app/model-attachment-policy";
-import { isComposerThreadRunning, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { isComposerThreadRunning, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { combineComposerQuote } from "./app/composer-quote";
 import { markApprovalActivitiesSettling, mergeAssistantActivityItems } from "./app/assistant-activity-merge";
 import { parseUsageExceptionCommand } from "./app/usage-exception-command";
@@ -1653,30 +1653,18 @@ export function App() {
       );
       setErrorMessage("");
       const nextSnapshot = result.runtimeSnapshot ?? await api.getSnapshot();
-      const canonicalSnapshot = (() => {
-        const messages = [...(nextSnapshot.messages ?? [])];
-        let patched = false;
-        for (let index = messages.length - 1; index >= 0; index -= 1) {
-          if (messages[index].role !== "assistant") continue;
-          messages[index] = {
-            ...messages[index],
-            content: finalContent,
-            reasoningSummary: result.reasoningSummary || messages[index].reasoningSummary
-          };
-          patched = true;
-          break;
-        }
-        if (!patched) {
-          messages.push({
-            id: streamRequestId,
-            role: "assistant",
-            content: finalContent,
-            reasoningSummary: result.reasoningSummary || "",
-            createdAt: new Date().toISOString()
-          } as never);
-        }
-        return { ...nextSnapshot, messages };
-      })();
+      const currentThreadMessages = threadMessagesRef.current.get(targetThreadId) ?? chatMessagesRef.current;
+      const canonicalSnapshot = {
+        ...nextSnapshot,
+        messages: patchRuntimeSnapshotMessagesForTurn({
+          snapshotMessages: (nextSnapshot.messages ?? []) as ModelChatMessage[],
+          currentMessages: currentThreadMessages,
+          streamRequestId,
+          userMessageId: userMessage.id,
+          finalContent,
+          reasoningSummary: result.reasoningSummary
+        })
+      };
       awaitingApproval = Boolean(result.awaitingApproval ?? canonicalSnapshot.approval);
       if (awaitingApproval) {
         awaitingApprovalRequestIdsRef.current.add(streamRequestId);

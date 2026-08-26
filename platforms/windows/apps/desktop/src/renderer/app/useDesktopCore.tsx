@@ -1172,7 +1172,9 @@ function selectAddedWorkspace(nextCatalog: WorkspaceCatalogItem[], preferredWork
   const newest = preferredWorkspace ?? nextCatalog.at(-1);
   if (newest) {
     setSelectedWorkspaceId(newest.id);
-    setSelectedThreadId(resolveUserVisibleThreadSelection(newest.threads, null)?.id ?? "");
+    const threadId = resolveUserVisibleThreadSelection(newest.threads, null)?.id ?? "";
+    setSelectedThreadId(threadId);
+    setIsComposingNewThread(!threadId);
     setExpandedWorkspaceIds((current) => new Set([...current, newest.id]));
     setExpandedThreadListWorkspaceIds((current) => new Set([...current, newest.id]));
   }
@@ -1194,38 +1196,41 @@ function resolveActiveBrainWorkspaceKey(preferred?: string) {
 
 async function createBlankProject(name: string, options?: { brainWorkspaceKey?: string }) {
   if (!api || !name.trim()) {
-    return false;
+    return "";
   }
 
   try {
     const brainWorkspaceKey = resolveActiveBrainWorkspaceKey(options?.brainWorkspaceKey);
+    const beforeIds = new Set(normalizeWorkspaceCatalog(workspaceCatalog).map((workspace) => workspace.id));
     const nextCatalog = await api.createBlankWorkspace({
       name: name.trim(),
       brainWorkspaceKey: brainWorkspaceKey as any
     });
+    const normalized = normalizeWorkspaceCatalog(nextCatalog);
+    const createdWorkspace = normalized.find((workspace) => !beforeIds.has(workspace.id)) ?? normalized.at(-1);
     try {
-      selectAddedWorkspace(nextCatalog);
+      selectAddedWorkspace(normalized, createdWorkspace);
     } catch (selectionError) {
       console.error("[project-create] project created but selection sync failed", selectionError);
-      setWorkspaceCatalog(normalizeWorkspaceCatalog(nextCatalog));
+      setWorkspaceCatalog(normalized);
     }
     setErrorMessage("");
-    return true;
+    return createdWorkspace?.id ?? "";
   } catch (error) {
     setErrorMessage(error instanceof Error ? error.message : String(error));
-    return false;
+    return "";
   }
 }
 
 async function addExistingProject(options?: { brainWorkspaceKey?: string }) {
   if (!api) {
-    return false;
+    return "";
   }
 
   try {
     const path = await api.selectWorkspaceFolder();
     if (!path) {
-      return false;
+      return "";
     }
     const name = path.split(/[\\/]/).filter(Boolean).at(-1) || "新项目";
     const nextCatalog = await api.addWorkspace({
@@ -1239,10 +1244,10 @@ async function addExistingProject(options?: { brainWorkspaceKey?: string }) {
     );
     selectAddedWorkspace(nextCatalog, addedWorkspace);
     setErrorMessage("");
-    return true;
+    return addedWorkspace?.id ?? "";
   } catch (error) {
     setErrorMessage(error instanceof Error ? error.message : String(error));
-    return false;
+    return "";
   }
 }
 

@@ -20,9 +20,17 @@ export interface PluginRepositoryIpcServices {
   reconcile(): unknown;
 }
 
+export interface RepositoryPluginLifecycleInput {
+  pluginKey: string;
+  version: string;
+}
+
 export interface PluginRepositoryRuntimeOptions {
   pluginRoot: string;
   clientVersion: string;
+  onInstalled?: (input: RepositoryPluginLifecycleInput) => Promise<void>;
+  onSetEnabled?: (input: RepositoryPluginLifecycleInput & { enabled: boolean }) => Promise<void>;
+  onRemoved?: (input: { pluginKey: string }) => Promise<void>;
   getConnection(): Promise<{
     runtimeKey: string;
     gatewayOrigin: string;
@@ -40,9 +48,10 @@ export interface PluginRepositoryRuntimeOptions {
     deviceId: string;
     clientVersion: string;
   }): {
-    install(pluginKey: string, version?: string): unknown;
-    setEnabled(pluginKey: string, enabled: boolean): unknown;
-    remove(pluginKey: string): unknown;
+    install(pluginKey: string, version?: string): Promise<{ version: string }>;
+    setEnabled(pluginKey: string, enabled: boolean): Promise<{ version: string }>;
+    remove(pluginKey: string): Promise<{ version: string }>;
+    getInstalled(pluginKey: string): Promise<{ version: string; enabled: boolean } | null>;
   };
 }
 
@@ -110,9 +119,32 @@ export function registerPluginRepositoryRuntime(
       const current = await requireRuntime();
       return current.client.detail(pluginKey, current.deviceId);
     },
-    install: async (pluginKey, version) => (await requireRuntime()).installer.install(pluginKey, version),
-    setEnabled: async (pluginKey, enabled) => (await requireRuntime()).installer.setEnabled(pluginKey, enabled),
-    remove: async (pluginKey) => (await requireRuntime()).installer.remove(pluginKey),
+    install: async (pluginKey, version) => {
+      const current = await requireRuntime();
+      const result = await current.installer.install(pluginKey, version) as { version?: string };
+      const installedVersion = String(result.version || version || "").trim();
+      if (options.onInstalled && installedVersion) {
+        await options.onInstalled({ pluginKey, version: installedVersion });
+      }
+      return result;
+    },
+    setEnabled: async (pluginKey, enabled) => {
+      const current = await requireRuntime();
+      const result = await current.installer.setEnabled(pluginKey, enabled) as { version?: string };
+      const installedVersion = String(result.version || "").trim();
+      if (options.onSetEnabled && installedVersion) {
+        await options.onSetEnabled({ pluginKey, version: installedVersion, enabled });
+      }
+      return result;
+    },
+    remove: async (pluginKey) => {
+      const current = await requireRuntime();
+      const result = await current.installer.remove(pluginKey) as { version?: string };
+      if (options.onRemoved) {
+        await options.onRemoved({ pluginKey });
+      }
+      return result;
+    },
     reconcile: async () => {
       const current = await requireRuntime();
       return current.client.reconcile(current.deviceId);

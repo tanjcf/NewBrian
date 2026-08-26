@@ -36,6 +36,13 @@ import {
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import { resolveLocalArtifactHref } from "./local-file-link";
 import { chatWorkspaces, crossSceneRecentProjects, filterWorkspaceCatalogByScene, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection } from "./workspace-visibility";
+import {
+  buildLegacyConversationThreadMappings,
+  mergeConversationThreadMappings,
+  resolveBrainProjectForWorkspace,
+  resolveLegacyConversationIdForThread,
+  shouldSyncBrainConversationThread
+} from "./brain-project-binding";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
@@ -605,6 +612,7 @@ export function WorkspaceModules(ctx: any) {
   const initialBrainCatalog = brainWorkspaceSelection.catalogs[selectedBrainWorkspaceKey];
   const [selectedBrainProjectId, setSelectedBrainProjectId] = useState(initialBrainCatalog?.projectId || "");
   const [selectedBrainConversationId, setSelectedBrainConversationId] = useState(initialBrainCatalog?.conversationId || "");
+  const [selectedSidebarRow, setSelectedSidebarRow] = useState<string | null>(null);
   const [brainWorkspaceMenuOpen, setBrainWorkspaceMenuOpen] = useState(false);
   const [brainWorkspaceBusy, setBrainWorkspaceBusy] = useState(false);
   const [brainWorkspaceAvailability, setBrainWorkspaceAvailability] = useState<"loading" | "ready" | "unavailable">("loading");
@@ -715,7 +723,7 @@ export function WorkspaceModules(ctx: any) {
     setIsComposingNewThread(!threadId);
   }, [selectedBrainWorkspaceKey, visibleWorkspaceCatalog, selectedWorkspace, selectedBrainConversationId, setSelectedWorkspaceId, setSelectedThreadId, setIsComposingNewThread]);
   const refreshBrainProjects = useCallback(async (workspaceKey = selectedBrainWorkspaceKey) => {
-    if (!window.codecn?.listBrainProjects) return;
+    if (!window.codecn?.listBrainProjects) return [];
     const [projects, recents] = await Promise.all([
       window.codecn.listBrainProjects({ workspaceKey, includeArchived: false }),
       window.codecn.listBrainProjects({ includeArchived: false })
@@ -724,6 +732,7 @@ export function WorkspaceModules(ctx: any) {
     setBrainProjects(nextProjects);
     setBrainRecentProjects(Array.isArray(recents) ? recents : []);
     setSelectedBrainProjectId((current) => nextProjects.some((project) => project.id === current) ? current : (nextProjects[0]?.id || ""));
+    return nextProjects;
   }, [selectedBrainWorkspaceKey]);
   const refreshBrainConversations = useCallback(async (projectId = selectedBrainProjectId) => {
     if (!projectId || !window.codecn?.listBrainConversations) {
@@ -740,7 +749,12 @@ export function WorkspaceModules(ctx: any) {
       includeArchived: false
     });
     let nextConversations = Array.isArray(conversations) ? conversations : [];
-    if (!nextConversations.length && window.codecn.createBrainConversation) {
+    if (
+      !nextConversations.length
+      && window.codecn.createBrainConversation
+      && !isComposingNewThread
+      && !String(selectedSidebarRow || "").startsWith("project:")
+    ) {
       try {
         const created = await window.codecn.createBrainConversation({
           projectId,
@@ -755,10 +769,26 @@ export function WorkspaceModules(ctx: any) {
     setBrainConversations(nextConversations);
     setSelectedBrainConversationId((current) => {
       if (current && nextConversations.some((conversation) => conversation.id === current)) return current;
+      if (isComposingNewThread || String(selectedSidebarRow || "").startsWith("project:")) return "";
       return nextConversations[0]?.id || "";
     });
+    const workspace = visibleWorkspaceCatalog.find((item) => item.id === project?.localWorkspaceId);
+    if (workspace?.threads?.length) {
+      setBrainConversationThreads((current) => mergeConversationThreadMappings(
+        current,
+        buildLegacyConversationThreadMappings({
+          conversations: nextConversations,
+          threads: workspace.threads
+        })
+      ));
+    }
     setSelectedSidebarRow((current) => {
-      if (current?.startsWith("feature:") || current?.startsWith("project-thread:") || current?.startsWith("chat:")) {
+      if (
+        current?.startsWith("feature:")
+        || current?.startsWith("project:")
+        || current?.startsWith("project-thread:")
+        || current?.startsWith("chat:")
+      ) {
         return current;
       }
       const preferred = current?.startsWith("brain-conversation:")
@@ -770,7 +800,25 @@ export function WorkspaceModules(ctx: any) {
       const nextRow = keep ? `brain-conversation:${keep}` : current;
       return nextRow === current ? current : nextRow;
     });
-  }, [selectedBrainProjectId, selectedBrainWorkspaceKey]);
+  }, [selectedBrainProjectId, selectedBrainWorkspaceKey, visibleWorkspaceCatalog, isComposingNewThread, selectedSidebarRow]);
+  const bindBrainProjectToWorkspace = useCallback((
+    workspaceId: string,
+    options?: { conversationId?: string; composingNewThread?: boolean; projects?: readonly { id: string; localWorkspaceId?: string | null }[] }
+  ) => {
+    const normalizedWorkspaceId = String(workspaceId || "").trim();
+    if (!normalizedWorkspaceId) return;
+    const project = resolveBrainProjectForWorkspace(options?.projects ?? brainProjects, normalizedWorkspaceId);
+    if (project) {
+      setSelectedBrainProjectId(project.id);
+    }
+    const nextConversationId = String(options?.conversationId || "").trim();
+    setSelectedBrainConversationId(nextConversationId);
+    if (options?.composingNewThread) {
+      activatedBrainThreadRef.current = "";
+      setSelectedThreadId("");
+      setIsComposingNewThread(true);
+    }
+  }, [brainProjects, setIsComposingNewThread, setSelectedThreadId]);
   useEffect(() => {
     let disposed = false;
     void (async () => {
@@ -809,7 +857,6 @@ export function WorkspaceModules(ctx: any) {
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
       .finally(() => setBrainWorkspaceBusy(false));
   }, [selectedBrainWorkspaceKey, refreshBrainProjects]);
-  const [selectedSidebarRow, setSelectedSidebarRow] = useState<string | null>(null);
   useEffect(() => {
     setBrainWorkspaceSelection((current) => rememberBrainWorkspaceCatalog(current, current.selectedWorkspaceKey, {
       projectId: selectedBrainProjectId,
@@ -825,11 +872,15 @@ export function WorkspaceModules(ctx: any) {
   }, [selectedBrainProjectId, selectedBrainWorkspaceKey, refreshBrainConversations]);
   useEffect(() => {
     if (!selectedBrainConversationId || !selectedBrainProjectId) return;
-    if (
-      selectedSidebarRow?.startsWith("feature:")
-      || selectedSidebarRow?.startsWith("project-thread:")
-      || selectedSidebarRow?.startsWith("chat:")
-    ) return;
+    const boundProject = resolveBrainProjectForWorkspace(brainProjects, selectedWorkspace?.id)
+      ?? brainProjects.find((project) => project.id === selectedBrainProjectId);
+    if (!shouldSyncBrainConversationThread({
+      sidebarRow: selectedSidebarRow,
+      selectedWorkspaceId: selectedWorkspace?.id,
+      boundWorkspaceId: boundProject?.localWorkspaceId
+    })) {
+      return;
+    }
     if (!brainConversations.some((conversation) => conversation.id === selectedBrainConversationId)) return;
     const row = `brain-conversation:${selectedBrainConversationId}`;
     setSelectedSidebarRow((current) => {
@@ -890,7 +941,7 @@ export function WorkspaceModules(ctx: any) {
       if (activatedBrainThreadRef.current === activationKey) activatedBrainThreadRef.current = "";
       setErrorMessage(error instanceof Error ? error.message : String(error));
     });
-  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, selectedWorkspace?.id, api, syncSnapshot, setErrorMessage, setIsComposingNewThread, setSelectedThreadId]);
+  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, brainProjects, selectedWorkspace?.id, api, syncSnapshot, setErrorMessage, setIsComposingNewThread, setSelectedThreadId]);
   useEffect(() => {
     if (!selectedBrainConversationId || isComposingNewThread || !selectedThreadId) return;
     setBrainConversationThreads((current) => current[selectedBrainConversationId] === selectedThreadId
@@ -3875,7 +3926,20 @@ function renderSidebarModule() {
                   type="button"
                   onClick={() => {
                     setShowAddWorkspacePanel(false);
-                    void addExistingProject({ brainWorkspaceKey: selectedBrainWorkspaceKey });
+                    void (async () => {
+                      const workspaceId = await addExistingProject({ brainWorkspaceKey: selectedBrainWorkspaceKey });
+                      if (!workspaceId) return;
+                      const projects = await refreshBrainProjects(selectedBrainWorkspaceKey);
+                      setSelectedSidebarRow(`project:${workspaceId}`);
+                      bindBrainProjectToWorkspace(workspaceId, {
+                        composingNewThread: true,
+                        projects
+                      });
+                      setActiveFeature("new-chat");
+                      setNewThreadScope("project");
+                      setChatUsesProject?.(true);
+                      setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+                    })();
                   }}
                 >
                   <SidebarIcon name="folder-open" />
@@ -3899,24 +3963,21 @@ function renderSidebarModule() {
                       onSubmit={async (event) => {
                         event.preventDefault();
                         const name = blankProjectName.trim();
-                        const created = await createBlankProject(name, {
+                        const workspaceId = await createBlankProject(name, {
                           brainWorkspaceKey: selectedBrainWorkspaceKey
                         });
-                        if (created) {
+                        if (workspaceId) {
                           setBlankProjectDialogOpen(false);
-                          await refreshBrainProjects(selectedBrainWorkspaceKey);
-                          const projects = await window.codecn?.listBrainProjects?.({
-                            workspaceKey: selectedBrainWorkspaceKey,
-                            includeArchived: false
-                          }) ?? [];
-                          const hit = projects.find((item) => item.name === name);
-                          if (hit) {
-                            setSelectedBrainProjectId(hit.id);
-                            if (hit.localWorkspaceId) {
-                              setSelectedWorkspaceId(hit.localWorkspaceId);
-                            }
-                            await refreshBrainConversations(hit.id);
-                          }
+                          const projects = await refreshBrainProjects(selectedBrainWorkspaceKey);
+                          setSelectedSidebarRow(`project:${workspaceId}`);
+                          bindBrainProjectToWorkspace(workspaceId, {
+                            composingNewThread: true,
+                            projects
+                          });
+                          setActiveFeature("new-chat");
+                          setNewThreadScope("project");
+                          setChatUsesProject?.(true);
+                          setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
                         }
                       }}
                     >
@@ -3982,6 +4043,10 @@ function renderSidebarModule() {
                             setSelectedSidebarRow(`project:${workspace.id}`);
                             setHoveredThread(null);
                             setSelectedWorkspaceId(workspace.id);
+                            bindBrainProjectToWorkspace(workspace.id, { composingNewThread: true });
+                            setActiveFeature("new-chat");
+                            setNewThreadScope("project");
+                            setChatUsesProject?.(true);
                             setExpandedWorkspaceIds((current) => {
                               const next = new Set(current);
                               if (next.has(workspace.id)) {
@@ -4076,10 +4141,16 @@ function renderSidebarModule() {
                                 }}
                                 onMouseLeave={() => setHoveredThread(null)}
                                 onClick={() => {
+                                  const legacyConversationId = resolveLegacyConversationIdForThread(thread.id);
                                   setSelectedSidebarRow(`project-thread:${workspace.id}:${thread.id}`);
                                   setSearchFilePreview(null);
                                   setIsComposingNewThread(false);
                                   setSelectedWorkspaceId(workspace.id);
+                                  bindBrainProjectToWorkspace(workspace.id, {
+                                    conversationId: brainConversations.some((conversation) => conversation.id === legacyConversationId)
+                                      ? legacyConversationId
+                                      : ""
+                                  });
                                   setSelectedThreadId(thread.id);
                                   setUnreadThreadIds((current) => {
                                     const next = new Set(current);
@@ -4713,14 +4784,12 @@ function renderSidebarModule() {
 
   function submitComposerRequest(draft?: Parameters<typeof askModel>[0]) {
     const outbound = buildComposerSendDraft(draft);
-    // BRAIN uses the native codeCN Composer/Thread path. The former
-    // sendBrainMessage path created a second conversation lifecycle and
-    // bypassed native turn, approval, tool, rollout, and recovery semantics.
-    // BRAIN context is supplied by the selected workspace/thread instead.
+    const executionBrainProject = resolveBrainProjectForWorkspace(brainProjects, selectedWorkspace?.id)
+      ?? selectedBrainProject;
     const sceneWorkspace = resolveSceneExecutionWorkspace(
       normalizeWorkspaceCatalog(workspaceCatalog),
       selectedBrainWorkspaceKey,
-      selectedBrainProject?.localWorkspaceId,
+      executionBrainProject?.localWorkspaceId,
       selectedWorkspace?.id
     );
     if (!sceneWorkspace) {
@@ -4730,12 +4799,16 @@ function renderSidebarModule() {
       return;
     }
     if (sceneWorkspace.id !== selectedWorkspace?.id) {
+      bindBrainProjectToWorkspace(sceneWorkspace.id);
       setSelectedWorkspaceId(sceneWorkspace.id);
       const threadId = resolveUserVisibleThreadSelection(sceneWorkspace.threads, null)?.id || "";
       setSelectedThreadId(threadId);
       setIsComposingNewThread(!threadId);
       setChatStatus(`已切换到“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景项目，请再次发送。`);
       return;
+    }
+    if (executionBrainProject && executionBrainProject.id !== selectedBrainProjectId) {
+      setSelectedBrainProjectId(executionBrainProject.id);
     }
     void askModel(outbound);
     composerTextareaRef.current?.setValue("");
@@ -7422,13 +7495,20 @@ function renderPluginsModule() {
     }
 
     async function installCatalogPlugin(plugin: any) {
-      if (plugin.bundled || installedIds.has(plugin.id)) return;
+      if (plugin.bundled) return;
+      const isUpgrade = plugin.repository && plugin.installState === "update_available";
+      if (!isUpgrade && installedIds.has(plugin.id)) return;
       if (plugin.repository && api?.installRepositoryPlugin) {
         try {
-          if (typeof setChatStatus === "function") setChatStatus("正在安装 " + plugin.name + "…");
+          if (typeof setChatStatus === "function") {
+            setChatStatus(isUpgrade ? `正在升级 ${plugin.name}…` : `正在安装 ${plugin.name}…`);
+          }
           await api.installRepositoryPlugin({ pluginKey: plugin.pluginKey, version: plugin.version });
           await loadRepositoryPlugins();
-          if (typeof setChatStatus === "function") setChatStatus(plugin.name + " 已安装。");
+          if (api.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
+          if (typeof setChatStatus === "function") {
+            setChatStatus(isUpgrade ? `${plugin.name} 已升级，历史数据已保留。` : `${plugin.name} 已安装，技能已同步到 Composer。`);
+          }
         } catch (error) {
           if (typeof setChatStatus === "function") setChatStatus(error instanceof Error ? error.message : String(error));
         }
@@ -7444,6 +7524,7 @@ function renderPluginsModule() {
       try {
         await api.setRepositoryPluginEnabled({ pluginKey: plugin.pluginKey, enabled });
         await loadRepositoryPlugins();
+        if (api.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
       } catch (error) {
         if (typeof setChatStatus === "function") setChatStatus(error instanceof Error ? error.message : String(error));
       }
@@ -7454,6 +7535,7 @@ function renderPluginsModule() {
       try {
         await api.removeRepositoryPlugin({ pluginKey: plugin.pluginKey });
         await loadRepositoryPlugins();
+        if (api.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
       } catch (error) {
         if (typeof setChatStatus === "function") setChatStatus(error instanceof Error ? error.message : String(error));
       }
@@ -7526,6 +7608,9 @@ function renderPluginsModule() {
                     </div>
                     {plugin.repository && plugin.installed ? (
                       <div className="plugin-market-actions" onClick={(event) => event.stopPropagation()}>
+                        {plugin.installState === "update_available" ? (
+                          <button type="button" onClick={() => void installCatalogPlugin(plugin)}>升级</button>
+                        ) : null}
                         <button type="button" onClick={() => void setCatalogPluginEnabled(plugin, plugin.installState === "disabled")}>
                           {plugin.installState === "disabled" ? "启用" : "停用"}
                         </button>
