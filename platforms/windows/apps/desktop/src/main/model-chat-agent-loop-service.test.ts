@@ -6,12 +6,31 @@ import test from "node:test";
 import type { ModelChatInput } from "@codex-forge/protocol";
 import { PDFParse } from "pdf-parse";
 
-const { ModelChatAgentLoopService, agentLoopStepLimit, prepareGovernmentPdfContent, shouldHandoffGovernmentOutline, shouldHandoffGovernmentSpecification, shouldRunGovernmentDraftDirectly, isGovernmentSpecificationConfirmRequest, isGovernmentSpecificationProceedRequest, isGovernmentMissingBodyRequest, hasIncompleteGovernmentOutlineConfirmation, canGenerateDirectGovernmentResearchSpecification, canFinalizeGovernmentResearchSpecification, buildEvidenceBackedGovernmentSpecification} = await import(
+const { ModelChatAgentLoopService, agentLoopStepLimit, prepareGovernmentPdfContent, shouldHandoffGovernmentOutline, shouldHandoffGovernmentSpecification, shouldRunGovernmentDraftDirectly, isGovernmentSpecificationConfirmRequest, isGovernmentSpecificationProceedRequest, isGovernmentMissingBodyRequest, hasIncompleteGovernmentOutlineConfirmation, canGenerateDirectGovernmentResearchSpecification, canFinalizeGovernmentResearchSpecification, buildEvidenceBackedGovernmentSpecification, isInvalidCapabilityRefusal, isOrdinaryChatRequest, buildInvalidRefusalRecoveryInstruction} = await import(
   new URL("./model-chat-agent-loop-service.ts", import.meta.url).href
 );
 
 const { requestedArtifactTargetPath } = await import(new URL("./artifact-request-policy.js", import.meta.url).href);
 const { buildGovernmentRevisionPreview } = await import(new URL("./government-revision-preview.js", import.meta.url).href);
+
+test("detects and blocks provider template refusals without escalating ordinary chat", () => {
+  assert.equal(isInvalidCapabilityRefusal("作为一个人工智能语言模型，我还没学习如何回答这个问题，您可以向我问一些其它的问题。"), true);
+  assert.equal(isInvalidCapabilityRefusal("这里是根据现有资料整理出的完整答案。"), false);
+  assert.equal(isOrdinaryChatRequest("你好"), true);
+  assert.equal(isOrdinaryChatRequest("请检索资料并交给专业子 Agent 分析"), false);
+  const chatRecovery = buildInvalidRefusalRecoveryInstruction({
+    latestUserRequest: "你好",
+    availableToolNames: ["agent.delegate", "web.search"]
+  });
+  assert.match(chatRecovery, /不得检索、调用工具、委派子 Agent/);
+  const complexRecovery = buildInvalidRefusalRecoveryInstruction({
+    latestUserRequest: "请检索资料并交给专业子 Agent 分析",
+    availableToolNames: ["agent.delegate", "agent.wait", "web.search"]
+  });
+  assert.match(complexRecovery, /必须先调用 agent\.delegate/);
+  assert.match(complexRecovery, /spring-app Auto 路由选择更强模型/);
+  assert.match(complexRecovery, /最后由主 Agent 审核并统一回答/);
+});
 
 test("allows artifact creation and verification the same bounded step budget as government delivery", () => {
   assert.equal(agentLoopStepLimit({ governmentWorkflowEnabled: false, nativeArtifactRequested: false }), Number.POSITIVE_INFINITY);

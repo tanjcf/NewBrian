@@ -36,6 +36,52 @@ import { extractGovernmentWritingSpecificationFromTexts, serializeGovernmentWrit
 
 export { buildGovernmentMaxStepsProgressBrief } from "./government-max-steps-draft.ts";
 
+const INVALID_CAPABILITY_REFUSAL_PATTERNS = [
+  /作为(?:一个|一名)?人工智能(?:语言)?模型[^。！？\n]*(?:还没|没有|尚未)(?:学习|学会)[^。！？\n]*(?:回答|处理)/iu,
+  /(?:我|本模型)(?:还没|没有|尚未)(?:学习|学会)(?:如何)?(?:回答|处理|解决)/iu,
+  /(?:请|可以)(?:向我)?(?:问|询问)(?:一些)?(?:其他|其它)的?问题/iu,
+  /\b(?:i (?:have not|haven't) learned|i do not know how)\b[^.\n]*(?:answer|respond)/iu
+];
+
+/** Returns true for provider boilerplate that must never become a completed answer. */
+export function isInvalidCapabilityRefusal(content: unknown) {
+  const normalized = String(content ?? "").replace(/\s+/g, " ").trim();
+  return normalized.length > 0
+    && INVALID_CAPABILITY_REFUSAL_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/** Ordinary chat stays on the current main Agent without retrieval or delegation. */
+export function isOrdinaryChatRequest(content: unknown) {
+  const normalized = String(content ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized || normalized.length > 48) return false;
+  return /^(?:你好|您好|嗨|哈喽|早上好|早|晚上好|晚安|谢谢|感谢|再见|拜拜|好的|可以|确认|明白了|嗯|哦|hello|hi|hey|thanks|thank you|bye|ok|okay|yes)[\s\p{P}\p{S}]*$/iu.test(normalized);
+}
+
+/** Builds the single retry constraint after an invalid capability refusal. */
+export function buildInvalidRefusalRecoveryInstruction(input: {
+  latestUserRequest: string;
+  availableToolNames: string[];
+}) {
+  if (isOrdinaryChatRequest(input.latestUserRequest)) {
+    return "上一答复是被禁止的模板式拒答。当前请求属于普通聊天，请立即由当前 Agent 使用简体中文自然、直接回答；不得检索、调用工具、委派子 Agent 或切换模型。";
+  }
+  const tools = new Set(input.availableToolNames.map((name) => String(name || "").trim()));
+  const actions = [
+    "上一答复是被禁止的模板式拒答，不能作为最终答案。",
+    "重新分析用户原始请求所需的事实、专业能力、工具和推理能力。"
+  ];
+  if ([...tools].some((name) => /search|knowledge|retrieve|read/i.test(name))) {
+    actions.push("缺失或可能不准确的事实必须先使用现有检索或读取工具核验。");
+  }
+  if (tools.has("agent.delegate")) {
+    actions.push("当前 Agent 已经无法可靠直接回答，因此必须先调用 agent.delegate，将原始请求交给适合该领域的子 Agent；子 Agent 由 spring-app Auto 路由选择更强模型。取得 childThreadId 后调用 agent.wait，最后由主 Agent 审核并统一回答。");
+  } else {
+    actions.push("若没有子 Agent 工具，使用现有能力继续完成；只有全部相关能力确实不可用时，才可说明具体限制并给出已能确定的内容。");
+  }
+  actions.push("不得再次输出“不知道”“还没学习如何回答”“请问其他问题”或同义模板。不要先解释，直接调用所需工具或给出完整答案。");
+  return actions.join("");
+}
+
 export function prepareGovernmentPdfContent(content: string, priorAssistantMessages: string[], _sourceText: string) {
   const candidates = [content, ...priorAssistantMessages]
     .map((candidate) => String(candidate ?? "").trim())
@@ -808,7 +854,37 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
             ]
           });
         }
-        return await executeModelStep(stepInput);
+        const firstResult = await executeModelStep(stepInput);
+        if ((firstResult.toolCalls?.length ?? 0) > 0 || !isInvalidCapabilityRefusal(firstResult.content)) {
+          return firstResult;
+        }
+        input.emitStream({ requestId: input.modelInput.requestId, delta: "", reset: true });
+        input.emitReasoningSummary("检测到无效模板拒答，正在升级能力路由。\n");
+        input.publishRetry(input.modelInput.requestId, 2, 2, 0);
+        const availableToolNames = stepInput.tools
+          .map((tool) => String((tool as { name?: unknown })?.name ?? "").trim())
+          .filter(Boolean);
+        const recovered = await executeModelStep({
+          ...stepInput,
+          messages: [
+            ...stepInput.messages,
+            { role: "assistant", content: String(firstResult.content ?? "").trim() },
+            {
+              role: "system",
+              content: buildInvalidRefusalRecoveryInstruction({
+                latestUserRequest: input.latestUserRequest,
+                availableToolNames
+              })
+            }
+          ]
+        });
+        if ((recovered.toolCalls?.length ?? 0) === 0 && isInvalidCapabilityRefusal(recovered.content)) {
+          return {
+            content: "当前请求未能完成能力升级：候选模型连续返回无效模板答复。系统已阻止该答复展示，请检查 Auto 路由、检索能力与子 Agent 模型是否可用后重试。",
+            toolCalls: []
+          };
+        }
+        return recovered;
       } catch (error) {
         if (
           input.abortController.signal.aborted

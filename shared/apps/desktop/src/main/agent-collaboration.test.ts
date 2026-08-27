@@ -34,6 +34,9 @@ test("collaboration instruction requires parallel start and final collection", (
   assert.match(instruction, /before calling agent\.wait/i);
   assert.match(instruction, /root agent remains responsible/i);
   assert.match(instruction, /not visible as sidebar threads/i);
+  assert.match(instruction, /ordinary chat/i);
+  assert.match(instruction, /MUST try the relevant retrieval\/tool capability/i);
+  assert.match(instruction, /stronger model is required/i);
   assert.match(instruction, /Do not empty-loop re-delegate/i);
 });
 
