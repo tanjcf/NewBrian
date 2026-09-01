@@ -72,3 +72,33 @@ test("maps common HTML sibling asset MIME types", () => {
   assert.equal(mimeTypeForArtifactPath("clip.mov"), "video/quicktime");
   assert.equal(mimeTypeForArtifactPath("unknown.bin"), "application/octet-stream");
 });
+
+test("sniffs mp3 bytes mislabeled as .wav for preview protocol", async () => {
+  const {
+    resolveArtifactMimeType,
+    sniffAudioMimeFromBytes
+  } = await import(new URL("./workspace-artifact-protocol.js", import.meta.url).href);
+  const id3 = Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+  assert.equal(sniffAudioMimeFromBytes(id3), "audio/mpeg");
+  assert.equal(resolveArtifactMimeType("media/audio/narration-shot-1.wav", id3), "audio/mpeg");
+  const frame = Buffer.from([0xff, 0xfb, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00]);
+  assert.equal(resolveArtifactMimeType("media/audio/narration.wav", frame), "audio/mpeg");
+  const wav = Buffer.from([
+    0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+    0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20
+  ]);
+  assert.equal(resolveArtifactMimeType("media/audio/clip.mp3", wav), "audio/wav");
+  assert.equal(resolveArtifactMimeType("media/audio/real.wav", wav), "audio/wav");
+});
+
+test("parses byte range headers for artifact streaming", async () => {
+  const { parseByteRangeHeader, artifactProtocolResponseHeaders } = await import(
+    new URL("./workspace-artifact-protocol.js", import.meta.url).href
+  );
+  assert.deepEqual(parseByteRangeHeader("bytes=0-99", 1000), { start: 0, end: 99 });
+  assert.deepEqual(parseByteRangeHeader("bytes=500-", 1000), { start: 500, end: 999 });
+  assert.deepEqual(parseByteRangeHeader("bytes=-128", 1000), { start: 872, end: 999 });
+  assert.equal(parseByteRangeHeader("bytes=1000-", 1000), null);
+  assert.equal(parseByteRangeHeader("invalid", 1000), null);
+  assert.equal(artifactProtocolResponseHeaders("video/mp4")["Accept-Ranges"], "bytes");
+});

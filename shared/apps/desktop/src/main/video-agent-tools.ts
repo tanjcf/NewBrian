@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
+import { brainVideoCanvasSize, type BrainVideoCanvas } from "@codex-forge/protocol/brain-video-runtime";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import type { VideoRenderService } from "./video-render-service.js";
 import type { VideoRuntimeService } from "./video-runtime-service.js";
@@ -21,10 +22,14 @@ type VideoPipelineState = {
     line: string;
     prompt: string;
     clip: string;
+    audio?: string;
+    image?: string;
+    lastImage?: string;
     ready: boolean;
     transition: string;
   }>;
   exportFormat: "mp4";
+  canvas: BrainVideoCanvas;
 };
 
 export type VideoAgentToolDependencies = {
@@ -35,7 +40,7 @@ export type VideoAgentToolDependencies = {
   videoRuntime: VideoRuntimeService;
   timeline: VideoTimelineService;
   render: VideoRenderService;
-  generateVideo: (input: { prompt: string; model?: string }) => Promise<VideoGenerationResult>;
+  generateVideo: (input: { prompt: string; model?: string; size?: string }) => Promise<VideoGenerationResult>;
   generateSpeech?: (input: { text: string; model?: string; voice?: string }) => Promise<AudioGenerationResult>;
   fetchImpl?: typeof fetch;
 };
@@ -56,17 +61,38 @@ async function fetchGeneratedMedia(deps: VideoAgentToolDependencies, parsed: URL
   }
 }
 
+function normalizeCanvas(value: unknown): BrainVideoCanvas {
+  const row = record(value);
+  return {
+    aspect: text(row.aspect) || "16:9",
+    width: Math.max(16, Math.round(Number(row.width) || 1920)),
+    height: Math.max(16, Math.round(Number(row.height) || 1080)),
+    fps: Math.max(1, Math.round(Number(row.fps) || 30))
+  };
+}
+
 function normalizePipeline(value: unknown): VideoPipelineState {
   const input = record(value);
   const shots = Array.isArray(input.shots) ? input.shots.map((item) => {
     const row = record(item);
     return {
-      title: text(row.title), line: text(row.line), prompt: text(row.prompt), clip: text(row.clip),
-      ready: row.ready === true, transition: text(row.transition) || "cut"
+      title: text(row.title),
+      line: text(row.line),
+      prompt: text(row.prompt),
+      clip: text(row.clip),
+      audio: text(row.audio) || undefined,
+      image: text(row.image) || undefined,
+      lastImage: text(row.lastImage) || undefined,
+      ready: row.ready === true,
+      transition: (() => {
+        const raw = text(row.transition);
+        if (!raw || /^(none|cut|硬切)$/i.test(raw)) return "cut";
+        return raw;
+      })()
     };
   }).filter((shot) => shot.title && shot.prompt) : [];
   if (!text(input.script) || shots.length === 0) throw new TypeError("script and at least one valid shot are required");
-  return { script: text(input.script), shots, exportFormat: "mp4" };
+  return { script: text(input.script), shots, exportFormat: "mp4", canvas: normalizeCanvas(input.canvas) };
 }
 
 async function persistGeneratedVideo(deps: VideoAgentToolDependencies, url: string, shotIndex: number) {
@@ -153,11 +179,19 @@ export function registerVideoAgentTools(runtime: ToolRuntime, deps: VideoAgentTo
   });
 
   runtime.registerExternalTool({
-    name: "video.pipeline.save", title: "保存视频脚本与分镜", description: "把脚本、分镜、旁白、提示词和转场真实保存到右侧视频制作 Rust pipeline。",
+    name: "video.pipeline.save", title: "保存视频脚本与分镜", description: "把脚本、分镜、旁白、提示词、转场和画幅适配器（canvas width/height/aspect）真实保存到右侧视频制作 Rust pipeline。",
     namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
-    inputSchema: { type: "object", properties: { script: { type: "string" }, shots: { type: "array", items: { type: "object", properties: {
-      title: { type: "string" }, line: { type: "string" }, prompt: { type: "string" }, clip: { type: "string" }, ready: { type: "boolean" }, transition: { type: "string" }
-    }, required: ["title", "line", "prompt"], additionalProperties: false } } }, required: ["script", "shots"], additionalProperties: false }
+    inputSchema: { type: "object", properties: {
+      script: { type: "string" },
+      shots: { type: "array", items: { type: "object", properties: {
+        title: { type: "string" }, line: { type: "string" }, prompt: { type: "string" }, clip: { type: "string" },
+        audio: { type: "string" }, image: { type: "string" }, lastImage: { type: "string" },
+        ready: { type: "boolean" }, transition: { type: "string" }
+      }, required: ["title", "line", "prompt"], additionalProperties: false } },
+      canvas: { type: "object", properties: {
+        aspect: { type: "string" }, width: { type: "integer", minimum: 16 }, height: { type: "integer", minimum: 16 }, fps: { type: "integer", minimum: 1 }
+      }, additionalProperties: false }
+    }, required: ["script", "shots"], additionalProperties: false }
   }, async (input) => ({ ok: true, output: JSON.stringify(await deps.videoRuntime.pipelineSave(binding, normalizePipeline(input))) }));
 
   runtime.registerExternalTool({
@@ -202,17 +236,36 @@ export function registerVideoAgentTools(runtime: ToolRuntime, deps: VideoAgentTo
   });
 
   runtime.registerExternalTool({
-    name: "video.audio.speech", title: "生成并加入真实配音", description: "通过 Spring 音频模型生成真实配音文件，登记到右侧工程并加入音频轨。",
+    name: "video.audio.speech", title: "生成并加入真实配音", description: "通过 Spring 音频模型生成真实配音文件，登记到右侧工程并挂到指定分镜的 A 轨（shot.audio）。须传 shotIndex，避免无镜头归属的 narration-时间戳.wav 被回填到每一镜。",
     namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
-    inputSchema: { type: "object", properties: { text: { type: "string" }, model: { type: "string" }, voice: { type: "string" }, startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 }, volume: { type: "number", minimum: 0, maximum: 2 } }, required: ["text", "startMs", "durationMs"], additionalProperties: false }
+    inputSchema: { type: "object", properties: {
+      text: { type: "string" },
+      model: { type: "string" },
+      voice: { type: "string" },
+      shotIndex: { type: "integer", minimum: 0, maximum: 99 },
+      startMs: { type: "integer", minimum: 0 },
+      durationMs: { type: "integer", minimum: 1 },
+      volume: { type: "number", minimum: 0, maximum: 2 }
+    }, required: ["text", "startMs", "durationMs"], additionalProperties: false }
   }, async (input) => {
     if (!deps.generateSpeech) throw new Error("BRAIN_VIDEO_SPEECH_UNAVAILABLE");
     const generated = await deps.generateSpeech({ text: text(input.text), model: text(input.model) || undefined, voice: text(input.voice) || undefined });
-    const persisted = await persistAudioBytes(deps, generated.bytes, generated.mimeType, "narration");
+    const shotIndex = Number.isFinite(Number(input.shotIndex)) ? Number(input.shotIndex) : -1;
+    const stem = shotIndex >= 0 ? `narration-shot-${shotIndex + 1}` : "narration";
+    const persisted = await persistAudioBytes(deps, generated.bytes, generated.mimeType, stem);
     const ownerId = await deps.ownerId();
     deps.timeline.ensureTimeline(ownerId, deps.projectId, { title: "未命名时间线", width: 1920, height: 1080, fps: 30 });
     const timeline = deps.timeline.addClip(ownerId, deps.projectId, { trackType: "audio", sourceFileId: persisted.file.id, startMs: Number(input.startMs), durationMs: Number(input.durationMs), sourceInMs: 0, volume: Number(input.volume ?? 1) });
-    return { ok: true, output: JSON.stringify({ provider: generated.providerResult, file: persisted.file, timeline }) };
+    let pipelineShotId: string | undefined;
+    if (shotIndex >= 0) {
+      const current = record(await deps.videoRuntime.pipelineGet(binding));
+      const state = normalizePipeline(current.state ?? current);
+      if (!state.shots[shotIndex]) throw new Error("BRAIN_VIDEO_SHOT_NOT_FOUND");
+      state.shots[shotIndex] = { ...state.shots[shotIndex]!, audio: persisted.relativePath };
+      pipelineShotId = `shot-${shotIndex + 1}`;
+      await deps.videoRuntime.pipelineSave(binding, state);
+    }
+    return { ok: true, output: JSON.stringify({ provider: generated.providerResult, file: persisted.file, timeline, shotIndex: shotIndex >= 0 ? shotIndex : undefined, shotId: pipelineShotId, relativePath: persisted.relativePath }) };
   });
 
   runtime.registerExternalTool({
@@ -229,22 +282,28 @@ export function registerVideoAgentTools(runtime: ToolRuntime, deps: VideoAgentTo
   });
 
   runtime.registerExternalTool({
-    name: "video.shot.generate", title: "生成并登记真实视频镜头", description: "调用 Spring video_generate，下载真实 MP4 到当前工程，登记文件、更新 Rust 分镜并加入右侧视频轨。不得使用模拟素材。",
+    name: "video.shot.generate", title: "生成并登记真实视频镜头", description: "调用 Spring video_generate（带工程画幅 size），下载真实 MP4 到当前工程，登记文件、更新 Rust 分镜并加入右侧视频轨。不得使用模拟素材。",
     namespace: "video", kind: "write", risk: "medium", requiresApproval: true,
-    inputSchema: { type: "object", properties: { shotIndex: { type: "integer", minimum: 0, maximum: 99 }, prompt: { type: "string" }, model: { type: "string" }, startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 } }, required: ["shotIndex", "prompt", "startMs", "durationMs"], additionalProperties: false }
+    inputSchema: { type: "object", properties: { shotIndex: { type: "integer", minimum: 0, maximum: 99 }, prompt: { type: "string" }, model: { type: "string" }, size: { type: "string" }, startMs: { type: "integer", minimum: 0 }, durationMs: { type: "integer", minimum: 1 } }, required: ["shotIndex", "prompt", "startMs", "durationMs"], additionalProperties: false }
   }, async (input) => {
     const shotIndex = Number(input.shotIndex);
-    const generated = await deps.generateVideo({ prompt: text(input.prompt), model: text(input.model) || undefined });
-    const persisted = await persistGeneratedVideo(deps, generated.url, shotIndex);
     const current = record(await deps.videoRuntime.pipelineGet(binding));
     const state = normalizePipeline(current.state ?? current);
+    const size = text(input.size) || brainVideoCanvasSize(state.canvas);
+    const generated = await deps.generateVideo({ prompt: text(input.prompt), model: text(input.model) || undefined, size });
+    const persisted = await persistGeneratedVideo(deps, generated.url, shotIndex);
     if (!state.shots[shotIndex]) throw new Error("BRAIN_VIDEO_SHOT_NOT_FOUND");
     state.shots[shotIndex] = { ...state.shots[shotIndex]!, clip: persisted.relativePath, ready: true };
     await deps.videoRuntime.pipelineSave(binding, state);
     const ownerId = await deps.ownerId();
-    deps.timeline.ensureTimeline(ownerId, deps.projectId, { title: "青石谷清晨入口宣传片", width: 1920, height: 1080, fps: 30 });
+    deps.timeline.ensureTimeline(ownerId, deps.projectId, {
+      title: "视频工程时间线",
+      width: state.canvas.width,
+      height: state.canvas.height,
+      fps: state.canvas.fps
+    });
     const timeline = deps.timeline.addClip(ownerId, deps.projectId, { trackType: "video", sourceFileId: persisted.file.id, startMs: Number(input.startMs), durationMs: Number(input.durationMs), sourceInMs: 0, volume: 1 });
-    return { ok: true, output: JSON.stringify({ generated: generated.providerResult, file: persisted.file, timeline }) };
+    return { ok: true, output: JSON.stringify({ generated: generated.providerResult, file: persisted.file, timeline, size }) };
   });
 
   runtime.registerExternalTool({

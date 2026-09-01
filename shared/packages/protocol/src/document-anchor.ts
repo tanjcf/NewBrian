@@ -1,4 +1,8 @@
+import type { DocumentChunkMeta } from "./document-chunk.js";
+
 export type DocumentFormat = "image" | "pdf" | "docx" | "pptx" | "xlsx" | "txt" | "markdown";
+
+export type { DocumentChunkMeta } from "./document-chunk.js";
 
 export interface DocumentRect { x: number; y: number; width: number; height: number; }
 export interface DocumentTextRange { start: number; end: number; }
@@ -19,6 +23,8 @@ interface DocumentAnchorBase<TFormat extends DocumentFormat, TLocator> {
   selectedText?: string;
   rect?: DocumentRect;
   transform?: DocumentCoordinateTransform;
+  /** RAG-style structural slice metadata (page/heading boundaries). */
+  chunk?: DocumentChunkMeta;
 }
 
 export type ImageDocumentAnchor = DocumentAnchorBase<"image", { kind: "image-region"; regionIndex: number; }> & {

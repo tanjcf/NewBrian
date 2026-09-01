@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test from "node:test";
+import ExcelJS from "exceljs";
 const { WorkspaceFileService } = await import(new URL("./workspace-file-service.ts", import.meta.url).href);
 
 async function withWorkspace(run: (root: string, service: InstanceType<typeof WorkspaceFileService>) => Promise<void>) {
@@ -100,16 +101,35 @@ test("returns image and video preview URLs for the embedded media viewers", asyn
   });
 });
 
+test("returns spreadsheet previews for CSV and XLSX files", async () => {
+  await withWorkspace(async (root, service) => {
+    await writeFile(join(root, "table.csv"), "name,value\nAlpha,1\n", "utf8");
+    const csv = await service.preview({ workspaceId: "w1", filePath: "table.csv" });
+    assert.equal(csv.kind, "spreadsheet");
+    assert.deepEqual(csv.sheets[0].headers, ["name", "value"]);
+    assert.deepEqual(csv.sheets[0].rows, [["Alpha", "1"]]);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Metrics");
+    sheet.addRow(["Metric", "Value"]);
+    sheet.addRow(["Passed", "yes"]);
+    await workbook.xlsx.writeFile(join(root, "model.xlsx"));
+    const xlsx = await service.preview({ workspaceId: "w1", filePath: "model.xlsx" });
+    assert.equal(xlsx.kind, "spreadsheet");
+    assert.equal(xlsx.sheets[0].name, "Metrics");
+    assert.deepEqual(xlsx.sheets[0].headers, ["Metric", "Value"]);
+    assert.deepEqual(xlsx.sheets[0].rows, [["Passed", "yes"]]);
+  });
+});
+
 test("rejects unsupported and out-of-workspace artifact previews", async () => {
   await withWorkspace(async (root, service) => {
     await writeFile(join(root, "notes.txt"), "not an artifact", "utf8");
-    await assert.rejects(
-      () => service.preview({ workspaceId: "w1", filePath: "notes.txt" }),
-      /不支持文档侧栏预览/
-    );
-    await assert.rejects(
-      () => service.preview({ workspaceId: "w1", filePath: "../outside.pdf" }),
-      /outside workspace/
-    );
+    const unsupported = await service.preview({ workspaceId: "w1", filePath: "notes.txt" });
+    assert.equal(unsupported.ok, false);
+    assert.match(String(unsupported.error), /不支持文档侧栏预览/);
+    const escaped = await service.preview({ workspaceId: "w1", filePath: "../outside.pdf" });
+    assert.equal(escaped.ok, false);
+    assert.match(String(escaped.error), /outside workspace/);
   });
 });

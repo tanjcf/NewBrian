@@ -20,19 +20,55 @@ fn default_state() -> Value {
             { "title": "镜头 2", "line": "推进叙事", "prompt": "中景，人物行动推动情节", "clip": "", "ready": false, "transition": "dissolve" },
             { "title": "镜头 3", "line": "收束段落", "prompt": "特写，情绪落点与余韵", "clip": "", "ready": false, "transition": "fade" }
         ],
-        "exportFormat": "mp4"
+        "exportFormat": "mp4",
+        "canvas": {
+            "aspect": "16:9",
+            "width": 1920,
+            "height": 1080,
+            "fps": 30
+        }
     })
 }
 
+fn try_parse_pipeline_file(path: &Path) -> Option<Value> {
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
 fn load_state(boundary: &ProjectBoundary) -> Result<Value, &'static str> {
-    if !boundary.root().join(STATE_PATH).is_file() {
+    let editor = boundary.root().join(STATE_PATH);
+    let cooked = boundary.root().join(COOKED_PIPELINE_PATH);
+    let prev = boundary.root().join(format!("{STATE_PATH}.prev"));
+
+    if let Some(state) = try_parse_pipeline_file(&editor) {
+        return Ok(state);
+    }
+
+    // Heal corrupt / truncated editor JSON without wiping user layout.
+    // Prefer .prev (last full editor write) over cooked (may omit clipInstances).
+    for (label, path) in [
+        ("prev", prev.as_path()),
+        ("cooked", cooked.as_path()),
+    ] {
+        if let Some(state) = try_parse_pipeline_file(path) {
+            let _ = label;
+            // Best-effort restore editor from last good snapshot.
+            if let Ok(body) = serde_json::to_string_pretty(&state) {
+                let _ = write_text_atomic(
+                    boundary,
+                    Path::new(STATE_PATH),
+                    &format!("{body}\n"),
+                    "pipeline-heal",
+                );
+            }
+            return Ok(state);
+        }
+    }
+
+    if !editor.is_file() {
         return Ok(default_state());
     }
-    let path = boundary
-        .existing(Path::new(STATE_PATH))
-        .map_err(|_| "BRAIN_CORE_PATH_ESCAPE")?;
-    let raw = fs::read_to_string(path).map_err(|_| "BRAIN_VIDEO_PIPELINE_READ_FAILED")?;
-    serde_json::from_str(&raw).map_err(|_| "BRAIN_VIDEO_PIPELINE_INVALID")
+    Err("BRAIN_VIDEO_PIPELINE_INVALID")
 }
 
 fn validate_state(state: &Value) -> Result<(), &'static str> {
@@ -58,6 +94,12 @@ fn persist_state(
         "{}\n",
         serde_json::to_string_pretty(state).map_err(|_| "BRAIN_VIDEO_PIPELINE_INVALID")?
     );
+    // Keep previous editor bytes for heal-on-corrupt without wiping arrangement.
+    let editor = boundary.root().join(STATE_PATH);
+    if editor.is_file() {
+        let prev = boundary.root().join(format!("{STATE_PATH}.prev"));
+        let _ = fs::copy(&editor, &prev);
+    }
     let (sha256, size_bytes) =
         write_text_atomic(boundary, Path::new(STATE_PATH), &body, request_id)?;
     let storyboard = json!({

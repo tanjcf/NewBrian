@@ -31,6 +31,22 @@ test("reopens and extracts representative image PDF DOCX PPTX XLSX and text fixt
       assert.equal(result.format, format);
       assert.ok(result.anchors?.length, `${format} should expose anchors`);
       assert.equal(result.anchors?.[0]?.locator.kind, locatorKind);
+      if (format === "markdown") {
+        assert.ok(result.anchors?.some((anchor) => anchor.objectId.startsWith("markdown:chunk:")), "markdown should expose section chunk anchors");
+      }
+      if (format === "pdf") {
+        assert.ok(result.anchors?.some((anchor) => anchor.objectId.includes(":chunk:")), "pdf should expose page chunk anchors");
+      }
+      if (format === "docx") {
+        assert.ok(result.anchors?.some((anchor) => anchor.objectId.startsWith("docx:chunk:")), "docx should expose heading chunk anchors");
+      }
+      if (format === "pptx") {
+        assert.ok(result.anchors?.some((anchor) => anchor.objectId.includes(":chunk:")), "pptx should expose slide chunk anchors");
+      }
+      if (format === "xlsx") {
+        assert.ok(result.anchors?.some((anchor) => anchor.objectId.includes(":chunk:")), "xlsx should expose sheet chunk anchors");
+        assert.ok(result.anchors?.some((anchor) => Boolean(anchor.chunk)), "xlsx chunk anchors should include chunk metadata");
+      }
       if (text) assert.match(result.text ?? "", new RegExp(text));
       for (const anchor of result.anchors ?? []) validateDocumentAnchor(anchor);
       assert.deepEqual(

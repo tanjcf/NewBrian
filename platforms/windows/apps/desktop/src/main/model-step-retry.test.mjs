@@ -1,13 +1,18 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("agent model steps use one bounded timeout retry and preserve user cancellation", async () => {
+test("model step retry uses five bounded delays for all chat turns", async () => {
   const stepSource = await readFile(new URL("./model-chat-step-service.ts", import.meta.url), "utf8");
-  assert.match(stepSource, /for \(let attempt = 1; attempt <= 2; attempt \+= 1\)/);
-  assert.match(stepSource, /AbortSignal\.timeout\(45_000\)/);
-  assert.match(stepSource, /input\.abortSignal\.aborted \|\| attempt === 2/);
+  assert.match(stepSource, /const retryDelaysMs = \[500, 1_000, 2_000, 4_000, 8_000\]/);
+  assert.doesNotMatch(stepSource, /resilientGoalMode === true[\s\S]*retryDelaysMs/);
+  assert.match(stepSource, /input\.abortSignal\.aborted/);
 
-  const chatSource = await readFile(new URL("./model-chat-service.ts", import.meta.url), "utf8");
-  assert.match(chatSource, /模型步骤超时，正在重试/);
+  const chatSource = await readFile(
+    new URL("../../../../../../shared/apps/desktop/src/main/model-chat-service.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(chatSource, /模型步骤暂时失败，正在自动重试/);
+  assert.match(chatSource, /目标进度已持久化，不会因单次超时丢失。/);
+  assert.doesNotMatch(chatSource, /const resilientGoalMode = goalSnapshot/);
 });

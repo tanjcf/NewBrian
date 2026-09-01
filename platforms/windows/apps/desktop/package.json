@@ -1,6 +1,6 @@
 {
   "name": "@codex-forge/desktop",
-  "version": "1.4.0",
+  "version": "1.4.3",
   "private": true,
   "description": "Desktop shell for the codeCN local-first coding agent workbench.",
   "author": "codeCN",
@@ -108,6 +108,16 @@
       "node_modules/pdfjs-dist/**",
       "node_modules/@uzen/kokoro-js/**",
       "node_modules/@huggingface/transformers/**",
+      "node_modules/phonemizer/**",
+      "node_modules/pinyin-pro/**"
+    ],
+    "asarUnpack": [
+      "**/novel-tts-kokoro-worker.js",
+      "node_modules/@uzen/kokoro-js/**",
+      "node_modules/@huggingface/transformers/**",
+      "node_modules/@huggingface/jinja/**",
+      "node_modules/@huggingface/tokenizers/**",
+      "node_modules/onnxruntime-node/**",
       "node_modules/phonemizer/**",
       "node_modules/pinyin-pro/**"
     ],

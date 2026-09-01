@@ -23,7 +23,7 @@ async function create(t, input) {
 
 test("artifact.create exposes a bounded native office generator", () => {
   const descriptor = createBuiltinToolRegistry().get("artifact.create");
-  assert.deepEqual(descriptor.inputSchema.properties.format.enum, ["pdf", "pptx", "xlsx", "docx"]);
+  assert.deepEqual(descriptor.inputSchema.properties.format.enum, ["pdf", "pptx", "html", "xlsx", "docx"]);
   assert.equal(descriptor.requiresApproval, false);
 });
 
@@ -89,12 +89,70 @@ test("renders Markdown content into PDF without raw Markdown markers", async (t)
 });
 
 test("creates a reopenable PPTX with slide OOXML", async (t) => {
-  const { bytes } = await create(t, { targetPath: "outputs/deck.pptx", title: "Release Review", slides: [{ title: "Outcome", body: "Native PowerPoint output", bullets: ["Openable", "Structured"] }] });
+  const { bytes, root } = await create(t, {
+    targetPath: "outputs/deck.pptx",
+    title: "Release Review",
+    slides: [
+      { title: "Release Review", subtitle: "2026 Q3", layout: "title" },
+      { title: "Outcome", body: "Native PowerPoint output", bullets: ["Openable", "Structured"], layout: "bullets" },
+      { title: "谢谢", body: "欢迎提问", layout: "closing" }
+    ]
+  });
   const archive = await JSZip.loadAsync(bytes);
   assert.ok(archive.file("ppt/presentation.xml"));
   assert.ok(archive.file("ppt/slides/slide1.xml"));
   assert.ok(archive.file("ppt/slides/slide2.xml"));
   assert.match(await archive.file("ppt/slides/slide2.xml").async("string"), /Native PowerPoint output/);
+  const companion = await fs.readFile(path.join(root, "outputs", "deck.slides.html"), "utf8");
+  assert.match(companion, /Release Review/);
+  assert.match(companion, /title-slide|closing-slide/);
+});
+
+test("creates a PPTX with native chart and timeline slides", async (t) => {
+  const { bytes } = await create(t, {
+    targetPath: "outputs/analytics.pptx",
+    title: "市场分析",
+    slides: [
+      { title: "市场分析", layout: "title" },
+      {
+        title: "销量趋势",
+        layout: "chart",
+        chart: {
+          type: "bar",
+          categories: ["2022", "2023", "2024"],
+          series: [{ name: "销量", values: [120, 168, 215] }]
+        }
+      },
+      {
+        title: "实施阶段",
+        layout: "timeline",
+        phases: [
+          { label: "P1", title: "调研", body: "需求访谈" },
+          { label: "P2", title: "试点", body: "上线验证" }
+        ]
+      }
+    ]
+  });
+  const archive = await JSZip.loadAsync(bytes);
+  assert.ok(archive.file("ppt/charts/chart1.xml") || archive.file("ppt/embeddings/"));
+  assert.ok(archive.file("ppt/slides/slide3.xml"));
+});
+
+test("creates a web-first HTML slide deck", async (t) => {
+  const { root, result } = await create(t, {
+    targetPath: "outputs/briefing.html",
+    format: "html",
+    title: "市场简报",
+    slides: [
+      { title: "市场简报", subtitle: "简洁大气", layout: "title" },
+      { title: "核心结论", bullets: ["渗透率提升", "价格带下沉", "供应链本地化"], layout: "bullets" }
+    ]
+  });
+  assert.equal(result.ok, true);
+  const html = await fs.readFile(path.join(root, "outputs", "briefing.html"), "utf8");
+  assert.match(html, /市场简报/);
+  assert.match(html, /viewport/);
+  assert.match(html, /ArrowRight/);
 });
 
 test("creates a reopenable XLSX preserving typed values", async (t) => {
@@ -222,6 +280,60 @@ test("document.create_docx writes Chinese curly quotes into Word XML", async (t)
   const xml = await archive.file("word/document.xml").async("string");
   assert.match(xml, /\u201c稳中求进\u201d/);
   assert.doesNotMatch(xml, /"稳中求进"/);
+});
+
+test("keeps Markdown pipe tables as Word tbl instead of one collapsed paragraph", async (t) => {
+  const { splitMarkdownTables } = await import("./artifact-generator.js");
+  assert.deepEqual(splitMarkdownTables([
+    "说明",
+    "",
+    "| 层次 | 逗号一 | 逗号二 |",
+    "| --- | --- | --- |",
+    "| 前瞻性 | 背景 | 做法 |",
+    "| 全局性 | 背景 | 做法 |"
+  ].join("\n")), {
+    text: "说明",
+    tables: [
+      [
+        ["层次", "逗号一", "逗号二"],
+        ["前瞻性", "背景", "做法"],
+        ["全局性", "背景", "做法"]
+      ]
+    ]
+  });
+
+  const { bytes } = await create(t, {
+    targetPath: "outputs/对照表.docx",
+    format: "docx",
+    title: "三层次三逗号对照表",
+    sections: [{
+      heading: "说明",
+      body: [
+        "| 层次 | 逗号一 | 逗号二 |",
+        "| --- | --- | --- |",
+        "| 前瞻性 | 背景总结 | 做法 |"
+      ].join("\n")
+    }]
+  });
+  const archive = await JSZip.loadAsync(bytes);
+  const xml = await archive.file("word/document.xml").async("string");
+  assert.match(xml, /<w:tbl[\s>]/);
+  assert.match(xml, /前瞻性/);
+  assert.doesNotMatch(xml, /\| 层次 \| 逗号一 \| 逗号二 \|前瞻性/);
+});
+
+test("document.create_docx accepts structured rows for comparison tables", async (t) => {
+  const root = await workspace(t);
+  const result = await createBuiltinToolRegistry().invoke("document.create_docx", {
+    title: "对照表",
+    rows: [["层次", "要点"], ["前瞻性", "看得远"], ["战略性", "抓得实"]]
+  }, { workspacePath: root, shellEnv: process.env });
+  assert.equal(result.ok, true, result.output);
+  const bytes = await fs.readFile(path.join(root, result.artifact.path));
+  const archive = await JSZip.loadAsync(bytes);
+  const xml = await archive.file("word/document.xml").async("string");
+  assert.match(xml, /<w:tbl[\s>]/);
+  assert.match(xml, /看得远/);
 });
 
 test("coerces page-size format a4 and synthesizes missing targetPath", async (t) => {

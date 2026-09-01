@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
+import { assertUserSkillWriteAllowed } from "./user-skill-write-guard.js";
 
 export type QuantSkillPackageInput = {
   skillId: string;
@@ -55,7 +56,12 @@ export class QuantSkillPackageService {
     const relativePath = `.codecn/skills/${skillId}`;
     try {
       const current = JSON.parse(await readFile(join(target, "asset.json"), "utf8")) as Partial<QuantSkillAsset>;
-      if (current.managedBy !== "codecn.quant") throw new Error(`Refusing to overwrite unmanaged Skill: ${skillId}`);
+      assertUserSkillWriteAllowed({
+        targetPath: skillId,
+        exists: true,
+        managedBy: current.managedBy ?? null,
+        policy: "quant"
+      });
       return { created: false, relativePath };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;

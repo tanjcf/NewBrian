@@ -65,7 +65,7 @@ test("registers two low-risk read tools without approval", () => {
   );
 });
 
-test("search returns structured official results", async () => {
+test("search returns structured official results with auto-read evidence", async () => {
   const { registered } = createHarness();
   const result = await registered[0].execute({ query: "policy", limit: 3 }) as {
     ok: boolean;
@@ -75,35 +75,34 @@ test("search returns structured official results", async () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.exitCode, 0);
-  assert.deepEqual(JSON.parse(result.output), {
-    count: 1,
-    results: [{ title: "Result", url: "https://www.gov.cn/a", snippet: "policy", rank: 1 }],
-  });
+  const payload = JSON.parse(result.output) as Record<string, unknown>;
+  assert.equal(payload.count, 1);
+  assert.ok(payload.auto_read);
+  assert.deepEqual(payload.results, [{ title: "Result", url: "https://www.gov.cn/a", snippet: "policy", rank: 1 }]);
 });
 
-test("search nudges the model to stop thrashing after repeated searches without reads", async () => {
+test("search auto-reads the top official result on the first successful search", async () => {
   const { registered } = createHarness();
-  let payload: Record<string, unknown> = {};
-  for (let index = 0; index < 3; index += 1) {
-    const result = await registered[0].execute({ query: `policy-${index}`, limit: 3 }) as {
-      ok: boolean;
-      output: string;
-    };
-    assert.equal(result.ok, true);
-    payload = JSON.parse(result.output) as Record<string, unknown>;
-  }
-  assert.match(String(payload.next_action ?? ""), /Stop additional web\.search_official/);
+  const result = await registered[0].execute({ query: "newborn statistics 2026", limit: 3 }) as {
+    ok: boolean;
+    output: string;
+  };
+  assert.equal(result.ok, true);
+  const payload = JSON.parse(result.output) as Record<string, unknown>;
+  assert.ok(payload.auto_read);
+  assert.match(String((payload.auto_read as { text?: string })?.text ?? ""), /Official text/);
 });
 
-test("search hard-blocks after five searches without read", async () => {
+test("search hard-blocks after repeated searches without another read", async () => {
   const { registered } = createHarness();
-  for (let index = 0; index < 4; index += 1) {
+  assert.equal((await registered[0].execute({ query: "policy-0", limit: 3 }) as { ok: boolean }).ok, true);
+  for (let index = 1; index < 5; index += 1) {
     const result = await registered[0].execute({ query: `policy-${index}`, limit: 3 }) as {
       ok: boolean;
     };
     assert.equal(result.ok, true);
   }
-  const blocked = await registered[0].execute({ query: "policy-4", limit: 3 }) as {
+  const blocked = await registered[0].execute({ query: "policy-5", limit: 3 }) as {
     ok: boolean;
     deniedReason?: string;
     output: string;
@@ -113,8 +112,9 @@ test("search hard-blocks after five searches without read", async () => {
   assert.match(blocked.output, /circuit breaker/i);
 });
 
-test("search hard-blocks identical query thrash", async () => {
+test("search hard-blocks identical query thrash after the auto-read budget resets", async () => {
   const { registered } = createHarness();
+  assert.equal((await registered[0].execute({ query: "seed", limit: 3 }) as { ok: boolean }).ok, true);
   assert.equal((await registered[0].execute({ query: "same", limit: 3 }) as { ok: boolean }).ok, true);
   assert.equal((await registered[0].execute({ query: "same", limit: 3 }) as { ok: boolean }).ok, true);
   const blocked = await registered[0].execute({ query: "same", limit: 3 }) as {

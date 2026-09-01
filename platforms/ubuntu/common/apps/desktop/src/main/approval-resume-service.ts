@@ -11,6 +11,7 @@ import {
   formatApprovalResumeFailureMessage,
   isTerminalAgentLoopFailure
 } from "./approval-resume-failure-policy.ts";
+import { extractPendingApprovalCommand } from "./approval-memory.ts";
 
 interface ApprovalResumeServiceOptions {
   getTasks: () => Map<string, any>;
@@ -55,6 +56,11 @@ interface ApprovalResumeServiceOptions {
     name: string;
     approvalMessage?: string;
   }) => Promise<{ approvalId?: string; sideEffectAllowed: boolean; offline?: boolean }>;
+  /**
+   * Persist an approved shell command so identical later calls skip the approval UI.
+   * Called after a successful local approve, before/while the tool runs.
+   */
+  rememberApprovedCommand?: (input: { toolName: string; command: string }) => Promise<void> | void;
 }
 
 /** Owns approval resume as one ordered transaction across runtime, UI, rollout, and thread state. */
@@ -70,9 +76,6 @@ export class ApprovalResumeService {
     const requestId = typeof input === "object" ? input.requestId?.trim() || "" : "";
     const approvalId = typeof input === "object" ? input.approvalId?.trim() || "" : "";
     const tasks = this.options.getTasks();
-    if ([...tasks.values()].some((task) => task.abortController.signal.aborted)) {
-      throw new Error("Cannot respond to approval after the task was cancelled.");
-    }
     if (!requestId && !approvalId) {
       throw new Error("respond-approval 需要 requestId 或 approvalId，不能回退到当前 UI 线程。");
     }
@@ -89,6 +92,9 @@ export class ApprovalResumeService {
       else throw new Error("当前审批已失效：审批标识与运行任务不匹配。请重新发起操作。");
     }
     const effectiveRequestId = [...tasks.entries()].find(([, task]) => task === pendingTask)?.[0] || requestId;
+    if (pendingTask?.abortController?.signal?.aborted) {
+      throw new Error("当前审批已失效：任务已被取消。请重新发送任务。");
+    }
     if (!pendingTask && !matchedDefaultApproval) {
       throw new Error("当前审批请求已失效：对应的运行任务不存在。请重新发送这条任务。");
     }
@@ -103,6 +109,9 @@ export class ApprovalResumeService {
     }
     const targetModelCallback = pendingTask?.modelCallback ?? (matchedDefaultApproval ? this.options.getActiveModelCallback() : undefined);
     const agentLoopStatus = targetRuntime.getAgentLoopSnapshot()?.status;
+    if (agentLoopStatus === "failed" || agentLoopStatus === "cancelled" || agentLoopStatus === "canceled") {
+      throw new Error("当前审批已失效：Agent loop 已取消或失败。请重新发送任务。");
+    }
     const agentLoopPending = agentLoopStatus === "awaiting-approval";
     const agentLoopCanAdvance = agentLoopStatus === "running";
     const agentEventOffset = targetRuntime.sessionMachine.events.length;
@@ -140,6 +149,25 @@ export class ApprovalResumeService {
       if (!approved && springResult.sideEffectAllowed === true) {
         // Defensive: deny must never open side effects.
         throw new Error("审批拒绝状态异常：服务端仍允许副作用。");
+      }
+    }
+
+    if (approved && this.options.rememberApprovedCommand) {
+      try {
+        const loopPending = targetRuntime.getAgentLoopSnapshot?.()?.pending
+          ?? targetRuntime.getSnapshot?.()?.pending
+          ?? null;
+        const pendingCommand = extractPendingApprovalCommand(
+          targetRuntime.getSnapshot?.() ?? null,
+          loopPending
+        );
+        if (pendingCommand?.command) {
+          await this.options.rememberApprovedCommand(pendingCommand);
+        }
+      } catch (error) {
+        await this.options.appendDebugLog(
+          `approval memory persist failed: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
 
@@ -446,6 +474,8 @@ export class ApprovalResumeService {
       ? resumedAgentLoop.status !== "awaiting-approval" && resumedAgentLoop.status !== "running"
       : !nextSnapshot.approval;
     if (pendingTask && remoteAgentLoopFinished) {
+      // Normalize the returned snapshot so the renderer does not keep「处理中」
+      // because session.status was left as awaiting-approval after a finished loop.
       if (!nextSnapshot.approval) {
         nextSnapshot.approval = null;
         nextSnapshot.pendingTool = null;

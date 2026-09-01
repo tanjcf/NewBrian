@@ -78,6 +78,7 @@ export class LocalAgentRuntime {
     this.workspacePath = path.resolve(input.workspacePath);
     this.platformLabel = input.platformLabel;
     this.shellLabel = input.shellLabel;
+    this.brainWorkspaceKey = input.brainWorkspaceKey || "explore";
     this.shellEnv = enrichShellEnvForTools(input.shellEnv ?? {});
     this.toolRegistry = input.toolRegistry ?? createBuiltinToolRegistry();
     this.toolHost = input.toolHost ?? (input.toolRegistry ? null : new ToolHostClient(input.toolHostOptions));
@@ -124,7 +125,10 @@ export class LocalAgentRuntime {
     }
     this.policyEngine = input.policyEngine ?? new PolicyEngine({ rules: input.policyRules ?? [] });
     this.memoryIndex = new MemoryIndex({ maxRecords: input.maxMemoryRecords ?? 100 });
-    this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
+    this.userShadow = new UserShadow({
+      workspacePath: this.workspacePath,
+      brainWorkspaceKey: this.brainWorkspaceKey
+    });
     this.configuredSkillRoots = Array.isArray(input.skillRoots) ? input.skillRoots : null;
     this.disabledSkillNames = new Set();
     this.skillRegistry = new SkillRegistry({
@@ -638,9 +642,13 @@ export class LocalAgentRuntime {
     this.shellEnv = enrichShellEnvForTools(nextEnv);
   }
 
-  async switchWorkspace(nextWorkspacePath) {
+  async switchWorkspace(nextWorkspacePath, options = {}) {
     this.workspacePath = path.resolve(nextWorkspacePath);
-    this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
+    if (options.brainWorkspaceKey) this.brainWorkspaceKey = options.brainWorkspaceKey;
+    this.userShadow = new UserShadow({
+      workspacePath: this.workspacePath,
+      brainWorkspaceKey: this.brainWorkspaceKey
+    });
     if (!this.configuredSkillRoots) {
       this.skillRegistry = new SkillRegistry({ roots: defaultSkillRoots(this.workspacePath) });
     }

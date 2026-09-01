@@ -48,7 +48,7 @@ export interface DesktopBootstrapStateFile {
   tasks?: DesktopBootstrapTaskState[];
   conda?: BootstrapRuntimeState & { initializedAt?: string; source?: "system" | "managed"; condaPath?: string };
   python?: BootstrapRuntimeState & { pythonPath?: string };
-  node?: BootstrapRuntimeState & { nodePath?: string; source?: "system" | "sandbox" };
+  node?: BootstrapRuntimeState & { nodePath?: string; source?: "system" | "sandbox" | "managed" };
   projectDeps?: BootstrapRuntimeState & { packageManager?: "pnpm" | "npm"; installCwd?: string };
 }
 

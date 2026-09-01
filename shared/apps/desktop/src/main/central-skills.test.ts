@@ -9,12 +9,16 @@ import {
   isGovernmentResearchWritingSkill
 } from "./central-skills.ts";
 
-test("government-research-writing is enabled in the central catalog", () => {
-  assert.equal(GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED, true);
-  assert.equal(isGovernmentResearchWritingProductEnabled(), true);
-  assert.ok(centralSkillDescriptors.some((skill) => skill.name === "government-research-writing"));
+test("government-research-writing product switch controls central catalog exposure", () => {
+  assert.equal(isGovernmentResearchWritingProductEnabled(), GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED);
   assert.equal(isGovernmentResearchWritingSkill("government-research-writing"), true);
-  assert.match(getCentralSkillInstruction(["government-research-writing"]), /native durable goal tools/);
+  if (GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) {
+    assert.ok(centralSkillDescriptors.some((skill) => skill.name === "government-research-writing"));
+    assert.match(getCentralSkillInstruction(["government-research-writing"]), /native durable goal tools/);
+  } else {
+    assert.equal(centralSkillDescriptors.length, 0);
+    assert.equal(getCentralSkillInstruction(["government-research-writing"]), "");
+  }
 });
 
 test("government writing instruction payload stays recoverable when re-enabled", async () => {

@@ -15,13 +15,13 @@ test("classifies stalled and max-steps loop failures as terminal", () => {
   assert.equal(isTerminalAgentLoopFailure(new Error("gateway unavailable")), false);
 });
 
-test("formats terminal failures into actionable Chinese summaries", () => {
+test("formats terminal failures with the original message", () => {
   assert.match(
     formatApprovalResumeFailureMessage(new Error("Agent loop stalled: no tool progress across 4 consecutive steps.")),
-    /没有成功进展/
+    /no tool progress/
   );
   assert.match(
     formatApprovalResumeFailureMessage(new Error("Agent loop exceeded 24 model steps.")),
-    /步数上限/
+    /24 model steps/
   );
 });

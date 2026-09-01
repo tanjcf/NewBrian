@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import { createDocumentRevisionProposal } from "./document-revision-task.js";
 
 type ToolExecute = (input: Record<string, unknown>, context?: Record<string, unknown>) => Promise<Record<string, unknown>>;
 type ToolValidate = (input: Record<string, unknown>) => Record<string, unknown> | void;
@@ -274,4 +275,45 @@ export function registerDocumentAgentTools(runtime: ToolRuntime, deps: DocumentA
       if (result.synced.length) notify(deps, "document.sync_existing");
     })
     .catch(() => undefined);
+
+  runtime.registerExternalTool({
+    name: "file.changeSet.create",
+    title: "创建文档修订方案",
+    description: "基于已有标注创建修改方案，并关联 document.revision 任务。",
+    namespace: "document",
+    kind: "write",
+    risk: "medium",
+    requiresApproval: false,
+    inputSchema: {
+      type: "object",
+      required: ["annotationId", "baseFileVersion", "changeSummary"],
+      properties: {
+        annotationId: { type: "string" },
+        baseFileVersion: { type: "number" },
+        changeSummary: { type: "string" },
+        diffJson: { type: "string" },
+        conversationId: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  }, async (input) => {
+    const ownerId = await deps.ownerId();
+    const annotationId = text(input.annotationId);
+    const baseFileVersion = Number(input.baseFileVersion);
+    const changeSummary = text(input.changeSummary);
+    if (!annotationId || !Number.isFinite(baseFileVersion) || !changeSummary) {
+      return { ok: false, output: "annotationId/baseFileVersion/changeSummary are required" };
+    }
+    const proposal = createDocumentRevisionProposal(deps.storage, {
+      ownerId,
+      projectId: deps.projectId,
+      annotationId,
+      baseFileVersion,
+      changeSummary,
+      diffJson: typeof input.diffJson === "string" ? input.diffJson : "{}",
+      conversationId: typeof input.conversationId === "string" ? input.conversationId : undefined
+    });
+    notify(deps, `file.changeSet.create:${proposal.changeSet.id}`);
+    return { ok: true, output: JSON.stringify(proposal) };
+  });
 }

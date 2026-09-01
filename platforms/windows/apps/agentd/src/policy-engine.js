@@ -141,8 +141,16 @@ function hasDynamicPathExpression(command) {
 function matchesRule(rule, toolName, command) {
   if (rule.enabled === false) return false;
   if (rule.toolName && rule.toolName !== "*" && rule.toolName !== toolName) return false;
-  const prefix = normalize(rule.commandPrefix).toLowerCase();
-  return !prefix || command.toLowerCase().startsWith(prefix);
+  const prefix = normalize(rule.commandPrefix);
+  if (!prefix) return true;
+  const haystack = command.toLowerCase();
+  const needle = prefix.toLowerCase();
+  if (rule.match === "exact") {
+    // Collapse runs of whitespace so remembered approvals stay stable across minor formatting.
+    const normalizeExact = (value) => value.replace(/[ \t]+/g, " ").trim();
+    return normalizeExact(haystack) === normalizeExact(needle);
+  }
+  return haystack.startsWith(needle);
 }
 
 export class PolicyEngine {
@@ -170,7 +178,8 @@ export class PolicyEngine {
         commandPrefix: normalize(rule.commandPrefix),
         decision,
         enabled: rule.enabled !== false,
-        reason: normalize(rule.reason)
+        reason: normalize(rule.reason),
+        match: rule.match === "exact" ? "exact" : "prefix"
       };
     });
   }

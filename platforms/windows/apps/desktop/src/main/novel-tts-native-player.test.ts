@@ -28,5 +28,10 @@ test("kokoro engine isolates synthesis in forked node child", () => {
   assert.match(engine, /CUDA_VISIBLE_DEVICES/);
   assert.match(engine, /ORT_DISABLE_GPU/);
   assert.match(engine, /warmChild/);
+  assert.match(engine, /resolveWorkerCwd/);
   assert.doesNotMatch(engine, /new Worker\(/);
+  assert.doesNotMatch(
+    engine,
+    /cwd:\s*path\.resolve\(path\.dirname\(workerPath\),\s*"\.\.",\s*"\.\."\)/
+  );
 });

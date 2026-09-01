@@ -2,6 +2,9 @@ import type { WorkspaceCatalogItem, WorkspaceThreadRecord } from "@codex-forge/p
 import {
   buildOrphanToolResultPayloads,
   enrichBoundaryEventsForPersistence,
+  extractRecoveredToolResultPayloads,
+  mergeToolBoundaryEventsForOrphanRepair,
+  type ToolBoundaryEventRecord,
   type ToolReplayDescriptor,
   type TurnReplayMetadata
 // @ts-expect-error Node's native TypeScript test runner requires the source extension.
@@ -166,19 +169,37 @@ export class ModelChatRunPersistenceService {
     workspace: WorkspaceCatalogItem;
     thread: WorkspaceThreadRecord;
     turnId: string;
+    failureReason?: string;
+    supplementalEvents?: ToolBoundaryEventRecord[];
   }) {
     if (!this.dependencies.readThreadEvents) return [];
     const existing = await this.dependencies.readThreadEvents(input.workspace, input.thread);
-    const orphans = buildOrphanToolResultPayloads(
-      existing.filter((event) => !input.turnId || event.turnId === input.turnId || !event.turnId)
+    const recovered = extractRecoveredToolResultPayloads(
+      existing,
+      input.supplementalEvents ?? [],
+      input.turnId
     );
-    if (!orphans.length) return [];
-    const projected = orphans.map((payload) =>
+    const merged = mergeToolBoundaryEventsForOrphanRepair(
+      existing,
+      input.supplementalEvents ?? [],
+      input.turnId
+    );
+    const orphans = buildOrphanToolResultPayloads(merged, { failureReason: input.failureReason });
+    const payloads = [
+      ...recovered.map((payload) => ({
+        callId: payload.callId,
+        name: payload.name,
+        result: payload.result
+      })),
+      ...orphans
+    ];
+    if (!payloads.length) return [];
+    const projected = payloads.map((payload) =>
       this.dependencies.createThreadEvent("tool_result", payload as unknown as Record<string, unknown>, input.turnId)
     );
     await this.dependencies.appendAuditRecords(
       this.dependencies.getEventLogPath(input.workspace.id, input.thread.id),
-      orphans.map((payload) => this.dependencies.createAuditRecord({
+      payloads.map((payload) => this.dependencies.createAuditRecord({
         recordType: "tool_result",
         threadId: input.thread.id,
         turnId: input.turnId,

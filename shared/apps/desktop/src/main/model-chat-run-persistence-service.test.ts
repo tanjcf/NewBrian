@@ -111,10 +111,41 @@ test("repairs orphan tool_call projections after an interrupted turn", async () 
   const repaired = await service.repairOrphanToolCalls({
     workspace: { id: "workspace-1" },
     thread: { id: "thread-1" },
-    turnId: "turn-1"
+    turnId: "turn-1",
+    failureReason: "Agent loop stalled: no tool progress across 4 consecutive steps."
   } as never);
   assert.equal(repaired.length, 1);
   assert.equal(projected.at(-1).type, "tool_result");
   assert.equal(projected.at(-1).payload.result.orphan, true);
+  assert.match(String(projected.at(-1).payload.result.output), /Agent loop stalled/);
   assert.equal(audited.at(-1).record_type, "tool_result");
+});
+
+test("recovers unpersisted in-memory tool results instead of inventing orphan failures", async () => {
+  const { service, projected } = createService();
+  await service.persistEvents({
+    workspace: { id: "workspace-1" },
+    thread: { id: "thread-1" },
+    turnId: "turn-1",
+    agentEvents: [
+      { type: "tool_call", payload: { id: "call-401", name: "music.generate", arguments: {} } }
+    ],
+    toolDescriptors: [{ name: "music.generate", kind: "write", risk: "medium" }]
+  } as never);
+  const repaired = await service.repairOrphanToolCalls({
+    workspace: { id: "workspace-1" },
+    thread: { id: "thread-1" },
+    turnId: "turn-1",
+    supplementalEvents: [{
+      type: "tool_result",
+      payload: {
+        callId: "call-401",
+        name: "music.generate",
+        result: { ok: false, output: "HTTP 401 unauthorized" }
+      }
+    }]
+  } as never);
+  assert.equal(repaired.length, 1);
+  assert.equal(projected.at(-1).payload.result.output, "HTTP 401 unauthorized");
+  assert.notEqual(projected.at(-1).payload.result.orphan, true);
 });

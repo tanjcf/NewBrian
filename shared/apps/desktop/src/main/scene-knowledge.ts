@@ -15,12 +15,12 @@ const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[
     { title: "工具接口", keywords: ["level", "actor", "preview", "cook"], content: "使用关卡编辑、内容树、Actor、试玩和导出工具操作右侧面板；写入前遵循项目权限和审批，工具失败要如实反馈。" }
   ] },
   video: { title: "视频制作", sections: [
-    { title: "能力", keywords: ["脚本", "分镜", "镜头", "音轨", "字幕", "合成", "导出"], content: "编写脚本、管理分镜、生成单镜、编辑本镜音视频轨、导入字幕、合成和导出。每次修改应绑定当前项目。" },
-    { title: "工具接口", keywords: ["storyboard", "shot", "timeline", "render", "export"], content: "通过视频流水线、时间线、字幕、渲染和导出工具操作右侧 tools；生成类操作必须返回任务状态和产物路径，不能只说正在生成。" }
+    { title: "能力", keywords: ["脚本", "分镜", "镜头", "音轨", "字幕", "合成", "导出"], content: "编写脚本、管理分镜、生成单镜、编辑本镜音视频轨、导入字幕、合成和导出。本场景必须走右侧视频流水线 Tools（脚本/分镜/单镜生成/本镜音视频轨），不要只用裸 video_generate 绕过面板。" },
+    { title: "工具接口", keywords: ["video.pipeline.save", "video.shot.generate", "video.project.inspect", "storyboard", "shot", "timeline", "render", "export"], content: "强制路由：脚本/分镜 → video.pipeline.save；单镜成片 → video.shot.generate；音轨/旁白 → video.audio.*；时间线 → video.timeline.*；导出 → video.render.*。先 video.project.inspect。裸 video_generate 仅非视频场景兜底。" }
   ] },
   music: { title: "音乐创作", sections: [
-    { title: "能力", keywords: ["生成", "音轨", "切片", "编曲", "导出"], content: "创建音乐片段、编辑音轨、标记切片、编排时间线和导出音频。所有音轨操作使用当前项目和时间线。" },
-    { title: "工具接口", keywords: ["daw", "track", "clip", "render"], content: "使用音乐 DAW、时间线、音轨、片段和渲染工具；保存后再刷新右侧面板，向用户报告实际状态。" }
+    { title: "能力", keywords: ["生成", "音轨", "切片", "编曲", "导出", "歌曲", "配乐"], content: "创建音乐片段、生成整曲、编辑音轨、标记切片、编排时间线和导出音频。本场景必须走右侧「音乐创作 Tools」子架构（生成 / 音轨 / 标记切片 / 导出），与视频流水线 Tools 同级；不要只用聊天里的裸 music_generate 绕过右侧面板。" },
+    { title: "工具接口", keywords: ["music.song.generate", "music.daw.save", "music.project.inspect", "music.render.start", "music_generate", "daw", "track", "clip", "render"], content: "强制路由：用户要写歌词/定风格/改曲名 → music.daw.save（写入右侧 DAW）。用户要生成歌曲/配乐/纯音乐 → music.song.generate（内部调用 spring-app music_generate，下载到 media/stems/，更新右侧「生成/音轨」并挂时间线）。先 music.project.inspect 再改写。导出混音 → music.render.start / music.render.status。裸 music_generate 仅作非音乐场景的 Auto 兜底；在本场景优先 music.*，完成后提醒用户查看右侧 Tools 对应页签。" }
   ] },
   data: { title: "数据与决策", sections: [
     { title: "能力", keywords: ["数据", "CSV", "Excel", "分析", "图表", "Julius", "Flow"], content: "导入CSV/Excel、浏览数据集、生成摘要分析、绘制图表和运行决策 Flow。分析结论必须引用实际数据集和筛选条件。" },

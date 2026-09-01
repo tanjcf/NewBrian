@@ -92,13 +92,15 @@ export function parseSynthesizeNovelSpeechInput(input: unknown): SynthesizeNovel
     || typeof input.voiceId !== "string"
     || !input.voiceId.trim()
     || input.voiceId.length > 80
-    || (input.voiceLabel !== undefined && typeof input.voiceLabel !== "string")) {
+    || (input.voiceLabel !== undefined && typeof input.voiceLabel !== "string")
+    || (input.playback !== undefined && typeof input.playback !== "boolean")) {
     throw new TypeError("Novel speech input is invalid.");
   }
   return {
     text: input.text,
     voiceId: input.voiceId.trim(),
-    voiceLabel: typeof input.voiceLabel === "string" ? input.voiceLabel : undefined
+    voiceLabel: typeof input.voiceLabel === "string" ? input.voiceLabel : undefined,
+    playback: typeof input.playback === "boolean" ? input.playback : undefined
   };
 }
 

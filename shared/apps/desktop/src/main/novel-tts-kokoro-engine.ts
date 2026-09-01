@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fork, type ChildProcess } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -216,13 +217,26 @@ export class NovelTtsKokoroEngine {
 
     this.spawning = new Promise((resolve, reject) => {
       const workerPath = this.dependencies.workerPath ?? resolveDefaultWorkerPath();
+      const cwd = resolveWorkerCwd(workerPath);
+      const moduleRoot = resolveKokoroModuleRoot(cwd);
+      const nodePathParts = [
+        path.join(moduleRoot, "node_modules"),
+        typeof process.resourcesPath === "string"
+          ? path.join(process.resourcesPath, "app.asar.unpacked", "node_modules")
+          : "",
+        process.env.NODE_PATH || ""
+      ].filter(Boolean);
       const child = fork(workerPath, [], {
-        cwd: path.resolve(path.dirname(workerPath), "..", ".."),
+        // Packaged worker lives under app.asar/out/main; `../..` is the asar FILE.
+        // CreateProcess rejects a file cwd and surfaces spawn <execPath> ENOENT.
+        cwd,
         execPath: process.execPath,
         execArgv: [],
         env: {
           ...process.env,
           ELECTRON_RUN_AS_NODE: "1",
+          CODECN_KOKORO_MODULE_ROOT: moduleRoot,
+          NODE_PATH: nodePathParts.join(path.delimiter),
           // Force CPU — never touch the display GPU from the TTS child.
           CUDA_VISIBLE_DEVICES: "-1",
           HIP_VISIBLE_DEVICES: "-1",
@@ -373,7 +387,65 @@ export class NovelTtsKokoroEngine {
   }
 }
 
+function isDirectory(target: string) {
+  try {
+    return Boolean(target) && statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer a real directory that can host NODE_PATH / package.json resolution. */
+export function resolveWorkerCwd(workerPath: string): string {
+  const packageRootGuess = path.resolve(path.dirname(workerPath), "..", "..");
+  const resourcesPath = typeof process.resourcesPath === "string" ? process.resourcesPath : "";
+  const unpackedRoot = resourcesPath ? path.join(resourcesPath, "app.asar.unpacked") : "";
+  const installRoot = path.dirname(process.execPath);
+  const candidates = [packageRootGuess, unpackedRoot, resourcesPath, installRoot, process.cwd()];
+
+  for (const candidate of candidates) {
+    if (!isDirectory(candidate)) continue;
+    if (
+      existsSync(path.join(candidate, "package.json"))
+      || existsSync(path.join(candidate, "node_modules"))
+    ) {
+      return candidate;
+    }
+  }
+  for (const candidate of candidates) {
+    if (isDirectory(candidate)) return candidate;
+  }
+  return process.cwd();
+}
+
+export function resolveKokoroModuleRoot(cwd: string): string {
+  const resourcesPath = typeof process.resourcesPath === "string" ? process.resourcesPath : "";
+  const candidates = [
+    cwd,
+    resourcesPath ? path.join(resourcesPath, "app.asar.unpacked") : "",
+    resourcesPath,
+    path.dirname(process.execPath)
+  ];
+  for (const candidate of candidates) {
+    if (!isDirectory(candidate)) continue;
+    if (existsSync(path.join(candidate, "node_modules", "@uzen", "kokoro-js"))) {
+      return candidate;
+    }
+    if (existsSync(path.join(candidate, "package.json"))) {
+      return candidate;
+    }
+  }
+  return cwd || process.cwd();
+}
+
 function resolveDefaultWorkerPath() {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(here, "novel-tts-kokoro-worker.js");
+  const direct = path.join(here, "novel-tts-kokoro-worker.js");
+  // Packaged builds may unpack the worker beside app.asar for ELECTRON_RUN_AS_NODE.
+  const asarMarker = `${path.sep}app.asar${path.sep}`;
+  if (direct.includes(asarMarker)) {
+    const unpacked = direct.replace(asarMarker, `${path.sep}app.asar.unpacked${path.sep}`);
+    if (existsSync(unpacked)) return unpacked;
+  }
+  return direct;
 }

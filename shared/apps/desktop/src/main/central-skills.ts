@@ -1,9 +1,11 @@
+import { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } from "../shared/product-flags.js";
+
 /**
  * Product offline switch for the built-in central skill.
- * Set to `true` to restore catalog registration, composer pick, auto-routing,
- * and writing-specification confirmation flows.
+ * Set to `true` in product-flags.ts to restore catalog registration, composer pick,
+ * auto-routing, and writing-specification confirmation flows.
  */
-export const GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED = true;
+export { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED };
 
 export const GOVERNMENT_RESEARCH_WRITING_SKILL_NAME = "government-research-writing";
 

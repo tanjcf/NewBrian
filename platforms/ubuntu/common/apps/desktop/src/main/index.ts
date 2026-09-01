@@ -3177,6 +3177,7 @@ function normalizeThread(input: Partial<WorkspaceThreadRecord>): WorkspaceThread
     title: repairKnownMojibakeText(input.title?.trim()) || "未命名线程",
     summary: repairKnownMojibakeText(input.summary?.trim()) || "暂无线程摘要。",
     scope: input.scope === "chat" ? "chat" : "project",
+    ...(isBrainWorkspaceKey(input.brainWorkspaceKey) ? { brainWorkspaceKey: input.brainWorkspaceKey } : {}),
     updatedAt: input.updatedAt?.trim() || nowIso(),
     lastEventSummary: repairKnownMojibakeText(input.lastEventSummary?.trim()),
     status: normalizedStatus,
@@ -6792,12 +6793,14 @@ async function addWorkspaceThread(input: {
   title: string;
   summary: string;
   scope?: "project" | "chat";
+  brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
 }) {
   const catalog = await readWorkspaceCatalog();
   const nextThread = normalizeThread({
     title: input.title,
     summary: input.summary,
     scope: input.scope,
+    ...(input.brainWorkspaceKey ? { brainWorkspaceKey: input.brainWorkspaceKey } : {}),
     lastEventSummary: "线程已创建"
   });
 

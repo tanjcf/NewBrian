@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
-import type { WorkspaceArtifactPreview } from "@codex-forge/protocol";
+import type { AnnotationMarkingTool, BrainAnnotationDto, WorkspaceArtifactPreview } from "@codex-forge/protocol";
+import type { DocumentRect, DocumentViewport } from "@codex-forge/protocol/document-anchor";
+import { DocumentMarkingLayer } from "./DocumentMarkingLayer";
 
 type SlidesResource = {
   resourceUri: string;
@@ -8,7 +10,16 @@ type SlidesResource = {
   preview: Extract<WorkspaceArtifactPreview, { kind: "pptx" }>;
 };
 
-type ArtifactFileViewer = ComponentType<{ resource: SlidesResource }>;
+export type SlidesMarkingProps = {
+  annotationActive: boolean;
+  markingTool: AnnotationMarkingTool;
+  markingColor: string;
+  savedAnnotations: BrainAnnotationDto[];
+  pendingMark: { rect: DocumentRect; tool: AnnotationMarkingTool; color: string } | null;
+  onMarkComplete: (input: { rect: DocumentRect; viewport: DocumentViewport; slide: number; captureTarget: HTMLElement }) => void;
+};
+
+type ArtifactFileViewer = ComponentType<{ resource: SlidesResource; marking?: SlidesMarkingProps }>;
 const viewerRegistry = new Map<SlidesResource["artifactType"], ArtifactFileViewer>();
 
 function dataUrlToBytes(dataUrl: string) {
@@ -16,7 +27,7 @@ function dataUrlToBytes(dataUrl: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-function BuiltinSlidesFileViewer({ resource }: { resource: SlidesResource }) {
+function BuiltinSlidesFileViewer({ resource, marking }: { resource: SlidesResource; marking?: SlidesMarkingProps }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PptxViewer | null>(null);
   const [state, setState] = useState({ loading: true, error: "", slideCount: 0, currentSlide: 0, navigating: false });
@@ -59,8 +70,6 @@ function BuiltinSlidesFileViewer({ resource }: { resource: SlidesResource }) {
     if (target === viewer.currentSlideIndex) return;
     setState((current) => ({ ...current, navigating: true }));
     try {
-      // `goToSlide` only schedules slide-mode rendering and resolves before the
-      // new DOM is ready. `renderSlide` waits for the actual render queue.
       await viewer.renderSlide(target);
       setState((current) => ({ ...current, currentSlide: viewer.currentSlideIndex, navigating: false }));
     } catch (error) {
@@ -68,29 +77,47 @@ function BuiltinSlidesFileViewer({ resource }: { resource: SlidesResource }) {
     }
   };
 
+  const currentSlideNumber = state.currentSlide + 1;
+
   return <div className="workspace-artifact-pptx" data-resource-uri={resource.resourceUri} data-slide-count={state.slideCount} data-current-slide={state.currentSlide}>
     {state.loading ? <div className="search-file-preview-state">正在加载演示文稿...</div> : null}
     {state.error ? <div className="search-file-preview-state error">PPTX 加载失败：{state.error}</div> : null}
     {!state.loading && !state.error ? <div className="workspace-pptx-toolbar">
       <button type="button" aria-label="上一页" title="上一页" disabled={state.currentSlide <= 0 || state.navigating} onClick={() => void navigate(-1)}>‹</button>
-      <span>{state.currentSlide + 1}/{state.slideCount}</span>
+      <span>{currentSlideNumber}/{state.slideCount}</span>
       <button type="button" aria-label="下一页" title="下一页" disabled={state.currentSlide >= state.slideCount - 1 || state.navigating} onClick={() => void navigate(1)}>›</button>
     </div> : null}
-    <div className="workspace-artifact-pptx-host" ref={hostRef} />
+    <div className="workspace-artifact-pptx-stage">
+      <div className="workspace-artifact-pptx-host" ref={hostRef} />
+      {marking ? (
+        <DocumentMarkingLayer
+          active={marking.annotationActive}
+          tool={marking.markingTool}
+          color={marking.markingColor}
+          savedAnnotations={marking.savedAnnotations}
+          pendingMark={marking.annotationActive ? marking.pendingMark : null}
+          pageFilter={currentSlideNumber}
+          onComplete={({ rect, viewport, host }) => {
+            if (!marking.annotationActive) return;
+            marking.onMarkComplete({ rect, viewport, slide: currentSlideNumber, captureTarget: hostRef.current || host });
+          }}
+        />
+      ) : null}
+    </div>
   </div>;
 }
 
 viewerRegistry.set("slides", BuiltinSlidesFileViewer);
 
-export function WorkspaceArtifactViewerHost({ preview }: { preview: WorkspaceArtifactPreview }) {
-  const resource = useMemo<SlidesResource | null>(() => preview.kind === "pptx" ? {
+export function WorkspaceArtifactViewerHost(props: { preview: WorkspaceArtifactPreview; marking?: SlidesMarkingProps }) {
+  const resource = useMemo<SlidesResource | null>(() => props.preview.kind === "pptx" ? {
     resourceUri: `codecn-resource://${crypto.randomUUID()}`,
     artifactType: "slides",
-    preview
-  } : null, [preview]);
+    preview: props.preview
+  } : null, [props.preview]);
   if (!resource) return null;
   const FileViewer = viewerRegistry.get(resource.artifactType);
   return FileViewer
-    ? <FileViewer resource={resource} />
+    ? <FileViewer resource={resource} marking={props.marking} />
     : <div className="search-file-preview-state error">没有可用于此文件的内置查看器。</div>;
 }

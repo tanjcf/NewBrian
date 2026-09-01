@@ -102,29 +102,24 @@ function createService(overrides: Record<string, unknown> = {}) {
         (item.capabilities ?? []).some((tag) => /vision|multimodal/i.test(tag))
         || /vision|vl/i.test(item.model)
       );
-      const image = models.find((item) =>
-        /hy-image|image-gen/i.test(item.model)
-        || (item.capabilities ?? []).some((tag) => /image-generation|text-to-image/i.test(tag))
-      );
       if (/壁纸|出图|生成图片|桌面壁纸|wallpaper/i.test(text)) {
-        if (!image) {
-          throw new Error("当前套餐没有可用的文生图/出图模型（如 hy-image-v3）");
-        }
+        const chat = models.find((item) =>
+          !/hy-image|image-gen|seedance|ocr/i.test(item.model)
+          && !(item.capabilities ?? []).some((tag) => /image-generation|text-to-image|video|ocr/i.test(tag))
+        ) ?? models[0];
         return {
           schema_version: 1 as const,
-          model: image.model,
-          channel: "image_gen",
+          model: chat.model,
+          channel: "text_chat",
           task_class: "general",
           optimize_for: "intelligence",
           degraded: false,
-          reason_codes: ["requires_image", "image_capable", "server_authoritative_auto"],
-          selected_reason: "image_gen",
+          reason_codes: ["hint_image_request", "media_via_tool_calls", "server_authoritative_auto"],
+          selected_reason: "text_chat",
           parent_role: "orchestrator",
-          child_specialty: "image_gen",
+          child_specialty: "",
           fallback_models: [],
-          tool_name: "image_generate",
-          media_kind: "image",
-          media_execution: "server" as const
+          available_media_tools: ["image_generate", "video_generate"]
         };
       }
       if (input.hasImageAttachments && vision) {
@@ -503,110 +498,41 @@ test("interrupt-resume after image turn asks spring Auto with hasImageAttachment
   assert.equal((prepared.input as { parentSelectedModel?: string }).parentSelectedModel, "kimi-k2.6");
 });
 
-test("local media override skips uploaded-image vision questions", async () => {
-  const { applyLocalMediaIntentOverride } = await import(
-    new URL("./model-chat-preparation-service.ts", import.meta.url).href
-  );
-  const decision = {
-    schema_version: 1 as const,
-    mode: "auto" as const,
-    decided_at: new Date().toISOString(),
-    run_id: "r-vision",
-    thread_id: "t1",
-    input_fingerprint: "fp",
-    model: {
-      requested: "auto" as const,
-      selected: "kimi-k2.6",
-      reason_codes: ["requires_vision", "server_authoritative_auto", "channel=vision_qa"],
-      fallback_chain: [],
-      fallback_index: 0
-    },
-    reasoning: { effort: "auto", summary: "auto" as const, resolved_effort: "medium" },
-    skills: { explicit: [], automatic: [], government_enabled: false },
-    permission_profile: "auto_review" as const,
-    allow_auto_delegate: true,
-    policy_etag: "spring-app-auto",
-    degraded: false,
-    task_class: "general" as const,
-    routing_tier: "general" as const,
-    orchestrator: {
-      schema_version: 1 as const,
-      intent: "vision_qa" as const,
-      handled_by: "router" as const,
-      can_handle_directly: false,
-      primary_channel: "vision_qa" as const,
-      reason_codes: ["requires_vision"]
-    }
-  };
-  const kept = applyLocalMediaIntentOverride({
-    decision,
-    latestUserText: "脸长后脑勺上？",
-    hasImageAttachments: true,
-    availableModels: [
-      { model: "kimi-k2.6", provider: "百度", capabilities: ["vision"] },
-      { model: "hy-image-v3", provider: "tokenhub", capabilities: ["image-generation"] }
-    ]
-  });
-  assert.equal(kept.model.selected, "kimi-k2.6");
-  assert.equal(kept.orchestrator?.primary_channel, "vision_qa");
-  assert.equal(kept.media_tool, undefined);
+test("local media override is removed; vision attachments stay vision_qa via server", async () => {
+  const prepared = await createService({
+    readAuthorizedModelConfig: async () => ({
+      availableModels: [
+        ...catalogModels,
+        {
+          id: "kimi",
+          provider: "百度",
+          model: "kimi-k2.6",
+          label: "Kimi",
+          capabilities: ["vision", "multimodal"],
+          routing: routing({
+            tier: 2,
+            cost_weight: 40,
+            quality_weight: 70,
+            roles: ["chat", "vision"],
+            capabilities: ["vision", "multimodal", "tools"]
+          })
+        }
+      ]
+    })
+  }).prepare({
+    ...input,
+    model: "auto",
+    messages: [{
+      role: "user",
+      content: "脸长后脑勺上？",
+      attachments: [{ url: "data:image/png;base64,abc" }]
+    }]
+  } as never);
+  assert.equal(prepared.autoDecision?.orchestrator?.primary_channel, "vision_qa");
+  assert.equal(prepared.autoDecision?.media_tool, undefined);
 });
 
-test("local media override forces image_gen when server returns text_chat", async () => {
-  const { applyLocalMediaIntentOverride } = await import(
-    new URL("./model-chat-preparation-service.ts", import.meta.url).href
-  );
-  const overridden = applyLocalMediaIntentOverride({
-    latestUserText: "做一张3D动画电影风两个人相遇的桌面壁纸",
-    availableModels: [
-      { model: "deepseek-v4-flash", provider: "deepseek", capabilities: ["text"] },
-      {
-        model: "hy-image-v3",
-        provider: "tokenhub",
-        capabilities: ["image-generation", "text-to-image"]
-      }
-    ],
-    decision: {
-      schema_version: 1,
-      mode: "auto",
-      decided_at: new Date().toISOString(),
-      run_id: "r1",
-      thread_id: "t1",
-      input_fingerprint: "fp",
-      model: {
-        requested: "auto",
-        selected: "deepseek-v4-flash",
-        reason_codes: ["server_authoritative_auto", "channel=text_chat"],
-        fallback_chain: [],
-        fallback_index: 0
-      },
-      reasoning: { effort: "auto", summary: "auto", resolved_effort: "medium" },
-      skills: { explicit: [], automatic: [], government_enabled: false },
-      permission_profile: "auto_review",
-      allow_auto_delegate: true,
-      policy_etag: "spring-app-auto",
-      degraded: false,
-      task_class: "chat",
-      routing_tier: "light",
-      orchestrator: {
-        schema_version: 1,
-        intent: "general",
-        handled_by: "router",
-        can_handle_directly: true,
-        primary_channel: "text_chat",
-        reason_codes: ["channel=text_chat"]
-      }
-    }
-  });
-  // Channel/tool only — desktop must not pin hy-image; parent Auto still owns model choice.
-  assert.equal(overridden.model.selected, "deepseek-v4-flash");
-  assert.equal(overridden.orchestrator?.primary_channel, "image_gen");
-  assert.equal(overridden.media_tool?.tool_name, "image_generate");
-  assert.ok(overridden.model.reason_codes.includes("local_media_intent_override"));
-  assert.ok(overridden.model.reason_codes.includes("parent_selects_model"));
-});
-
-test("Auto wallpaper uses spring-app image_gen decision not local flash", async () => {
+test("Auto wallpaper keeps chat channel without media_tool short-circuit", async () => {
   const prepared = await createService({
     readAuthorizedModelConfig: async () => ({
       availableModels: [
@@ -632,14 +558,11 @@ test("Auto wallpaper uses spring-app image_gen decision not local flash", async 
     model: "auto",
     messages: [{ role: "user", content: "我希望是一张桌面壁纸卡通的两个人相遇的场景" }]
   } as never);
-  // Auto outbound stays model=auto; parent route selected media model for child tool.
   assert.equal(prepared.input.model, "auto");
-  assert.equal(prepared.autoDecision?.model.selected, "hy-image-v3");
-  assert.equal(prepared.autoDecision?.orchestrator?.primary_channel, "image_gen");
-  assert.ok(prepared.autoDecision?.model.reason_codes.includes("requires_image"));
-  assert.equal(prepared.autoDecision?.optimize_for, "intelligence");
-  assert.equal(prepared.autoDecision?.media_tool?.tool_name, "image_generate");
-  assert.equal(prepared.autoDecision?.media_tool?.execution, "server");
+  assert.notEqual(prepared.autoDecision?.model.selected, "hy-image-v3");
+  assert.equal(prepared.autoDecision?.orchestrator?.primary_channel, "text_chat");
+  assert.ok(prepared.autoDecision?.model.reason_codes.includes("media_via_tool_calls"));
+  assert.equal(prepared.autoDecision?.media_tool, undefined);
 });
 
 test("skill routing still works for pinned models; Auto defers specialty to spring-app", async () => {

@@ -6,6 +6,8 @@ export type MusicDawStep = "gen" | "tracks" | "slice" | "export";
 export type MusicDawShellProps = {
   projectId?: string;
   activeStep?: MusicDawStep;
+  /** Bumps when Agent tools write DAW state so the right Tools panel reloads. */
+  refreshToken?: number;
 };
 
 type Track = {
@@ -34,7 +36,7 @@ const markers = [
   { name: "Bridge", left: 72 }
 ];
 
-export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
+export function MusicDawShell({ projectId, activeStep, refreshToken = 0 }: MusicDawShellProps) {
   const [localStep, setLocalStep] = useState<MusicDawStep>("tracks");
   const [title, setTitle] = useState("");
   const [lyrics, setLyrics] = useState("");
@@ -58,9 +60,9 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
       setDawTracks(result.state.tracks);
       setMuted(result.state.tracks.filter((track) => track.muted).map((track) => track.id));
       if (result.state.segments.length) setSegments(result.state.segments.map(String));
-      setStatus("已从 Rust 工程加载");
+      setStatus(refreshToken > 0 ? "已从 Agent / Rust 工程刷新" : "已从 Rust 工程加载");
     }).catch((error: unknown) => setStatus(`加载失败：${error instanceof Error ? error.message : String(error)}`));
-  }, [projectId]);
+  }, [projectId, refreshToken]);
 
   const state = (): BrainMusicDawState => ({
     title,
@@ -123,7 +125,7 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
       await persistDaw(true);
       const started = await window.codecn.startMusicRender({
         projectId,
-        outputRelativePath: `renders/music-mix-${Date.now()}.wav`
+        outputRelativePath: `exports/music-mix-${Date.now()}.wav`
       });
       setStatus(`FFmpeg 已启动 · ${started.renderId}`);
       const getStatus = window.codecn.getMusicRenderStatus;
@@ -132,7 +134,7 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
           const tick = await getStatus({ renderId: started.renderId });
           if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(String(tick?.status || ""))) {
             setStatus(tick?.status === "SUCCEEDED"
-              ? `导出完成 · ${tick.outputPath || started.outputPath || "renders/*.wav"}`
+              ? `导出完成 · ${tick.outputPath || started.outputPath || "exports/*.wav"}`
               : `导出结束：${tick?.status}${tick?.errorCode ? ` · ${tick.errorCode}` : ""}`);
             return;
           }
@@ -147,8 +149,10 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
   };
 
   const chooseStep = (key: MusicDawStep) => {
-    if (!activeStep) setLocalStep(key);
-    setStatus(activeStep ? `当前步骤由父级控制：${key}` : `已切换到${steps.find((item) => item.key === key)?.label}`);
+    // Parent WorkspaceModules owns scene tabs when activeStep is set — do not claim control here.
+    if (activeStep) return;
+    setLocalStep(key);
+    setStatus(`已切换到${steps.find((item) => item.key === key)?.label}`);
   };
 
   const toggleMuted = (id: string) => {
@@ -201,19 +205,21 @@ export function MusicDawShell({ projectId, activeStep }: MusicDawShellProps) {
         <span className="brain-music-daw__summary">{dawTracks.length ? `${dawTracks.length} 音轨` : "暂无音轨"}</span>
       </header>
 
-      <nav className="brain-music-daw__steps" aria-label="音乐功能">
-        {steps.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={`brain-music-daw__step${pane === item.key ? " brain-music-daw__step--active" : ""}`}
-            aria-current={pane === item.key ? "step" : undefined}
-            onClick={() => chooseStep(item.key)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      {!activeStep ? (
+        <nav className="brain-music-daw__steps" aria-label="音乐功能">
+          {steps.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`brain-music-daw__step${pane === item.key ? " brain-music-daw__step--active" : ""}`}
+              aria-current={pane === item.key ? "step" : undefined}
+              onClick={() => chooseStep(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
 
       <div className="brain-music-daw__pane" role="tabpanel">
         {pane === "gen" && (

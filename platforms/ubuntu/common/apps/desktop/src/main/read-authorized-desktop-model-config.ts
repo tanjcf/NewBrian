@@ -49,13 +49,13 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
     const accessTokenCredential = authState?.access_token?.trim() || "";
     const device = deps.collectDesktopDeviceFingerprint();
     const credentials = [
-      process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv
-        ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
-        : null,
       accessTokenCredential ? {
         value: accessTokenCredential,
         headers: deps.createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
       } : null,
+      process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv
+        ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
+        : null,
       apiKeyCredential ? {
         value: apiKeyCredential,
         headers: { Authorization: `Bearer ${apiKeyCredential}` }
@@ -147,6 +147,17 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
     const selectedReview = availableModels.find((item) => item.model.toLowerCase() === effectiveConfig.reviewModel.toLowerCase())
       ?? selected;
     deps.setCachedAuthorizedModels(availableModels);
+    let syncedAutoParentDisplayName: string | undefined;
+    try {
+      const controlPlane = deps.parseJsonText<{ model_config?: Record<string, unknown> }>(
+        await fs.readFile(deps.desktopControlPlaneStatePath, "utf8")
+      );
+      const raw = controlPlane.model_config?.auto_parent_display_name
+        ?? controlPlane.model_config?.autoParentDisplayName;
+      syncedAutoParentDisplayName = typeof raw === "string" ? raw : undefined;
+    } catch {
+      syncedAutoParentDisplayName = undefined;
+    }
     return {
       ...deps.normalizeModelConfig({
         ...effectiveConfig,
@@ -155,7 +166,8 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
         baseUrl: gatewayBaseUrl,
         wireApi: "responses",
         model: requestedAuto ? "auto" : (selected?.model ?? ""),
-        reviewModel: selectedReview?.model ?? selected?.model ?? ""
+        reviewModel: selectedReview?.model ?? selected?.model ?? "",
+        autoParentDisplayName: syncedAutoParentDisplayName
       }),
       apiKey: "",
       availableModels

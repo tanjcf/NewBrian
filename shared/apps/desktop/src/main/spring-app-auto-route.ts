@@ -25,11 +25,8 @@ export type SpringAppAutoRouteDecision = {
   child_specialty: string;
   fallback_models: string[];
   notes?: string;
-  /** OpenClaw-style tool owned by spring-app Auto (image_generate / video_generate). */
-  tool_name?: string;
-  media_kind?: string;
-  /** When "server", desktop must invoke /v1/auto/tools/* instead of vendor APIs. */
-  media_execution?: "server" | "client";
+  /** Soft list from spring-app; Auto chat registers these as agent tools. */
+  available_media_tools?: string[];
   /** Diagnostic only — local TurnScope remains authoritative. */
   correlationMismatches?: SpringCorrelationMismatch[];
 };
@@ -117,12 +114,19 @@ export async function fetchSpringAppAutoRoute(
     const message = formatSpringCorrelationDiagnostics("auto/route", correlationMismatches);
     input.onCorrelationMismatch?.(message, correlationMismatches);
   }
-  const mediaExecutionRaw = String(payload.media_execution || "").trim().toLowerCase();
-  const mediaExecution =
-    mediaExecutionRaw === "server" || mediaExecutionRaw === "client"
-      ? mediaExecutionRaw
-      : undefined;
-  const toolName = String(payload.tool_name || "").trim();
+  const availableMediaTools = Array.isArray(payload.available_media_tools)
+    ? payload.available_media_tools.map((item) => String(item)).filter(Boolean)
+    : Array.isArray(payload.tools)
+      ? payload.tools
+          .map((tool) => {
+            const record = tool && typeof tool === "object" ? tool as Record<string, unknown> : null;
+            const fn = record?.function && typeof record.function === "object"
+              ? record.function as Record<string, unknown>
+              : null;
+            return String(fn?.name || "").trim();
+          })
+          .filter(Boolean)
+      : [];
   return {
     schema_version: 1,
     model: String(payload.model || "").trim(),
@@ -141,9 +145,7 @@ export async function fetchSpringAppAutoRoute(
       ? payload.fallback_models.map((item) => String(item))
       : [],
     notes: payload.notes == null ? undefined : String(payload.notes),
-    tool_name: toolName || undefined,
-    media_kind: payload.media_kind == null ? undefined : String(payload.media_kind).trim() || undefined,
-    media_execution: mediaExecution,
+    available_media_tools: availableMediaTools.length ? availableMediaTools : undefined,
     correlationMismatches: correlationMismatches.length ? correlationMismatches : undefined
   };
 }

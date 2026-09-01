@@ -1,4 +1,5 @@
 import type { ModelConfig } from "@codex-forge/protocol";
+import { resolveAutoParentDisplayName } from "./auto-parent-display-policy.ts";
 
 export function normalizeModelConfig(input: Partial<ModelConfig> | undefined, fallback: ModelConfig): ModelConfig {
   const optimizeFor =
@@ -24,6 +25,9 @@ export function normalizeModelConfig(input: Partial<ModelConfig> | undefined, fa
         ? input.disableResponseStorage
         : fallback.disableResponseStorage,
     systemPrompt: input?.systemPrompt?.trim() || fallback.systemPrompt,
-    optimizeFor
+    optimizeFor,
+    autoParentDisplayName: resolveAutoParentDisplayName(
+      input?.autoParentDisplayName ?? fallback.autoParentDisplayName
+    )
   };
 }

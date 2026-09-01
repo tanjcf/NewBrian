@@ -9,6 +9,9 @@ import {
   isVideoArtifactExtension,
   mimeTypeForArtifactPath
 } from "./workspace-artifact-protocol.js";
+import { buildSpreadsheetPreview } from "./spreadsheet-preview.ts";
+
+const spreadsheetExtensions = new Set([".xlsx", ".csv", ".tsv"]);
 
 interface WorkspaceEntry {
   id: string;
@@ -171,6 +174,30 @@ export class WorkspaceFileService {
           mimeType: mimeTypeForArtifactPath(targetPath),
           size: stat.size,
           previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
+        };
+      }
+      if (spreadsheetExtensions.has(extension)) {
+        const preview = await buildSpreadsheetPreview(buffer, extension);
+        return {
+          kind: "spreadsheet" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: extension === ".csv"
+            ? "text/csv"
+            : extension === ".tsv"
+              ? "text/tab-separated-values"
+              : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          size: stat.size,
+          sheets: preview.sheets
+        };
+      }
+      if (extension === ".xls") {
+        return {
+          ok: false as const,
+          error: "不支持旧版 .xls 格式，请转换为 .xlsx 或 .csv。",
+          reason: "preview_unsupported" as const,
+          path: relativePath,
+          name: basename(targetPath)
         };
       }
       return {

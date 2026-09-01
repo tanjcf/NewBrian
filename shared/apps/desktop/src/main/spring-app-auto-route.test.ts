@@ -5,7 +5,7 @@ const { fetchSpringAppAutoRoute } = await import(
   new URL("./spring-app-auto-route.ts", import.meta.url).href
 );
 
-test("fetchSpringAppAutoRoute posts to /v1/auto/route and maps image_gen decision", async () => {
+test("fetchSpringAppAutoRoute posts to /v1/auto/route and maps chat decision with media tools", async () => {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const decision = await fetchSpringAppAutoRoute({
     gatewayBaseUrl: "https://gateway.example/v1",
@@ -19,20 +19,22 @@ test("fetchSpringAppAutoRoute posts to /v1/auto/route and maps image_gen decisio
       calls.push({ url: String(url), init: init ?? {} });
       return new Response(JSON.stringify({
         schema_version: 1,
-        model: "hy-image-v3",
-        provider: "tokenhub",
-        channel: "image_gen",
+        model: "deepseek-v4-flash",
+        provider: "deepseek",
+        channel: "text_chat",
         task_class: "general",
         optimize_for: "intelligence",
         degraded: false,
-        reason_codes: ["requires_image", "needs_image_gen_channel"],
-        selected_reason: "image_gen",
+        reason_codes: ["hint_image_request", "media_via_tool_calls"],
+        selected_reason: "text_chat",
         parent_role: "orchestrator",
-        child_specialty: "image_gen",
+        child_specialty: "",
         fallback_models: [],
-        tool_name: "image_generate",
-        media_kind: "image",
-        media_execution: "server"
+        available_media_tools: ["image_generate", "video_generate"],
+        tools: [
+          { type: "function", function: { name: "image_generate" } },
+          { type: "function", function: { name: "video_generate" } }
+        ]
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
   });
@@ -47,45 +49,57 @@ test("fetchSpringAppAutoRoute posts to /v1/auto/route and maps image_gen decisio
   const body = JSON.parse(String(calls[0].init.body || "{}"));
   assert.equal(body.thread_id, "thread-a");
   assert.equal(body.request_id, "req-1");
-  assert.equal(decision.model, "hy-image-v3");
-  assert.equal(decision.channel, "image_gen");
-  assert.equal(decision.child_specialty, "image_gen");
+  assert.equal(decision.model, "deepseek-v4-flash");
+  assert.equal(decision.channel, "text_chat");
+  assert.equal(decision.child_specialty, "");
   assert.equal(decision.optimize_for, "intelligence");
-  assert.equal(decision.tool_name, "image_generate");
-  assert.equal(decision.media_execution, "server");
+  assert.deepEqual(decision.available_media_tools, ["image_generate", "video_generate"]);
 });
 
-test("fetchSpringAppAutoRoute surfaces Chinese no-image-model errors", async () => {
+test("fetchSpringAppAutoRoute surfaces gateway Chinese error for missing image model", async () => {
   await assert.rejects(
     () => fetchSpringAppAutoRoute({
-      gatewayBaseUrl: "https://gateway.example",
+      gatewayBaseUrl: "http://127.0.0.1:9/v1",
       bearerToken: "tok",
       latestUserText: "出图",
       fetchImpl: async () => new Response(JSON.stringify({
-        message: "当前套餐没有可用的文生图/出图模型（如 hy-image-v3）"
-      }), { status: 400 })
+        message: "当前套餐没有可用的文生图/出图模型（如 hy-image-v3），请在管理后台启用后再试。"
+      }), { status: 400, headers: { "Content-Type": "application/json" } })
     }),
-    /文生图|hy-image/
+    /文生图|出图模型/
   );
 });
 
-test("fetchSpringAppAutoRoute logs correlation mismatches without failing the route", async () => {
-  const diagnostics: string[] = [];
+test("fetchSpringAppAutoRoute reports correlation mismatches without failing", async () => {
+  const mismatches: string[] = [];
   const decision = await fetchSpringAppAutoRoute({
-    gatewayBaseUrl: "https://gateway.example/v1",
+    gatewayBaseUrl: "https://gateway.example",
     bearerToken: "tok",
-    latestUserText: "hello",
-    threadId: "thread-a",
-    requestId: "req-1",
-    onCorrelationMismatch: (message) => { diagnostics.push(message); },
+    latestUserText: "你好",
+    workspaceId: "ws-local",
+    threadId: "th-local",
+    requestId: "req-local",
+    onCorrelationMismatch: (message) => {
+      mismatches.push(message);
+    },
     fetchImpl: async () => new Response(JSON.stringify({
-      model: "gpt-test",
+      schema_version: 1,
+      model: "flash",
       channel: "text_chat",
-      thread_id: "thread-b",
-      request_id: "req-9"
-    }), { status: 200 })
+      task_class: "chat",
+      optimize_for: "balanced",
+      degraded: false,
+      reason_codes: [],
+      selected_reason: "ok",
+      parent_role: "orchestrator",
+      child_specialty: "",
+      fallback_models: [],
+      workspace_id: "ws-remote",
+      thread_id: "th-remote",
+      request_id: "req-remote"
+    }), { status: 200, headers: { "Content-Type": "application/json" } })
   });
-  assert.equal(decision.model, "gpt-test");
-  assert.equal(decision.correlationMismatches?.length, 2);
-  assert.match(diagnostics[0] || "", /local TurnScope remains authoritative/);
+  assert.equal(decision.model, "flash");
+  assert.ok(mismatches.length >= 1);
+  assert.match(mismatches[0]!, /auto\/route/);
 });

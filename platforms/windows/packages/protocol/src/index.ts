@@ -167,6 +167,8 @@ export interface WorkspaceThreadRecord {
   title: string;
   summary: string;
   scope?: "project" | "chat";
+  /** Scene affinity for INTERNAL_CHAT threads (「聊天」绑定场景). */
+  brainWorkspaceKey?: import("./workspace-types.js").BrainWorkspaceKey;
   /** User-visible chat vs internal sub-agent session (OpenClaw-style isolated child). */
   kind?: "user" | "subagent";
   /** Parent thread when kind is subagent. */
@@ -1185,6 +1187,8 @@ export interface AddWorkspaceThreadInput extends WorkspaceIdInput {
   title: string;
   summary: string;
   scope?: "project" | "chat";
+  /** Scene affinity when creating INTERNAL_CHAT / standalone chat threads. */
+  brainWorkspaceKey?: import("./workspace-types.js").BrainWorkspaceKey;
 }
 export interface ForkWorkspaceThreadInput extends WorkspaceIdInput {
   sourceThreadId: string;
@@ -1251,6 +1255,19 @@ export type WorkspaceArtifactPreview = {
   mimeType: string;
   size: number;
   previewUrl: string;
+} | {
+  kind: "spreadsheet";
+  path: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  sheets: Array<{
+    name: string;
+    headers: string[];
+    rows: string[][];
+    truncated: boolean;
+    totalRows: number;
+  }>;
 };
 export interface WorkspaceFileActionInput extends WorkspaceFileInput {
   action: "open-vscode" | "open-with" | "open-tool" | "copy-contents" | "reveal" | "save-as";
@@ -1297,6 +1314,8 @@ export interface ModelConfig {
   toolContext?: string;
   /** Auto Optimize For mode; default balanced when omitted. */
   optimizeFor?: ModelOptimizeFor;
+  /** Parent Auto user-visible label from route settings; not an upstream model id. */
+  autoParentDisplayName?: string;
   availableModels?: Array<{
     id: string;
     model: string;
@@ -1326,6 +1345,8 @@ export interface DesktopPolicyRule {
   decision: "allow" | "ask" | "deny";
   enabled?: boolean;
   reason?: string;
+  /** exact remembers a full approved command; prefix is legacy startsWith matching */
+  match?: "exact" | "prefix";
 }
 
 export interface OpenSystemToolInput {
@@ -1357,6 +1378,8 @@ export interface SynthesizeNovelSpeechInput {
   text: string;
   voiceId: string;
   voiceLabel?: string;
+  /** When false, return audio bytes without native playback (timeline preview sync). */
+  playback?: boolean;
 }
 
 export interface SynthesizeNovelSpeechResult {

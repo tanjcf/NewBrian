@@ -1,7 +1,21 @@
+import type { AnnotationGeometry } from "./annotation-geometry.js";
 import type { DocumentAnchor } from "./document-anchor.js";
 import type { BrainWorkspaceKey } from "./workspace-types.js";
 export { brainWorkspaceKeys } from "./workspace-types.js";
 export type { BrainWorkspaceKey } from "./workspace-types.js";
+export type {
+  AnnotationGeometry,
+  AnnotationGeometryStyle,
+  AnnotationMarkingColor,
+  AnnotationMarkingTool
+} from "./annotation-geometry.js";
+export {
+  ANNOTATION_MARKING_COLORS,
+  DEFAULT_ANNOTATION_GEOMETRY,
+  linesFromPreviewRect,
+  normalizeAnnotationGeometry,
+  validateAnnotationGeometry
+} from "./annotation-geometry.js";
 
 export interface BrainWorkspaceDto {
   workspaceKey: BrainWorkspaceKey;
@@ -306,12 +320,13 @@ export interface BrainArtifactRegisterInput extends BrainProjectGetInput {
 
 export interface BrainAnnotationDto {
   id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
-  anchor: DocumentAnchor; instruction: string; status: "OPEN" | "APPLIED" | "DISMISSED";
+  anchor: DocumentAnchor; geometry: AnnotationGeometry; instruction: string; status: "OPEN" | "APPLIED" | "DISMISSED";
   supersedesAnnotationId: string; selectedText: string; createdBy: string; createdAt: string;
 }
 
 export interface BrainAnnotationCreateInput extends BrainProjectGetInput {
   fileId: string; fileVersion: number; anchor: DocumentAnchor; instruction: string;
+  geometry?: Partial<AnnotationGeometry> & { style?: Partial<AnnotationGeometry["style"]> };
   status?: "OPEN" | "APPLIED" | "DISMISSED"; supersedesAnnotationId?: string;
 }
 
@@ -444,6 +459,8 @@ export const brainWorkspaceIpcChannels = {
   ,environmentEnsure: "brain:environment:ensure"
   ,environmentEnsureScene: "brain:environment:ensure-scene"
   ,filePreviewUrl: "brain:file:preview-url"
+  ,mediaImport: "brain:media:import"
+  ,mediaPeel: "brain:media:peel"
   ,gameWebTemplateCreate: "brain:game:web-template-create"
   ,gameUnrealTemplateCreate: "brain:game:unreal-template-create"
   ,gameDesignExport: "brain:game:design-export"

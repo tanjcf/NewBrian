@@ -11,7 +11,9 @@ import {
   findMatchingArtifactTab,
   formatFilePreviewStatus,
   isReusableArtifactPreview,
-  isStaleFilePreviewRequest
+  isStaleFilePreviewRequest,
+  patchArtifactTabsForRequest,
+  withFilePreviewTimeout
 } from "./file-preview-policy.ts";
 
 test("treats only newer sequences as current preview requests", () => {
@@ -42,6 +44,9 @@ test("classifies missing files as retryable preview errors", () => {
   const other = classifyFilePreviewError(new Error("Permission denied"));
   assert.equal(other.reason, "read_failed");
   assert.equal(other.retryable, false);
+  const timedOut = classifyFilePreviewError(new Error("文件读取超时，请重试。"));
+  assert.equal(timedOut.reason, "read_failed");
+  assert.equal(timedOut.retryable, true);
 });
 
 test("classifies soft IPC preview failures without aborting retryable reasons", () => {
@@ -63,6 +68,11 @@ test("classifies soft IPC preview failures without aborting retryable reasons", 
 test("detects empty artifact payloads", () => {
   assert.equal(classifyArtifactPreviewPayload({ kind: "docx", html: "" }).reason, "empty_artifact");
   assert.deepEqual(classifyArtifactPreviewPayload({ kind: "docx", html: "<p>ok</p>" }), { ok: true });
+  assert.equal(classifyArtifactPreviewPayload({ kind: "spreadsheet", sheets: [] }).reason, "empty_artifact");
+  assert.deepEqual(classifyArtifactPreviewPayload({
+    kind: "spreadsheet",
+    sheets: [{ name: "Sheet1", headers: ["A"], rows: [["1"]], truncated: false, totalRows: 1 }]
+  }), { ok: true });
 });
 
 test("builds user-visible status and durable diagnostic context", () => {
@@ -105,4 +115,26 @@ test("dedupes absolute, outputs-relative, and basename preview paths", () => {
   assert.equal(findMatchingArtifactTab(tabs, "龟途-第1章.md")?.tabPath, "outputs/龟途-第1章.md");
   assert.equal(isReusableArtifactPreview(tabs[0]), true);
   assert.equal(isReusableArtifactPreview({ ...tabs[0], error: "missing" }), false);
+});
+
+test("patches artifact tabs for completed requests even when inactive", () => {
+  const tabs = [
+    { tabPath: "outputs/a.docx", path: "outputs/a.docx", name: "a.docx", loading: true },
+    { tabPath: "outputs/b.docx", path: "outputs/b.docx", name: "b.docx", loading: false, kind: "docx", html: "<p>b</p>" }
+  ];
+  const next = patchArtifactTabsForRequest(tabs, ["outputs/a.docx"], {
+    loading: false,
+    kind: "docx",
+    html: "<p>a</p>"
+  });
+  assert.equal(next[0].loading, false);
+  assert.equal(next[0].html, "<p>a</p>");
+  assert.equal(next[1].html, "<p>b</p>");
+});
+
+test("times out hung preview reads", async () => {
+  await assert.rejects(
+    withFilePreviewTimeout(new Promise(() => {}), 20),
+    /文件读取超时/
+  );
 });

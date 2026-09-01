@@ -1,10 +1,13 @@
 import { resolveNovelTtsVoice } from "../shared/novel-tts-policy.js";
 import { NovelTtsKokoroEngine } from "./novel-tts-kokoro-engine.js";
+import { NovelTtsNativePlayer } from "./novel-tts-native-player.js";
 
 export type NovelTtsSynthesizeInput = {
   text: string;
   voiceId: string;
   voiceLabel?: string;
+  /** When false, synthesize WAV/base64 without native SoundPlayer playback (video timeline preview). */
+  playback?: boolean;
 };
 
 export type NovelTtsSynthesizeResult = {
@@ -14,6 +17,9 @@ export type NovelTtsSynthesizeResult = {
   detail?: string;
   provider?: string;
   runtime?: "gpu" | "cpu";
+  playingInMain?: boolean;
+  durationMs?: number;
+  audioPath?: string;
 };
 
 type NovelTtsServiceDependencies = {
@@ -21,9 +27,9 @@ type NovelTtsServiceDependencies = {
   readBearerToken: () => Promise<string>;
   appendDebugLog?: (message: string) => Promise<void> | void;
   fetchImpl?: typeof fetch;
-  /** When false, skip spring-app /v1/audio/speech (default: offline-first). */
   enableGatewaySpeech?: boolean;
   kokoroEngine?: NovelTtsKokoroEngine;
+  nativePlayer?: NovelTtsNativePlayer;
 };
 
 function trimText(value: string, max = 4_000) {
@@ -40,17 +46,23 @@ function buildSpeechUrl(baseUrl: string) {
 }
 
 /**
- * Offline-first novel TTS: Kokoro (GPU/CPU) when assets exist, optional gateway,
- * otherwise renderer falls back to speechSynthesis.
+ * Offline-first novel TTS:
+ * 1) Kokoro in isolated Node child (crash-safe)
+ * 2) Windows SoundPlayer for audible output
+ * 3) Renderer only drives follow-along UI
  */
 export class NovelTtsService {
   private readonly dependencies: NovelTtsServiceDependencies;
   private readonly kokoroEngine: NovelTtsKokoroEngine;
+  private readonly nativePlayer: NovelTtsNativePlayer;
   private remoteController: AbortController | null = null;
 
   constructor(dependencies: NovelTtsServiceDependencies) {
     this.dependencies = dependencies;
     this.kokoroEngine = dependencies.kokoroEngine ?? new NovelTtsKokoroEngine({
+      appendDebugLog: dependencies.appendDebugLog
+    });
+    this.nativePlayer = dependencies.nativePlayer ?? new NovelTtsNativePlayer({
       appendDebugLog: dependencies.appendDebugLog
     });
   }
@@ -60,18 +72,63 @@ export class NovelTtsService {
     if (!text) return { ok: false, detail: "没有可朗读的内容。" };
     const voice = resolveNovelTtsVoice(input.voiceId);
     const voiceLabel = input.voiceLabel || voice.label;
+    const wantPlayback = input.playback !== false;
+
+    this.nativePlayer.stop();
+
+    // Silent path for video timeline: durable WAV + base64, no SoundPlayer.
+    if (!wantPlayback) {
+      const file = await this.synthesizeToFile(input);
+      if (!file.ok || !file.audioPath) return { ok: false, detail: file.detail || "旁白生成失败。" };
+      try {
+        const { readFile } = await import("node:fs/promises");
+        const bytes = await readFile(file.audioPath);
+        return {
+          ok: true,
+          audioBase64: bytes.toString("base64"),
+          mimeType: file.mimeType || "audio/wav",
+          provider: file.provider,
+          runtime: file.runtime,
+          durationMs: file.durationMs,
+          audioPath: file.audioPath,
+          playingInMain: false
+        };
+      } catch (error) {
+        return { ok: false, detail: error instanceof Error ? error.message : "旁白音频读取失败。" };
+      }
+    }
 
     const kokoro = await this.kokoroEngine.synthesize({ text, voiceId: voice.id });
-    if (kokoro.ok && kokoro.audioBase64) {
+    if (kokoro.ok && kokoro.audioPath) {
       await this.dependencies.appendDebugLog?.(
-        `novel tts kokoro ok runtime=${kokoro.runtime || "cpu"} voice=${voice.id}->${voice.kokoroVoice}`
+        `novel tts kokoro ok runtime=${kokoro.runtime || "cpu"} voice=${voice.id}->${voice.kokoroVoice} path=${kokoro.audioPath}`
+      );
+      let audioBase64: string | undefined;
+      try {
+        const { readFile } = await import("node:fs/promises");
+        audioBase64 = (await readFile(kokoro.audioPath)).toString("base64");
+      } catch {
+        audioBase64 = undefined;
+      }
+      const played = await this.nativePlayer.playWavFile(kokoro.audioPath, kokoro.durationMs);
+      if (played.ok) {
+        return {
+          ok: true,
+          audioBase64,
+          provider: kokoro.provider || "kokoro-zh-offline",
+          runtime: kokoro.runtime,
+          playingInMain: true,
+          durationMs: played.durationMs || kokoro.durationMs,
+          mimeType: "audio/wav",
+          audioPath: kokoro.audioPath
+        };
+      }
+      await this.dependencies.appendDebugLog?.(
+        `novel tts native play miss detail=${played.detail || "unknown"}`
       );
       return {
-        ok: true,
-        audioBase64: kokoro.audioBase64,
-        mimeType: kokoro.mimeType || "audio/wav",
-        provider: kokoro.provider || "kokoro-zh-offline",
-        runtime: kokoro.runtime
+        ok: false,
+        detail: played.detail || "离线音频合成成功但无法播放。"
       };
     }
     await this.dependencies.appendDebugLog?.(
@@ -89,10 +146,21 @@ export class NovelTtsService {
     };
   }
 
+  /** Generate a durable WAV source for project workflows without starting playback. */
+  async synthesizeToFile(input: NovelTtsSynthesizeInput): Promise<NovelTtsSynthesizeResult> {
+    const text = trimText(input.text);
+    if (!text) return { ok: false, detail: "没有可生成的内容。" };
+    const voice = resolveNovelTtsVoice(input.voiceId);
+    const result = await this.kokoroEngine.synthesize({ text, voiceId: voice.id });
+    if (!result.ok || !result.audioPath) return { ok: false, detail: result.detail || "离线配音生成失败。" };
+    return { ok: true, audioPath: result.audioPath, mimeType: "audio/wav", provider: result.provider || "kokoro-zh-offline", runtime: result.runtime, durationMs: result.durationMs };
+  }
+
   cancel() {
     this.remoteController?.abort(new Error("Novel speech cancelled"));
     this.remoteController = null;
     this.kokoroEngine.cancel();
+    this.nativePlayer.stop();
   }
 
   private async synthesizeViaGateway(

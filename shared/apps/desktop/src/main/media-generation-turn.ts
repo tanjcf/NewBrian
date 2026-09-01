@@ -15,6 +15,8 @@ export type MediaGenerationTurnDeps = {
   model: string;
   prompt: string;
   imageUrl?: string;
+  /** Optional last-frame image URL (MiniMax H3 role=last_frame). */
+  lastFrameImageUrl?: string;
   kind: MediaGenerationKind;
   requestId: string;
   workspaceId?: string;
@@ -22,6 +24,8 @@ export type MediaGenerationTurnDeps = {
   turnId?: string;
   /** Prefer spring-app Auto tools when set (image_generate / video_generate). */
   toolName?: AutoMediaToolName | string;
+  /** Forwarded to video_generate / image_generate as spring-app `size` (e.g. 1920x1080). */
+  size?: string;
   mediaExecution?: "server" | "client";
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
@@ -29,7 +33,6 @@ export type MediaGenerationTurnDeps = {
   onJobId?: (mediaJobId: string) => void;
   onCorrelationMismatch?: (message: string) => void;
   pollIntervalMs?: number;
-  maxWaitMs?: number;
 };
 
 /**
@@ -90,7 +93,7 @@ export function resolveAutoMediaToolName(input: {
 }): AutoMediaToolName | null {
   const fromDecision = String(input.autoDecision?.media_tool?.tool_name || "").trim();
   const candidate = String(input.toolName || fromDecision || "").trim();
-  if (candidate === "image_generate" || candidate === "video_generate") {
+  if (candidate === "image_generate" || candidate === "video_generate" || candidate === "music_generate") {
     return candidate;
   }
   return toolNameForMediaKind(input.kind);
@@ -112,7 +115,7 @@ export async function executeMediaGenerationTurn(
   // the call; it must not bypass Auto and send the desktop to legacy
   // /images/generations or /videos routes.
   const preferServerTools = toolName != null
-    && (input.kind === "image" || input.kind === "video");
+    && (input.kind === "image" || input.kind === "video" || input.kind === "music");
   const rememberJobId = (job: GenerationJobSnapshot) => {
     const mediaJobId = String(job.id || "").trim();
     if (mediaJobId) input.onJobId?.(mediaJobId);
@@ -128,10 +131,11 @@ export async function executeMediaGenerationTurn(
         prompt: input.prompt,
         model: input.model,
         imageUrl: input.imageUrl,
+        lastFrameImageUrl: input.lastFrameImageUrl,
+        size: input.size,
         idempotencyKey: `codecn-${input.requestId}`,
         wait: false,
         pollIntervalMs: input.pollIntervalMs,
-        maxWaitMs: input.maxWaitMs,
         signal: input.signal,
         fetchImpl: input.fetchImpl,
         onProgress: input.onProgress,
@@ -162,9 +166,9 @@ export async function executeMediaGenerationTurn(
     model: input.model,
     prompt: input.prompt,
     imageUrl: input.imageUrl,
+    lastFrameImageUrl: input.lastFrameImageUrl,
     idempotencyKey: `codecn-${input.requestId}`,
     pollIntervalMs: input.pollIntervalMs,
-    maxWaitMs: input.maxWaitMs,
     signal: input.signal,
     fetchImpl: input.fetchImpl,
     onProgress: input.onProgress,

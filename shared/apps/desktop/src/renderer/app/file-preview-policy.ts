@@ -19,6 +19,26 @@ export type FilePreviewIssue = {
 export type FilePreviewOk = { ok: true };
 
 export const FILE_PREVIEW_MAX_ATTEMPTS = 4;
+export const FILE_PREVIEW_TIMEOUT_MS = 45_000;
+
+/** Bound workspace file reads so a hung IPC call cannot leave preview tabs loading forever. */
+export function withFilePreviewTimeout<T>(promise: Promise<T>, timeoutMs = FILE_PREVIEW_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("文件读取超时，请重试。"));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 /** Drop responses that no longer match the latest open request. */
 export function isStaleFilePreviewRequest(requestSequence: number, currentSequence: number) {
@@ -109,6 +129,17 @@ export function classifyArtifactPreviewPayload(file: {
       message: "演示文稿预览数据为空。"
     };
   }
+  if (kind === "spreadsheet") {
+    const sheets = Array.isArray((file as { sheets?: unknown[] }).sheets) ? (file as { sheets: unknown[] }).sheets : [];
+    if (!sheets.length) {
+      return {
+        ok: false,
+        reason: "empty_artifact",
+        retryable: true,
+        message: "表格预览内容为空。"
+      };
+    }
+  }
   return { ok: true };
 }
 
@@ -133,6 +164,14 @@ export function classifyFilePreviewError(error: unknown): FilePreviewIssue {
       reason: "preview_unsupported",
       retryable: false,
       message
+    };
+  }
+  if (/超时|timed out|timeout/i.test(message)) {
+    return {
+      ok: false,
+      reason: "read_failed",
+      retryable: true,
+      message: message || "文件读取超时，请重试。"
     };
   }
   return {
@@ -260,6 +299,34 @@ export function findMatchingArtifactTab<T extends { tabPath?: string; path?: str
   );
 }
 
+export function artifactTabMatchesRequest<T extends { tabPath?: string; path?: string; name?: string }>(
+  tab: T,
+  ...requestKeys: string[]
+) {
+  return requestKeys.some((key) =>
+    artifactPathsReferToSameFile(String(tab.tabPath || ""), key)
+    || artifactPathsReferToSameFile(String(tab.path || ""), key)
+    || (
+      !normalizeArtifactPathKey(key).includes("/")
+      && normalizeArtifactPathKey(String(tab.name || "")) === normalizeArtifactPathKey(key)
+    )
+  );
+}
+
+export function patchArtifactTabsForRequest<T extends { tabPath?: string; path?: string; name?: string }>(
+  tabs: readonly T[],
+  requestKeys: string[],
+  patch: Partial<T>
+) {
+  let changed = false;
+  const next = tabs.map((tab) => {
+    if (!artifactTabMatchesRequest(tab, ...requestKeys)) return tab;
+    changed = true;
+    return { ...tab, ...patch };
+  });
+  return changed ? next : tabs;
+}
+
 export function isReusableArtifactPreview(tab: {
   loading?: boolean;
   error?: string;
@@ -275,5 +342,6 @@ export function isReusableArtifactPreview(tab: {
   if (tab.binary) return true;
   if (String(tab.content || "").length > 0) return true;
   if (String(tab.kind || "") && (tab.dataUrl || tab.html || tab.previewUrl || tab.content)) return true;
+  if (String(tab.kind || "") === "spreadsheet" && Array.isArray((tab as { sheets?: unknown[] }).sheets) && (tab as { sheets: unknown[] }).sheets.length > 0) return true;
   return false;
 }

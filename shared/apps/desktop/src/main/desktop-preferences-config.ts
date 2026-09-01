@@ -36,7 +36,7 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
     includeVerificationSummary: true,
     reviewFindingsFirst: true,
     // Safe default: specialty skills wake only from explicit composer selection.
-    autoSkillEnabled: false
+    autoSkillEnabled: true
   },
   permissions: {
     fullAccess: false

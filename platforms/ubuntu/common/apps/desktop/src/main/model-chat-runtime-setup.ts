@@ -31,7 +31,11 @@ export interface ModelChatRuntimeSetupDependencies {
   publishWorkspaceFilePreview: (event: { workspaceId: string; filePath: string; kind: WorkspaceMediaKind }) => void;
 }
 
-async function openWorkspaceMediaForAgent(
+/**
+ * Open a workspace-relative image/video in the side panel.
+ * Used by workspace.open_* tools and Auto media download completion.
+ */
+export async function openWorkspaceMediaForAgent(
   deps: ModelChatRuntimeSetupDependencies,
   kind: WorkspaceMediaKind,
   targetPath: string

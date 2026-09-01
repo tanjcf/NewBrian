@@ -51,15 +51,21 @@ export class DelegatedAgentIpcService {
       let current = task;
       const status = String(current.status || "").toLowerCase();
       const terminal = status === "completed" || status === "failed" || status === "cancelled" || status === "canceled";
-      if (!terminal && this.dependencies.hasActiveRun && !this.dependencies.hasActiveRun(current.childThreadId)) {
+      const childThread = workspace.threads.find((thread) => thread.id === current.childThreadId);
+      const childState = childThread ? await this.dependencies.readState(workspace, childThread) : undefined;
+      const checkpointAwaiting = childState?.agentCheckpoint?.status === "awaiting-approval";
+      if (
+        !terminal
+        && !checkpointAwaiting
+        && this.dependencies.hasActiveRun
+        && !this.dependencies.hasActiveRun(current.childThreadId)
+      ) {
         const failed = this.dependencies.failTask?.(
           current,
           "Child agent run is no longer active; marked failed so the parent can finish."
         );
         if (failed) current = failed;
       }
-      const childThread = workspace.threads.find((thread) => thread.id === current.childThreadId);
-      const childState = childThread ? await this.dependencies.readState(workspace, childThread) : undefined;
       return {
         ...current,
         checkpointStatus: childState?.agentCheckpoint?.status,
@@ -82,8 +88,12 @@ export class DelegatedAgentIpcService {
       throw new Error("Delegated child thread does not belong to the selected workspace.");
     }
     const childState = await this.dependencies.readState(workspace, childThread);
-    const canResume = (task.status === "running" || task.status === "queued")
-      && childState.agentCheckpoint?.status === "awaiting-approval";
+    const checkpointAwaiting = childState.agentCheckpoint?.status === "awaiting-approval";
+    const canResume = checkpointAwaiting && (
+      task.status === "running"
+      || task.status === "queued"
+      || Boolean(this.dependencies.hasActiveRun?.(input.childThreadId))
+    );
     if (!canResume) {
       return {
         ok: false,

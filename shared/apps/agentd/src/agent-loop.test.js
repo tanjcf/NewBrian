@@ -573,3 +573,50 @@ test("aborts after consecutive tool steps with no successful progress", async ()
   assert.equal(step, 3);
   assert.equal(events.some((event) => event.type === "agent_loop_failed" && event.payload?.reason === "no_progress"), true);
 });
+
+test("tool-loop policy feedback does not count as no-progress stall", async () => {
+  const tools = new ToolRegistry().register({
+    name: "web.search_official",
+    title: "Search",
+    description: "Search",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false },
+    async execute() {
+      return { ok: true, exitCode: 0, output: JSON.stringify({ count: 1, results: [] }) };
+    }
+  });
+  const loop = new AgentLoop({
+    toolRegistry: tools,
+    authorize: () => ({ decision: "allow" }),
+    noProgressStepLimit: 3,
+    loopDetection: {
+      enabled: true,
+      pairProgress: [
+        {
+          idleTool: "web.search_official",
+          progressTool: "web.read_official",
+          warningThreshold: 1,
+          criticalThreshold: 2
+        }
+      ]
+    }
+  });
+  loop.start([{ role: "user", content: "research" }]);
+  let step = 0;
+  const snapshot = await loop.advance(async () => {
+    step += 1;
+    if (step <= 5) {
+      return {
+        toolCalls: [{ id: `s-${step}`, name: "web.search_official", arguments: JSON.stringify({ query: `q-${step}` }) }]
+      };
+    }
+    return { content: "done after policy blocks", toolCalls: [] };
+  });
+  assert.equal(snapshot.status, "completed");
+  assert.equal(snapshot.finalContent, "done after policy blocks");
+  assert.ok(snapshot.messages.some((message) =>
+    message.role === "tool" && String(message.content).includes("without web.read_official")
+  ));
+});

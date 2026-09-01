@@ -10,6 +10,8 @@ import {
   shouldMainAgentHandleDirectly,
   type OrchestratorDecisionTrace
 } from "./agent-orchestrator-policy.ts";
+import { shouldAutoDelegateHeavyWork } from "./auto-orchestrator-policy.ts";
+import { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } from "../shared/product-flags.js";
 import {
   compareModelsByEffectivenessThenCost,
   ensureRoutingProfile,
@@ -145,8 +147,16 @@ export function looksLikeVideoGenerationRequest(text: string | undefined | null)
 const IMAGE_GEN_REQUEST_RE =
   /(?:文生图|画一[张幅只个]|生成一?[张幅].*(?:图|图片|海报|插画|壁纸|场景)|帮我画|画张|做张图|做[一]?[张幅].*(?:图|图片|海报|插画|壁纸|场景)|做出[一]?[张幅].*(?:图|图片|壁纸)|出[一]?[张幅]?图|出图|生成图片|生成海报|生成壁纸|做壁纸|画壁纸|桌面(?:图片|壁纸|背景)|壁纸|wallpaper|卡通.*(?:图|壁纸|场景)|3d?\s*动画|动画电影|电影风|两个人.*相遇|生成.*场景|做成.*壁纸|一张.*(?:图|壁纸|场景)|hy-image|tokenhub.*(?:image|图)|混元生图)/i;
 
+const MEDIA_CAPABILITY_QUESTION_RE =
+  /^(?:你|brain|codecn|ai|系统)?\s*(?:会|能|可以|是否可以|支持)\s*(?:直接)?\s*(?:生成|制作|画)\s*(?:图片|图像|图|视频|动画)\s*(?:吗|么|嘛|不|\?|？)?$/i;
+
+export function looksLikeMediaCapabilityQuestion(text: string | undefined | null): boolean {
+  return MEDIA_CAPABILITY_QUESTION_RE.test(String(text || "").trim());
+}
+
 export function looksLikeImageGenerationRequest(text: string | undefined | null): boolean {
   const trimmed = String(text || "").trim();
+  if (looksLikeMediaCapabilityQuestion(trimmed)) return false;
   if (looksLikeVideoGenerationRequest(trimmed)) return false;
   return IMAGE_GEN_REQUEST_RE.test(trimmed);
 }
@@ -179,7 +189,10 @@ export function classifyAutoTaskClass(input: {
   selectedSkillNames?: string[];
 }): AutoTaskClass {
   const skills = (input.selectedSkillNames ?? []).map((name) => String(name || "").toLowerCase());
-  if (skills.some((name) => name.includes("government") || name.includes("research-writing"))) {
+  if (
+    GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED
+    && skills.some((name) => name.includes("government") || name.includes("research-writing"))
+  ) {
     return "gov_write";
   }
   const text = String(input.text || "");
@@ -189,7 +202,12 @@ export function classifyAutoTaskClass(input: {
   }
   // Video generation needs tools / specialized models — never treat as light chat.
   if (looksLikeVideoGenerationRequest(trimmed)) return "general";
-  if (/政务|公文|政策|白皮书|调研报告|政府网|育儿补贴|通知公告/.test(text)) return "gov_write";
+  if (
+    GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED
+    && /政务|公文|政策|白皮书|调研报告|政府网|育儿补贴|通知公告/.test(text)
+  ) {
+    return "gov_write";
+  }
   if (/调研|检索|资料汇总|文献|研究/.test(text)) return "research";
   if (
     /代码|重构|bug|报错|编译|测试|pull request|\bpr\b|typescript|javascript|java|python|实现|修复|调试|排查|单元测试|集成测试|接口|api\b|sql\b|前端|后端|仓库|commit|分支/i
@@ -199,7 +217,7 @@ export function classifyAutoTaskClass(input: {
   }
   // Multi-step delivery / long-form writing needs a stronger parent model (pro), not flash.
   if (
-    /完整正文|整章|章节|docx|pdf|pptx|方案设计|架构设计|制作动画|分镜|交付|里程碑|子\s*agent|多步骤|端到端|从零|完整稿|长文|白皮书提纲/i
+    /完整正文|整章|章节|docx|pdf|pptx|\bppt\b|方案设计|架构设计|制作动画|分镜|交付|里程碑|子\s*agent|多步骤|端到端|从零|完整稿|长文|白皮书提纲|简报|导出/i
       .test(text)
     || (trimmed.length >= 80 && /写|生成|实现|完成|继续|请帮|帮我/.test(text))
   ) {
@@ -891,13 +909,19 @@ export function resolveAutoConstraintDecision(input: {
       text: input.latestUserText,
       selectedSkillNames: input.selectedSkillNames
     });
+    const autoDelegateHeavy = shouldAutoDelegateHeavyWork({
+      taskClass,
+      latestUserText: input.latestUserText
+    });
     const preferLight = preferVideo || preferMusic || prefer3d || preferOcr
       ? false
-      : prefersLightAutoModel({
-          taskClass,
-          optimizeFor,
-          latestUserText: input.latestUserText
-        });
+      : autoDelegateHeavy
+        ? true
+        : prefersLightAutoModel({
+            taskClass,
+            optimizeFor,
+            latestUserText: input.latestUserText
+          });
     const chatPool = available.filter((item) => !isSpecializedNonChatModel(item));
     const videoFallbackPool = preferVideo
       ? available.filter((item) => isVideoCapableModel(item))
@@ -944,9 +968,11 @@ export function resolveAutoConstraintDecision(input: {
       ? (videoFallbackPool.length ? "video_capable" : "video_model_unavailable_use_tools")
       : preferVision
         ? "vision_capable"
-        : preferLight
-          ? "prefer_flash_for_light_task"
-          : "prefer_pro_for_heavy_task";
+        : autoDelegateHeavy
+          ? "prefer_flash_for_orchestrator"
+          : preferLight
+            ? "prefer_flash_for_light_task"
+            : "prefer_pro_for_heavy_task";
     const modeNote = videoFallbackPool.length
       ? "（视频）"
       : visionFallbackPool.length
@@ -958,7 +984,7 @@ export function resolveAutoConstraintDecision(input: {
             : "（高质量）";
     const orchestrator = buildOrchestratorTrace({
       intent: direct.intent,
-      handledBy: "main",
+      handledBy: autoDelegateHeavy ? "router" : "main",
       canHandleDirectly: false,
       reasonCodes: [
         ...direct.reasonCodes,
@@ -966,6 +992,7 @@ export function resolveAutoConstraintDecision(input: {
         "routing_pool_empty",
         "degraded_first_available",
         strengthCode,
+        ...(autoDelegateHeavy ? ["auto_orchestrator_delegate_first"] : []),
         ...(videoFallbackPool.length
           ? ["requires_video", "video_capable"]
           : preferVideo
@@ -1051,6 +1078,10 @@ export function resolveAutoConstraintDecision(input: {
   const prefer3d = looksLike3dGenerationRequest(input.latestUserText);
   const preferOcr = looksLikeOcrRequest(input.latestUserText) && Boolean(input.hasImageAttachments);
   const preferVision = Boolean(input.hasImageAttachments) && !preferVideo && !preferImage && !preferOcr;
+  const autoDelegateHeavy = shouldAutoDelegateHeavyWork({
+    taskClass,
+    latestUserText: input.latestUserText
+  });
   const videoEligible = eligible.filter((item) => isVideoCapableModel(item));
   const imageEligible = eligible.filter((item) => isImageGenerationCapableModel(item));
   const musicEligible = eligible.filter((item) => isMusicCapableModel(item));
@@ -1092,11 +1123,13 @@ export function resolveAutoConstraintDecision(input: {
 
   const preferLight = preferVideo || preferImage || preferMusic || prefer3d || preferOcr
     ? false
-    : prefersLightAutoModel({
-        taskClass,
-        optimizeFor,
-        latestUserText: input.latestUserText
-      });
+    : autoDelegateHeavy
+      ? true
+      : prefersLightAutoModel({
+          taskClass,
+          optimizeFor,
+          latestUserText: input.latestUserText
+        });
   const ranked = [...constrained].sort((left, right) => {
     // Heavy/general delivery: effectiveness first, cost only as a near-tie breaker.
     if (!preferVision && preferLight === false) {
@@ -1131,7 +1164,16 @@ export function resolveAutoConstraintDecision(input: {
       optimizeFor
     }) || left.model.localeCompare(right.model);
   });
-  const selectedModel = ranked[0];
+  const selectedModel = autoDelegateHeavy
+    ? (pickParentAgentModelForTask({
+        availableModels: constrained,
+        taskClass,
+        optimizeFor,
+        latestUserText: input.latestUserText,
+        defaultModel: subscriptionSafeDefault || undefined,
+        preferLight: true
+      }) ?? ranked[0])
+    : ranked[0];
   const reasonCodes = [
     ...blockedDefaultAgentCodes,
     `task_class=${taskClass}`,
@@ -1152,10 +1194,13 @@ export function resolveAutoConstraintDecision(input: {
               ? (requireOcr ? "ocr_capable" : "ocr_model_unavailable_use_vision")
               : preferVision
                 ? "vision_capable"
-                : preferLight
-                  ? "prefer_flash_for_light_task"
-                  : "prefer_pro_for_heavy_task"
+                : autoDelegateHeavy
+                  ? "prefer_flash_for_orchestrator"
+                  : preferLight
+                    ? "prefer_flash_for_light_task"
+                    : "prefer_pro_for_heavy_task"
   ];
+  if (autoDelegateHeavy) reasonCodes.push("auto_orchestrator_delegate_first");
   if (requireVideo) reasonCodes.push("requires_video", "video_capable");
   else if (preferVideo) reasonCodes.push("needs_video_gen_channel", "prefer_pro_for_video_task");
   if (requireImage) reasonCodes.push("requires_image", "image_capable");
@@ -1183,7 +1228,12 @@ export function resolveAutoConstraintDecision(input: {
     intent: direct.intent,
     handledBy: "router",
     canHandleDirectly: false,
-    reasonCodes: [...direct.reasonCodes, ...blockedDefaultAgentCodes, ...reasonCodes]
+    reasonCodes: [
+      ...direct.reasonCodes,
+      ...blockedDefaultAgentCodes,
+      ...reasonCodes,
+      ...(autoDelegateHeavy ? ["handled_by_orchestrator"] : [])
+    ]
   });
   return {
     ...baseDecisionFields({

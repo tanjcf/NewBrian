@@ -300,3 +300,30 @@ test("writeAsk=always asks for write tools without weakening shell hard denies",
     permissionMode: "full"
   }).decision, "deny");
 });
+
+test("exact remembered approval allows the same command and not a longer prefix match", () => {
+  const engine = new PolicyEngine({
+    rules: [{
+      id: "remember-1",
+      toolName: "shell.exec",
+      commandPrefix: "where.exe ffmpeg",
+      decision: "allow",
+      match: "exact",
+      reason: "user-approval-memory"
+    }]
+  });
+  assert.equal(engine.evaluate({
+    toolName: "shell.exec",
+    arguments: { command: "WHERE.EXE  ffmpeg" },
+    descriptor,
+    workspacePath: workspace,
+    permissionMode: "approval"
+  }).decision, "allow");
+  assert.equal(engine.evaluate({
+    toolName: "shell.exec",
+    arguments: { command: "where.exe ffmpeg --help-extra" },
+    descriptor,
+    workspacePath: workspace,
+    permissionMode: "approval"
+  }).decision, "ask");
+});

@@ -9,6 +9,8 @@ import { ThreadContextMenu } from "./app/ThreadContextMenu";
 import { AuthLoadingScreen, BootstrapBlockingScreen } from "./app/BootstrapScreens";
 import { createMcpServerActions } from "./app/mcp-server-actions";
 import { useDesktopCore } from "./app/useDesktopCore";
+import { reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { snapshotToDisplayMessages } from "./app/thread-hydration";
 import { SidebarIcon } from "./app/SidebarIcon";
 import type {
   AutomationSpec,
@@ -20,6 +22,7 @@ import type {
   WorkspaceThreadRecord,
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
+import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
 import {
   SettingsNavIcon,
   SettingsSwitch,
@@ -75,11 +78,14 @@ import type {
 } from "./app/desktop-model";
 
 function normalizeModelErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message
+  const message = (error instanceof Error ? error.message : String(error))
     .replace(/^Error invoking remote method 'phase1:chat-with-model': Error:\s*/i, "")
     .replace(/^Error invoking remote method \"phase1:chat-with-model\": Error:\s*/i, "")
     .trim();
+  if (/this operation was aborted|aborterror|model request aborted|agent loop was cancelled/i.test(message)) {
+    return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
+  }
+  return message;
 }
 
 function normalizeLoginErrorMessage(error: unknown) {
@@ -147,20 +153,62 @@ export function App() {
     setSelectedWorkspaceIdState(next);
   };
   const setSelectedThreadId = (value: SetStateAction<string>) => {
-    const next = typeof value === "function" ? value(selectedThreadIdRef.current) : value;
+    const previous = selectedThreadIdRef.current;
+    const next = typeof value === "function" ? value(previous) : value;
+    if (previous === next) {
+      return;
+    }
     selectedThreadIdRef.current = next;
     setSelectedThreadIdState(next);
-    // 切换线程时立刻从缓存恢复消息，避免在 activateWorkspaceThread 返回前仍显示上一个线程的内容（串线程展示）。
     if (next) {
       const cached = threadMessagesRef.current.get(next);
-      if (cached) {
+      if (cached?.length) {
         chatMessagesRef.current = cached;
         setChatMessagesState(cached);
-      } else {
+      } else if (previous !== next) {
         chatMessagesRef.current = [];
         setChatMessagesState([]);
       }
     }
+  };
+
+  const hydrateWorkspaceThread = (
+    workspaceId: string,
+    threadId: string,
+    options?: { display?: boolean }
+  ) => {
+    if (!api || !workspaceId || !threadId) return;
+    void api.activateWorkspaceThread({ workspaceId, threadId }).then((nextSnapshot) => {
+      if (selectedThreadIdRef.current !== threadId) return;
+      const restoredMessages = snapshotToDisplayMessages(nextSnapshot);
+      const current = threadMessagesRef.current.get(threadId) ?? chatMessagesRef.current;
+      const reconciled = reconcileThreadDisplayMessages(current, restoredMessages);
+      updateThreadMessages(threadId, () => reconciled, { display: options?.display ?? true });
+      setSnapshot(nextSnapshot);
+    }).catch(() => undefined);
+  };
+
+  const selectWorkspaceThread = (
+    workspaceId: string,
+    threadId: string,
+    options?: { force?: boolean }
+  ) => {
+    const normalizedWorkspaceId = String(workspaceId || "").trim();
+    const normalizedThreadId = String(threadId || "").trim();
+    if (!normalizedThreadId) return;
+    if (normalizedWorkspaceId) {
+      selectedWorkspaceIdRef.current = normalizedWorkspaceId;
+      setSelectedWorkspaceIdState(normalizedWorkspaceId);
+    }
+    const switching = selectedThreadIdRef.current !== normalizedThreadId;
+    if (switching) {
+      setSelectedThreadId(normalizedThreadId);
+    } else if (!options?.force) {
+      return;
+    }
+    hydrateWorkspaceThread(normalizedWorkspaceId || selectedWorkspaceIdRef.current, normalizedThreadId, {
+      display: true
+    });
   };
   useEffect(() => {
     if (desktopPreferences.permissions?.fullAccess) {
@@ -187,13 +235,14 @@ export function App() {
 
   const updateThreadMessages = (
     threadId: string,
-    updater: ModelChatMessage[] | ((current: ModelChatMessage[]) => ModelChatMessage[])
+    updater: ModelChatMessage[] | ((current: ModelChatMessage[]) => ModelChatMessage[]),
+    options?: { display?: boolean }
   ) => {
     const current = threadMessagesRef.current.get(threadId) ??
       (selectedThreadIdRef.current === threadId ? chatMessagesRef.current : []);
     const next = typeof updater === "function" ? updater(current) : updater;
     threadMessagesRef.current.set(threadId, next);
-    if (selectedThreadIdRef.current === threadId) {
+    if (options?.display || selectedThreadIdRef.current === threadId) {
       chatMessagesRef.current = next;
       setChatMessagesState(next);
     }
@@ -633,6 +682,9 @@ export function App() {
   );
   const conversationTurns = useMemo<ConversationTurn[]>(() => {
     if (chatMessages.length === 0) {
+      if (selectedThread?.id && !isComposingNewThread) {
+        return [];
+      }
       return [
         {
           id: "thread-summary",
@@ -684,7 +736,7 @@ export function App() {
     }
 
     return turns;
-  }, [chatMessages, isCurrentThreadAskingModel, latestAssistantMessage]);
+  }, [chatMessages, isComposingNewThread, isCurrentThreadAskingModel, latestAssistantMessage, selectedThread?.id]);
   const latestUserMessage =
     [...chatMessages].reverse().find((message) => message.role === "user")?.content ??
     "继续推进当前项目窗口的对话任务流。";
@@ -1036,9 +1088,15 @@ export function App() {
     setLoginForm(updater);
   }
 
-  async function askModel(draftOverride?: QueuedComposerDraft) {
+  async function askModel(draftOverride?: QueuedComposerDraft & {
+    forceStandaloneChat?: boolean;
+    forceProjectThread?: boolean;
+    brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
+  }) {
     const draftQuestion = draftOverride?.question ?? question;
     const draftImages = draftOverride?.images ?? composerImages;
+    const forceStandaloneChat = Boolean(draftOverride?.forceStandaloneChat);
+    const forceProjectThread = Boolean(draftOverride?.forceProjectThread);
     if (!api || (!draftQuestion.trim() && draftImages.length === 0)) {
       return;
     }
@@ -1072,15 +1130,26 @@ export function App() {
       return;
     }
 
-    const composingNewThread = isComposingNewThread;
-    const composingThreadScope = newThreadScope;
+    const composingNewThread = forceStandaloneChat || isComposingNewThread;
+    const composingThreadScope = forceStandaloneChat ? "chat" : (forceProjectThread ? "project" : newThreadScope);
+    const effectiveChatUsesProject = forceStandaloneChat ? false : (forceProjectThread ? true : chatUsesProject);
+    if (forceStandaloneChat) {
+      setChatUsesProject(false);
+      setNewThreadScope("chat");
+      setIsComposingNewThread(true);
+    } else if (forceProjectThread) {
+      setChatUsesProject(true);
+      setNewThreadScope("project");
+    }
     const effectiveThreadScope: "project" | "chat" =
-      composingThreadScope === "project" || (composingThreadScope === "chat" && chatUsesProject)
+      composingThreadScope === "project" || (composingThreadScope === "chat" && effectiveChatUsesProject)
         ? "project"
         : "chat";
-    let targetWorkspaceId = currentWorkspaceId;
-    let targetWorkspace = currentWorkspace;
-    let targetThread = currentThread;
+    let targetWorkspaceId = forceStandaloneChat ? INTERNAL_CHAT_WORKSPACE_ID : currentWorkspaceId;
+    let targetWorkspace = forceStandaloneChat
+      ? workspaceCatalog.find((workspace) => workspace.id === INTERNAL_CHAT_WORKSPACE_ID) ?? currentWorkspace
+      : currentWorkspace;
+    let targetThread = forceStandaloneChat ? undefined : currentThread;
     let targetThreadTitle = selectedThread?.title || "新对话";
     if (composingNewThread) {
       if (!targetWorkspaceId) {
@@ -1095,7 +1164,10 @@ export function App() {
           workspaceId: targetWorkspaceId,
           title: titleText,
           summary: effectiveThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新线程。",
-          scope: effectiveThreadScope
+          scope: effectiveThreadScope,
+          ...(targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID && draftOverride?.brainWorkspaceKey
+            ? { brainWorkspaceKey: draftOverride.brainWorkspaceKey }
+            : {})
         });
         const nextWorkspace = nextCatalog.find((workspace) => workspace.id === targetWorkspaceId);
         const newestThread = nextWorkspace?.threads[0];
@@ -1119,7 +1191,12 @@ export function App() {
           setExpandedThreadListWorkspaceIds((current) => new Set([...current, targetWorkspaceId]));
         }
         setIsComposingNewThread(false);
-        setNewThreadScope("chat");
+        if (forceProjectThread) {
+          setNewThreadScope("project");
+          setChatUsesProject(true);
+        } else {
+          setNewThreadScope("chat");
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setErrorMessage(message);
@@ -2235,6 +2312,7 @@ export function App() {
         sortThreadsForMenu={sortThreadsForMenu}
         setSelectedWorkspaceId={setSelectedWorkspaceId}
         setSelectedThreadId={setSelectedThreadId}
+        selectWorkspaceThread={selectWorkspaceThread}
         setUnreadThreadIds={setUnreadThreadIds}
         pinnedThreadIds={pinnedThreadIds}
         unreadThreadIds={unreadThreadIds}

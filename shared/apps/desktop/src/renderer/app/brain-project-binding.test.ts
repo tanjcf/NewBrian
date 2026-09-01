@@ -39,6 +39,16 @@ test("only syncs brain conversation threads for explicit brain-conversation rows
     boundWorkspaceId: "workspace-a"
   }), false);
   assert.equal(shouldSyncBrainConversationThread({
+    sidebarRow: "chat:workspace-a:thread-1",
+    selectedWorkspaceId: "workspace-a",
+    boundWorkspaceId: "workspace-a"
+  }), false);
+  assert.equal(shouldSyncBrainConversationThread({
+    sidebarRow: "task:workspace-a:thread-1",
+    selectedWorkspaceId: "workspace-a",
+    boundWorkspaceId: "workspace-a"
+  }), false);
+  assert.equal(shouldSyncBrainConversationThread({
     sidebarRow: "brain-conversation:conv-a",
     selectedWorkspaceId: "workspace-a",
     boundWorkspaceId: "workspace-b"

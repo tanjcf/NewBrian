@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import JSZip from "jszip";
 import type { SkillSpec } from "@codex-forge/protocol";
+import { assertUserSkillWriteAllowed } from "./user-skill-write-guard.js";
 import type {
   OpenClawSkillPackageInfo,
   OpenClawSkillSecurityScan
@@ -187,15 +188,19 @@ export async function installOpenClawSkillPackage(
     const targetDir = join(userSkillRoot, skillName);
     assertManagedTarget(userSkillRoot, targetDir);
 
-    if (!options.force) {
-      try {
-        await fs.access(targetDir);
-        throw new Error(`Skill already installed at ${targetDir}. Pass force=true to replace.`);
-      } catch (error) {
-        if ((error as Error).message.includes("already installed")) throw error;
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
+    let targetExists = false;
+    try {
+      await fs.access(targetDir);
+      targetExists = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    assertUserSkillWriteAllowed({
+      targetPath: targetDir,
+      exists: targetExists,
+      force: options.force,
+      policy: "install"
+    });
 
     await fs.rm(targetDir, { recursive: true, force: true });
     await fs.mkdir(dirname(targetDir), { recursive: true });

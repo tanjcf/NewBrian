@@ -618,6 +618,10 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       if (!batch.length) return;
       const last = batch[batch.length - 1];
       const lastType = typeof last?.type === "string" ? last.type : "";
+      // Persist tool_call only together with its terminal boundary (result/approval/failure).
+      if (lastType === "tool_call") {
+        return;
+      }
       if (!["tool_call", "tool_result", "approval_requested", "agent_loop_failed"].includes(lastType)) {
         return;
       }

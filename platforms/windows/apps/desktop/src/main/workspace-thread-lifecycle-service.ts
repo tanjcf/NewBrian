@@ -10,6 +10,7 @@ export interface AddWorkspaceThreadInput {
   title: string;
   summary: string;
   scope?: "project" | "chat";
+  brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
 }
 
 export interface ForkWorkspaceThreadInput {
@@ -81,6 +82,7 @@ export class WorkspaceThreadLifecycleService {
       title: input.title,
       summary: input.summary,
       scope: input.scope,
+      ...(input.brainWorkspaceKey ? { brainWorkspaceKey: input.brainWorkspaceKey } : {}),
       lastEventSummary: "线程已创建"
     });
     const nextCatalog = await this.dependencies.writeCatalog(catalog.workspaces.map((item) =>

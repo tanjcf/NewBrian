@@ -339,7 +339,16 @@ declare global {
       startMusicRender: (input: { projectId: string; outputRelativePath: string }) => Promise<any>;
       getMusicRenderStatus: (input: { renderId: string }) => Promise<any>;
       cancelMusicRender: (input: { renderId: string }) => Promise<any>;
-      generateBrainSceneMedia: (input: { projectId: string; kind: "video" | "music" | "image"; prompt: string; model?: string; shotIndex?: number }) => Promise<{ content: string; kind: string }>;
+      generateBrainSceneMedia: (input: {
+        projectId: string;
+        kind: "video" | "music" | "image";
+        prompt: string;
+        model?: string;
+        shotIndex?: number;
+        size?: string;
+        imageUrl?: string;
+        lastFrameImageUrl?: string;
+      }) => Promise<{ content: string; kind: string; clipRelativePath?: string; fileId?: string; ready?: boolean; jobId?: string }>;
       bootstrap: () => Promise<BootstrapPayload>;
       getSnapshot: () => Promise<PhaseOneSnapshot>;
       getGoal: () => Promise<ThreadGoalState | null>;
@@ -526,7 +535,7 @@ declare global {
         size: number;
       }>;
       previewWorkspaceFile: (input: { workspaceId: string; filePath: string }) => Promise<{
-        kind: "pdf" | "docx" | "pptx" | "html" | "image" | "video";
+        kind: "pdf" | "docx" | "pptx" | "html" | "image" | "video" | "spreadsheet";
         path: string;
         name: string;
         mimeType: string;
@@ -535,6 +544,13 @@ declare global {
         html?: string;
         content?: string;
         previewUrl?: string;
+        sheets?: Array<{
+          name: string;
+          headers: string[];
+          rows: string[][];
+          truncated: boolean;
+          totalRows: number;
+        }>;
       }>;
       openWorkspaceFile: (input: { workspaceId: string; filePath: string }) => Promise<{ ok: boolean; detail: string; path: string }>;
       performWorkspaceFileAction: (input: { workspaceId: string; filePath: string; action: "open-vscode" | "open-with" | "open-tool" | "copy-contents" | "reveal" | "save-as"; toolId?: string }) => Promise<{ ok: boolean; detail: string; content?: string }>;
@@ -658,6 +674,7 @@ declare global {
         title: string;
         summary: string;
         scope?: "project" | "chat";
+        brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
       }) => Promise<WorkspaceCatalogItem[]>;
       forkWorkspaceThread: (input: {
         workspaceId: string;

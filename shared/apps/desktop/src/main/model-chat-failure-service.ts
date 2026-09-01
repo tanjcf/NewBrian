@@ -63,12 +63,20 @@ export class ModelChatFailureService {
     thread: WorkspaceThreadRecord;
     requestId: string;
     turnId: string;
+    model?: string;
     reasoningSummary: string;
     partialContent?: string;
     error: unknown;
   }) {
     const failureMessage = input.error instanceof Error ? input.error.message : String(input.error);
-    const failureCode = input.error instanceof Error && "code" in input.error
+    const httpStatus = input.error instanceof Error && "status" in input.error
+      ? Number((input.error as { status?: unknown }).status)
+      : /\(403\)|HTTP 403|403:/i.test(failureMessage) ? 403 : undefined;
+    const failureCode = httpStatus === 403
+      ? "model_forbidden"
+      : /Agent loop stalled|no tool progress across/i.test(failureMessage)
+        ? "agent_loop_stalled"
+      : input.error instanceof Error && "code" in input.error
       ? String((input.error as { code?: unknown }).code ?? "")
       : /reasoning_content[\s\S]{0,120}must be passed back|must be passed back[\s\S]{0,120}reasoning_content/i.test(failureMessage)
         ? "gateway_reasoning_context_required"
@@ -118,6 +126,8 @@ export class ModelChatFailureService {
       stage: "model_request",
       message: failureMessage,
       code: failureCode,
+      ...(httpStatus ? { httpStatus } : {}),
+      ...(input.model ? { model: input.model } : {}),
       ...(gatewayReasoningRepair ? {
         httpStatus: 400,
         remediation: "retry_without_stale_thinking_context"
@@ -141,6 +151,8 @@ export class ModelChatFailureService {
         turnId: input.turnId,
         stage: "model_request",
         failureCode,
+        ...(httpStatus ? { httpStatus } : {}),
+        ...(input.model ? { model: input.model } : {}),
         ...(gatewayReasoningRepair ? {
           httpStatus: 400,
           remediation: "retry_without_stale_thinking_context"

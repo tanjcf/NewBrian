@@ -51,7 +51,8 @@ import {
   sanitizeVisibleModelContent
 } from "./model-stream-visibility.js";
 import { selectModelRequestAuth } from "./model-request-auth-policy.js";
-import { configureModelChatRuntime, type ModelChatRuntimeSetupDependencies } from "./model-chat-runtime-setup.js";
+import { configureModelChatRuntime, openWorkspaceMediaForAgent, type ModelChatRuntimeSetupDependencies } from "./model-chat-runtime-setup.js";
+import { registerAutoMediaAgentTools } from "./auto-media-agent-tools.js";
 import {
   inferSkillRoutingHint,
   readSkillRoutingHintFromDir,
@@ -431,6 +432,33 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
     buildShellEnv: deps.buildWorkspaceShellEnvWithPreferences,
     configureRuntime: async (targetRuntime, workspace, thread) => {
       await configureModelChatRuntime(deps.runtimeSetup, targetRuntime as never, workspace, thread);
+      registerAutoMediaAgentTools(targetRuntime as never, {
+        workspaceId: workspace.id,
+        threadId: thread.id,
+        workspaceRoot: workspace.path,
+        openLocalMedia: async ({ kind, relativePath }) => {
+          await openWorkspaceMediaForAgent(deps.runtimeSetup, kind, relativePath);
+        },
+        resolveAbortSignal: () => {
+          for (const task of deps.concurrentModelTasks.values()) {
+            if (task.workspaceId === workspace.id && task.threadId === thread.id) {
+              return task.abortController.signal;
+            }
+          }
+          return undefined;
+        },
+        resolveGateway: async () => {
+          let baseUrl = await deps.readGatewayBaseUrl();
+          const authState = await deps.readDesktopAuthState();
+          const authSelection = selectModelRequestAuth(authState as never, "");
+          let bearerToken = authSelection.bearerToken;
+          if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
+            bearerToken = "codecn-e2e";
+          }
+          if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
+          return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
+        }
+      });
     },
     readPolicyRules: deps.readPolicyRules,
     readThreadState: deps.readThreadState,

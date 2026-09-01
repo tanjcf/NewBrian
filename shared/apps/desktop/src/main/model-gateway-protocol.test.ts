@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 
 const protocol = await import(new URL("./model-gateway-protocol.ts", import.meta.url).href);
@@ -33,6 +33,29 @@ test("selects model credentials with explicit secure precedence", () => {
   }, "configured"), {
     source: "desktop_access_token", bearerToken: "access", useGatewayBaseUrl: true
   });
+
+  const previousBypass = process.env.CODECN_E2E_AUTH_BYPASS;
+  const previousBaseUrl = process.env.CODECN_MODEL_BASE_URL;
+  process.env.CODECN_E2E_AUTH_BYPASS = "1";
+  process.env.CODECN_MODEL_BASE_URL = "http://127.0.0.1:8790/v1";
+  try {
+    assert.deepEqual(authPolicy.selectModelRequestAuth({
+      mode: "desktop_token", access_token: " live-user-token "
+    }, ""), {
+      source: "desktop_access_token", bearerToken: "live-user-token", useGatewayBaseUrl: true
+    });
+    assert.deepEqual(authPolicy.selectModelRequestAuth({
+      mode: "desktop_token", access_token: ""
+    }, ""), {
+      source: "dev_e2e_bypass", bearerToken: "codecn-e2e", useGatewayBaseUrl: true
+    });
+  } finally {
+    if (previousBypass === undefined) delete process.env.CODECN_E2E_AUTH_BYPASS;
+    else process.env.CODECN_E2E_AUTH_BYPASS = previousBypass;
+    if (previousBaseUrl === undefined) delete process.env.CODECN_MODEL_BASE_URL;
+    else process.env.CODECN_MODEL_BASE_URL = previousBaseUrl;
+  }
+
   assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, " configured ").source, "configured_api_key");
   assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, "").source, "none");
   assert.equal(authPolicy.selectModelRequestAuth(null, " ").source, "none");

@@ -1,4 +1,9 @@
 import { resolveNovelTtsVoice } from "../shared/novel-tts-policy.js";
+import {
+  resolveMinimaxNarrationVoice,
+  type MinimaxNarrationVoiceId
+} from "../shared/minimax-narration-voices.js";
+import { synthesizeMinimaxSyncTts } from "./minimax-tts-gateway.js";
 import { NovelTtsKokoroEngine } from "./novel-tts-kokoro-engine.js";
 import { NovelTtsNativePlayer } from "./novel-tts-native-player.js";
 
@@ -6,6 +11,10 @@ export type NovelTtsSynthesizeInput = {
   text: string;
   voiceId: string;
   voiceLabel?: string;
+  /** When false, synthesize WAV/base64 without native SoundPlayer playback (video timeline preview). */
+  playback?: boolean;
+  /** Prefer MiniMax gateway TTS before Kokoro (video narration). */
+  preferGateway?: boolean;
 };
 
 export type NovelTtsSynthesizeResult = {
@@ -25,6 +34,7 @@ type NovelTtsServiceDependencies = {
   readBearerToken: () => Promise<string>;
   appendDebugLog?: (message: string) => Promise<void> | void;
   fetchImpl?: typeof fetch;
+  /** When true, MiniMax sync_tts is attempted (gateway-first when preferGateway / silent path). */
   enableGatewaySpeech?: boolean;
   kokoroEngine?: NovelTtsKokoroEngine;
   nativePlayer?: NovelTtsNativePlayer;
@@ -36,18 +46,16 @@ function trimText(value: string, max = 4_000) {
   return `${text.slice(0, max).trimEnd()}……`;
 }
 
-function buildSpeechUrl(baseUrl: string) {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (/\/v1$/i.test(normalized)) return `${normalized}/audio/speech`;
-  if (/\/v1\//i.test(normalized)) return `${normalized.replace(/\/$/, "")}/audio/speech`;
-  return `${normalized}/v1/audio/speech`;
+function isMinimaxVoiceId(voiceId: string) {
+  return /^(narration_default|narration_brighter|narration_deeper)$/.test(voiceId)
+    || /^minimax_/i.test(voiceId);
 }
 
 /**
- * Offline-first novel TTS:
- * 1) Kokoro in isolated Node child (crash-safe)
- * 2) Windows SoundPlayer for audible output
- * 3) Renderer only drives follow-along UI
+ * Novel / video TTS:
+ * 1) Optional MiniMax gateway (`/v1/wand/minimax-tts/sync_tts`) — preferred for video narration
+ * 2) Kokoro offline fallback
+ * 3) Windows SoundPlayer for audible novel playback
  */
 export class NovelTtsService {
   private readonly dependencies: NovelTtsServiceDependencies;
@@ -68,25 +76,62 @@ export class NovelTtsService {
   async synthesize(input: NovelTtsSynthesizeInput): Promise<NovelTtsSynthesizeResult> {
     const text = trimText(input.text);
     if (!text) return { ok: false, detail: "没有可朗读的内容。" };
-    const voice = resolveNovelTtsVoice(input.voiceId);
-    const voiceLabel = input.voiceLabel || voice.label;
+    const wantPlayback = input.playback !== false;
 
     this.nativePlayer.stop();
 
+    // Silent path for video timeline: durable audio + base64, no SoundPlayer.
+    if (!wantPlayback) {
+      const file = await this.synthesizeToFile({ ...input, preferGateway: input.preferGateway !== false });
+      if (!file.ok || !file.audioBase64) {
+        if (file.ok && file.audioPath) {
+          try {
+            const { readFile } = await import("node:fs/promises");
+            const bytes = await readFile(file.audioPath);
+            return {
+              ok: true,
+              audioBase64: bytes.toString("base64"),
+              mimeType: file.mimeType || "audio/wav",
+              provider: file.provider,
+              runtime: file.runtime,
+              durationMs: file.durationMs,
+              audioPath: file.audioPath,
+              playingInMain: false
+            };
+          } catch (error) {
+            return { ok: false, detail: error instanceof Error ? error.message : "旁白音频读取失败。" };
+          }
+        }
+        return { ok: false, detail: file.detail || "旁白生成失败。" };
+      }
+      return { ...file, playingInMain: false };
+    }
+
+    const kokoroVoiceId = this.resolveKokoroVoiceId(input.voiceId);
+    const voice = resolveNovelTtsVoice(kokoroVoiceId);
     const kokoro = await this.kokoroEngine.synthesize({ text, voiceId: voice.id });
     if (kokoro.ok && kokoro.audioPath) {
       await this.dependencies.appendDebugLog?.(
         `novel tts kokoro ok runtime=${kokoro.runtime || "cpu"} voice=${voice.id}->${voice.kokoroVoice} path=${kokoro.audioPath}`
       );
+      let audioBase64: string | undefined;
+      try {
+        const { readFile } = await import("node:fs/promises");
+        audioBase64 = (await readFile(kokoro.audioPath)).toString("base64");
+      } catch {
+        audioBase64 = undefined;
+      }
       const played = await this.nativePlayer.playWavFile(kokoro.audioPath, kokoro.durationMs);
       if (played.ok) {
         return {
           ok: true,
+          audioBase64,
           provider: kokoro.provider || "kokoro-zh-offline",
           runtime: kokoro.runtime,
           playingInMain: true,
           durationMs: played.durationMs || kokoro.durationMs,
-          mimeType: "audio/wav"
+          mimeType: "audio/wav",
+          audioPath: kokoro.audioPath
         };
       }
       await this.dependencies.appendDebugLog?.(
@@ -102,7 +147,7 @@ export class NovelTtsService {
     );
 
     if (this.dependencies.enableGatewaySpeech) {
-      const remote = await this.synthesizeViaGateway(text, voice.id, voiceLabel);
+      const remote = await this.synthesizeViaMinimax(text, input.voiceId);
       if (remote.ok) return remote;
     }
 
@@ -112,14 +157,56 @@ export class NovelTtsService {
     };
   }
 
-  /** Generate a durable WAV source for project workflows without starting playback. */
+  /** Generate durable audio for project workflows without starting playback. Gateway-first when enabled. */
   async synthesizeToFile(input: NovelTtsSynthesizeInput): Promise<NovelTtsSynthesizeResult> {
     const text = trimText(input.text);
     if (!text) return { ok: false, detail: "没有可生成的内容。" };
-    const voice = resolveNovelTtsVoice(input.voiceId);
+    const preferGateway = input.preferGateway !== false && this.dependencies.enableGatewaySpeech;
+
+    if (preferGateway) {
+      const remote = await this.synthesizeViaMinimax(text, input.voiceId);
+      if (remote.ok && remote.audioBase64) {
+        try {
+          const { writeFile, mkdtemp } = await import("node:fs/promises");
+          const { tmpdir } = await import("node:os");
+          const { join } = await import("node:path");
+          const dir = await mkdtemp(join(tmpdir(), "codecn-minimax-tts-"));
+          const ext = remote.mimeType?.includes("wav") ? ".wav" : ".mp3";
+          const audioPath = join(dir, `narration${ext}`);
+          await writeFile(audioPath, Buffer.from(remote.audioBase64, "base64"));
+          return {
+            ok: true,
+            audioBase64: remote.audioBase64,
+            audioPath,
+            mimeType: remote.mimeType || "audio/mpeg",
+            provider: remote.provider || "gateway-minimax-sync-tts"
+          };
+        } catch (error) {
+          await this.dependencies.appendDebugLog?.(
+            `novel tts minimax persist miss ${error instanceof Error ? error.message : String(error)}`
+          );
+          return remote;
+        }
+      }
+      await this.dependencies.appendDebugLog?.(
+        `novel tts minimax miss detail=${remote.detail || "unknown"}; falling back to kokoro`
+      );
+    }
+
+    const kokoroVoiceId = this.resolveKokoroVoiceId(input.voiceId);
+    const voice = resolveNovelTtsVoice(kokoroVoiceId);
     const result = await this.kokoroEngine.synthesize({ text, voiceId: voice.id });
-    if (!result.ok || !result.audioPath) return { ok: false, detail: result.detail || "离线配音生成失败。" };
-    return { ok: true, audioPath: result.audioPath, mimeType: "audio/wav", provider: result.provider || "kokoro-zh-offline", runtime: result.runtime, durationMs: result.durationMs };
+    if (!result.ok || !result.audioPath) {
+      return { ok: false, detail: result.detail || "离线配音生成失败。" };
+    }
+    return {
+      ok: true,
+      audioPath: result.audioPath,
+      mimeType: "audio/wav",
+      provider: result.provider || "kokoro-zh-offline",
+      runtime: result.runtime,
+      durationMs: result.durationMs
+    };
   }
 
   cancel() {
@@ -129,12 +216,17 @@ export class NovelTtsService {
     this.nativePlayer.stop();
   }
 
-  private async synthesizeViaGateway(
+  private resolveKokoroVoiceId(voiceId: string) {
+    if (isMinimaxVoiceId(voiceId)) {
+      return resolveMinimaxNarrationVoice(voiceId as MinimaxNarrationVoiceId).kokoroVoiceId;
+    }
+    return voiceId;
+  }
+
+  private async synthesizeViaMinimax(
     text: string,
-    voiceId: string,
-    voiceLabel: string
+    voiceId: string
   ): Promise<NovelTtsSynthesizeResult> {
-    const fetchImpl = this.dependencies.fetchImpl ?? fetch;
     const controller = new AbortController();
     this.remoteController?.abort(new Error("Novel speech replaced"));
     this.remoteController = controller;
@@ -144,56 +236,34 @@ export class NovelTtsService {
         this.dependencies.readBearerToken()
       ]);
       if (!baseUrl || !bearerToken) {
-        return { ok: false, detail: "未登录或网关不可用，将尝试本地朗读。" };
+        return { ok: false, detail: "未登录或网关不可用，将尝试本地配音。" };
       }
-      const endpoint = buildSpeechUrl(baseUrl);
-      await this.dependencies.appendDebugLog?.(
-        `novel tts request endpoint=${endpoint} voice=${voiceId} chars=${text.length}`
+      const voice = resolveMinimaxNarrationVoice(
+        isMinimaxVoiceId(voiceId) ? voiceId : undefined
       );
-      const response = await fetchImpl(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${bearerToken}`,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg, audio/wav, application/json"
-        },
-        body: JSON.stringify({
-          model: "tts-1",
-          input: text,
-          voice: voiceId,
-          voice_label: voiceLabel,
-          response_format: "mp3"
-        }),
+      await this.dependencies.appendDebugLog?.(
+        `novel tts minimax request voice=${voice.id}->${voice.voiceId} chars=${text.length}`
+      );
+      const remote = await synthesizeMinimaxSyncTts({
+        gatewayBaseUrl: baseUrl,
+        bearerToken,
+        text,
+        voice,
+        fetchImpl: this.dependencies.fetchImpl,
         signal: controller.signal
       });
-      if (!response.ok) {
-        const detail = `朗读服务不可用（HTTP ${response.status}），将尝试本地朗读。`;
-        await this.dependencies.appendDebugLog?.(`novel tts failed status=${response.status}`);
-        return { ok: false, detail };
+      if (!remote.ok) {
+        await this.dependencies.appendDebugLog?.(`novel tts minimax failed detail=${remote.detail || ""}`);
       }
-      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-      if (contentType.includes("application/json")) {
-        const payload = await response.json().catch(() => ({})) as { detail?: string; message?: string };
-        return {
-          ok: false,
-          detail: payload.detail || payload.message || "朗读服务未返回音频，将尝试本地朗读。"
-        };
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (!buffer.length) return { ok: false, detail: "朗读服务返回空音频。" };
-      return {
-        ok: true,
-        audioBase64: buffer.toString("base64"),
-        mimeType: contentType.includes("wav") ? "audio/wav" : "audio/mpeg",
-        provider: "gateway-audio-speech"
-      };
+      return remote;
     } catch (error) {
-      const aborted = controller.signal.aborted || Boolean(error && typeof error === "object" && "name" in error && (error as { name?: string }).name === "AbortError");
+      const aborted = controller.signal.aborted
+        || Boolean(error && typeof error === "object" && "name" in error && (error as { name?: string }).name === "AbortError");
       const detail = aborted
         ? "朗读已取消。"
-        : "朗读服务请求失败，将尝试本地朗读。";
+        : "朗读服务请求失败，将尝试本地配音。";
       await this.dependencies.appendDebugLog?.(
-        `novel tts error ${aborted ? "cancelled" : error instanceof Error ? error.message : String(error)}`
+        `novel tts minimax error ${aborted ? "cancelled" : error instanceof Error ? error.message : String(error)}`
       );
       return { ok: false, detail };
     } finally {

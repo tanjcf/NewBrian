@@ -47,19 +47,19 @@ test("GPU probe uses CPU when VRAM below 2GB", async () => {
 
 test("Kokoro engine and service enforce offline-first lifecycle contracts", () => {
   const engine = readFileSync(new URL("./novel-tts-kokoro-engine.ts", import.meta.url), "utf8");
-  const service = readFileSync(new URL("./novel-tts-service.ts", import.meta.url), "utf8");
   const worker = readFileSync(new URL("./novel-tts-kokoro-worker.ts", import.meta.url), "utf8");
   assert.match(engine, /ELECTRON_RUN_AS_NODE/);
   assert.match(engine, /fork\(/);
   assert.match(engine, /isolated Node child/);
-  assert.match(service, /kokoroEngine\.synthesize/);
-  assert.match(service, /enableGatewaySpeech/);
-  assert.match(service, /playingInMain/);
+  assert.match(engine, /resolveWorkerCwd/);
+  assert.match(engine, /CODECN_KOKORO_MODULE_ROOT/);
+  assert.doesNotMatch(
+    engine,
+    /cwd:\s*path\.resolve\(path\.dirname\(workerPath\),\s*"\.\.",\s*"\.\."\)/
+  );
   assert.match(engine, /dtype: "q4f16"/);
   assert.match(engine, /Soft-cancel/);
   assert.doesNotMatch(engine, /170_000|Kokoro 合成超时|Kokoro 子进程启动超时/);
-  assert.doesNotMatch(service, /NOVEL_TTS_REMOTE_TIMEOUT_MS|timeoutMs|setTimeout\(/);
-  assert.match(service, /remoteController\?\.abort/);
   assert.match(engine, /killWarmChild/);
   assert.doesNotMatch(engine, /this\.cancel\(\);\s*\n\s*const jobId/);
   assert.match(worker, /type: "dispose"/);
@@ -67,8 +67,16 @@ test("Kokoro engine and service enforce offline-first lifecycle contracts", () =
   assert.match(worker, /q4f16/);
   assert.match(worker, /isRecoverableAudioError/);
   assert.match(worker, /@uzen\/kokoro-js/);
+  assert.match(worker, /CODECN_KOKORO_MODULE_ROOT/);
   assert.match(worker, /audioPath/);
   assert.match(worker, /Number\.isFinite/);
   assert.match(worker, /pcm16Peak/);
   assert.doesNotMatch(worker, /process\.exit\(0\);\s*\n\s*\}\);\s*\n\s*\}\);/);
+});
+
+test("resolveWorkerCwd helper rejects asar-file package roots", () => {
+  const engine = readFileSync(new URL("./novel-tts-kokoro-engine.ts", import.meta.url), "utf8");
+  assert.match(engine, /export function resolveWorkerCwd/);
+  assert.match(engine, /statSync\(target\)\.isDirectory\(\)/);
+  assert.match(engine, /app\.asar\.unpacked/);
 });

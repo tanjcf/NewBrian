@@ -75,7 +75,28 @@ export function registerOfficialGovernmentWebTools(
         searchCallsWithoutRead += 1;
         queryCounts.set(query, identicalCount);
         const payload: Record<string, unknown> = { count: results.length, results };
-        if (searchCallsWithoutRead >= SEARCH_WARNING_WITHOUT_READ && readCalls === 0) {
+        const topOfficialUrl = results
+          .map((entry) => (typeof entry?.url === "string" ? entry.url.trim() : ""))
+          .find((url) => url && isOfficialGovernmentUrl(url));
+        if (topOfficialUrl && readCalls === 0) {
+          try {
+            const page = await service.read({ url: topOfficialUrl });
+            readCalls += 1;
+            searchCallsWithoutRead = 0;
+            queryCounts.clear();
+            payload.auto_read = { url: topOfficialUrl, ...page };
+            payload.next_action = [
+              "Primary official page content is in auto_read.",
+              "Use it as evidence and continue drafting.",
+              "Call web.read_official only for additional gov.cn URLs when needed."
+            ].join(" ");
+          } catch {
+            payload.next_action = [
+              `Call web.read_official on ${topOfficialUrl} before searching again.`,
+              "Search snippets alone are not sufficient evidence."
+            ].join(" ");
+          }
+        } else if (searchCallsWithoutRead >= SEARCH_WARNING_WITHOUT_READ && readCalls === 0) {
           payload.next_action = [
             "Stop additional web.search_official calls.",
             "Call web.read_official on the most relevant gov.cn URLs already returned,",

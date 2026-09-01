@@ -44,14 +44,35 @@ export function DocumentWorkspace(props: DocumentWorkspaceProps) {
 
     {props.activeView === "project" ? <section className="brain-document-overview"><article><span>项目文档</span><strong>{props.files.length}</strong></article><article><span>结构锚点</span><strong>{props.availableAnchors.length}</strong></article><article><span>待处理标注</span><strong>{fileAnnotations.filter((item) => item.status === "OPEN").length}</strong></article><button type="button" onClick={props.onOpenFiles}>打开通用文件面板</button></section> : null}
 
-    {["outline", "body", "references", "slides"].includes(props.activeView) ? <>
-      <section className="brain-document-toolbar"><select aria-label="选择文档" value={activeFile?.id || ""} onChange={(event) => { const file = props.files.find((item) => item.id === event.target.value); if (file) props.onSelectFile(file); }}><option value="">选择文档</option>{props.files.map((file) => <option key={file.id} value={file.id}>{file.logicalName}</option>)}</select><button type="button" disabled={!activeFile} className={props.annotationActive ? "active" : ""} onClick={props.onToggleAnnotation}>{props.annotationActive ? "退出标记" : "画笔标记"}</button></section>
-      <section className="brain-document-structure">{viewAnchors.length ? viewAnchors.slice(0, 200).map((anchor) => <button type="button" key={anchor.anchorId} onClick={() => props.onSelectAnchor(anchor)}><strong>{anchorTitle(anchor)}</strong><small>{anchor.objectId || anchor.anchorId}</small></button>) : <div className="brain-resource-empty">当前文档没有可用于该视图的结构锚点，请先选择并解析支持的文件。</div>}</section>
+      {["outline", "body", "references", "slides"].includes(props.activeView) ? <>
+      <section className="brain-document-toolbar"><select aria-label="选择文档" value={activeFile?.id || ""} onChange={(event) => { const file = props.files.find((item) => item.id === event.target.value); if (file) props.onSelectFile(file); }}><option value="">选择文档</option>{props.files.map((file) => <option key={file.id} value={file.id}>{file.logicalName}</option>)}</select><button type="button" disabled={!activeFile} className={props.annotationActive ? "active" : ""} onClick={props.onToggleAnnotation}>{props.annotationActive ? "退出标注模式" : "在中央预览标注"}</button></section>
+      {!props.annotationActive ? (
+        <section className="brain-document-structure">{viewAnchors.length ? viewAnchors.slice(0, 200).map((anchor) => <button type="button" key={anchor.anchorId} onClick={() => props.onSelectAnchor(anchor)}><strong>{anchorTitle(anchor)}</strong><small>{anchor.objectId || anchor.anchorId}</small></button>) : <div className="brain-resource-empty">当前文档没有可用于该视图的结构锚点，请先选择并解析支持的文件。</div>}</section>
+      ) : (
+        <p className="brain-document-marking-hint">标注模式已开启。请在中央预览区拖动标记笔框选内容，完成标记后再描述修改要求。</p>
+      )}
     </> : null}
 
     {props.activeView === "review" ? <section className="brain-document-review">
-      <header><strong>标注与修改版本</strong><button type="button" disabled={!activeFile} className={props.annotationActive ? "active" : ""} onClick={props.onToggleAnnotation}>{props.annotationActive ? "退出画笔" : "开始画笔标记"}</button></header>
-      {fileAnnotations.map((annotation) => <article key={annotation.id}><div><strong>{annotation.instruction}</strong><small>{annotation.anchor?.objectId || annotation.anchorJson || annotation.id} · {annotation.status}</small></div><button type="button" onClick={() => props.onSendAnnotation(annotation)}>加入对话</button></article>)}
+      <header><strong>标注与修改版本</strong><button type="button" disabled={!activeFile && !props.files.length} className={props.annotationActive ? "active" : ""} onClick={props.onToggleAnnotation}>{props.annotationActive ? "退出标注模式" : "在中央预览标注"}</button></header>
+      {props.annotationActive ? <p className="brain-document-marking-hint">标注模式已开启。请在中央预览区用标记笔框选内容，标记完成后再描述修改要求。</p> : null}
+      {fileAnnotations.map((annotation) => {
+        const snapshotUrl = annotation.geometry?.snapshotUrl || "";
+        return (
+          <article key={annotation.id}>
+            <div>
+              {snapshotUrl ? (
+                <div className="document-annotation-snapshot-thumb" aria-hidden="true">
+                  <img src={snapshotUrl} alt="" />
+                </div>
+              ) : null}
+              <strong>{annotation.instruction}</strong>
+              <small>{annotation.selectedText?.trim() || "标记区域"} · {annotation.status}</small>
+            </div>
+            <button type="button" disabled={!annotation.instruction.trim()} title={annotation.instruction.trim() ? "将标记位置、截图与修改要求加入左侧对话" : "请先填写修改要求"} onClick={() => props.onSendAnnotation(annotation)}>加入对话</button>
+          </article>
+        );
+      })}
       {fileChangeSets.map((changeSet) => <article key={changeSet.id}><div><strong>{changeSet.changeSummary}</strong><small>基础版本 {changeSet.baseFileVersion} · {changeSet.status}</small></div><div><button type="button" disabled={props.busy} onClick={() => props.onPreviewChangeSet(changeSet)}>预览</button>{changeSet.status === "PROPOSED" ? <><button type="button" disabled={props.busy} onClick={() => props.onReviewChangeSet(changeSet, "ACCEPTED")}>接受</button><button type="button" disabled={props.busy} onClick={() => props.onReviewChangeSet(changeSet, "REJECTED")}>拒绝</button></> : null}{changeSet.status === "ACCEPTED" ? <button type="button" disabled={props.busy} onClick={() => props.onExportChangeSet(changeSet)}>导出新版本</button> : null}</div></article>)}
       {props.preview ? <pre>{props.preview.previewText || props.preview.diff || JSON.stringify(props.preview, null, 2)}</pre> : null}
       {!fileAnnotations.length && !fileChangeSets.length ? <div className="brain-resource-empty">当前文档还没有标注或修改方案。</div> : null}

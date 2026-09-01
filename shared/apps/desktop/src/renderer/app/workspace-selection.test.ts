@@ -41,15 +41,57 @@ test("switchBrainWorkspace restores sidebar selection from target scene catalog"
 
 test("scene switching clears outgoing composer Skill and never submits into another scene", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
-  const switchSource = source.slice(source.indexOf("const switchBrainWorkspace"), source.indexOf("useEffect(() => {\n    const sceneProjects"));
+  const switchSource = source.slice(source.indexOf("const switchBrainWorkspace"), source.indexOf("useEffect(() => {\n    // Standalone / INTERNAL_CHAT"));
   const submitSource = source.slice(source.indexOf("function submitComposerRequest"), source.indexOf("function renderBrainChatModule"));
   assert.match(switchSource, /setSelectedComposerSkill\(null\)/);
   assert.match(switchSource, /setSelectedComposerTools\(\[\]\)/);
   assert.match(switchSource, /setSelectedThreadId\(""\)/);
   assert.match(submitSource, /resolveSceneExecutionWorkspace/);
-  assert.match(submitSource, /本次请求未发送/);
+  assert.match(submitSource, /forceStandaloneChat:\s*true/);
+  assert.match(submitSource, /wantsStandaloneChat/);
+  assert.match(submitSource, /inProjectConversationContext/);
+  assert.match(submitSource, /forceProjectThread:\s*true/);
+  assert.match(submitSource, /独立聊天|INTERNAL_CHAT|forceStandaloneChat/);
+  assert.doesNotMatch(submitSource, /本次请求未发送/);
   assert.match(submitSource, /请再次发送/);
   assert.doesNotMatch(source, /boundWorkspaceId \|\| activeWorkspaceId/);
+});
+
+test("project BRAIN conversations keep project-scoped composer routing on send", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const submitSource = source.slice(source.indexOf("function submitComposerRequest"), source.indexOf("function renderBrainChatModule"));
+  assert.match(submitSource, /isBrainConversationSelection[\s\S]*forceProjectThread:\s*true/);
+  assert.match(submitSource, /!inProjectConversationContext[\s\S]*wantsStandaloneChat/);
+  assert.match(source, /setNewThreadScope\("project"\);[\s\S]*setChatUsesProject\?\.\(true\);[\s\S]*brain-conversation:/);
+});
+
+test("sidebar thread clicks force disk hydration for legacy rows", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const renderSidebarTaskEntry = source.slice(
+    source.indexOf("function renderSidebarTaskEntry"),
+    source.indexOf("function renderSidebarModule")
+  );
+  const projectThreadClick = source.slice(
+    source.indexOf("data-testid=\"sidebar-project-task-row\""),
+    source.indexOf("data-testid=\"sidebar-project-task-row\"") + 1800
+  );
+  assert.match(renderSidebarTaskEntry, /selectWorkspaceThread\(workspace\.id, thread\.id, \{ force: true \}\)/);
+  assert.match(projectThreadClick, /selectWorkspaceThread\(workspace\.id, thread\.id, \{ force: true \}\)/);
+  assert.match(source, /LEGACY_SIDEBAR_ROW_STORAGE_KEY/);
+  assert.match(source, /resolveLegacySidebarRowForThread/);
+});
+
+test("sidebar chat rows use chat: selection prefix and stay on thread history", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const renderSidebarTaskEntry = source.slice(
+    source.indexOf("function renderSidebarTaskEntry"),
+    source.indexOf("function renderSidebarModule")
+  );
+  assert.match(renderSidebarTaskEntry, /setSelectedSidebarRow\(`chat:\$\{workspace\.id\}:\$\{thread\.id\}`\)/);
+  assert.match(renderSidebarTaskEntry, /setIsComposingNewThread\(false\)/);
+  assert.doesNotMatch(renderSidebarTaskEntry, /setSelectedSidebarRow\(`task:/);
+  assert.match(source, /selectedSidebarRow\?\.startsWith\("project-thread:"\) \|\| selectedSidebarRow\?\.startsWith\("chat:"\)/);
+  assert.match(source, /sidebarRow\.startsWith\("chat:"\)/);
 });
 
 test("binds document project selection to local workspace without hijacking project-thread rows", () => {
@@ -140,10 +182,15 @@ test("uses the Claude Code projects-section as the scene-bound left catalog", ()
   assert.match(source, /projects-section/);
   assert.doesNotMatch(source, /brain-projects-section/);
   assert.doesNotMatch(source, /legacy-workspace-section/);
+  assert.match(source, /sceneChatWorkspaces/);
   assert.match(source, /filterWorkspaceCatalogByScene/);
   assert.match(source, /orderSidebarProjects/);
   assert.match(source, /crossSceneRecentProjects|data-testid="brain-recent-projects"/);
   assert.match(source, /data-testid="new-chat-button"/);
+  const startNewChatSource = source.slice(source.indexOf("function startNewChat"), source.indexOf("function renderSidebarTaskEntry"));
+  assert.match(startNewChatSource, /setNewThreadScope\("chat"\)/);
+  assert.match(startNewChatSource, /setChatUsesProject\?\.\(false\)/);
+  assert.doesNotMatch(startNewChatSource, /setNewThreadScope\("project"\)/);
   assert.match(source, /setNewThreadScope\("project"\)/);
   assert.match(source, /brainWorkspaceKey:\s*selectedBrainWorkspaceKey/);
   assert.match(source, /新建空白项目/);
@@ -164,21 +211,56 @@ test("keeps quant conversation in the center and renders market tools in the rig
   assert.match(resourcePanel, /selectedBrainWorkspaceKey === "quant"/);
   assert.match(resourcePanel, /<QuantWorkspace[^>]+compact/);
   assert.match(resourcePanel, /brain-resource-resize-handle/);
-  assert.match(resourcePanel, /展开预览|缩回侧栏/);
+  assert.match(resourcePanel, /展开预览|还原布局/);
   assert.match(resourcePanel, /隐藏侧栏/);
   assert.match(resourcePanel, /SidebarIcon name=\{isCenter \? "minimize" : "maximize"\}/);
   assert.match(resourcePanel, /panel-right/);
   assert.match(source, /brain-tools-restore-toggle|显示侧栏/);
+  assert.match(source, /data-testid="brain-tools-restore-toggle"/);
+  assert.match(workspaceRenderer, /brainResourcePlacement === "hidden"[\s\S]*?brain-tools-restore-toggle/);
   assert.doesNotMatch(source, /brain-resource-restore-rail/);
+
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  // Collapsed Tools residual must sit on workspace-frame so empty home / no-project / hidden new-chat topbar still show it.
+  assert.match(styles, /\.workspace-frame\s*>\s*\.brain-tools-restore-toggle\s*\{[^}]*position:\s*absolute/s);
+});
+
+test("expanding the right Tools panel hides the left sidebar like open-file artifact-workbench", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
+
+  // Shared expand toggle for every scene (center ↔ side).
+  assert.match(resourcePanel, /current === "center"[\s\S]*?return "side"/);
+  assert.match(resourcePanel, /title=\{isCenter \? "还原布局" : "展开预览"\}/);
+  assert.match(resourcePanel, /aria-pressed=\{isCenter\}/);
+  assert.match(resourcePanel, /expand-sidebar/);
+  assert.match(resourcePanel, /SidebarIcon name=\{isCenter \? "minimize" : "maximize"\}/);
+
+  // Expand must keep chat rendered beside Tools (not replace mainModule with the panel).
+  assert.match(source, /brainToolsCentered \? renderBrainResourcePanel\("center"\)/);
+  assert.doesNotMatch(source, /const mainModule = brainToolsCentered\s*\?\s*renderBrainResourcePanel\("center"\)/);
+
+  // Open-file workbench already hides the left menu and keeps chat.
+  assert.match(styles, /\.workspace-frame\.artifact-workbench\s*>\s*\.codex-sidebar\s*\{[^}]*display:\s*none\s*!important/s);
+  assert.match(styles, /\.workspace-frame\.artifact-workbench[\s\S]*?grid-template-columns:\s*clamp\(340px,\s*31vw,\s*460px\)\s*minmax\(560px,\s*1fr\)\s*!important/);
+
+  // Tools expand (.center): hide left nav only; chat + Tools two-column like open-file.
+  assert.match(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)\s*>\s*\.codex-sidebar\s*\{[^}]*display:\s*none\s*!important/s);
+  assert.match(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)[\s\S]*?grid-template-columns:\s*clamp\(340px,\s*31vw,\s*460px\)\s*minmax\(560px,\s*1fr\)\s*!important/);
+  assert.match(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)\s*>\s*\.task-column/);
+  assert.doesNotMatch(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)\s*>\s*\.brain-resource-panel\.center\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
 });
 
 test("switching scenes restores the right-hand scene panel instead of the generic files side preview", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
-  const switchFn = source.slice(source.indexOf("const switchBrainWorkspace"), source.indexOf("useEffect(() => {\n    const sceneProjects"));
+  const switchFn = source.slice(source.indexOf("const switchBrainWorkspace"), source.indexOf("useEffect(() => {\n    // Standalone / INTERNAL_CHAT"));
   assert.match(switchFn, /setPreviewPlacement\("hidden"\)/);
   assert.match(switchFn, /setPreviewMode\("empty"\)/);
   assert.match(switchFn, /setSearchFilePreview\(null\)/);
   assert.match(source, /resolveCatalogBrainWorkspaceKey\(selectedWorkspace\) !== selectedBrainWorkspaceKey/);
+  assert.match(source, /INTERNAL_CHAT_WORKSPACE_ID/);
+  assert.match(source, /isComposingNewThread && newThreadScope === "chat" && !chatUsesProject/);
 });
 
 test("matches the approved prototype with separate global and workspace capability navigation", () => {
@@ -206,6 +288,31 @@ test("explore scene restores original codeCN right panel without fake scene tool
   assert.match(resourcePanel, /文件 <em>\{brainFiles\.length\}<\/em>/);
   assert.match(resourcePanel, /产物 <em>\{brainArtifacts\.length\}<\/em>/);
   assert.match(resourcePanel, /任务 <em>\{brainTasks\.length\}<\/em>/);
+});
+
+test("opening files while BRAIN project panel is visible uses the right-hand project slot", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const openPreview = source.slice(source.indexOf("const openLocalFilePreview = useCallback"), source.indexOf("}, [api, brainResourcePlacement, reportFilePreviewIssue"));
+  assert.match(openPreview, /useProjectPanelSlot/);
+  assert.match(openPreview, /brainResourcePlacement !== "hidden"/);
+  assert.match(openPreview, /useProjectPanelSlot\s*\?\s*"side"/);
+  assert.match(source, /brainToolsSide = activeFeature === "new-chat" && brainResourcePlacement === "side" && previewPlacement !== "side"/);
+  assert.match(source, /previewPlacement === "side" && activeFeature === "new-chat" \? renderPreviewModule\("side"\)/);
+  // Search must not force Office docs back into the chat column after openLocalFilePreview.
+  const selectSearch = source.slice(source.indexOf("function selectSearchTarget"), source.indexOf("function renderSearchDialogLegacy"));
+  assert.doesNotMatch(selectSearch, /setPreviewPlacement\("center"\)/);
+});
+
+test("docx preview fills the side panel and scrolls instead of using a fixed-height iframe", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const docxBlock = source.slice(source.indexOf('searchFilePreview.kind === "docx"'), source.indexOf('searchFilePreview.kind === "pptx"'));
+  assert.match(docxBlock, /workspace-artifact-docx-shell/);
+  assert.match(docxBlock, /data-testid="workspace-docx-viewer"/);
+  assert.match(docxBlock, /dangerouslySetInnerHTML/);
+  assert.doesNotMatch(docxBlock, /<iframe[\s\S]*workspace-artifact-docx/);
+  assert.match(styles, /\.workspace-artifact-docx-shell[\s\S]*flex:\s*1\s*1\s*auto/);
+  assert.match(styles, /\.workspace-artifact-docx[\s\S]*overflow:\s*auto/);
 });
 
 test("never substitutes fabricated market bars when the provider is empty or unavailable", () => {
@@ -266,32 +373,36 @@ test("document workspace exposes real structure annotation and revision surfaces
   assert.match(source, /onExportChangeSet/);
 });
 
-test("document capability keys route files to the shared panel and citation to the references view", () => {
+test("document capability keys route files to the shared panel", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /if \(tabKey === "files"\)\s*\{\s*setBrainResourceTab\("files"\)/s);
-  assert.match(source, /const documentView = brainSceneTab === "citation" \? "references" : brainSceneTab/);
+  assert.match(source, /const documentView = brainSceneTab === "files" \? "project" : "review"/);
 });
 
-test("game planning tabs use a persisted project-scoped editor instead of pending placeholders", () => {
+test("game planning tabs use persisted editors instead of pending placeholders", () => {
   const workspace = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   const editor = readFileSync(new URL("./WorkspaceSectionEditor.tsx", import.meta.url), "utf8");
-  for (const section of ["design", "world", "level", "combat"]) {
-    assert.match(workspace, new RegExp(`${section}: \\{ title:`));
-  }
-  assert.match(workspace, /<WorkspaceSectionEditor/);
+  assert.match(workspace, /brainSceneTab === "level"\) return <GameLevelEditor/);
+  assert.match(workspace, /brainSceneTab === "design"[\s\S]*?<WorkspaceSectionEditor/);
+  assert.match(workspace, /world: \{ title: "角色与世界观"/);
+  assert.match(workspace, /combat: \{ title: "战斗设计"/);
+  assert.match(workspace, /<GameDesignPanel/);
   assert.match(editor, /getBrainWorkspaceSection/);
   assert.match(editor, /saveBrainWorkspaceSection/);
   assert.match(editor, /expectedRevision/);
   assert.match(editor, /BRAIN_WORKSPACE_SECTION_CONFLICT/);
 });
 
-test("video writing and music writing tabs reuse the persisted scene editor", () => {
+test("video and music scenes mount pipeline shells instead of legacy section editors", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
-  for (const section of ["script", "storyboard", "caption", "lyrics", "arrangement", "mix"]) {
-    assert.match(source, new RegExp(`${section}: \\{ title:`));
-  }
-  assert.match(source, /workspaceKey="video"/);
-  assert.match(source, /workspaceKey="music"/);
+  assert.match(source, /<VideoPipelineShell/);
+  assert.match(source, /<MusicDawShell/);
+  assert.match(source, /refreshToken=\{dataWorkspaceRefreshToken\}/);
+  assert.match(source, /reason\.startsWith\("music:"\)/);
+  assert.match(source, /key: "script", label: "脚本"/);
+  assert.match(source, /key: "tracks", label: "本镜音视频轨"/);
+  assert.match(source, /key: "gen", label: "生成"/);
+  assert.match(source, /key: "slice", label: "标记切片"/);
 });
 
 test("software scene mounts real SoftwareWorkspace and FlowWorkspace instead of ExecShell demo", () => {
@@ -299,7 +410,7 @@ test("software scene mounts real SoftwareWorkspace and FlowWorkspace instead of 
   assert.match(source, /key: "terminal", label: "终端"/);
   assert.match(source, /key: "deploy", label: "部署"/);
   assert.match(source, /<SoftwareWorkspace/);
-  assert.match(source, /brainSceneTab === "flow" return <FlowWorkspace/);
+  assert.match(source, /brainSceneTab === "flow"\) return <FlowWorkspace/);
   assert.doesNotMatch(source, /<SoftwareExecShell/);
   assert.doesNotMatch(source, /<DocumentPreviewShell/);
 });

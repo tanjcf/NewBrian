@@ -56,3 +56,20 @@ test("normalizes optimizeFor for Auto mode persistence", () => {
   assert.equal(normalizeModelConfig({ optimizeFor: "nope" as never }, { ...fallback, optimizeFor: "cost" }).optimizeFor, "cost");
   assert.equal(normalizeModelConfig({}, fallback).optimizeFor, "balanced");
 });
+
+test("normalizeModelConfig preserves parent Auto display name", () => {
+  const fallback = {
+    provider: "DeepSeek",
+    baseUrl: "http://127.0.0.1:8790/v1",
+    apiKey: "",
+    wireApi: "responses" as const,
+    model: "auto",
+    reviewModel: "auto",
+    reasoningEffort: "medium" as const,
+    disableResponseStorage: true,
+    systemPrompt: "",
+    autoParentDisplayName: "brain"
+  };
+  assert.equal(normalizeModelConfig({ autoParentDisplayName: "neo" }, fallback).autoParentDisplayName, "neo");
+  assert.equal(normalizeModelConfig({}, fallback).autoParentDisplayName, "brain");
+});

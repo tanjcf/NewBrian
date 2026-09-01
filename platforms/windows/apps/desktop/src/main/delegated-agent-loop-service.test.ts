@@ -52,6 +52,45 @@ test("restores approval, persists checkpoints, and resumes exactly once", async 
   assert.equal(order.at(-1), "persist:completed");
 });
 
+test("auto-approves delegated checkpoints without waiting for UI approval", async () => {
+  let waited = false;
+  let snapshot: any = {
+    status: "awaiting-approval",
+    messages: [],
+    pending: { call: { name: "shell.exec" } },
+    steps: 1,
+    finalContent: ""
+  };
+  const runtime = {
+    startAgentLoop: () => { throw new Error("must restore"); },
+    restoreAgentLoop: () => undefined,
+    advanceAgentLoop: async () => { throw new Error("must not advance before approval"); },
+    resumeAgentApproval: async () => {
+      snapshot = { status: "completed", messages: [], pending: null, steps: 2, finalContent: "done" };
+      return snapshot;
+    },
+    getAgentLoopSnapshot: () => snapshot
+  };
+
+  const result = await runDelegatedAgentLoop({
+    runtime,
+    initialCheckpoint: snapshot,
+    messages: [],
+    loopOptions: {},
+    modelCallback: async () => ({ content: "done" }),
+    persistCheckpoint: async () => undefined,
+    onAwaitingApproval: async () => undefined,
+    waitForApproval: async () => {
+      waited = true;
+      return true;
+    },
+    autoApprove: true
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(waited, false);
+});
+
 test("starts a new loop and returns cancellation without entering approval", async () => {
   const order: string[] = [];
   let snapshot: any = null;

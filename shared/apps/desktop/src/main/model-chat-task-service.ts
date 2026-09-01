@@ -113,6 +113,7 @@ export class ModelChatTaskService<
         runtimeId,
         projectId: input.workspace.id,
         workspacePath: input.workspace.path,
+        brainWorkspaceKey: (input.workspace as { brainWorkspaceKey?: string }).brainWorkspaceKey,
         shellEnv: await this.dependencies.buildShellEnv(input.workspace)
       });
       createdRuntime = runtime;

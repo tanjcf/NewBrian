@@ -107,13 +107,17 @@ import { VideoTimelineService } from "./video-timeline-service.js";
 import { VideoRenderService } from "./video-render-service.js";
 import { VideoRuntimeService } from "./video-runtime-service.js";
 import { registerVideoAgentTools } from "./video-agent-tools.js";
+import { registerMusicAgentTools } from "./music-agent-tools.js";
+import { registerAutoMediaAgentTools, resolveAutoMediaReferenceImage } from "./auto-media-agent-tools.js";
 import { registerDataAgentTools } from "./data-agent-tools.js";
 import { registerDocumentAgentTools } from "./document-agent-tools.js";
 import { registerExploreAgentTools } from "./explore-agent-tools.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { MusicMediaService } from "./music-media-service.js";
 import { MusicRenderService } from "./music-render-service.js";
+import { MusicRuntimeService } from "./music-runtime-service.js";
 import { confirmBrainSceneUiAction } from "./brain-scene-auto-confirm.js";
+import { initializeSceneProjectSkills } from "./project-scene-init.js";
 import { EngineDiscoveryService, lookupCommandSync } from "./engine-discovery-service.js";
 import { ManagedEngineInstallerService, runBoundedEnvironmentCommand } from "./managed-engine-installer-service.js";
 import { ensureDesktopEnginesInitialized, ensureEnginesForWorkspaceKey } from "./engine-bootstrap-service.js";
@@ -238,6 +242,10 @@ import {
   executeMediaGenerationTurn
 } from "./media-generation-turn.js";
 import { extractMediaUrlsFromResult } from "./media-generation-gateway.js";
+import { executeWithMediaAuthenticationRetry } from "./media-auth-retry.js";
+import { finalizeSceneVideoShot } from "./brain-scene-media-generation.js";
+import { resolveSceneMediaModel } from "./resolve-scene-media-model.js";
+import { brainVideoCanvasSize } from "@codex-forge/protocol/brain-video-runtime";
 import {
   formatBridgedImageText,
   resolvePreferredBridgeVisionModelFromEnv,
@@ -298,7 +306,9 @@ import { DesktopNativeCapabilityService, spawnDetachedAndConfirm } from "./deskt
 import { WorkspaceFileService } from "./workspace-file-service.js";
 import {
   ARTIFACT_PROTOCOL_MAX_BYTES,
-  mimeTypeForArtifactPath,
+  artifactProtocolResponseHeaders,
+  resolveArtifactMimeType,
+  parseByteRangeHeader,
   parseWorkspaceArtifactPreviewUrl
 } from "./workspace-artifact-protocol.js";
 import {
@@ -658,7 +668,21 @@ const resolveManagedFfmpeg = async () => {
   if (!resolved && autoInstall) {
     try { resolved = await engineInstaller.ensureInstalled("ffmpeg"); } catch { /* fall through */ }
   }
-  return resolved?.executable || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+  let executable = resolved?.executable || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+  // Prefer an absolute path so brain-core process.run does not depend on a filtered PATH.
+  if (!executable.includes("/") && !executable.includes("\\") && process.platform === "win32") {
+    const located = lookupCommandSync("where.exe", [executable]);
+    const first = String(located.stdout ?? "").split(/\r?\n/u).map((line) => line.trim()).find(Boolean);
+    if (first) executable = first;
+  }
+  if (executable.includes("/") || executable.includes("\\")) {
+    try { executable = await fs.realpath(executable); } catch { /* keep unresolved path */ }
+  }
+  if (resolved) {
+    activeShellEnv = environmentDiscoveryService.prependPathEntries(activeShellEnv, dirname(executable));
+    runtime?.setShellEnv(activeShellEnv);
+  }
+  return executable;
 };
 const ensureDesktopEngine = async (engineId: string) => {
   const autoInstall = process.env.BRAIN_ENGINE_AUTO_INSTALL !== "false";
@@ -1264,7 +1288,8 @@ const novelTtsService = new NovelTtsService({
     const authSelection = selectModelRequestAuth(authState, "");
     return authSelection.bearerToken || "";
   },
-  appendDebugLog: appendDesktopDebugLog
+  appendDebugLog: appendDesktopDebugLog,
+  enableGatewaySpeech: true
 });
 async function appendDiagnosticsLog(entry: string) {
   const preferences = await getActiveDesktopPreferences().catch(() => defaultDesktopPreferences);
@@ -1566,13 +1591,13 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
   const accessTokenCredential = authState?.access_token?.trim() || "";
   const device = collectDesktopDeviceFingerprint();
   const credentials = [
-    process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
-      : null,
     accessTokenCredential ? {
       value: accessTokenCredential,
       headers: createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
     } : null,
+    process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
+      ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
+      : null,
     apiKeyCredential ? { value: apiKeyCredential, headers: { Authorization: `Bearer ${apiKeyCredential}` } } : null
   ].filter((item): item is { value: string; headers: Record<string, string> } => Boolean(item));
   let remoteModels: unknown[] = [];
@@ -1661,6 +1686,17 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
   const selectedReview = availableModels.find((item) => item.model.toLowerCase() === effectiveConfig.reviewModel.toLowerCase())
     ?? selected;
   cachedAuthorizedModels = availableModels;
+  let syncedAutoParentDisplayName: string | undefined;
+  try {
+    const controlPlane = parseJsonText<{ model_config?: Record<string, unknown> }>(
+      await fs.readFile(desktopControlPlaneStatePath, "utf8")
+    );
+    const raw = controlPlane.model_config?.auto_parent_display_name
+      ?? controlPlane.model_config?.autoParentDisplayName;
+    syncedAutoParentDisplayName = typeof raw === "string" ? raw : undefined;
+  } catch {
+    syncedAutoParentDisplayName = undefined;
+  }
   return {
     ...normalizeModelConfig({
       ...effectiveConfig,
@@ -1668,7 +1704,8 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
       baseUrl: gatewayBaseUrl,
       wireApi: "responses",
       model: requestedAuto ? "auto" : (selected?.model ?? ""),
-      reviewModel: selectedReview?.model ?? selected?.model ?? ""
+      reviewModel: selectedReview?.model ?? selected?.model ?? "",
+      autoParentDisplayName: syncedAutoParentDisplayName
     }),
     availableModels
   };
@@ -1870,11 +1907,46 @@ async function refreshDesktopTokens(persisted: PersistedDesktopAuthState, device
   const payload = await readJsonResponse(response);
   return { response, payload };
 }
+
+async function refreshDesktopAccessTokenForGateway(): Promise<string> {
+  const persisted = await readDesktopAuthState();
+  if (!persisted?.refresh_token) return "";
+  const refreshed = await refreshDesktopTokens(persisted, collectDesktopDeviceFingerprint());
+  const payload = refreshed?.payload as DesktopAuthApiResponse | null;
+  if (!refreshed?.response.ok || !payload?.ok) return "";
+  const accessToken =
+    typeof payload.accessToken === "string" && payload.accessToken
+      ? payload.accessToken
+      : typeof payload.data?.tokens?.access_token === "string"
+        ? payload.data.tokens.access_token
+        : "";
+  if (!accessToken) return "";
+  const refreshToken =
+    typeof payload.sessionToken === "string" && payload.sessionToken
+      ? payload.sessionToken
+      : typeof payload.data?.tokens?.refresh_token === "string"
+        ? payload.data.tokens.refresh_token
+        : persisted.refresh_token;
+  await writeDesktopAuthState({
+    ...persisted,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires: typeof payload.expires === "string" ? payload.expires : persisted.expires,
+    last_synced_at: nowIso()
+  });
+  return accessToken;
+}
 async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
   const agreement = await fetchAgreementConfig();
   const checkedAt = nowIso();
   const gatewayOrigin = await readGatewayOrigin();
-  if (!app.isPackaged && e2eRemoteDebugPort && process.env.CODECN_E2E_AUTH_BYPASS === "1") {
+  const persisted = await readDesktopAuthState();
+  if (
+    !persisted?.access_token?.trim()
+    && !app.isPackaged
+    && e2eRemoteDebugPort
+    && process.env.CODECN_E2E_AUTH_BYPASS === "1"
+  ) {
     return {
       authenticated: true,
       loading: false,
@@ -1896,7 +1968,6 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       }
     };
   }
-  const persisted = await readDesktopAuthState();
   const device = collectDesktopDeviceFingerprint();
   if (!persisted || !persisted.access_token) {
     const loginFlags = await fetchDesktopAuthLoginFlags();
@@ -2306,10 +2377,16 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
       }
       continue;
     } catch (error) {
-      const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
+      const detail = error instanceof Error ? error.message : String(error);
       await appendDesktopDebugLog(
-        `desktop login fetch failed: ${error instanceof Error ? error.message : String(error)}`
+        `desktop login fetch failed: ${detail}`
       );
+      if (/ByteString|Invalid character in header|header content/i.test(detail)) {
+        throw new Error(
+          `登录请求头包含非法字符（常见于中文电脑名），请升级客户端或将电脑名改为英文后重试。原始错误：${detail}`
+        );
+      }
+      const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
       await appendAuthAuditLog("login_failed", `${maskEmail(email)} ${message}`);
       throw new Error(message);
     }
@@ -2355,10 +2432,16 @@ async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
       })
     });
   } catch (error) {
-    const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
+    const detail = error instanceof Error ? error.message : String(error);
     await appendDesktopDebugLog(
-      `desktop send login code fetch failed: ${error instanceof Error ? error.message : String(error)}`
+      `desktop send login code fetch failed: ${detail}`
     );
+    if (/ByteString|Invalid character in header|header content/i.test(detail)) {
+      throw new Error(
+        `发送验证码失败：请求头包含非法字符（常见于中文电脑名），请升级客户端或将电脑名改为英文后重试。原始错误：${detail}`
+      );
+    }
+    const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
     throw new Error(message);
   }
   const payload = await readJsonResponse(response);
@@ -3239,7 +3322,12 @@ const workspaceCatalogPolicyContext = {
 const normalizeThread = (input: Partial<WorkspaceThreadRecord>) =>
   normalizeWorkspaceThread(input, workspaceCatalogPolicyContext);
 async function applyApplicationSkillPolicy(targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>) {
-  await applySkillPolicy(targetRuntime, userSkillRoot, async () => (await readFeatureConfig()).skills);
+  const catalog = await readWorkspaceCatalog();
+  const workspace = catalog.workspaces.find((item) => item.id === activeWorkspaceId);
+  const projectRoots = workspace?.path
+    ? [join(workspace.path, ".codecn", "skills"), join(workspace.path, "skills")]
+    : [];
+  await applySkillPolicy(targetRuntime, userSkillRoot, async () => (await readFeatureConfig()).skills, projectRoots);
 }
 function registerGoalRuntimeTools(
   targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>,
@@ -4063,7 +4151,8 @@ async function writePolicyRules(rules: DesktopPolicyRule[]) {
     commandPrefix: rule.commandPrefix?.trim() || "",
     decision: rule.decision === "allow" || rule.decision === "deny" ? rule.decision : "ask",
     enabled: rule.enabled !== false,
-    reason: rule.reason?.trim() || ""
+    reason: rule.reason?.trim() || "",
+    match: rule.match === "exact" ? "exact" : "prefix"
   }));
   await ensureDirectory(dirname(policyRulesPath));
   await fs.writeFile(policyRulesPath, `${JSON.stringify({ version: 1, rules: normalized }, null, 2)}\n`, "utf8");
@@ -4694,8 +4783,8 @@ async function ensureDesktopNodeInitialized() {
     overallStatus: "running",
     message: "正在检查 Node.js 运行时..."
   });
-  let nodePath = resolvePreferredNodeExecutable();
-  let source: "system" | "sandbox" = "system";
+  let nodePath = await resolvePreferredNodeExecutable();
+  let source: "system" | "sandbox" | "managed" = "system";
   if (!nodePath && process.platform === "win32") {
     const offlineNodeMsi = join(workspacePath, "windows", "_sandbox_tools", "node.msi");
     if (await pathExists(offlineNodeMsi)) {
@@ -4709,7 +4798,11 @@ async function ensureDesktopNodeInitialized() {
         args: ["/i", offlineNodeMsi, "/qn", "/norestart"],
         cwd: workspacePath,
         signal: desktopBootstrapAbortController?.signal
-      });
+      }).catch((error) => ({
+        status: -1,
+        stdout: "",
+        stderr: error instanceof Error ? error.message : String(error)
+      }));
       if (installResult.status !== 0) {
         return writeDesktopBootstrapState({
           ...installingState,
@@ -4721,26 +4814,68 @@ async function ensureDesktopNodeInitialized() {
           }
         });
       }
-      nodePath = resolvePreferredNodeExecutable();
+      nodePath = await resolvePreferredNodeExecutable();
       source = "sandbox";
+    }
+  }
+  if (!nodePath) {
+    try {
+      await updateDesktopBootstrapTaskState(runningState, "node", {
+        overallStatus: "running",
+        message: "正在准备托管 Node.js 运行时..."
+      });
+      const resolved = await ensureDesktopEngine("node");
+      nodePath = resolved.executable;
+      source = resolved.source === "managed" ? "managed" : "system";
+    } catch (error) {
+      void appendDesktopDebugLog(
+        `managed node bootstrap unavailable: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
   if (!nodePath) {
     return writeDesktopBootstrapState({
       ...runningState,
+      overall: {
+        status: "manual_required",
+        currentTaskId: "node",
+        message: "未检测到可用 Node.js，可稍后在设置中重试或手动安装 Node 18+。",
+        updatedAt: nowIso()
+      },
       node: {
         status: "manual_required",
         updatedAt: nowIso(),
-        reason: "未检测到系统 Node.js，请先安装 Node 18+。"
+        reason: "未检测到系统 Node.js，请先安装 Node 18+，或确认已加入 PATH 后重启 codeCN。"
       }
     });
   }
-  const versionResult = await runBoundedEnvironmentCommand({
-    executable: nodePath,
-    args: ["--version"],
-    cwd: workspacePath,
-    signal: desktopBootstrapAbortController?.signal
-  });
+  let versionResult: { status: number; stdout: string; stderr: string };
+  try {
+    versionResult = await runBoundedEnvironmentCommand({
+      executable: nodePath,
+      args: ["--version"],
+      cwd: workspacePath,
+      signal: desktopBootstrapAbortController?.signal
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return writeDesktopBootstrapState({
+      ...runningState,
+      overall: {
+        status: "manual_required",
+        currentTaskId: "node",
+        message: "Node.js 运行时不可用，请安装后重试。",
+        updatedAt: nowIso()
+      },
+      node: {
+        status: "manual_required",
+        updatedAt: nowIso(),
+        nodePath,
+        source,
+        reason: `无法启动 Node.js（${nodePath}）：${detail}`
+      }
+    });
+  }
   const version = String(versionResult.stdout || versionResult.stderr || "").trim();
   source = source || "system";
   return writeDesktopBootstrapState({
@@ -5055,7 +5190,23 @@ async function startDesktopBootstrapAfterAuth() {
   // service is production-ready. Use the explicit refresh/update action to
   // call syncAuthenticatedDesktopControlPlane instead of touching the network
   // during login or on a background timer.
-  await startDesktopBootstrapInitialization();
+  try {
+    await startDesktopBootstrapInitialization();
+  } catch (error) {
+    const detail = error instanceof Error ? error.stack ?? error.message : String(error);
+    await appendDesktopDebugLog(`desktop bootstrap initialization failed: ${detail}`);
+    const previousState = await readDesktopBootstrapState().catch(() => null);
+    if (previousState) {
+      await writeDesktopBootstrapState({
+        ...previousState,
+        overall: {
+          status: "manual_required",
+          message: `桌面环境初始化未完成：${error instanceof Error ? error.message : String(error)}`,
+          updatedAt: nowIso()
+        }
+      }).catch(() => undefined);
+    }
+  }
   const nextCatalog = await ensureWorkspaceCatalogConda(await readWorkspaceCatalog());
   await ensureCatalogState(nextCatalog);
   const activeWorkspace = activeWorkspaceId
@@ -5902,6 +6053,15 @@ async function addWorkspace(input: { name: string; path: string; brainWorkspaceK
     brainWorkspaceKey: input.brainWorkspaceKey as any,
     threads: []
   });
+  try {
+    await initializeSceneProjectSkills({
+      workspacePath: resolvedPath,
+      projectName: input.name,
+      brainWorkspaceKey: input.brainWorkspaceKey || "explore"
+    });
+  } catch (error) {
+    console.warn("[project-scene-init] failed to seed scene skills", error);
+  }
   const nextCatalog = await writeWorkspaceCatalog([...catalog.workspaces, nextWorkspace]);
   await ensureCatalogState(nextCatalog);
   await syncCatalogBrainProjects(nextCatalog);
@@ -5912,6 +6072,7 @@ async function addWorkspaceThread(input: {
   title: string;
   summary: string;
   scope?: "project" | "chat";
+  brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
 }) {
   return workspaceThreadLifecycleService.add(input);
 }
@@ -6072,7 +6233,7 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
       await writeThreadState(workspace, childThread, latestState);
     };
     const childLoopOptions = {
-      permissionMode: "approval" as const,
+      permissionMode: "full" as const,
       abortController: childAbortController,
       agentId: currentTask.childThreadId,
       threadId: currentTask.childThreadId,
@@ -6093,6 +6254,7 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
         statusLabel: "等待批准",
         lastEventSummary: `工具 ${snapshot.pending?.call.name ?? ""} 等待用户批准`
       }),
+      autoApprove: true,
       waitForApproval: () => delegatedAgentControlService.waitForApproval(
         currentTask.childThreadId,
         childAbortController.signal
@@ -7247,7 +7409,17 @@ async function activateWorkspaceThreadUnlocked(input: { workspaceId: string; thr
   // appear newly run; real messages and task events update updatedAt separately.
   await saveActiveThreadState(undefined, { touchUpdatedAt: false });
   if (runtime.workspacePath !== resolve(workspace.path)) {
-    await runtime.switchWorkspace(workspace.path);
+    await runtime.switchWorkspace(workspace.path, { brainWorkspaceKey: workspace.brainWorkspaceKey });
+  } else if (workspace.brainWorkspaceKey && typeof runtime.userShadow?.ensureProjectSkill === "function") {
+    try {
+      await initializeSceneProjectSkills({
+        workspacePath: workspace.path,
+        projectName: workspace.name,
+        brainWorkspaceKey: workspace.brainWorkspaceKey
+      });
+    } catch (error) {
+      console.warn("[project-scene-init] open-project seed failed", error);
+    }
   }
   activeShellEnv = await buildWorkspaceShellEnvWithPreferences(workspace);
   runtime.setShellEnv(activeShellEnv);
@@ -7500,20 +7672,36 @@ async function callModelApi(input: {
       })
     }));
   };
-  const sendModelRequest = async (url: string, body: string) => {
+  const sendModelRequest = async (url: string, body: string, tokenOverride?: string, retriedAuth = false) => {
+    const activeToken = tokenOverride ?? bearerToken;
     let httpResponse: Response;
     try {
       httpResponse = await fetchModelResponseWithHeadersTimeout(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${bearerToken}`
+          Authorization: `Bearer ${activeToken}`
         },
         signal: input.signal,
         body
       });
     } catch (error) {
       throw new Error(formatModelNetworkError(error, url));
+    }
+    if (
+      !httpResponse.ok
+      && httpResponse.status === 401
+      && authSelection.source === "desktop_access_token"
+      && !retriedAuth
+    ) {
+      const refreshedToken = await refreshDesktopAccessTokenForGateway();
+      if (refreshedToken && refreshedToken !== activeToken) {
+        bearerToken = refreshedToken;
+        await appendDesktopDebugLog(
+          `model request auth refreshed after 401 endpoint=${url} tokenLength=${refreshedToken.length}`
+        );
+        return sendModelRequest(url, body, refreshedToken, true);
+      }
     }
     let streamed: Awaited<ReturnType<typeof readModelResponseBody>>;
     try {
@@ -8018,9 +8206,7 @@ function registerIpc() {
       // development desktop. The control-plane model origin may point at a
       // remote/older gateway that does not expose auto media routes.
       const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
-      let baseUrl = forcedMediaBase || (!app.isPackaged
-        ? "http://127.0.0.1:8790/v1"
-        : await readGatewayBaseUrl());
+      let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
@@ -8030,16 +8216,82 @@ function registerIpc() {
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
       if (!bearerToken) throw new Error("媒体生成需要已登录的网关凭证。");
       if (!baseUrl) throw new Error("媒体生成需要已配置的模型网关地址。");
-      const result = await executeMediaGenerationTurn({
-        gatewayBaseUrl: baseUrl,
-        bearerToken,
+      const owner = await resolveBrainLocalOwnerId();
+      const project = brainWorkspaceStorage.getProject(owner, input.projectId);
+      if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
+      const projectRoot = await resolveBrainWorkspaceRoot(project.localWorkspaceId);
+      const videoRuntime = new VideoRuntimeService((binding) => getRustCoreService().acquire(binding));
+      let size = typeof input.size === "string" && input.size.trim() ? input.size.trim() : "";
+      if (!size && input.kind === "video") {
+        try {
+          const pipeline = await videoRuntime.pipelineGet({ projectId: project.id, projectRoot }) as { state?: { canvas?: { width?: number; height?: number; aspect?: string; fps?: number } } };
+          size = brainVideoCanvasSize(pipeline.state?.canvas);
+        } catch {
+          size = "1920x1080";
+        }
+      }
+      const requestId = `scene-media-${input.projectId}-${Date.now()}`;
+      let preferredModel = "";
+      try {
+        preferredModel = String((await readRootConfig()).llm?.model || "").trim();
+      } catch {
+        preferredModel = "";
+      }
+      const resolvedModel = resolveSceneMediaModel({
         kind: input.kind,
-        model: input.model || "",
-        prompt: input.prompt,
-        requestId: `scene-media-${input.projectId}-${Date.now()}`,
-        toolName: input.kind === "video" ? "video_generate" : input.kind === "image" ? "image_generate" : undefined
+        explicitModel: input.model,
+        preferredModel,
+        availableModels: cachedAuthorizedModels
       });
-      return { content: result.content, kind: input.kind };
+      let imageUrl = String(input.imageUrl || "").trim() || undefined;
+      let lastFrameImageUrl = String(input.lastFrameImageUrl || "").trim() || undefined;
+      if (imageUrl) {
+        imageUrl = await resolveAutoMediaReferenceImage({ workspaceRoot: projectRoot, imageUrl });
+      }
+      if (lastFrameImageUrl) {
+        lastFrameImageUrl = await resolveAutoMediaReferenceImage({
+          workspaceRoot: projectRoot,
+          imageUrl: lastFrameImageUrl
+        });
+      }
+      const result = await executeWithMediaAuthenticationRetry({
+        initialToken: bearerToken,
+        refreshAccessToken: refreshDesktopAccessTokenForGateway,
+        execute: (activeBearerToken) => executeMediaGenerationTurn({
+          gatewayBaseUrl: baseUrl,
+          bearerToken: activeBearerToken,
+          kind: input.kind,
+          model: resolvedModel,
+          prompt: input.prompt,
+          imageUrl,
+          lastFrameImageUrl,
+          requestId,
+          size: size || undefined,
+          toolName: input.kind === "video"
+            ? "video_generate"
+            : input.kind === "image"
+              ? "image_generate"
+              : input.kind === "music"
+                ? "music_generate"
+                : undefined
+        })
+      });
+      // Per-shot video: download clip → media/clips/ → Rust pipeline (not a mock status flip).
+      if (input.kind === "video" && input.shotIndex !== undefined) {
+        return finalizeSceneVideoShot({
+          deps: {
+            ownerId: resolveBrainLocalOwnerId,
+            projectId: project.id,
+            projectRoot,
+            storage: brainWorkspaceStorage,
+            videoRuntime
+          },
+          shotIndex: input.shotIndex,
+          content: result.content,
+          job: result.job
+        });
+      }
+      return { content: result.content, kind: input.kind, jobId: String(result.job.id || "") };
     }
   });
   registerDataImportIpc({ dataImport: new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot), resolveOwnerId: resolveBrainLocalOwnerId });
@@ -8098,7 +8350,21 @@ function registerIpc() {
     writeTerminalInput: (input) => agentHostAdapter.writeTerminalInput(input),
     restartTerminalSession: () => agentHostAdapter.restartTerminalSession(),
     cancelSpringTurn: (input) => agentTurnControlPlane.cancelTurn(input),
-    resolveSpringApproval: (input) => agentTurnControlPlane.resolveApproval(input)
+    resolveSpringApproval: (input) => agentTurnControlPlane.resolveApproval(input),
+    rememberApprovedCommand: async ({ toolName, command }) => {
+      const { rememberApprovedCommand } = await import("./approval-memory.js");
+      const current = await readPolicyRules();
+      const next = rememberApprovedCommand(current, { toolName, command });
+      const saved = await writePolicyRules(next);
+      for (const task of concurrentModelTasks.values()) {
+        try {
+          task.runtime?.setPolicyRules?.(saved);
+        } catch {
+          // Best-effort: default runtime already updated in writePolicyRules.
+        }
+      }
+      await appendDesktopDebugLog(`approval memory saved tool=${toolName} command=${command.slice(0, 120)}`);
+    }
   });
   ipcMain.handle(desktopIpcChannels.model.guideRequest, (_event, input: {
     requestId?: unknown;
@@ -8703,6 +8969,61 @@ function registerIpc() {
     configureRuntime: async (targetRuntime, workspace, thread) => {
       registerDesktopArtifactRenderer(targetRuntime, workspace.path);
       registerWorkspaceMediaAgentTools(targetRuntime);
+      const brainOwnerId = await resolveBrainLocalOwnerId();
+      const brainWorkspaceKey = workspace.brainWorkspaceKey;
+      let boundBrainProject = brainWorkspaceKey
+        ? brainWorkspaceStorage.listProjects({
+          ownerId: brainOwnerId,
+          workspaceKey: brainWorkspaceKey
+        }).find((project) => project.localWorkspaceId === workspace.id)
+        : undefined;
+      if (!boundBrainProject && brainWorkspaceKey === "explore") {
+        boundBrainProject = brainWorkspaceStorage.createProject({
+          ownerId: brainOwnerId,
+          name: workspace.name || "场景学习探索",
+          primaryWorkspaceKey: "explore",
+          localWorkspaceId: workspace.id
+        });
+      }
+      registerAutoMediaAgentTools(targetRuntime, {
+        workspaceId: workspace.id,
+        threadId: thread.id,
+        workspaceRoot: workspace.path,
+        ...(boundBrainProject ? {
+          ownerId: resolveBrainLocalOwnerId,
+          projectId: boundBrainProject.id,
+          workspaceKey: boundBrainProject.primaryWorkspaceKey,
+          storage: brainWorkspaceStorage,
+          notifyUi: (payload) => {
+            mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
+          }
+        } : {}),
+        openLocalMedia: async ({ kind, relativePath }) => {
+          await openWorkspaceMediaForAgent(kind, relativePath);
+        },
+        resolveAbortSignal: () => {
+          for (const task of concurrentModelTasks.values()) {
+            if (task.workspaceId === workspace.id && task.threadId === thread.id) {
+              return task.abortController.signal;
+            }
+          }
+          return undefined;
+        },
+        resolveGateway: async () => {
+          const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+          let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
+          const authState = await readDesktopAuthState();
+          const authSelection = selectModelRequestAuth(authState, "");
+          let bearerToken = authSelection.bearerToken;
+          if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+            bearerToken = "codecn-e2e";
+          }
+          if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
+            baseUrl = await readGatewayBaseUrl();
+          }
+          return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
+        }
+      });
       if (workspace.brainWorkspaceKey === "game") {
         registerGameRuntimeTools(targetRuntime, workspace.id, workspace.path);
       }
@@ -8721,11 +9042,9 @@ function registerIpc() {
             videoRuntime: new VideoRuntimeService((binding) => getRustCoreService().acquire(binding)),
             timeline: videoTimelineService,
             render: videoRenderService,
-            generateVideo: async ({ prompt, model }) => {
+            generateVideo: async ({ prompt, model, size }) => {
               const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
-              let baseUrl = forcedMediaBase || (!app.isPackaged
-                ? "http://127.0.0.1:8790/v1"
-                : await readGatewayBaseUrl());
+              let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
@@ -8737,46 +9056,163 @@ function registerIpc() {
               }
               if (!bearerToken) throw new Error("视频生成需要已登录的网关凭证。");
               if (!baseUrl) throw new Error("视频生成需要已配置的模型网关地址。");
-              const result = await executeMediaGenerationTurn({
-                gatewayBaseUrl: baseUrl,
-                bearerToken,
+              const requestId = `video-agent-${videoProject.id}-${Date.now()}`;
+              let preferredModel = "";
+              try {
+                preferredModel = String((await readRootConfig()).llm?.model || "").trim();
+              } catch {
+                preferredModel = "";
+              }
+              const resolvedModel = resolveSceneMediaModel({
                 kind: "video",
-                model: model || "",
-                prompt,
-                requestId: `video-agent-${videoProject.id}-${Date.now()}`,
-                workspaceId: workspace.id,
-                threadId: thread.id,
-                toolName: "video_generate"
+                explicitModel: model,
+                preferredModel,
+                availableModels: cachedAuthorizedModels
+              });
+              const result = await executeWithMediaAuthenticationRetry({
+                initialToken: bearerToken,
+                refreshAccessToken: refreshDesktopAccessTokenForGateway,
+                execute: (activeBearerToken) => executeMediaGenerationTurn({
+                  gatewayBaseUrl: baseUrl,
+                  bearerToken: activeBearerToken,
+                  kind: "video",
+                  model: resolvedModel,
+                  prompt,
+                  requestId,
+                  size: size || undefined,
+                  workspaceId: workspace.id,
+                  threadId: thread.id,
+                  toolName: "video_generate"
+                })
               });
               const url = extractMediaUrlsFromResult(result.job.resultJson)[0];
               if (!url) throw new Error("BRAIN_VIDEO_GENERATION_OUTPUT_MISSING");
-              return { url, providerResult: { job: result.job, via: result.via } };
+              return { url, providerResult: { job: result.job, via: result.via, size: size || "" } };
             },
             generateSpeech: async ({ text, model, voice }) => {
               const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
-              let baseUrl = forcedMediaBase || (!app.isPackaged ? "http://127.0.0.1:8790/v1" : await readGatewayBaseUrl());
+              let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
               if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) bearerToken = "codecn-e2e";
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
               if (!bearerToken) throw new Error("配音生成需要已登录的网关凭证。");
-              const endpoint = `${baseUrl.replace(/\/+$/u, "").replace(/\/v1$/iu, "")}/v1/audio/speech`;
-              const response = await fetch(endpoint, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${bearerToken}`, "Content-Type": "application/json", Accept: "audio/mpeg,audio/wav" },
-                body: JSON.stringify({ model: model || "minimax-speech-2.8-hd", input: text, voice: voice || "minimax_55e81114-ce7e-4ca1", response_format: "mp3" })
+              const { synthesizeMinimaxSyncTts, resolveMinimaxNarrationVoice, MINIMAX_DEFAULT_VOICE_ID } = await import("./minimax-tts-gateway.js");
+              const profile = resolveMinimaxNarrationVoice(voice);
+              const remote = await synthesizeMinimaxSyncTts({
+                gatewayBaseUrl: baseUrl,
+                bearerToken,
+                text,
+                model: model || undefined,
+                voice: {
+                  voiceId: voice && /^minimax_/i.test(voice) ? voice : (profile.voiceId || MINIMAX_DEFAULT_VOICE_ID),
+                  speed: profile.speed,
+                  vol: profile.vol,
+                  pitch: profile.pitch
+                }
               });
-              if (response.ok) {
-                const bytes = Buffer.from(await response.arrayBuffer());
-                const mimeType = String(response.headers.get("content-type") || "audio/mpeg").split(";")[0] || "audio/mpeg";
-                if (bytes.length) return { bytes, mimeType, providerResult: { endpoint: "/v1/audio/speech", model: model || "minimax-speech-2.8-hd", byteLength: bytes.length } };
+              if (remote.ok && remote.audioBase64) {
+                const bytes = Buffer.from(remote.audioBase64, "base64");
+                return {
+                  bytes,
+                  mimeType: remote.mimeType || "audio/mpeg",
+                  providerResult: {
+                    endpoint: "/v1/wand/minimax-tts/sync_tts",
+                    model: model || "minimax-speech-2.8-hd",
+                    byteLength: bytes.length,
+                    provider: remote.provider
+                  }
+                };
               }
-              const remoteDetail = response.ok ? "empty response" : `${response.status}:${(await response.text()).slice(0, 300)}`;
-              const offline = await novelTtsService.synthesizeToFile({ text, voiceId: voice || "zh_female_1", voiceLabel: "视频旁白" });
+              const remoteDetail = remote.detail || "minimax sync_tts failed";
+              const offline = await novelTtsService.synthesizeToFile({
+                text,
+                voiceId: profile.kokoroVoiceId || "calm_narrator",
+                voiceLabel: "视频旁白",
+                preferGateway: false
+              });
               if (!offline.ok || !offline.audioPath) throw new Error(`BRAIN_VIDEO_SPEECH_FAILED:${remoteDetail}:${offline.detail || "offline unavailable"}`);
               const bytes = await fs.readFile(offline.audioPath);
-              return { bytes, mimeType: offline.mimeType || "audio/wav", providerResult: { endpoint: "/v1/audio/speech", remoteFailure: remoteDetail, fallback: offline.provider, runtime: offline.runtime, durationMs: offline.durationMs, byteLength: bytes.length } };
+              return {
+                bytes,
+                mimeType: offline.mimeType || "audio/wav",
+                providerResult: {
+                  endpoint: "/v1/wand/minimax-tts/sync_tts",
+                  remoteFailure: remoteDetail,
+                  fallback: offline.provider,
+                  runtime: offline.runtime,
+                  durationMs: offline.durationMs,
+                  byteLength: bytes.length
+                }
+              };
+            }
+          });
+        }
+      }
+      if (workspace.brainWorkspaceKey === "music") {
+        const ownerId = await resolveBrainLocalOwnerId();
+        const musicProject = brainWorkspaceStorage.listProjects({
+          ownerId,
+          workspaceKey: "music"
+        }).find((project) => project.localWorkspaceId === workspace.id);
+        if (musicProject) {
+          registerMusicAgentTools(targetRuntime, {
+            ownerId: resolveBrainLocalOwnerId,
+            projectId: musicProject.id,
+            projectRoot: workspace.path,
+            storage: brainWorkspaceStorage,
+            musicRuntime: new MusicRuntimeService((binding) => getRustCoreService().acquire(binding)),
+            timeline: musicTimelineService,
+            render: musicRenderService,
+            notifyUi: (payload) => {
+              mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
+            },
+            generateMusic: async ({ prompt, model }) => {
+              const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+              let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
+              const authState = await readDesktopAuthState();
+              const authSelection = selectModelRequestAuth(authState, "");
+              let bearerToken = authSelection.bearerToken;
+              if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+                bearerToken = "codecn-e2e";
+              }
+              if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
+                baseUrl = await readGatewayBaseUrl();
+              }
+              if (!bearerToken) throw new Error("音乐生成需要已登录的网关凭证。");
+              if (!baseUrl) throw new Error("音乐生成需要已配置的模型网关地址。");
+              const requestId = `music-agent-${musicProject.id}-${Date.now()}`;
+              let preferredModel = "";
+              try {
+                preferredModel = String((await readRootConfig()).llm?.model || "").trim();
+              } catch {
+                preferredModel = "";
+              }
+              const resolvedModel = resolveSceneMediaModel({
+                kind: "music",
+                explicitModel: model,
+                preferredModel,
+                availableModels: cachedAuthorizedModels
+              });
+              const result = await executeWithMediaAuthenticationRetry({
+                initialToken: bearerToken,
+                refreshAccessToken: refreshDesktopAccessTokenForGateway,
+                execute: (activeBearerToken) => executeMediaGenerationTurn({
+                  gatewayBaseUrl: baseUrl,
+                  bearerToken: activeBearerToken,
+                  kind: "music",
+                  model: resolvedModel,
+                  prompt,
+                  requestId,
+                  workspaceId: workspace.id,
+                  threadId: thread.id,
+                  toolName: "music_generate"
+                })
+              });
+              const url = extractMediaUrlsFromResult(result.job.resultJson)[0];
+              if (!url) throw new Error("BRAIN_MUSIC_GENERATION_OUTPUT_MISSING");
+              return { url, providerResult: { job: result.job, via: result.via } };
             }
           });
         }
@@ -8830,23 +9266,10 @@ function registerIpc() {
         }
       }
       if (workspace.brainWorkspaceKey === "explore") {
-        const ownerId = await resolveBrainLocalOwnerId();
-        let exploreProject = brainWorkspaceStorage.listProjects({
-          ownerId,
-          workspaceKey: "explore"
-        }).find((project) => project.localWorkspaceId === workspace.id);
-        if (!exploreProject) {
-          exploreProject = brainWorkspaceStorage.createProject({
-            ownerId,
-            name: workspace.name || "场景学习探索",
-            primaryWorkspaceKey: "explore",
-            localWorkspaceId: workspace.id
-          });
-        }
-        if (exploreProject) {
+        if (boundBrainProject) {
           registerExploreAgentTools(targetRuntime, {
             ownerId: resolveBrainLocalOwnerId,
-            projectId: exploreProject.id,
+            projectId: boundBrainProject.id,
             projectRoot: workspace.path,
             storage: brainWorkspaceStorage,
             notifyUi: (payload) => {
@@ -8954,9 +9377,7 @@ function registerIpc() {
       // instance as scene-triggered generation. Otherwise the model path can
       // reach a remote/older gateway and incorrectly fall back to /videos.
       const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
-      let baseUrl = forcedMediaBase || (!app.isPackaged
-        ? "http://127.0.0.1:8790/v1"
-        : await readGatewayBaseUrl());
+      let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
@@ -8972,30 +9393,34 @@ function registerIpc() {
       if (!baseUrl) {
         throw new Error("媒体生成需要已配置的模型网关地址。");
       }
-      const result = await executeMediaGenerationTurn({
-        gatewayBaseUrl: baseUrl,
-        bearerToken,
-        kind: input.kind,
-        model: input.model,
-        prompt: input.prompt,
-        imageUrl: input.imageUrl,
-        requestId: input.requestId,
-        workspaceId: input.workspaceId,
-        threadId: input.threadId,
-        turnId: input.turnId,
-        toolName: input.toolName,
-        mediaExecution: input.mediaExecution,
-        signal: input.signal,
-        onProgress: (job) => {
-          input.onProgress?.(`任务 ${job.id} · ${job.state}`);
-        },
-        onJobId: (mediaJobId) => {
-          input.onJobId?.(mediaJobId);
-        },
-        onCorrelationMismatch: (message) => {
-          void appendDesktopDebugLog(message);
-          void appendDiagnosticsLog(message);
-        }
+      const result = await executeWithMediaAuthenticationRetry({
+        initialToken: bearerToken,
+        refreshAccessToken: refreshDesktopAccessTokenForGateway,
+        execute: (activeBearerToken) => executeMediaGenerationTurn({
+          gatewayBaseUrl: baseUrl,
+          bearerToken: activeBearerToken,
+          kind: input.kind,
+          model: input.model,
+          prompt: input.prompt,
+          imageUrl: input.imageUrl,
+          requestId: input.requestId,
+          workspaceId: input.workspaceId,
+          threadId: input.threadId,
+          turnId: input.turnId,
+          toolName: input.toolName,
+          mediaExecution: input.mediaExecution,
+          signal: input.signal,
+          onProgress: (job) => {
+            input.onProgress?.(`任务 ${job.id} · ${job.state}`);
+          },
+          onJobId: (mediaJobId) => {
+            input.onJobId?.(mediaJobId);
+          },
+          onCorrelationMismatch: (message) => {
+            void appendDesktopDebugLog(message);
+            void appendDiagnosticsLog(message);
+          }
+        })
       });
       return { content: result.content };
     },
@@ -9192,14 +9617,42 @@ app.whenReady().then(async () => {
       if (stat.size > ARTIFACT_PROTOCOL_MAX_BYTES) {
         return new Response("Artifact too large", { status: 413 });
       }
+      const headLen = Math.min(16, Number(stat.size) || 0);
+      let head = Buffer.alloc(0);
+      if (headLen > 0) {
+        head = Buffer.alloc(headLen);
+        const headHandle = await fs.open(targetPath, "r");
+        try {
+          await headHandle.read(head, 0, headLen, 0);
+        } finally {
+          await headHandle.close();
+        }
+      }
+      const mimeType = resolveArtifactMimeType(targetPath, head);
+      const byteRange = parseByteRangeHeader(request.headers.get("Range"), stat.size);
+      if (byteRange) {
+        const length = byteRange.end - byteRange.start + 1;
+        const buffer = Buffer.alloc(length);
+        const handle = await fs.open(targetPath, "r");
+        try {
+          await handle.read(buffer, 0, length, byteRange.start);
+        } finally {
+          await handle.close();
+        }
+        return new Response(buffer, {
+          status: 206,
+          headers: artifactProtocolResponseHeaders(mimeType, {
+            "Content-Length": String(length),
+            "Content-Range": `bytes ${byteRange.start}-${byteRange.end}/${stat.size}`
+          })
+        });
+      }
       const bytes = await fs.readFile(targetPath);
       return new Response(bytes, {
         status: 200,
-        headers: {
-          "Content-Type": mimeTypeForArtifactPath(targetPath),
-          "Cache-Control": "no-store",
-          "X-Content-Type-Options": "nosniff"
-        }
+        headers: artifactProtocolResponseHeaders(mimeType, {
+          "Content-Length": String(stat.size)
+        })
       });
     } catch {
       return new Response("Artifact not found", { status: 404 });
@@ -9221,7 +9674,8 @@ app.whenReady().then(async () => {
       workspacePath: initialWorkspace?.path ?? workspacePath,
       platformLabel,
       shellLabel,
-      shellEnv: activeShellEnv
+      shellEnv: activeShellEnv,
+      brainWorkspaceKey: initialWorkspace?.brainWorkspaceKey || "explore"
     });
     registerDesktopArtifactRenderer(runtime, initialWorkspace?.path ?? workspacePath);
     await applyApplicationSkillPolicy(runtime);

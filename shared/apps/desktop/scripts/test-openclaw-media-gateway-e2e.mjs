@@ -108,8 +108,7 @@ const image = await executeMediaGenerationTurn({
   requestId: "req-image-1",
   workspaceId: "ws-1",
   threadId: "th-1",
-  pollIntervalMs: 20,
-  maxWaitMs: 5_000
+  pollIntervalMs: 20
 });
 assert.equal(image.via, "auto_tools");
 assert.equal(image.job.state, "SUCCEEDED");
@@ -125,8 +124,7 @@ const video = await executeMediaGenerationTurn({
   requestId: "req-video-1",
   workspaceId: "ws-1",
   threadId: "th-1",
-  pollIntervalMs: 20,
-  maxWaitMs: 5_000
+  pollIntervalMs: 20
 });
 assert.equal(video.via, "auto_tools");
 assert.equal(video.job.state, "SUCCEEDED");

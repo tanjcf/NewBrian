@@ -762,7 +762,7 @@ export function createBuiltinToolRegistry() {
     .register({
       name: "artifact.create",
       title: "Create office artifact",
-      description: "Create a real PDF, PowerPoint, Excel, or Word file inside the workspace. For government writing PDF/DOCX prefer document.create_pdf or document.create_docx with structured sections. Required: targetPath under outputs/. format must be pdf|pptx|xlsx|docx (never page size a4). Pass plain text/Markdown only—never HTML/XML.",
+      description: "Create a real PDF, PowerPoint, HTML slides, Excel, or Word file inside the workspace. For government writing PDF/DOCX prefer document.create_pdf or document.create_docx with structured sections. Required: targetPath under outputs/. format must be pdf|pptx|html|xlsx|docx (never page size a4). For presentations include chart (统计图), timeline/process (阶段图), and image (展示图) slides—not text-only decks. chart uses categories+values; phases for stage diagrams; imagePath from image_generate or imagePlaceholder. Pass plain text/Markdown only—never HTML/XML document dumps.",
       kind: "write",
       risk: "medium",
       requiresApproval: false,
@@ -776,13 +776,86 @@ export function createBuiltinToolRegistry() {
           },
           format: {
             type: "string",
-            enum: ["pdf", "pptx", "xlsx", "docx"],
-            description: "File format only. Never pass page size values such as a4 or letter."
+            enum: ["pdf", "pptx", "html", "xlsx", "docx"],
+            description: "File format only. Never pass page size values such as a4 or letter. Use html for web-first slide decks; pptx also writes a companion .slides.html."
           },
           title: { type: "string" },
+          subtitle: { type: "string" },
           content: { type: "string" },
           sections: { type: "array", items: { type: "object", properties: { heading: { type: "string" }, body: { type: "string" }, bullets: { type: "array", items: { type: "string" } } }, additionalProperties: false } },
-          slides: { type: "array", items: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, bullets: { type: "array", items: { type: "string" } } }, additionalProperties: false } },
+          slides: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                subtitle: { type: "string" },
+                body: { type: "string" },
+                bullets: { type: "array", items: { type: "string" } },
+                layout: { type: "string", enum: ["title", "section", "bullets", "columns", "cards", "closing", "stat", "chart", "timeline", "process", "image"] },
+                chart: {
+                  type: "object",
+                  properties: {
+                    type: { type: "string", enum: ["bar", "line", "pie", "doughnut", "area"] },
+                    categories: { type: "array", items: { type: "string" } },
+                    labels: { type: "array", items: { type: "string" } },
+                    seriesName: { type: "string" },
+                    values: { type: "array", items: { type: "number" } },
+                    series: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          values: { type: "array", items: { type: "number" } }
+                        },
+                        additionalProperties: false
+                      }
+                    }
+                  },
+                  additionalProperties: false
+                },
+                phases: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      label: { type: "string" },
+                      title: { type: "string" },
+                      body: { type: "string" }
+                    },
+                    additionalProperties: false
+                  }
+                },
+                imagePath: { type: "string", description: "Workspace-relative PNG/JPG path (outputs/ or .codecn/generated-media/image/)" },
+                imagePlaceholder: { type: "string", description: "Placeholder text when imagePath is not yet available" },
+                caption: { type: "string" },
+                columns: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      bullets: { type: "array", items: { type: "string" } }
+                    },
+                    additionalProperties: false
+                  }
+                },
+                cards: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      body: { type: "string" }
+                    },
+                    additionalProperties: false
+                  }
+                }
+              },
+              additionalProperties: false
+            }
+          },
           sheets: { type: "array", items: { type: "object", properties: { name: { type: "string" }, rows: { type: "array", items: { type: "array", items: {} } } }, additionalProperties: false } },
           rows: { type: "array", items: { type: "array", items: {} } }
         },
@@ -1043,37 +1116,48 @@ const documentSectionSchema = {
 
 function createStructuredDocumentTool(format) {
   const extension = format;
+  const properties = {
+    targetPath: {
+      type: "string",
+      minLength: 1,
+      description: `Workspace-relative path such as outputs/宣讲稿-第一版.${extension}`
+    },
+    title: { type: "string", minLength: 1, description: "Document title in plain text" },
+    content: {
+      type: "string",
+      description: "Optional full plain-text/Markdown body when sections are omitted"
+    },
+    sections: {
+      type: "array",
+      description: "Preferred structured body",
+      items: documentSectionSchema
+    }
+  };
+  if (format === "docx") {
+    properties.rows = {
+      type: "array",
+      description: "Optional comparison/table rows for Word tables (header row first)",
+      items: { type: "array", items: {} }
+    };
+  }
   return {
     name: `document.create_${format}`,
     title: format === "pdf" ? "Create PDF document" : "Create Word document",
     description: [
       `Create a real .${extension} file from structured plain-text sections (OpenClaw-style encapsulation).`,
       "Required: title. Prefer sections:[{heading,body,bullets}].",
+      format === "docx"
+        ? "For 对照表 / comparison tables, pass rows:[[\"列1\",\"列2\"],[\"...\",\"...\"]] or Markdown pipe tables in body so Word keeps a real table."
+        : null,
       "Optional targetPath under outputs/ ending with ." + extension + ".",
       "Never pass HTML/XML tags such as <document>, <p>, <h1>, <font>, or <margins>."
-    ].join(" "),
+    ].filter(Boolean).join(" "),
     kind: "write",
     risk: "medium",
     requiresApproval: false,
     inputSchema: {
       type: "object",
-      properties: {
-        targetPath: {
-          type: "string",
-          minLength: 1,
-          description: `Workspace-relative path such as outputs/宣讲稿-第一版.${extension}`
-        },
-        title: { type: "string", minLength: 1, description: "Document title in plain text" },
-        content: {
-          type: "string",
-          description: "Optional full plain-text/Markdown body when sections are omitted"
-        },
-        sections: {
-          type: "array",
-          description: "Preferred structured body",
-          items: documentSectionSchema
-        }
-      },
+      properties,
       required: ["title"],
       additionalProperties: false
     },
@@ -1088,11 +1172,16 @@ async function executeArtifactCreate(input, context) {
   const outputPath = projectArtifactPath(input.targetPath);
   const resolved = await resolveSafeWorkspaceTarget(context.workspacePath, outputPath);
   const previousStat = await fs.stat(resolved.target).catch(() => null);
-  const metadata = await generateArtifact(input, resolved.target);
+  const metadata = await generateArtifact(input, resolved.target, { workspacePath: context.workspacePath });
+  const companionNote = input.format === "pptx"
+    ? ` Companion web deck: ${resolved.relativePath.replace(/\.pptx$/i, ".slides.html")}.`
+    : input.format === "html"
+      ? " Open the HTML in a browser and use arrow keys to present."
+      : "";
   return {
     ok: true,
     exitCode: 0,
-    output: `Created ${input.format.toUpperCase()} ${resolved.relativePath} (${metadata.size} bytes).`,
+    output: `Created ${input.format.toUpperCase()} ${resolved.relativePath} (${metadata.size} bytes).${companionNote}`,
     command: `create ${resolved.relativePath}`,
     artifact: {
       path: resolved.relativePath,

@@ -5,14 +5,9 @@ import type {
   WorkspaceThreadRecord
 } from "@codex-forge/protocol";
 import {
-  AUTO_NO_IMAGE_MODEL_MESSAGE,
-  isImageGenerationCapableModel,
   isModelAutoSelection,
   isSpecializedNonChatModel,
-  isVideoCapableModel,
   isVisionCapableModel,
-  looksLikeImageGenerationRequest,
-  looksLikeVideoGenerationRequest,
   MODEL_AUTO_ID,
   normalizeOptimizeFor,
   resolveModelAutoDecision,
@@ -21,6 +16,7 @@ import {
   type AutoTaskClass,
   type AuthorizedModelOption
 } from "./model-auto-router.ts";
+import { resolveAutoParentDisplayName } from "./auto-parent-display-policy.ts";
 import {
   buildSkillRoutingHints,
   type SkillRoutingHint,
@@ -212,116 +208,6 @@ export function enforceVisionCapableAutoSelection(input: {
   };
 }
 
-/**
- * Safety net when spring-app Auto mislabels image/video as text_chat:
- * only correct the child-tool channel. Never pick a concrete model on desktop —
- * parent agent (spring-app Auto) owns selection (effect first, cost second);
- * child tool (`image_generate` / `video_generate`) executes.
- */
-export function applyLocalMediaIntentOverride(input: {
-  decision: AutoDecision;
-  latestUserText: string;
-  availableModels: AuthorizedModelOption[];
-  hasImageAttachments?: boolean;
-}): AutoDecision {
-  const text = String(input.latestUserText || "").trim();
-  const channel = String(input.decision.orchestrator?.primary_channel || "").trim();
-  // Uploaded-image Q&A must stay on vision_qa — never force image_gen (empty chat envelope).
-  if (input.hasImageAttachments && channel !== "image_gen" && channel !== "video_gen") {
-    const strongImageGen =
-      /(?:文生图|出图|生成图片|生成壁纸|做壁纸|画壁纸|壁纸|wallpaper|hy-image|混元生图|重画|图生图)/i.test(text);
-    if (!strongImageGen) {
-      return input.decision;
-    }
-  }
-  const wantVideo = looksLikeVideoGenerationRequest(text);
-  const wantImage = !wantVideo && looksLikeImageGenerationRequest(text);
-  if (!wantImage && !wantVideo) return input.decision;
-  if (wantImage && channel === "image_gen" && input.decision.media_tool?.tool_name === "image_generate") {
-    return input.decision;
-  }
-  if (wantVideo && channel === "video_gen" && input.decision.media_tool?.tool_name === "video_generate") {
-    return input.decision;
-  }
-
-  if (wantImage) {
-    const hasImagePool = input.availableModels.some((item) => isImageGenerationCapableModel(item));
-    if (!hasImagePool) {
-      throw new Error(AUTO_NO_IMAGE_MODEL_MESSAGE);
-    }
-    const reasonCodes = [
-      ...input.decision.model.reason_codes,
-      "requires_image",
-      "local_media_intent_override",
-      "parent_selects_model",
-      "child_specialty=image_gen",
-      "server_authoritative_auto",
-      "channel=image_gen"
-    ];
-    return {
-      ...input.decision,
-      // Keep parent-selected model as advisory; do not locally pin hy-image / first match.
-      model: {
-        ...input.decision.model,
-        reason_codes: [...new Set(reasonCodes.map((code) => String(code || "").trim()).filter(Boolean))]
-      },
-      notes: `local channel override → image_gen（模型仍由父 Auto 选型；子工具 image_generate 执行）`,
-      task_class: "general",
-      routing_tier: "general",
-      optimize_for: input.decision.optimize_for === "cost" ? "intelligence" : (input.decision.optimize_for || "intelligence"),
-      orchestrator: {
-        schema_version: 1,
-        intent: "image_gen",
-        handled_by: "router",
-        can_handle_directly: false,
-        primary_channel: "image_gen",
-        reason_codes: [...new Set(reasonCodes)]
-      },
-      media_tool: {
-        execution: "server",
-        tool_name: "image_generate",
-        media_kind: "image"
-      }
-    };
-  }
-
-  const hasVideoPool = input.availableModels.some((item) => isVideoCapableModel(item));
-  const reasonCodes = [
-    ...input.decision.model.reason_codes,
-    "requires_video",
-    "local_media_intent_override",
-    "parent_selects_model",
-    "child_specialty=video_gen",
-    "server_authoritative_auto",
-    "channel=video_gen"
-  ];
-  return {
-    ...input.decision,
-    model: {
-      ...input.decision.model,
-      reason_codes: [...new Set(reasonCodes.map((code) => String(code || "").trim()).filter(Boolean))]
-    },
-    notes: hasVideoPool
-      ? "local channel override → video_gen（模型仍由父 Auto 选型；子工具 video_generate 执行）"
-      : "local channel override → video_gen（套餐暂无视频模型；子工具将返回明确错误）",
-    task_class: "general",
-    routing_tier: "general",
-    orchestrator: {
-      schema_version: 1,
-      intent: "video_gen",
-      handled_by: "router",
-      can_handle_directly: false,
-      primary_channel: "video_gen",
-      reason_codes: [...new Set(reasonCodes)]
-    },
-    media_tool: {
-      execution: "server",
-      tool_name: "video_generate",
-      media_kind: "video"
-    }
-  };
-}
-
 function autoDecisionFromServer(input: {
   server: SpringAppAutoRouteDecision;
   runId: string;
@@ -341,7 +227,8 @@ function autoDecisionFromServer(input: {
   const reasonCodes = [
     ...input.server.reason_codes,
     "server_authoritative_auto",
-    `channel=${channel}`
+    `channel=${channel}`,
+    "media_via_tool_calls"
   ];
   return {
     schema_version: 1,
@@ -378,7 +265,7 @@ function autoDecisionFromServer(input: {
     policy_etag: "spring-app-auto",
     degraded: Boolean(input.server.degraded),
     notes: input.server.notes
-      || `spring-app Auto → ${input.server.model} · ${channel}（父编排/子专长由网关决定；勿 curl TokenHub）`,
+      || `spring-app Auto → ${input.server.model} · ${channel}（媒体由模型 tool_calls；勿 curl TokenHub）`,
     task_class: mapServerTaskClass(input.server.task_class),
     routing_tier: mapServerTaskClass(input.server.task_class) === "chat" ? "light" : "general",
     optimize_for: normalizeOptimizeFor(input.server.optimize_for),
@@ -389,20 +276,7 @@ function autoDecisionFromServer(input: {
       can_handle_directly: false,
       primary_channel: channel as never,
       reason_codes: reasonCodes
-    },
-    media_tool: input.server.tool_name
-      ? {
-          execution: input.server.media_execution === "client" ? "client" : "server",
-          tool_name: input.server.tool_name,
-          media_kind: input.server.media_kind
-        }
-      : channel === "image_gen" || channel === "video_gen"
-        ? {
-            execution: "server",
-            tool_name: channel === "video_gen" ? "video_generate" : "image_generate",
-            media_kind: channel === "video_gen" ? "video" : "image"
-          }
-        : undefined
+    }
   };
 }
 
@@ -475,18 +349,13 @@ export class ModelChatPreparationService {
         throw new Error("spring-app Auto 未返回可用模型。");
       }
       autoDecision = enforceVisionCapableAutoSelection({
-        decision: applyLocalMediaIntentOverride({
-          decision: autoDecisionFromServer({
-            server,
-            runId: input.requestId,
-            threadId: thread.id,
-            latestUserText,
-            selectedSkillNames,
-            permissionMode: input.permissionMode
-          }),
+        decision: autoDecisionFromServer({
+          server,
+          runId: input.requestId,
+          threadId: thread.id,
           latestUserText,
-          availableModels: (availableModels as AuthorizedModelOption[]) ?? [],
-          hasImageAttachments: hasImages
+          selectedSkillNames,
+          permissionMode: input.permissionMode
         }),
         availableModels: (availableModels as AuthorizedModelOption[]) ?? [],
         hasImageAttachments: hasImages
@@ -545,6 +414,7 @@ export class ModelChatPreparationService {
       workspace,
       thread,
       autoDecision,
+      autoParentDisplayName: resolveAutoParentDisplayName(authorized.autoParentDisplayName),
       input: {
         ...input,
         provider: selected.provider,

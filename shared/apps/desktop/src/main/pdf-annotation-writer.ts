@@ -9,12 +9,24 @@ export type PdfAnnotationResult = {
   renderedText: string;
 };
 
+function parseHighlightColor(color?: string) {
+  const normalized = String(color || "").trim();
+  const match = /^#([0-9a-f]{6})$/i.exec(normalized);
+  if (!match) return { fill: rgb(1, 0.95, 0.8), stroke: rgb(0.9, 0.2, 0.1) };
+  const hex = match[1];
+  const r = Number.parseInt(hex.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(hex.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(hex.slice(4, 6), 16) / 255;
+  return { fill: rgb(r, g, b), stroke: rgb(Math.min(1, r + 0.15), Math.min(1, g + 0.15), Math.min(1, b + 0.15)) };
+}
+
 /** Draws a bounded highlight + annotation text; embeds a system CJK font when available. */
 export async function addPdfAnnotation(input: {
   bytes: Buffer;
   page: number;
   rect: { x: number; y: number; width: number; height: number };
   text: string;
+  color?: string;
 }): Promise<Buffer> {
   const result = await addPdfAnnotationWithMeta(input);
   return result.bytes;
@@ -25,6 +37,7 @@ export async function addPdfAnnotationWithMeta(input: {
   page: number;
   rect: { x: number; y: number; width: number; height: number };
   text: string;
+  color?: string;
 }): Promise<PdfAnnotationResult> {
   if (
     !Number.isInteger(input.page)
@@ -43,14 +56,15 @@ export async function addPdfAnnotationWithMeta(input: {
   document.registerFontkit(fontkit);
 
   const page = document.getPage(input.page - 1);
+  const colors = parseHighlightColor(input.color);
   page.drawRectangle({
     x: input.rect.x,
     y: input.rect.y,
     width: input.rect.width,
     height: input.rect.height,
-    borderColor: rgb(0.9, 0.2, 0.1),
+    borderColor: colors.stroke,
     borderWidth: 1.5,
-    color: rgb(1, 0.95, 0.8),
+    color: colors.fill,
     opacity: 0.18
   });
 

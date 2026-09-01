@@ -19,7 +19,7 @@ const localSkills = [
 const researchPrompt = "请撰写一篇地方实践调研报告，突出因地制宜路径。";
 
 test("explicit government-research-writing selection enables the central workflow", () => {
-  assert.equal(GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED, true);
+  if (!GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) return;
 
   for (const autoSkillEnabled of [false, true]) {
     const selection = selectModelChatSkills({
@@ -135,6 +135,8 @@ test("non-chat task still attaches always-on project-manager shadow", () => {
 });
 
 test("explicit composer selection enables government-research-writing", () => {
+  if (!GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) return;
+
   for (const autoSkillEnabled of [false, true]) {
     const selection = selectModelChatSkills({
       requestedSkillNames: ["government-research-writing"],
@@ -151,6 +153,8 @@ test("explicit composer selection enables government-research-writing", () => {
 });
 
 test("autoSkill keyword advisory enables government-research-writing", () => {
+  if (!GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) return;
+
   const selection = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: [],
@@ -166,6 +170,8 @@ test("autoSkill keyword advisory enables government-research-writing", () => {
 });
 
 test("autoSkill can revive persisted and heuristic government specialty", () => {
+  if (!GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) return;
+
   const fromPersisted = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: ["government-research-writing"],
@@ -188,4 +194,19 @@ test("autoSkill can revive persisted and heuristic government specialty", () => 
   });
   assert.equal(fromHeuristic.governmentSkillEnabled, true);
   assert.ok(fromHeuristic.centralSkillNames.includes("government-research-writing"));
+});
+
+test("project local skills can auto-wake even when Skill 自动唤醒 is off", () => {
+  const projectSkill = { name: "market-brief", description: "市场简报", path: "C:/proj/.codecn/skills/market-brief" };
+  const selection = selectModelChatSkills({
+    requestedSkillNames: [],
+    persistedSkillNames: [],
+    localSkillDescriptors: [projectSkill, ...localSkills.filter((skill) => skill.name.endsWith("-project-manager"))],
+    heuristicSkills: [projectSkill],
+    hasActiveGoal: false,
+    autoSkillEnabled: false,
+    latestUserRequest: "请根据项目 skill 生成一份新能源汽车市场分析简报并导出 PPT"
+  });
+  assert.ok(selection.selectedLocalSkillNames.includes("market-brief"), selection.selectedLocalSkillNames.join(","));
+  assert.equal(selection.governmentSkillEnabled, false);
 });

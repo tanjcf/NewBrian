@@ -181,7 +181,9 @@ test("document previews open beside the mounted conversation and close without n
   const viewerRegistry = readFileSync(new URL("./artifact-viewer-registry.tsx", import.meta.url), "utf8");
   assert.match(viewerRegistry, /viewerRegistry\.set\("slides", BuiltinSlidesFileViewer\)/);
   assert.match(viewerRegistry, /codecn-resource:\/\//);
-  assert.match(workspaceSource, /\(pdf\|docx\|pptx\)/);
+  // BRAIN project panel open → side slot; otherwise Office still may center.
+  assert.match(previewHandler, /useProjectPanelSlot/);
+  assert.match(previewHandler, /docx\|pdf\|pptx\|xlsx/);
   assert.match(styles, /\.workspace-artifact-pptx/);
 });
 

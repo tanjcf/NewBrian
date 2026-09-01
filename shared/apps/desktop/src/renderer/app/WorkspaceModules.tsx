@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PreviewPlacement } from "./desktop-model";
 import { MarkdownMessage } from "./MarkdownMessage";
@@ -13,17 +13,21 @@ import {
   classifySoftFilePreviewFailure,
   classifyTextPreviewPayload,
   FILE_PREVIEW_MAX_ATTEMPTS,
+  FILE_PREVIEW_TIMEOUT_MS,
   filePreviewRetryDelayMs,
   findMatchingArtifactTab,
   formatFilePreviewStatus,
   isReusableArtifactPreview,
   isStaleFilePreviewRequest,
+  patchArtifactTabsForRequest,
+  withFilePreviewTimeout,
   type FilePreviewIssue
 } from "./file-preview-policy";
 import { ComposerTextarea, type ComposerTextareaHandle } from "./ComposerTextarea";
 import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
+import { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } from "../../shared/product-flags.js";
 import { builtinPluginCatalog } from "../../shared/builtin-plugins";
 import { executionKindDescription, executionKindLabel } from "../../shared/plugin-execution";
 import { projectPersistedActivities } from "./persisted-activity-policy";
@@ -35,7 +39,7 @@ import {
 } from "./thread-activity-policy";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import { resolveLocalArtifactHref } from "./local-file-link";
-import { chatWorkspaces, crossSceneRecentProjects, filterWorkspaceCatalogByScene, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection } from "./workspace-visibility";
+import { crossSceneRecentProjects, filterWorkspaceCatalogByScene, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection, sceneChatWorkspaces } from "./workspace-visibility";
 import {
   buildLegacyConversationThreadMappings,
   mergeConversationThreadMappings,
@@ -43,14 +47,22 @@ import {
   resolveLegacyConversationIdForThread,
   shouldSyncBrainConversationThread
 } from "./brain-project-binding";
+import {
+  LEGACY_SIDEBAR_ROW_STORAGE_KEY,
+  resolveLegacySidebarRowForThread
+} from "./thread-hydration";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
-import { DocumentAnchorOverlay } from "./DocumentAnchorOverlay";
-import { buildAnnotationChatReference, createTextLineAnchor } from "./document-annotation-policy";
+import { attachMarkOverlay, buildAnnotationChatReference, bindDocxPreviewParagraphs, buildMarkingAnchor, documentAnchorsNeedChunkRefresh, isValidDocumentMarkRect, linesFromPreviewRect, resolveDocxAnchorFromMark, resolveMarkdownAnchorFromMark, resolvePdfAnchorFromMark, resolvePptxAnchorFromMark, resolveTxtAnchorFromMark, resolveXlsxAnchorFromMark } from "./document-annotation-policy";
+import { captureAnnotationSnapshot, dataUrlToArrayBuffer, resolveAnnotationSnapshotPreview } from "./document-annotation-snapshot";
+import { DocumentMarkingLayer, renderTextLineMarks } from "./DocumentMarkingLayer";
+import { WorkspaceSpreadsheetViewer } from "./WorkspaceSpreadsheetViewer";
+import { ANNOTATION_MARKING_COLORS } from "@codex-forge/protocol";
+import type { AnnotationMarkingTool } from "@codex-forge/protocol";
 import { QuantWorkspace } from "./QuantWorkspace";
 import { GameWorkspace } from "./GameWorkspace";
 import { GameLevelEditor } from "./GameLevelEditor";
@@ -69,6 +81,7 @@ import { FlowWorkspace } from "./FlowWorkspace";
 import { DocumentWorkspace } from "./DocumentWorkspace";
 import { WorkspaceSectionEditor } from "./WorkspaceSectionEditor";
 import {
+  INTERNAL_CHAT_WORKSPACE_ID,
   brainWorkspaceModes,
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
@@ -102,8 +115,7 @@ const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ ke
   ],
   video: [
     { key: "script", label: "脚本" }, { key: "storyboard", label: "分镜" },
-    { key: "generate", label: "单镜生成" }, { key: "tracks", label: "本镜音视频轨" },
-    { key: "mux", label: "合成" }, { key: "export", label: "导出" }
+    { key: "generate", label: "单镜生成" }, { key: "tracks", label: "本镜音视频轨" }
   ],
   music: [
     { key: "gen", label: "生成" }, { key: "tracks", label: "音轨" },
@@ -125,6 +137,7 @@ const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ ke
   ]
 };
 import { WorkspaceHtmlViewer } from "./workspace-html-viewer";
+import { WorkspaceVideoViewer } from "./workspace-video-viewer";
 import { LocalFileContextMenu, positionLocalFileMenu, type LocalFileMenuState } from "./LocalFileContextMenu";
 import {
   positionComposerPickerMenu,
@@ -151,24 +164,28 @@ import {
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function PdfPage({ document, pageNumber, scale, anchors = [], annotationActive = false, selectedAnchorId = null, onSelectAnchor }: {
+function PdfPage({ document, pageNumber, scale, markingTool = "select-rect", markingColor = ANNOTATION_MARKING_COLORS[0], savedAnnotations = [], pendingMark = null, onMarkComplete }: {
   document: any;
   pageNumber: number;
   scale: number;
-  anchors?: any[];
-  annotationActive?: boolean;
-  selectedAnchorId?: string | null;
-  onSelectAnchor?: (anchor: any) => void;
+  markingTool?: AnnotationMarkingTool;
+  markingColor?: string;
+  savedAnnotations?: any[];
+  pendingMark?: { rect: { x: number; y: number; width: number; height: number }; tool: AnnotationMarkingTool; color: string } | null;
+  onMarkComplete?: (input: { rect: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number }; page: number; basisWidth: number; basisHeight: number; captureTarget: HTMLElement }) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
+  const [pageBasis, setPageBasis] = useState({ width: 0, height: 0 });
   useEffect(() => {
     let canceled = false;
     let renderTask: any;
     let textLayer: TextLayer | undefined;
     void document.getPage(pageNumber).then((page: any) => {
       if (canceled || !canvasRef.current || !pageRef.current || !textLayerRef.current) return;
+      const basisViewport = page.getViewport({ scale: 1 });
+      setPageBasis({ width: basisViewport.width, height: basisViewport.height });
       const viewport = page.getViewport({ scale: 1.35 * scale });
       const canvas = canvasRef.current;
       const pageElement = pageRef.current;
@@ -194,22 +211,68 @@ function PdfPage({ document, pageNumber, scale, anchors = [], annotationActive =
   return <div ref={pageRef} className="workspace-artifact-pdf-page-shell" data-page-number={pageNumber}>
     <canvas ref={canvasRef} className="workspace-artifact-pdf-page" />
     <div ref={textLayerRef} className="workspace-artifact-pdf-text-layer textLayer" />
-    <DocumentAnchorOverlay
-      anchors={anchors}
-      active={annotationActive}
-      selectedAnchorId={selectedAnchorId}
+    <DocumentMarkingLayer
+      active={Boolean(onMarkComplete)}
+      tool={markingTool}
+      color={markingColor}
+      savedAnnotations={savedAnnotations}
+      pendingMark={pendingMark}
       pageFilter={pageNumber}
-      onSelectAnchor={onSelectAnchor}
+      onComplete={({ rect, viewport, host }) => {
+        if (!pageBasis.width || !pageBasis.height) return;
+        onMarkComplete?.({ rect, viewport, page: pageNumber, basisWidth: pageBasis.width, basisHeight: pageBasis.height, captureTarget: pageRef.current || host });
+      }}
     />
   </div>;
 }
 
-function WorkspacePdfViewer({ dataUrl, anchors = [], annotationActive = false, selectedAnchorId = null, onSelectAnchor }: {
+function WorkspaceDocxViewer({ html, anchors, annotationActive, markingTool, markingColor, savedAnnotations, pendingMark, onMarkComplete }: {
+  html: string;
+  anchors: any[];
+  annotationActive: boolean;
+  markingTool: AnnotationMarkingTool;
+  markingColor: string;
+  savedAnnotations: any[];
+  pendingMark: { rect: { x: number; y: number; width: number; height: number }; tool: AnnotationMarkingTool; color: string } | null;
+  onMarkComplete: (input: { rect: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number }; host: HTMLElement }) => void;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!contentRef.current) return;
+    bindDocxPreviewParagraphs(contentRef.current, anchors);
+  }, [html, anchors]);
+  return (
+    <div className="workspace-artifact-docx-shell">
+      <div className="workspace-artifact-docx-host">
+        <div
+          ref={contentRef}
+          className="workspace-artifact-docx"
+          data-testid="workspace-docx-viewer"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+        <DocumentMarkingLayer
+          active={annotationActive}
+          tool={markingTool}
+          color={markingColor}
+          savedAnnotations={savedAnnotations}
+          pendingMark={pendingMark}
+          onComplete={({ rect, viewport, host }) => {
+            onMarkComplete({ rect, viewport, host: contentRef.current || host });
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WorkspacePdfViewer({ dataUrl, annotationActive = false, markingTool = "select-rect", markingColor = ANNOTATION_MARKING_COLORS[0], savedAnnotations = [], pendingMark = null, onMarkComplete }: {
   dataUrl: string;
-  anchors?: any[];
   annotationActive?: boolean;
-  selectedAnchorId?: string | null;
-  onSelectAnchor?: (anchor: any) => void;
+  markingTool?: AnnotationMarkingTool;
+  markingColor?: string;
+  savedAnnotations?: any[];
+  pendingMark?: { rect: { x: number; y: number; width: number; height: number }; tool: AnnotationMarkingTool; color: string } | null;
+  onMarkComplete?: (input: { rect: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number }; page: number; basisWidth: number; basisHeight: number; captureTarget: HTMLElement }) => void;
 }) {
   const [document, setDocument] = useState<any>(null);
   const [error, setError] = useState("");
@@ -275,21 +338,18 @@ function WorkspacePdfViewer({ dataUrl, anchors = [], annotationActive = false, s
         document={document}
         pageNumber={index + 1}
         scale={scale}
-        anchors={anchors}
-        annotationActive={annotationActive}
-        selectedAnchorId={selectedAnchorId}
-        onSelectAnchor={onSelectAnchor}
+        markingTool={markingTool}
+        markingColor={markingColor}
+        savedAnnotations={savedAnnotations}
+        pendingMark={annotationActive && pendingMark ? pendingMark : null}
+        onMarkComplete={annotationActive ? onMarkComplete : undefined}
       />
     ))}</div>
   </div>;
 }
 
-function WorkspacePptxViewer({ dataUrl, anchors = [], annotationActive = false, selectedAnchorId = null, onSelectAnchor }: {
+function WorkspacePptxViewer({ dataUrl }: {
   dataUrl: string;
-  anchors?: any[];
-  annotationActive?: boolean;
-  selectedAnchorId?: string | null;
-  onSelectAnchor?: (anchor: any) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PptxViewer | null>(null);
@@ -338,19 +398,12 @@ function WorkspacePptxViewer({ dataUrl, anchors = [], annotationActive = false, 
     </div> : null}
     <div className="workspace-artifact-pptx-stage">
       <div className="workspace-artifact-pptx-host" ref={hostRef} />
-      <DocumentAnchorOverlay
-        anchors={anchors}
-        active={annotationActive && !state.loading && !state.error}
-        selectedAnchorId={selectedAnchorId}
-        pageFilter={state.currentSlide + 1}
-        onSelectAnchor={onSelectAnchor}
-      />
     </div>
   </div>;
 }
 
 const RESEARCH_WRITING_SKILL = "government-research-writing";
-const RESEARCH_WRITING_PRODUCT_ENABLED = true;
+const RESEARCH_WRITING_PRODUCT_ENABLED = GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED;
 const COMPOSER_PERMISSION_OPTIONS = [
   { id: "agent", name: "替我审批", detail: "自动审核操作，仅拦截明确高风险动作", icon: "shield-bolt" },
   { id: "full", name: "完全访问", detail: "可不受限制地访问互联网和本机文件", icon: "shield-unlock" }
@@ -445,7 +498,7 @@ function formatLiveProcessSteps(activities: any[] = []) {
 
 export function WorkspaceModules(ctx: any) {
   const { previewMode } = ctx;
-  const { WorkspaceTree, isSettingsFeature, activeFeature, setActiveFeature, featureItems, showsFeaturePanel, activeFeatureItem, renderFeaturePanel, projectsCollapsed, setProjectsCollapsed, workspaceCatalog, setWorkspaceCatalog, expandedWorkspaceIds, setExpandedWorkspaceIds, sortProjectsAscending, setSortProjectsAscending, showAddWorkspacePanel, setShowAddWorkspacePanel, newWorkspaceName, setNewWorkspaceName, newWorkspacePath, setNewWorkspacePath, api, createWorkspace, createBlankProject, addExistingProject, visibleWorkspaceCatalog, selectedWorkspace, workspaceHeaderStatus, snapshot, setSnapshot, syncSnapshot, expandedThreadListWorkspaceIds, setExpandedThreadListWorkspaceIds, sortThreadsForMenu, setSelectedWorkspaceId, setSelectedThreadId, setArchivedThreadIds, setUnreadThreadIds, pinnedThreadIds, unreadThreadIds, threadContextMenu, setThreadContextMenu, handleThreadMenuAction, formatRelativeTimeLabel, formatSearchKind, reviewDrawerOpen, setReviewDrawerOpen, treeNodes, expandedPaths, activeTreePath, searchFilePreview, setSearchFilePreview, setExpandedPaths, setActiveTreePath, setPatchForm, setPreviewMode, setPreviewPlacement, runAction, displayUserAvatar, displayUserName, displayUserPlan, showAccountMenu, setShowAccountMenu, setActiveSettingsSection, handleLogout, title, previewPlacement, renderPreviewHeaderActions, errorMessage, setErrorMessage, conversationTurns, writeClipboard, setQuestion, composerImages, setComposerImages, queuedComposerDraft, setQueuedComposerDraft, queuedComposerDraftRef, questionRef, timelineItems, assistantActivities, assistantStartedAt, lastAssistantElapsedSeconds, selectedThread, activeThreadIds = [], activeThreadRequestIds = {}, liveModelContent = {}, liveReasoningSummaries = {}, settleApprovalRequest, settleLiveApprovalActivities, updateThreadMessages, selectedWorkspaceId, selectedThreadId, forkCurrentAnswer, selectedComposerTools, handleRemoveComposerTool, renderComposerToolFields, question, isAskingModel, isGlobalModelBusy, composerPermission, setComposerPermission, composerWorkspaceContext, setComposerWorkspaceContext, setShowMcpToolPicker, showMcpToolPicker, mcpDiscoveredTools, mcpServers, mcpDraft, setMcpDraft, editingMcpId, mcpHealth, mcpInspection, testingMcpId, resetMcpDraft, loadMcpDraft, handleSaveMcpServer, handleDeleteMcpServer, handleToggleMcpServer, handleTestMcpServer, handleInspectMcpServer, handleInsertMcpTool, modelConfig, setModelConfig, askModel, cancelCurrentModelRequest, shellCommand, setShellCommand, chatStatus, setChatStatus, renderPreviewPanel, renderSettingsWorkspace, searchQuery, setSearchQuery, searchResults, showSearchDialog, setShowSearchDialog, isComposingNewThread, setIsComposingNewThread, newThreadScope, setNewThreadScope, chatUsesProject, setChatUsesProject, desktopPreferences, featureConfig, setFeatureConfig, skillDraft, setSkillDraft, pluginDraft, setPluginDraft, automationDraft, setAutomationDraft, resetFeatureDraft, loadFeatureDraft, saveFeature, editingFeatureId } = ctx;
+  const { WorkspaceTree, isSettingsFeature, activeFeature, setActiveFeature, featureItems, showsFeaturePanel, activeFeatureItem, renderFeaturePanel, projectsCollapsed, setProjectsCollapsed, workspaceCatalog, setWorkspaceCatalog, expandedWorkspaceIds, setExpandedWorkspaceIds, sortProjectsAscending, setSortProjectsAscending, showAddWorkspacePanel, setShowAddWorkspacePanel, newWorkspaceName, setNewWorkspaceName, newWorkspacePath, setNewWorkspacePath, api, createWorkspace, createBlankProject, addExistingProject, visibleWorkspaceCatalog, selectedWorkspace, workspaceHeaderStatus, snapshot, setSnapshot, syncSnapshot, expandedThreadListWorkspaceIds, setExpandedThreadListWorkspaceIds, sortThreadsForMenu, setSelectedWorkspaceId, setSelectedThreadId, selectWorkspaceThread, setArchivedThreadIds, setUnreadThreadIds, pinnedThreadIds, unreadThreadIds, threadContextMenu, setThreadContextMenu, handleThreadMenuAction, formatRelativeTimeLabel, formatSearchKind, reviewDrawerOpen, setReviewDrawerOpen, treeNodes, expandedPaths, activeTreePath, searchFilePreview, setSearchFilePreview, setExpandedPaths, setActiveTreePath, setPatchForm, setPreviewMode, setPreviewPlacement, runAction, displayUserAvatar, displayUserName, displayUserPlan, showAccountMenu, setShowAccountMenu, setActiveSettingsSection, handleLogout, title, previewPlacement, renderPreviewHeaderActions, errorMessage, setErrorMessage, conversationTurns, writeClipboard, setQuestion, composerImages, setComposerImages, queuedComposerDraft, setQueuedComposerDraft, queuedComposerDraftRef, questionRef, timelineItems, assistantActivities, assistantStartedAt, lastAssistantElapsedSeconds, selectedThread, activeThreadIds = [], activeThreadRequestIds = {}, liveModelContent = {}, liveReasoningSummaries = {}, settleApprovalRequest, settleLiveApprovalActivities, updateThreadMessages, selectedWorkspaceId, selectedThreadId, forkCurrentAnswer, selectedComposerTools, handleRemoveComposerTool, renderComposerToolFields, question, isAskingModel, isGlobalModelBusy, composerPermission, setComposerPermission, composerWorkspaceContext, setComposerWorkspaceContext, setShowMcpToolPicker, showMcpToolPicker, mcpDiscoveredTools, mcpServers, mcpDraft, setMcpDraft, editingMcpId, mcpHealth, mcpInspection, testingMcpId, resetMcpDraft, loadMcpDraft, handleSaveMcpServer, handleDeleteMcpServer, handleToggleMcpServer, handleTestMcpServer, handleInspectMcpServer, handleInsertMcpTool, modelConfig, setModelConfig, askModel, cancelCurrentModelRequest, shellCommand, setShellCommand, chatStatus, setChatStatus, renderPreviewPanel, renderSettingsWorkspace, searchQuery, setSearchQuery, searchResults, showSearchDialog, setShowSearchDialog, isComposingNewThread, setIsComposingNewThread, newThreadScope, setNewThreadScope, chatUsesProject, setChatUsesProject, desktopPreferences, featureConfig, setFeatureConfig, skillDraft, setSkillDraft, pluginDraft, setPluginDraft, automationDraft, setAutomationDraft, resetFeatureDraft, loadFeatureDraft, saveFeature, editingFeatureId } = ctx;
   const { selectedComposerSkill, setSelectedComposerSkill, bindThreadComposerSkill, setSelectedComposerTools, composerSkillContext, setComposerSkillContext, composerModes, setComposerModes, usageExceptionFeedbackPreview, usageExceptionFeedbackBusy, cancelUsageExceptionFeedback, confirmUsageExceptionFeedback, reportGenerationFailureFeedback, appUpdateStatus, appUpdateBusy, appUpdateProgress, startDesktopAppUpdate, dismissAppUpdateProgress } = ctx;
   const releaseInactiveModelRequest = ctx.releaseInactiveModelRequest;
   const [hoveredThread, setHoveredThread] = useState<any>(null);
@@ -567,6 +620,8 @@ export function WorkspaceModules(ctx: any) {
   });
   const activatedBrainThreadRef = useRef("");
   const composerTextareaRef = useRef<ComposerTextareaHandle | null>(null);
+  const textPreviewShellRef = useRef<HTMLDivElement | null>(null);
+  const imagePreviewShellRef = useRef<HTMLDivElement | null>(null);
   const composerLayoutDraftTimerRef = useRef<number | null>(null);
   const [composerLayoutDraft, setComposerLayoutDraft] = useState("");
   const [brainDraft, setBrainDraft] = useState("");
@@ -584,6 +639,11 @@ export function WorkspaceModules(ctx: any) {
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
   const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
+  const [documentMarkingTool, setDocumentMarkingTool] = useState<AnnotationMarkingTool>("select-rect");
+  const [documentMarkingColor, setDocumentMarkingColor] = useState<string>(ANNOTATION_MARKING_COLORS[0]);
+  const [documentAnnotationGeometry, setDocumentAnnotationGeometry] = useState<{ tool: AnnotationMarkingTool; color: string } | null>(null);
+  const [documentAnnotationPendingMark, setDocumentAnnotationPendingMark] = useState<{ rect: { x: number; y: number; width: number; height: number }; tool: AnnotationMarkingTool; color: string } | null>(null);
+  const [documentAnnotationSnapshot, setDocumentAnnotationSnapshot] = useState<{ dataUrl: string } | null>(null);
   const initialBrainWorkspaceSelection = useRef(restoreBrainWorkspaceSelection({
     serialized: (() => { try { return localStorage.getItem(BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
     legacyWorkspaceKey: (() => { try { return localStorage.getItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })()
@@ -612,11 +672,26 @@ export function WorkspaceModules(ctx: any) {
   const initialBrainCatalog = brainWorkspaceSelection.catalogs[selectedBrainWorkspaceKey];
   const [selectedBrainProjectId, setSelectedBrainProjectId] = useState(initialBrainCatalog?.projectId || "");
   const [selectedBrainConversationId, setSelectedBrainConversationId] = useState(initialBrainCatalog?.conversationId || "");
-  const [selectedSidebarRow, setSelectedSidebarRow] = useState<string | null>(null);
+  const [selectedSidebarRow, setSelectedSidebarRow] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(LEGACY_SIDEBAR_ROW_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [brainWorkspaceMenuOpen, setBrainWorkspaceMenuOpen] = useState(false);
   const [brainWorkspaceBusy, setBrainWorkspaceBusy] = useState(false);
   const [brainWorkspaceAvailability, setBrainWorkspaceAvailability] = useState<"loading" | "ready" | "unavailable">("loading");
   const brainWorkspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    try {
+      if (selectedSidebarRow) {
+        localStorage.setItem(LEGACY_SIDEBAR_ROW_STORAGE_KEY, selectedSidebarRow);
+      } else {
+        localStorage.removeItem(LEGACY_SIDEBAR_ROW_STORAGE_KEY);
+      }
+    } catch { /* best effort */ }
+  }, [selectedSidebarRow]);
   useEffect(() => {
     const capabilityTabs = brainWorkspaceCapabilityTabs[selectedBrainWorkspaceKey] || [];
     const firstCapability = capabilityTabs[0]?.key || "files";
@@ -706,6 +781,10 @@ export function WorkspaceModules(ctx: any) {
     setBrainResourcePlacement("side");
   }, [activeFeature, selectedBrainProjectId, selectedBrainConversationId, setActiveFeature, setComposerModes, setComposerSkillContext, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedComposerSkill, setSelectedComposerTools, setSelectedThreadId, setSelectedWorkspaceId, visibleWorkspaceCatalog]);
   useEffect(() => {
+    // Standalone / INTERNAL_CHAT drafts must not be stolen back into the scene
+    // project (codeCN keeps them on workspace:internal-chat).
+    if (selectedWorkspace?.id === INTERNAL_CHAT_WORKSPACE_ID) return;
+    if (isComposingNewThread && newThreadScope === "chat" && !chatUsesProject) return;
     const sceneProjects = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
     if (!sceneProjects.length) {
       // 无项目的场景只显示空状态。不要在这里清空全局工作区/线程：
@@ -721,7 +800,7 @@ export function WorkspaceModules(ctx: any) {
     const threadId = resolveUserVisibleThreadSelection(next.threads, null)?.id || "";
     setSelectedThreadId(threadId);
     setIsComposingNewThread(!threadId);
-  }, [selectedBrainWorkspaceKey, visibleWorkspaceCatalog, selectedWorkspace, selectedBrainConversationId, setSelectedWorkspaceId, setSelectedThreadId, setIsComposingNewThread]);
+  }, [selectedBrainWorkspaceKey, visibleWorkspaceCatalog, selectedWorkspace, selectedBrainConversationId, isComposingNewThread, newThreadScope, chatUsesProject, setSelectedWorkspaceId, setSelectedThreadId, setIsComposingNewThread]);
   const refreshBrainProjects = useCallback(async (workspaceKey = selectedBrainWorkspaceKey) => {
     if (!window.codecn?.listBrainProjects) return [];
     const [projects, recents] = await Promise.all([
@@ -769,7 +848,16 @@ export function WorkspaceModules(ctx: any) {
     setBrainConversations(nextConversations);
     setSelectedBrainConversationId((current) => {
       if (current && nextConversations.some((conversation) => conversation.id === current)) return current;
-      if (isComposingNewThread || String(selectedSidebarRow || "").startsWith("project:")) return "";
+      const sidebarRow = String(selectedSidebarRow || "");
+      if (
+        isComposingNewThread
+        || sidebarRow.startsWith("project:")
+        || sidebarRow.startsWith("project-thread:")
+        || sidebarRow.startsWith("chat:")
+        || sidebarRow.startsWith("task:")
+      ) {
+        return "";
+      }
       return nextConversations[0]?.id || "";
     });
     const workspace = visibleWorkspaceCatalog.find((item) => item.id === project?.localWorkspaceId);
@@ -788,8 +876,16 @@ export function WorkspaceModules(ctx: any) {
         || current?.startsWith("project:")
         || current?.startsWith("project-thread:")
         || current?.startsWith("chat:")
+        || current?.startsWith("task:")
       ) {
         return current;
+      }
+      if (!current && selectedWorkspace?.id && selectedThread?.id) {
+        return resolveLegacySidebarRowForThread({
+          workspaceId: selectedWorkspace.id,
+          threadId: selectedThread.id,
+          scope: selectedThread.scope
+        }) || current;
       }
       const preferred = current?.startsWith("brain-conversation:")
         ? current.slice("brain-conversation:".length)
@@ -800,7 +896,7 @@ export function WorkspaceModules(ctx: any) {
       const nextRow = keep ? `brain-conversation:${keep}` : current;
       return nextRow === current ? current : nextRow;
     });
-  }, [selectedBrainProjectId, selectedBrainWorkspaceKey, visibleWorkspaceCatalog, isComposingNewThread, selectedSidebarRow]);
+  }, [selectedBrainProjectId, selectedBrainWorkspaceKey, visibleWorkspaceCatalog, isComposingNewThread, selectedSidebarRow, selectedWorkspace?.id, selectedThread?.id, selectedThread?.scope]);
   const bindBrainProjectToWorkspace = useCallback((
     workspaceId: string,
     options?: { conversationId?: string; composingNewThread?: boolean; projects?: readonly { id: string; localWorkspaceId?: string | null }[] }
@@ -882,10 +978,18 @@ export function WorkspaceModules(ctx: any) {
       return;
     }
     if (!brainConversations.some((conversation) => conversation.id === selectedBrainConversationId)) return;
+    setNewThreadScope("project");
+    setChatUsesProject?.(true);
     const row = `brain-conversation:${selectedBrainConversationId}`;
     setSelectedSidebarRow((current) => {
       if (current?.startsWith("feature:")) return current;
-      if (current?.startsWith("project-thread:") || current?.startsWith("chat:")) return current;
+      if (
+        current?.startsWith("project-thread:")
+        || current?.startsWith("chat:")
+        || current?.startsWith("task:")
+      ) {
+        return current;
+      }
       return current === row ? current : row;
     });
     // BRAIN conversations are backed by their own native threads. Never leave
@@ -1008,7 +1112,7 @@ export function WorkspaceModules(ctx: any) {
   }, [selectedBrainProjectId, selectedBrainConversationId, dataWorkspaceRefreshToken]);
   useEffect(() => {
     if (!window.codecn?.onDataWorkspaceUpdated) return;
-    return window.codecn.onDataWorkspaceUpdated((payload: { projectId?: string }) => {
+    return window.codecn.onDataWorkspaceUpdated((payload: { projectId?: string; reason?: string }) => {
       const projectId = String(payload?.projectId || "").trim();
       if (projectId && selectedBrainProjectId && projectId !== selectedBrainProjectId) return;
       if (projectId && !selectedBrainProjectId) {
@@ -1016,13 +1120,21 @@ export function WorkspaceModules(ctx: any) {
         // active local folder; select it so 文件/产物/任务 refresh against it.
         setSelectedBrainProjectId(projectId);
       }
+      const reason = String(payload?.reason || "");
+      if (reason.startsWith("music:")) {
+        setBrainResourcePlacement((current) => (current === "hidden" ? "side" : current));
+        setBrainResourceTab("scene");
+        setBrainSceneTab(reason.includes("render") ? "export" : reason.includes("song.generate") ? "tracks" : "gen");
+      }
       setDataWorkspaceRefreshToken((value) => value + 1);
     });
   }, [selectedBrainProjectId]);
   useEffect(() => {
-    setDocumentAnnotationActive(false);
     setDocumentAnnotationCandidate(null);
     setDocumentAnnotationInstruction("");
+    setDocumentAnnotationGeometry(null);
+    setDocumentAnnotationPendingMark(null);
+    setDocumentAnnotationSnapshot(null);
   }, [selectedBrainProjectId, activeBrainDocumentFileId]);
   const visibleBrainWorkspaces = brainWorkspaces.length ? brainWorkspaces : fallbackBrainWorkspaces;
   const selectedBrainWorkspace = visibleBrainWorkspaces.find((item) => item.workspaceKey === selectedBrainWorkspaceKey) || visibleBrainWorkspaces[0];
@@ -2193,7 +2305,16 @@ export function WorkspaceModules(ctx: any) {
     setActiveFeature("new-chat");
     setIsComposingNewThread(false);
     setPreviewMode("workspace");
-    setPreviewPlacement("side");
+    // When the BRAIN project panel (文件/产物/任务) is open, put the file preview
+    // in that right-hand slot so it replaces the empty project list instead of
+    // stealing the chat column (Office used to force center → red preview left of green empty panel).
+    // artifact-workbench CSS still gives the side preview a wide surface for Office docs.
+    const useProjectPanelSlot = brainResourcePlacement !== "hidden";
+    setPreviewPlacement(
+      useProjectPanelSlot
+        ? "side"
+        : (/\.(?:docx|pdf|pptx|xlsx)$/i.test(filePath) ? "center" : "side")
+    );
     const existing = findMatchingArtifactTab(artifactTabsRef.current, filePath);
     if (existing && isReusableArtifactPreview(existing) && !location?.line) {
       activeArtifactPathRef.current = existing.tabPath;
@@ -2230,7 +2351,7 @@ export function WorkspaceModules(ctx: any) {
     const requestPath = openPath;
     const requestTabKey = tabKey;
     const requestWorkspaceId = workspaceId;
-    const artifact = /\.(pdf|docx|pptx|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi)$/i.test(requestPath);
+    const artifact = /\.(pdf|docx|pptx|xlsx|csv|tsv|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi)$/i.test(requestPath);
     const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
     const stillActiveForRequest = () => {
       const active = String(activeArtifactPathRef.current || "");
@@ -2238,15 +2359,20 @@ export function WorkspaceModules(ctx: any) {
         || artifactPathsReferToSameFile(active, requestTabKey)
         || artifactPathsReferToSameFile(active, filePath);
     };
+    const requestTabKeys = () => [requestTabKey, requestPath, filePath];
+    const readPreviewPayload = async () => withFilePreviewTimeout(
+      artifact
+        ? api.previewWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath })
+        : api.readWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath }),
+      FILE_PREVIEW_TIMEOUT_MS
+    );
     void (async () => {
       let lastIssue: FilePreviewIssue | null = null;
       let lastFile: any = null;
       for (let attempt = 1; attempt <= FILE_PREVIEW_MAX_ATTEMPTS; attempt += 1) {
         if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current)) return;
         try {
-          const file = artifact
-            ? await api.previewWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath })
-            : await api.readWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath });
+          const file = await readPreviewPayload();
           if (file && (file as { ok?: boolean }).ok === false) {
             lastIssue = classifySoftFilePreviewFailure(file as { ok?: boolean; error?: string; message?: string; reason?: string });
             if (!lastIssue.retryable || attempt === FILE_PREVIEW_MAX_ATTEMPTS) break;
@@ -2256,7 +2382,7 @@ export function WorkspaceModules(ctx: any) {
           lastFile = file;
           const diagnosis = artifact ? classifyArtifactPreviewPayload(file) : classifyTextPreviewPayload(file);
           if (diagnosis.ok) {
-            if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current) || !stillActiveForRequest()) return;
+            if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current)) return;
             const canonicalPath = String(file.path || requestPath);
             const loadedTab = {
               ...file,
@@ -2268,20 +2394,26 @@ export function WorkspaceModules(ctx: any) {
               workspaceId: requestWorkspaceId,
               ...location
             };
-            activeArtifactPathRef.current = canonicalPath;
+            const activeForRequest = stillActiveForRequest();
+            if (activeForRequest) activeArtifactPathRef.current = canonicalPath;
             setArtifactTabs((tabs) => {
-              const next = tabs.filter((tab) =>
-                !artifactPathsReferToSameFile(String(tab.tabPath || ""), canonicalPath)
-                && !artifactPathsReferToSameFile(String(tab.path || ""), canonicalPath)
-                && !artifactPathsReferToSameFile(String(tab.tabPath || ""), requestTabKey)
-                && !artifactPathsReferToSameFile(String(tab.tabPath || ""), requestPath)
-                && !artifactPathsReferToSameFile(String(tab.tabPath || ""), filePath)
-              );
-              return [...next, loadedTab];
+              if (activeForRequest) {
+                const next = tabs.filter((tab) =>
+                  !artifactPathsReferToSameFile(String(tab.tabPath || ""), canonicalPath)
+                  && !artifactPathsReferToSameFile(String(tab.path || ""), canonicalPath)
+                  && !artifactPathsReferToSameFile(String(tab.tabPath || ""), requestTabKey)
+                  && !artifactPathsReferToSameFile(String(tab.tabPath || ""), requestPath)
+                  && !artifactPathsReferToSameFile(String(tab.tabPath || ""), filePath)
+                );
+                return [...next, loadedTab];
+              }
+              return patchArtifactTabsForRequest(tabs, requestTabKeys(), loadedTab);
             });
-            setActiveTreePath(canonicalPath);
-            setSearchFilePreview(loadedTab);
-            if (location?.line) window.requestAnimationFrame(() => document.querySelector(`[data-preview-line="${location.line}"]`)?.scrollIntoView({ block: "center" }));
+            if (activeForRequest) {
+              setActiveTreePath(canonicalPath);
+              setSearchFilePreview(loadedTab);
+              if (location?.line) window.requestAnimationFrame(() => document.querySelector(`[data-preview-line="${location.line}"]`)?.scrollIntoView({ block: "center" }));
+            }
             return;
           }
           lastIssue = diagnosis;
@@ -2294,7 +2426,7 @@ export function WorkspaceModules(ctx: any) {
           await sleep(filePreviewRetryDelayMs(attempt));
         }
       }
-      if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current) || !stillActiveForRequest()) return;
+      if (isStaleFilePreviewRequest(requestSequence, filePreviewRequestSequence.current)) return;
       const issue = lastIssue || {
         ok: false as const,
         reason: "read_failed" as const,
@@ -2325,19 +2457,23 @@ export function WorkspaceModules(ctx: any) {
         workspaceId: requestWorkspaceId,
         ...location
       };
+      const activeForRequest = stillActiveForRequest();
       setArtifactTabs((tabs) => {
-        const matched = findMatchingArtifactTab(tabs, requestTabKey)
-          || findMatchingArtifactTab(tabs, requestPath)
-          || findMatchingArtifactTab(tabs, filePath);
-        if (!matched) return [...tabs, failedTab];
-        return tabs.map((tab) => (tab === matched || tab.tabPath === matched.tabPath ? failedTab : tab));
+        if (activeForRequest) {
+          const matched = findMatchingArtifactTab(tabs, requestTabKey)
+            || findMatchingArtifactTab(tabs, requestPath)
+            || findMatchingArtifactTab(tabs, filePath);
+          if (!matched) return [...tabs, failedTab];
+          return tabs.map((tab) => (tab === matched || tab.tabPath === matched.tabPath ? failedTab : tab));
+        }
+        return patchArtifactTabsForRequest(tabs, requestTabKeys(), failedTab);
       });
-      setSearchFilePreview(failedTab);
+      if (activeForRequest) setSearchFilePreview(failedTab);
       if (issue.reason === "preview_unsupported" || issue.reason === "binary_file" || issue.reason === "read_failed") {
         void api.openWorkspaceFile({ workspaceId: requestWorkspaceId, filePath: requestPath }).catch(() => undefined);
       }
     })();
-  }, [api, reportFilePreviewIssue, selectedWorkspace?.id, setActiveFeature, setActiveTreePath, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedWorkspaceId]);
+  }, [api, brainResourcePlacement, reportFilePreviewIssue, selectedWorkspace?.id, setActiveFeature, setActiveTreePath, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedWorkspaceId]);
 
   useEffect(() => {
     if (!api?.onOpenWorkspaceFilePreview) return;
@@ -2355,6 +2491,13 @@ export function WorkspaceModules(ctx: any) {
     setWorkspaceFileMenu(positionLocalFileMenu(event.currentTarget, { filePath }, { x: event.clientX, y: event.clientY }));
   };
   const selectArtifactTab = (tab: any) => {
+    if (tab.loading) {
+      openLocalFilePreview(tab.tabPath || tab.path, {
+        ...(tab.workspaceId ? { workspaceId: tab.workspaceId } : {}),
+        ...(tab.line ? { line: tab.line, endLine: tab.endLine } : {})
+      });
+      return;
+    }
     activeArtifactPathRef.current = tab.tabPath;
     setActiveTreePath(tab.path || tab.tabPath);
     setSearchFilePreview(tab);
@@ -2368,9 +2511,17 @@ export function WorkspaceModules(ctx: any) {
         activeArtifactPathRef.current = replacement?.tabPath || "";
         setSearchFilePreview(replacement || null);
         if (!replacement) {
-          setPreviewMode("files");
-          setPreviewPlacement("side");
-          void api?.queueWorkspaceScan();
+          // BRAIN project panel is the home surface for explore/scene files — restore it
+          // instead of falling back to the generic codeCN files side browser.
+          if (brainResourcePlacement !== "hidden") {
+            setPreviewMode("empty");
+            setPreviewPlacement("hidden");
+            setSearchFilePreview(null);
+          } else {
+            setPreviewMode("files");
+            setPreviewPlacement("side");
+            void api?.queueWorkspaceScan();
+          }
         }
       }
       return nextTabs;
@@ -3357,7 +3508,9 @@ export function WorkspaceModules(ctx: any) {
     .slice(0, 9);
   const sceneVisibleWorkspaceCatalog = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
   const sceneWorkspaceCatalog = filterWorkspaceCatalogByScene(normalizeWorkspaceCatalog(workspaceCatalog), selectedBrainWorkspaceKey);
-  const standaloneChats = chatWorkspaces(sceneWorkspaceCatalog)
+  // 「聊天」= scene-bound conversation threads (INTERNAL_CHAT + chat-scope on scene projects).
+  // Distinct from 「项目」 threads; do not list via scene-filtered catalog alone (INTERNAL_CHAT has no scene key).
+  const standaloneChats = sceneChatWorkspaces(normalizeWorkspaceCatalog(workspaceCatalog), selectedBrainWorkspaceKey)
     .flatMap((workspace: any) =>
       sortThreadsForMenu(workspace.threads ?? [])
         .map((thread: any) => ({ workspace, thread }))
@@ -3441,6 +3594,7 @@ export function WorkspaceModules(ctx: any) {
         refresh: refreshDelegatedAgents
       });
       if (result.error) setErrorMessage(result.error instanceof Error ? result.error.message : String(result.error));
+      else if (!result.ok && result.stale) setErrorMessage("子 Agent 已不再等待审批，界面已刷新。");
     } finally {
       setDelegatedAgentAction("");
     }
@@ -3710,16 +3864,10 @@ function startNewChat() {
     resetFeatureDraft?.("automations");
     setSearchFilePreview(null);
     setActiveFeature("new-chat");
-    const targetProject = sceneVisibleWorkspaceCatalog.find((workspace: any) => workspace.id === selectedWorkspace?.id)
-      || sceneVisibleWorkspaceCatalog[0];
-    if (targetProject) {
-      setSelectedWorkspaceId(targetProject.id);
-      setChatUsesProject?.(true);
-      setNewThreadScope("project");
-    } else {
-      setChatUsesProject?.(true);
-      setNewThreadScope("project");
-    }
+    // Match codeCN: sidebar chat "+" / 新对话 = standalone chat (INTERNAL_CHAT).
+    // Project-scoped drafts use the per-project "新建线程" control instead.
+    setNewThreadScope("chat");
+    setChatUsesProject?.(false);
     setIsComposingNewThread(true);
     setSelectedThreadId("");
     setQuestion("");
@@ -3745,11 +3893,15 @@ function startNewChat() {
         data-thread-key={threadKey}
         className={`thread-row sidebar-chat-row${active ? " active" : ""}${pinnedThreadIds.has(thread.id) ? " pinned" : ""}${unreadThreadIds.has(thread.id) ? " unread" : ""}`}
         onClick={() => {
-          setSelectedSidebarRow(`task:${workspace.id}:${thread.id}`);
+          setSelectedSidebarRow(`chat:${workspace.id}:${thread.id}`);
           setSearchFilePreview(null);
           setIsComposingNewThread(false);
-          setSelectedWorkspaceId(workspace.id);
-          setSelectedThreadId(thread.id);
+          if (selectWorkspaceThread) {
+            selectWorkspaceThread(workspace.id, thread.id, { force: true });
+          } else {
+            setSelectedWorkspaceId(workspace.id);
+            setSelectedThreadId(thread.id);
+          }
           setUnreadThreadIds((current) => {
             const next = new Set(current);
             next.delete(thread.id);
@@ -4145,13 +4297,19 @@ function renderSidebarModule() {
                                   setSelectedSidebarRow(`project-thread:${workspace.id}:${thread.id}`);
                                   setSearchFilePreview(null);
                                   setIsComposingNewThread(false);
-                                  setSelectedWorkspaceId(workspace.id);
+                                  setNewThreadScope("project");
+                                  setChatUsesProject?.(true);
                                   bindBrainProjectToWorkspace(workspace.id, {
                                     conversationId: brainConversations.some((conversation) => conversation.id === legacyConversationId)
                                       ? legacyConversationId
                                       : ""
                                   });
-                                  setSelectedThreadId(thread.id);
+                                  if (selectWorkspaceThread) {
+                                    selectWorkspaceThread(workspace.id, thread.id, { force: true });
+                                  } else {
+                                    setSelectedWorkspaceId(workspace.id);
+                                    setSelectedThreadId(thread.id);
+                                  }
                                   setUnreadThreadIds((current) => {
                                     const next = new Set(current);
                                     next.delete(thread.id);
@@ -4640,17 +4798,18 @@ function renderSidebarModule() {
     const hasAttachments = (draft?.images?.length ?? composerImages.length) > 0;
     if ((!content && !hasAttachments) || brainMessageBusy || !selectedBrainConversationId || !selectedBrainProjectId) return;
     if (!window.codecn?.appendBrainMessage) return;
+    const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
     const executionWorkspace = resolveSceneExecutionWorkspace(
-      normalizeWorkspaceCatalog(workspaceCatalog),
+      catalog,
       selectedBrainWorkspaceKey,
       selectedBrainProject?.localWorkspaceId,
       selectedWorkspace?.id
-    );
-    const executionWorkspaceId = executionWorkspace?.id || "";
-    if (!api?.chatWithModel || !executionWorkspaceId) {
-      const message = `当前“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景尚未创建或绑定项目，未向其他场景发送。`;
-      setErrorMessage(message);
-      setChatStatus(message);
+    ) ?? catalog.find((item: any) => item.id === INTERNAL_CHAT_WORKSPACE_ID);
+    // No same-scene project: use standalone chat. Never borrow another scene's project.
+    const executionWorkspaceId = executionWorkspace?.id || INTERNAL_CHAT_WORKSPACE_ID;
+    if (!api?.chatWithModel) {
+      setErrorMessage("当前环境无法发送模型请求。");
+      setChatStatus("当前环境无法发送模型请求。");
       return;
     }
     setBrainMessageBusy(true);
@@ -4694,7 +4853,10 @@ function renderSidebarModule() {
           workspaceId: executionWorkspaceId,
           title: content.slice(0, 36) || "BRAIN 对话",
           summary: "从 BRAIN 工作台对话自动创建的模型线程。",
-          scope: executionWorkspaceId === "workspace:internal-chat" ? "chat" : "project"
+          scope: executionWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID ? "chat" : "project",
+          ...(executionWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID
+            ? { brainWorkspaceKey: selectedBrainWorkspaceKey }
+            : {})
         });
         const nextWorkspace = nextCatalog.find((item: any) => item.id === executionWorkspaceId);
         const createdThread = nextWorkspace?.threads?.find((item: any) => !previousIds.has(item.id));
@@ -4782,8 +4944,33 @@ function renderSidebarModule() {
     }
   }
 
+  function clearComposerAfterSend() {
+    // askModel is often called with a draft override from this path, which skips
+    // its own !draftOverride clear. Always drop sent text + attachment chips here.
+    composerTextareaRef.current?.setValue("");
+    setQuestion("");
+    if (questionRef) questionRef.current = "";
+    setComposerLayoutDraft("");
+    setComposerImages([]);
+  }
+
   function submitComposerRequest(draft?: Parameters<typeof askModel>[0]) {
     const outbound = buildComposerSendDraft(draft);
+    const sidebarRow = String(selectedSidebarRow || "");
+    const inProjectConversationContext = isBrainConversationSelection
+      || sidebarRow.startsWith("project-thread:");
+    // Match codeCN: sidebar "新对话 / 聊天 +" stays on INTERNAL_CHAT and must
+    // never be redirected into the scene's project thread on send.
+    const wantsStandaloneChat = !inProjectConversationContext
+      && newThreadScope === "chat"
+      && !chatUsesProject
+      && (sidebarRow === "feature:new-chat" || isComposingNewThread);
+    if (wantsStandaloneChat) {
+      setErrorMessage("");
+      void askModel({ ...outbound, forceStandaloneChat: true, brainWorkspaceKey: selectedBrainWorkspaceKey });
+      clearComposerAfterSend();
+      return;
+    }
     const executionBrainProject = resolveBrainProjectForWorkspace(brainProjects, selectedWorkspace?.id)
       ?? selectedBrainProject;
     const sceneWorkspace = resolveSceneExecutionWorkspace(
@@ -4793,9 +4980,15 @@ function renderSidebarModule() {
       selectedWorkspace?.id
     );
     if (!sceneWorkspace) {
-      const message = `当前“${selectedBrainWorkspace?.displayName || selectedBrainWorkspaceKey}”场景尚未创建或绑定项目，请先新建该场景项目。为避免上下文串场，本次请求未发送。`;
-      setErrorMessage(message);
-      setChatStatus(message);
+      // Project-scoped intent but this scene has no project: allow standalone
+      // chat. Never borrow another scene's project (防串场).
+      setChatUsesProject?.(false);
+      setNewThreadScope("chat");
+      setIsComposingNewThread(true);
+      setErrorMessage("");
+      setChatStatus("当前场景暂无项目，已使用独立聊天发送。");
+      void askModel({ ...outbound, forceStandaloneChat: true, brainWorkspaceKey: selectedBrainWorkspaceKey });
+      clearComposerAfterSend();
       return;
     }
     if (sceneWorkspace.id !== selectedWorkspace?.id) {
@@ -4810,11 +5003,30 @@ function renderSidebarModule() {
     if (executionBrainProject && executionBrainProject.id !== selectedBrainProjectId) {
       setSelectedBrainProjectId(executionBrainProject.id);
     }
-    void askModel(outbound);
-    composerTextareaRef.current?.setValue("");
-    setQuestion("");
-    setComposerLayoutDraft("");
+    if (inProjectConversationContext) {
+      setNewThreadScope("project");
+      setChatUsesProject?.(true);
+    }
+    void askModel(inProjectConversationContext ? { ...outbound, forceProjectThread: true } : outbound);
+    clearComposerAfterSend();
   }
+
+  /** Video pipeline prompt fields → normal BRAIN composer / Auto / tools (not raw Kokoro). */
+  const handoffVideoPipelineAi = (request: { question: string; kind?: string }) => {
+    const question = String(request?.question || "").trim();
+    if (!question) return;
+    setChatStatus("已交给对话 Auto 处理…");
+    setErrorMessage("");
+    if (selectedBrainConversationId) {
+      setSelectedSidebarRow(`brain-conversation:${selectedBrainConversationId}`);
+    }
+    // Briefly surface the handoff in composer, then send through normal askModel path.
+    focusComposerInputWithContent(question);
+    window.requestAnimationFrame(() => {
+      composerTextareaRef.current?.focus();
+      void submitComposerRequest({ question });
+    });
+  };
 
   function renderBrainChatModule() {
     return (
@@ -4888,9 +5100,17 @@ function renderSidebarModule() {
       setBrainResourceTab("scene");
     };
     const isCenter = placement === "center";
-    // Mirror codeCN preview: center ↔ side, and hide → restore from the chat topbar toggle.
+    // Toggle: center = focus Tools (hide left nav via CSS, keep chat); side = restore full layout.
     const toggleBrainExpanded = () => {
-      setBrainResourcePlacement((current) => (current === "center" ? "side" : "center"));
+      setBrainResourcePlacement((current) => {
+        if (current === "center") {
+          // Second click: restore nav + chat + side Tools. Force left nav visible even if
+          // Ctrl+B had collapsed it before/during expand (CSS hide does not sync that flag).
+          window.dispatchEvent(new CustomEvent("codecn:app-command", { detail: { command: "expand-sidebar" } }));
+          return "side";
+        }
+        return "center";
+      });
     };
     const collapseBrainPanel = () => {
       setBrainResourcePlacement("hidden");
@@ -4899,11 +5119,20 @@ function renderSidebarModule() {
         setPreviewPlacement("hidden");
       }
     };
-    const selectBrainDocumentFile = (file: any, openPreview = true) => {
+    const selectBrainDocumentFile = (file: any, openPreview = true, options?: { keepMarkingActive?: boolean }) => {
       setActiveBrainDocumentFileId(file.id);
-      setDocumentAnnotationActive(false);
-      setDocumentAnnotationCandidate(null);
-      setDocumentAnnotationInstruction("");
+      if (!options?.keepMarkingActive) {
+        setDocumentAnnotationActive(false);
+        setDocumentAnnotationCandidate(null);
+        setDocumentAnnotationInstruction("");
+        setDocumentAnnotationGeometry(null);
+        setDocumentAnnotationPendingMark(null);
+      } else {
+        setDocumentAnnotationCandidate(null);
+        setDocumentAnnotationInstruction("");
+        setDocumentAnnotationGeometry(null);
+        setDocumentAnnotationPendingMark(null);
+      }
       if (openPreview) {
         const workspaceId = selectedBrainProject?.localWorkspaceId
           || resourceBrainProject?.localWorkspaceId
@@ -4916,6 +5145,35 @@ function renderSidebarModule() {
           .then((result) => { setBrainDocumentAnchors(result.anchors || []); if (result.warnings?.length) setChatStatus(result.warnings.join(" ")); })
           .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解析失败"));
       }
+    };
+    const deactivateDocumentMarking = () => {
+      setDocumentAnnotationActive(false);
+      setDocumentAnnotationCandidate(null);
+      setDocumentAnnotationInstruction("");
+      setDocumentAnnotationGeometry(null);
+      setDocumentAnnotationPendingMark(null);
+    };
+    const activateDocumentMarkingInPreview = () => {
+      const targetFile = brainFiles.find((file) => file.id === activeBrainDocumentFileId) || brainFiles[0];
+      if (!targetFile) {
+        setChatStatus("请先在「文件」中添加文档，再进行标注。");
+        setBrainResourceTab("files");
+        return;
+      }
+      selectBrainDocumentFile(targetFile, true, { keepMarkingActive: true });
+      setDocumentAnnotationActive(true);
+      setDocumentAnnotationCandidate(null);
+      setDocumentAnnotationInstruction("");
+      setDocumentAnnotationGeometry(null);
+      setDocumentAnnotationPendingMark(null);
+      setPreviewPlacement("center");
+      window.setTimeout(() => {
+        document.querySelector(".search-file-preview")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 120);
+    };
+    const toggleDocumentMarking = () => {
+      if (documentAnnotationActive) deactivateDocumentMarking();
+      else activateDocumentMarkingInPreview();
     };
     const renderPendingCapability = (label: string) => (
       <div className="brain-workspace-plugin-empty" data-testid="brain-capability-pending">
@@ -4948,13 +5206,24 @@ function renderSidebarModule() {
       }
       if (selectedBrainWorkspaceKey === "video") {
         if (["script", "storyboard", "generate", "tracks", "mux", "export"].includes(brainSceneTab)) {
-          return <VideoPipelineShell projectId={selectedBrainProject?.id} files={brainFiles} activeStep={brainSceneTab as "script" | "storyboard" | "generate" | "tracks" | "mux" | "export"} />;
+          const step = (brainSceneTab === "mux" || brainSceneTab === "export") ? "tracks" : brainSceneTab;
+          return (
+            <VideoPipelineShell
+              projectId={selectedBrainProject?.id}
+              files={brainFiles}
+              activeStep={step as "script" | "storyboard" | "generate" | "tracks"}
+              onFilesChanged={() => setDataWorkspaceRefreshToken((value) => value + 1)}
+              onAskBrain={handoffVideoPipelineAi}
+              availableModels={Array.isArray(modelConfig.availableModels) ? modelConfig.availableModels : []}
+              preferredVideoModel={String(modelConfig.model || "").trim()}
+            />
+          );
         }
         return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "视频制作");
       }
       if (selectedBrainWorkspaceKey === "music") {
         if (["gen", "tracks", "slice", "export"].includes(brainSceneTab)) {
-          return <MusicDawShell projectId={selectedBrainProject?.id} activeStep={brainSceneTab as "gen" | "tracks" | "slice" | "export"} />;
+          return <MusicDawShell projectId={selectedBrainProject?.id} activeStep={brainSceneTab as "gen" | "tracks" | "slice" | "export"} refreshToken={dataWorkspaceRefreshToken} />;
         }
         return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "音乐创作");
       }
@@ -4992,8 +5261,8 @@ function renderSidebarModule() {
             annotationActive={documentAnnotationActive}
             onOpenFiles={() => setBrainResourceTab("files")}
             onSelectFile={selectBrainDocumentFile}
-            onSelectAnchor={(anchor) => { setDocumentAnnotationActive(true); setDocumentAnnotationCandidate(anchor); }}
-            onToggleAnnotation={() => { setDocumentAnnotationActive((current) => !current); setDocumentAnnotationCandidate(null); setDocumentAnnotationInstruction(""); }}
+            onSelectAnchor={() => { activateDocumentMarkingInPreview(); }}
+            onToggleAnnotation={toggleDocumentMarking}
             onSendAnnotation={sendDocumentAnnotationToChat}
             onPreviewChangeSet={(changeSet) => void previewDocumentChangeSet(changeSet)}
             onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
@@ -5013,8 +5282,8 @@ function renderSidebarModule() {
           annotationActive={documentAnnotationActive}
           onOpenFiles={() => setBrainResourceTab("files")}
           onSelectFile={selectBrainDocumentFile}
-          onSelectAnchor={(anchor) => { setDocumentAnnotationActive(true); setDocumentAnnotationCandidate(anchor); }}
-          onToggleAnnotation={() => { setDocumentAnnotationActive((current) => !current); setDocumentAnnotationCandidate(null); setDocumentAnnotationInstruction(""); }}
+          onSelectAnchor={() => { activateDocumentMarkingInPreview(); }}
+          onToggleAnnotation={toggleDocumentMarking}
           onSendAnnotation={sendDocumentAnnotationToChat}
           onPreviewChangeSet={(changeSet) => void previewDocumentChangeSet(changeSet)}
           onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
@@ -5046,10 +5315,12 @@ function renderSidebarModule() {
           </div>
           <div className={`preview-header-actions ${isCenter ? "expanded" : "sidebar"}`} aria-label="工作区操作">
             <button
-              className="preview-icon-button"
+              className={`preview-icon-button brain-resource-expand-toggle${isCenter ? " is-expanded" : ""}`}
               type="button"
-              title={isCenter ? "缩回侧栏" : "展开预览"}
-              aria-label={isCenter ? "缩回侧栏" : "展开预览"}
+              title={isCenter ? "还原布局" : "展开预览"}
+              aria-label={isCenter ? "还原布局" : "展开预览"}
+              aria-pressed={isCenter}
+              data-testid="brain-resource-expand-toggle"
               onClick={toggleBrainExpanded}
             >
               <SidebarIcon name={isCenter ? "minimize" : "maximize"} />
@@ -5071,11 +5342,20 @@ function renderSidebarModule() {
           <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("tasks"); }}>任务 <em>{brainTasks.length}</em></button>
         </nav>
         {capabilityTabs.length ? (
-          <nav className="brain-resource-scene-nav" aria-label="当前工作台功能">
-            {capabilityTabs.map((tab) => (
-              <button key={tab.key} type="button" className={brainResourceTab === "scene" && brainSceneTab === tab.key ? "active" : ""} onClick={() => showCapability(tab.key)}>{tab.label}</button>
-            ))}
-          </nav>
+          brainResourceTab === "scene" ? (
+            <nav className="brain-resource-scene-nav" aria-label="当前工作台功能">
+              {capabilityTabs.map((tab) => (
+                <button key={tab.key} type="button" className={brainSceneTab === tab.key ? "active" : ""} onClick={() => showCapability(tab.key)}>{tab.label}</button>
+              ))}
+            </nav>
+          ) : (
+            <div className="brain-resource-scene-shortcuts" aria-label="工作台功能入口">
+              <span>工作台</span>
+              {capabilityTabs.map((tab) => (
+                <button key={tab.key} type="button" onClick={() => showCapability(tab.key)}>{tab.label}</button>
+              ))}
+            </div>
+          )
         ) : null}
         <div className={`brain-resource-list${brainResourceTab === "scene" ? " scene-plugin" : ""}`}>
           {brainResourceTab === "scene" ? renderSceneCapability() : null}
@@ -5094,11 +5374,11 @@ function renderSidebarModule() {
             </div>
           )) : null}
           {brainResourceTab === "tasks" ? brainTasks.map((task) => (
-            <div key={task.id} className="brain-resource-row brain-task-row">
+            <button key={task.id} type="button" className="brain-resource-row brain-task-row" onClick={() => void openDocumentRevisionTask(task)}>
               <SidebarIcon name={task.status === "RUNNING" ? "automation" : "list-status"} />
               <span><strong>{task.taskType}</strong><small>{Math.round(task.progress * 100)}% · {taskStatusLabel[task.status] || task.status}</small></span>
               <em>{task.errorCode || ""}</em>
-            </div>
+            </button>
           )) : null}
           {brainResourceTab === "files" && !brainFiles.length ? <div className="brain-resource-empty">项目还没有文件</div> : null}
           {brainResourceTab === "artifacts" && !brainArtifacts.length ? <div className="brain-resource-empty">生成产物会显示在这里</div> : null}
@@ -5137,20 +5417,8 @@ function renderChatModule() {
               <SidebarIcon name="more" />
             </button>
           </div>
-          <div className={`task-topbar-actions${brainResourcePlacement === "hidden" && previewPlacement !== "side" ? " brain-tools-collapsed" : ""}`}>
+          <div className="task-topbar-actions">
             {renderPreviewHeaderActions("topbar")}
-            {/* codeCN: when the right panel is hidden, the panel-right toggle returns on the chat topbar. */}
-            {activeFeature === "new-chat" && brainResourcePlacement === "hidden" && previewPlacement !== "side" ? (
-              <button
-                className="preview-icon-button preview-panel-toggle brain-tools-restore-toggle"
-                type="button"
-                title="显示侧栏"
-                aria-label="显示侧栏"
-                onClick={() => setBrainResourcePlacement("side")}
-              >
-                <span className="preview-panel-glyph hidden"><SidebarIcon name="panel-right" /></span>
-              </button>
-            ) : null}
           </div>
         </header>
 
@@ -5961,8 +6229,8 @@ function renderChatModule() {
                       <div className="delegated-agent-approval">
                         <code>{agent.pendingTool?.name || "工具调用"}</code>
                         <div className="approval-card__actions">
-                          <button disabled={delegatedAgentAction === agent.childThreadId} onClick={() => void handleDelegatedAgentApproval(agent.childThreadId, false)}>拒绝</button>
-                          <button className="primary" disabled={delegatedAgentAction === agent.childThreadId} onClick={() => void handleDelegatedAgentApproval(agent.childThreadId, true)}>批准</button>
+                          <button type="button" data-testid="delegated-agent-reject-button" disabled={delegatedAgentAction === agent.childThreadId} onClick={() => void handleDelegatedAgentApproval(agent.childThreadId, false)}>拒绝</button>
+                          <button type="button" className="primary" data-testid="delegated-agent-approve-button" disabled={delegatedAgentAction === agent.childThreadId} onClick={() => void handleDelegatedAgentApproval(agent.childThreadId, true)}>批准</button>
                         </div>
                       </div>
                     ) : null}
@@ -6617,33 +6885,206 @@ function renderChatModule() {
     if (name.endsWith(".txt")) return "txt" as const;
     return null;
   })();
+  useEffect(() => {
+    if (!activeBrainFile?.id || !selectedBrainProjectId || !window.codecn?.ingestBrainFile) return;
+    const previewKind = searchFilePreview?.kind;
+    const markable = previewKind === "pdf" || previewKind === "docx" || previewKind === "pptx" || previewKind === "spreadsheet" || activeTextAnnotationFormat;
+    if (!markable) return;
+    const ingestFormat = previewKind === "spreadsheet" ? "xlsx" : (activeTextAnnotationFormat || previewKind);
+    if (brainDocumentAnchors.length && !documentAnchorsNeedChunkRefresh(ingestFormat, brainDocumentAnchors)) return;
+    void window.codecn.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: activeBrainFile.id })
+      .then((result) => {
+        setBrainDocumentAnchors(result.anchors || []);
+        if (result.warnings?.length) setChatStatus(result.warnings.join(" "));
+      })
+      .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解析失败"));
+  }, [activeBrainFile?.id, selectedBrainProjectId, searchFilePreview?.kind, activeTextAnnotationFormat]);
   const saveDocumentAnnotation = async () => {
     if (!activeBrainFile || !selectedBrainProjectId || !documentAnnotationCandidate || !documentAnnotationInstruction.trim()) return;
     if (!window.codecn?.createBrainAnnotation) return;
     setDocumentAnnotationBusy(true);
     try {
+      let snapshotGeometry: { snapshotPath?: string; snapshotUrl?: string } = {};
+      if (documentAnnotationSnapshot?.dataUrl && api?.saveComposerClipboardFile) {
+        const saved = await api.saveComposerClipboardFile({
+          name: `annotation-mark-${Date.now()}.png`,
+          mimeType: "image/png",
+          data: dataUrlToArrayBuffer(documentAnnotationSnapshot.dataUrl)
+        });
+        snapshotGeometry = { snapshotPath: saved.path, snapshotUrl: saved.url };
+      }
       const annotation = await window.codecn.createBrainAnnotation({
         projectId: selectedBrainProjectId,
         fileId: activeBrainFile.id,
         fileVersion: activeBrainFile.versionNo,
         anchor: documentAnnotationCandidate,
-        instruction: documentAnnotationInstruction.trim()
+        instruction: documentAnnotationInstruction.trim(),
+        geometry: {
+          ...(documentAnnotationGeometry ? { style: documentAnnotationGeometry } : { style: { tool: documentMarkingTool, color: documentMarkingColor } }),
+          ...snapshotGeometry
+        }
       });
       setBrainAnnotations((current) => [annotation, ...current]);
       setDocumentAnnotationCandidate(null);
       setDocumentAnnotationInstruction("");
-      setChatStatus(`标注 ${annotation.id} 已保存。`);
+      setDocumentAnnotationGeometry(null);
+      setDocumentAnnotationPendingMark(null);
+      setDocumentAnnotationSnapshot(null);
+      setDocumentAnnotationActive(true);
+      setChatStatus(snapshotGeometry.snapshotPath
+        ? `标注 ${annotation.geometry?.displayIndex || annotation.id} 已保存（含区域截图）。可继续框选下一块区域。`
+        : `标注 ${annotation.id} 已保存。可继续框选下一块区域。`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setDocumentAnnotationBusy(false);
     }
   };
+  const handlePreviewMark = (input: {
+    format: "pdf" | "image" | "txt" | "markdown" | "docx" | "pptx" | "xlsx";
+    rect: { x: number; y: number; width: number; height: number };
+    viewport: { width: number; height: number };
+    transform: { coordinateSpace: "pdf-points" | "pixels" | "slide-emu" | "sheet-grid"; basisWidth: number; basisHeight: number; scale: number };
+    page?: number;
+    slide?: number;
+    sheet?: string;
+    columnCount?: number;
+    rowCount?: number;
+    lines?: string[];
+    docxHost?: HTMLElement | null;
+    captureTarget?: HTMLElement | null;
+  }) => {
+    if (!documentAnnotationActive) return;
+    try {
+      if (!isValidDocumentMarkRect(input.rect, input.viewport)) {
+        throw new Error("无法定位标记区域，请重新框选。");
+      }
+      let anchor;
+      if (input.format === "docx") {
+        anchor = resolveDocxAnchorFromMark(input.rect, input.docxHost ?? null, brainDocumentAnchors, input.viewport);
+        anchor = attachMarkOverlay(anchor, { rect: input.rect, viewport: input.viewport, transform: input.transform });
+      } else if (input.format === "pptx") {
+        const slide = input.slide;
+        if (typeof slide !== "number" || !Number.isInteger(slide) || slide < 1) throw new Error("无法定位幻灯片页码。");
+        anchor = resolvePptxAnchorFromMark(input.rect, input.viewport, slide, brainDocumentAnchors);
+        anchor = attachMarkOverlay(anchor, { rect: input.rect, viewport: input.viewport, transform: input.transform });
+      } else if (input.format === "pdf") {
+        const page = input.page;
+        if (typeof page !== "number" || !Number.isInteger(page) || page < 1) throw new Error("无法定位 PDF 页码。");
+        anchor = resolvePdfAnchorFromMark(input.rect, input.viewport, page, brainDocumentAnchors, input.transform);
+        anchor = attachMarkOverlay(anchor, { rect: input.rect, viewport: input.viewport, transform: input.transform });
+      } else if (input.format === "xlsx") {
+        const sheet = input.sheet;
+        if (!sheet?.trim()) throw new Error("无法定位工作表。");
+        anchor = resolveXlsxAnchorFromMark(
+          input.rect,
+          input.viewport,
+          sheet,
+          brainDocumentAnchors,
+          { columnCount: input.columnCount || 1, rowCount: input.rowCount || 1 }
+        );
+        anchor = attachMarkOverlay(anchor, { rect: input.rect, viewport: input.viewport, transform: input.transform });
+      } else if (input.format === "image") {
+        anchor = attachMarkOverlay(
+          buildMarkingAnchor({
+            format: "image",
+            rect: input.rect,
+            viewport: input.viewport,
+            transform: input.transform
+          }),
+          { rect: input.rect, viewport: input.viewport, transform: input.transform }
+        );
+      } else if (input.format === "markdown") {
+        anchor = resolveMarkdownAnchorFromMark(input.rect, input.viewport, brainDocumentAnchors, input.lines || []);
+      } else if (input.format === "txt") {
+        anchor = resolveTxtAnchorFromMark(input.rect, input.viewport, brainDocumentAnchors, input.lines || []);
+      } else {
+        const totalLines = input.lines?.length || 1;
+        const lineHeight = input.viewport.height / Math.max(totalLines, 1);
+        const lineRange = linesFromPreviewRect({ rect: input.rect, lineHeight, totalLines });
+        const selectedText = (input.lines || []).slice(lineRange.startLine - 1, lineRange.endLine).join("\n");
+        anchor = buildMarkingAnchor({
+          format: input.format,
+          rect: input.rect,
+          viewport: input.viewport,
+          transform: input.transform,
+          lineRange: { ...lineRange, selectedText }
+        });
+      }
+      setDocumentAnnotationCandidate(anchor);
+      setDocumentAnnotationGeometry({ tool: documentMarkingTool, color: documentMarkingColor });
+      setDocumentAnnotationPendingMark({ rect: input.rect, tool: documentMarkingTool, color: documentMarkingColor });
+      setDocumentAnnotationSnapshot(null);
+      const captureTarget = input.captureTarget ?? input.docxHost ?? null;
+      void captureAnnotationSnapshot({ rect: input.rect, viewport: input.viewport, target: captureTarget })
+        .then((snapshot) => {
+          setDocumentAnnotationSnapshot(snapshot);
+          setChatStatus(snapshot
+            ? "已标记区域并捕获截图，请描述修改要求。"
+            : "已标记区域（未捕获截图，将使用文本与位置信息），请描述修改要求。");
+        })
+        .catch(() => {
+          setChatStatus("已标记区域，请描述修改要求。");
+        });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const openDocumentRevisionTask = async (task: any) => {
+    if (task.taskType !== "document.revision") return;
+    let payload: Record<string, unknown> = {};
+    try { payload = JSON.parse(String(task.resultJson || "{}")); } catch { payload = {}; }
+    const changeSetId = String(payload.changeSetId || "");
+    const fileId = String(payload.fileId || "");
+    const annotationId = String(payload.annotationId || "");
+    const file = brainFiles.find((item) => item.id === fileId);
+    const changeSet = brainChangeSets.find((item) => item.id === changeSetId)
+      || brainChangeSets.find((item) => item.taskId === task.id);
+    const annotation = brainAnnotations.find((item) => item.id === (annotationId || changeSet?.annotationId));
+    if (file) {
+      setDocumentAnnotationActive(true);
+      setDocumentAnnotationCandidate(annotation?.anchor || null);
+      await openLocalFilePreview(file.storageKey || file.logicalName, { workspaceId: selectedWorkspace?.id });
+    }
+    if (changeSet) await previewDocumentChangeSet(changeSet);
+    setBrainResourceTab("tasks");
+    setBrainResourcePlacement("side");
+  };
   const sendDocumentAnnotationToChat = (annotation: any) => {
-    const reference = buildAnnotationChatReference(annotation);
-    setQuestion((current) => [current.trim(), reference].filter(Boolean).join("\n\n"));
+    if (!String(annotation.instruction || "").trim()) {
+      setChatStatus("请先在标注中填写修改要求，再加入对话。");
+      return;
+    }
+    const fileName = activeBrainFile?.id === annotation.fileId
+      ? activeBrainFile.logicalName
+      : brainFiles.find((file) => file.id === annotation.fileId)?.logicalName;
+    const snapshotPath = String(annotation.geometry?.snapshotPath || "").trim();
+    const snapshotUrl = resolveAnnotationSnapshotPreview(annotation.geometry);
+    const reference = buildAnnotationChatReference(annotation, {
+      fileName,
+      hasSnapshot: Boolean(snapshotPath || snapshotUrl)
+    });
+    setQuestion((current) => {
+      const next = [current.trim(), reference].filter(Boolean).join("\n\n");
+      composerTextareaRef.current?.setValue(next);
+      return next;
+    });
     setBrainDraft((current) => [current.trim(), reference].filter(Boolean).join("\n\n"));
-    setChatStatus(`标注 ${annotation.id} 已加入 BRAIN 对话。`);
+    if (snapshotPath) {
+      const markLabel = annotation.geometry?.displayIndex || annotation.id;
+      setComposerImages((current: any[]) => {
+        const attachment = {
+          name: `标记-${markLabel}.png`,
+          path: snapshotPath,
+          url: snapshotUrl || undefined
+        };
+        if (current.some((item) => item.path === attachment.path)) return current;
+        return [...current, attachment].slice(0, 8);
+      });
+    }
+    setChatStatus(snapshotPath
+      ? `标注 ${annotation.geometry?.displayIndex || annotation.id} 已加入对话（含区域截图），发送后 Agent 将按附图处理。`
+      : `标注 ${annotation.geometry?.displayIndex || annotation.id} 已加入对话输入框，发送后 Agent 将按标记位置处理。`);
   };
   const previewDocumentChangeSet = async (changeSet: any) => {
     if (!selectedBrainProjectId || !window.codecn?.previewBrainChangeSet) return;
@@ -6662,6 +7103,14 @@ function renderChatModule() {
     try {
       const updated = await window.codecn.updateBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id, status });
       setBrainChangeSets((current) => current.map((item) => item.id === updated.id ? updated : item));
+      if (window.codecn?.listBrainTasks) {
+        const tasks = await window.codecn.listBrainTasks({ projectId: selectedBrainProjectId });
+        setBrainTasks(Array.isArray(tasks) ? tasks : []);
+      }
+      if (status === "REJECTED" && window.codecn?.listBrainAnnotations) {
+        const annotations = await window.codecn.listBrainAnnotations({ projectId: selectedBrainProjectId });
+        setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
+      }
       setChatStatus(status === "ACCEPTED" ? "修改方案已接受，可导出为新版本。" : "修改方案已拒绝，原文件未改变。");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -6676,6 +7125,14 @@ function renderChatModule() {
       const result = await window.codecn.exportBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id });
       setBrainChangeSets((current) => current.map((item) => item.id === result.changeSet.id ? result.changeSet : item));
       setBrainFiles((current) => [result.file, ...current.filter((item) => item.id !== result.file.id)]);
+      if (window.codecn?.listBrainTasks) {
+        const tasks = await window.codecn.listBrainTasks({ projectId: selectedBrainProjectId });
+        setBrainTasks(Array.isArray(tasks) ? tasks : []);
+      }
+      if (window.codecn?.listBrainAnnotations) {
+        const annotations = await window.codecn.listBrainAnnotations({ projectId: selectedBrainProjectId });
+        setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
+      }
       setChatStatus(`新版本已导出：${result.relativePath}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -6686,6 +7143,7 @@ function renderChatModule() {
 
 function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "center">) {
     const isCenter = placement === "center";
+    const savedFileAnnotations = brainAnnotations.filter((annotation) => annotation.fileId === activeBrainFile?.id);
 
     return (
       <section className={isCenter ? "preview-center-module" : "preview-column"}>
@@ -6752,6 +7210,20 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 }}>
                   <SidebarIcon name="download" />
                 </button>
+                {/\.(?:docx|xlsx|pptx)$/i.test(String(searchFilePreview.name || searchFilePreview.path || "")) ? (
+                  <button type="button" className="artifact-icon-button" title="用 Word / WPS 打开编辑" aria-label="用系统应用打开" onClick={async () => {
+                    setPreviewFileMenu(false);
+                    try {
+                      const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
+                      if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
+                      else setChatStatus("已在系统应用中打开，可直接编辑表格与排版。");
+                    } catch (error) {
+                      setChatStatus(error instanceof Error ? error.message : "文件无法打开");
+                    }
+                  }}>
+                    <SidebarIcon name="external-link" />
+                  </button>
+                ) : null}
                 <div className="artifact-more-wrap">
                   <button type="button" className="artifact-icon-button" title="更多操作" aria-label="更多操作" aria-expanded={previewFileMenu} onClick={() => setPreviewFileMenu((current) => !current)}>
                     <SidebarIcon name="more" />
@@ -6822,15 +7294,21 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               preview={brainChangeSetPreview}
               active={documentAnnotationActive}
               candidate={documentAnnotationCandidate}
-              availableAnchors={brainDocumentAnchors}
+              candidateSnapshotUrl={documentAnnotationSnapshot?.dataUrl}
               instruction={documentAnnotationInstruction}
               busy={documentAnnotationBusy}
+              markingTool={documentMarkingTool}
+              markingColor={documentMarkingColor}
               onToggle={() => {
                 setDocumentAnnotationActive((current) => !current);
                 setDocumentAnnotationCandidate(null);
                 setDocumentAnnotationInstruction("");
+                setDocumentAnnotationGeometry(null);
+                setDocumentAnnotationPendingMark(null);
+                setDocumentAnnotationSnapshot(null);
               }}
-              onSelectAnchor={setDocumentAnnotationCandidate}
+              onMarkingToolChange={setDocumentMarkingTool}
+              onMarkingColorChange={setDocumentMarkingColor}
               onInstructionChange={setDocumentAnnotationInstruction}
               onSave={() => void saveDocumentAnnotation()}
               onSendToChat={sendDocumentAnnotationToChat}
@@ -6838,17 +7316,7 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
               onExportChangeSet={(changeSet) => void exportDocumentChangeSet(changeSet)}
             />
-            {documentAnnotationActive && brainDocumentAnchors.some((anchor) => anchor.format === "xlsx") ? (
-              <div className="workspace-artifact-xlsx-sheet" data-testid="document-xlsx-sheet">
-                <DocumentAnchorOverlay
-                  anchors={brainDocumentAnchors}
-                  active
-                  selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
-                  sheetFilter={documentAnnotationCandidate?.sheet || brainDocumentAnchors.find((anchor) => anchor.format === "xlsx")?.sheet}
-                  onSelectAnchor={setDocumentAnnotationCandidate}
-                />
-              </div>
-            ) : null}
+            <div className={`search-file-preview-body${documentAnnotationActive ? " document-marking-active" : ""}`}>
             {searchFilePreview.loading ? (
               <div className="search-file-preview-state">正在读取文件...</div>
             ) : searchFilePreview.error || searchFilePreview.blankReason || (!searchFilePreview.binary && !searchFilePreview.kind && !String(searchFilePreview.content || "").length && !searchFilePreview.loading) ? (
@@ -6873,45 +7341,57 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             ) : searchFilePreview.kind === "pdf" ? (
               <WorkspacePdfViewer
                 dataUrl={searchFilePreview.dataUrl}
-                anchors={brainDocumentAnchors}
                 annotationActive={documentAnnotationActive}
-                selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
-                onSelectAnchor={setDocumentAnnotationCandidate}
+                markingTool={documentMarkingTool}
+                markingColor={documentMarkingColor}
+                savedAnnotations={savedFileAnnotations}
+                pendingMark={documentAnnotationPendingMark}
+                onMarkComplete={(mark) => handlePreviewMark({
+                  format: "pdf",
+                  rect: mark.rect,
+                  viewport: mark.viewport,
+                  page: mark.page,
+                  transform: { coordinateSpace: "pdf-points", basisWidth: mark.basisWidth, basisHeight: mark.basisHeight, scale: 1 },
+                  captureTarget: mark.captureTarget
+                })}
               />
             ) : searchFilePreview.kind === "docx" ? (
-              <div className="workspace-artifact-docx-shell">
-                <iframe
-                  className="workspace-artifact-docx"
-                  title={searchFilePreview.name}
-                  sandbox=""
-                  srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:32px 40px;background:#fff;color:#202124;font:15px/1.75 system-ui,sans-serif}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dce2;padding:6px 8px}h1,h2,h3{line-height:1.35}p{margin:0 0 12px}[data-object-id].selected{outline:2px solid #d88621;background:#fff3df}</style></head><body>${searchFilePreview.html || ""}</body></html>`}
-                />
-                {documentAnnotationActive ? (
-                  <div className="document-anchor-docx-picker" data-testid="document-anchor-docx-picker">
-                    {brainDocumentAnchors.filter((anchor) => anchor.format === "docx").slice(0, 100).map((anchor) => (
-                      <button
-                        type="button"
-                        key={anchor.anchorId}
-                        data-testid="document-anchor-hit"
-                        data-object-id={anchor.objectId}
-                        className={documentAnnotationCandidate?.anchorId === anchor.anchorId ? "selected" : ""}
-                        onClick={() => setDocumentAnnotationCandidate(anchor)}
-                      >
-                        <strong>{anchor.selectedText?.trim() || anchor.objectId}</strong>
-                        <small>{anchor.objectId}</small>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              <WorkspaceDocxViewer
+                html={String(searchFilePreview.html || "")}
+                anchors={brainDocumentAnchors}
+                annotationActive={documentAnnotationActive}
+                markingTool={documentMarkingTool}
+                markingColor={documentMarkingColor}
+                savedAnnotations={savedFileAnnotations}
+                pendingMark={documentAnnotationPendingMark}
+                onMarkComplete={({ rect, viewport, host }) => handlePreviewMark({
+                  format: "docx",
+                  rect,
+                  viewport,
+                  transform: { coordinateSpace: "pixels", basisWidth: viewport.width, basisHeight: viewport.height, scale: 1 },
+                  docxHost: host,
+                  captureTarget: host
+                })}
+              />
             ) : searchFilePreview.kind === "pptx" ? (
               <div className="workspace-artifact-pptx-shell">
-                <WorkspaceArtifactViewerHost preview={searchFilePreview} />
-                <DocumentAnchorOverlay
-                  anchors={brainDocumentAnchors}
-                  active={documentAnnotationActive}
-                  selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
-                  onSelectAnchor={setDocumentAnnotationCandidate}
+                <WorkspaceArtifactViewerHost
+                  preview={searchFilePreview}
+                  marking={{
+                    annotationActive: documentAnnotationActive,
+                    markingTool: documentMarkingTool,
+                    markingColor: documentMarkingColor,
+                    savedAnnotations: savedFileAnnotations,
+                    pendingMark: documentAnnotationPendingMark,
+                    onMarkComplete: ({ rect, viewport, slide, captureTarget }) => handlePreviewMark({
+                      format: "pptx",
+                      rect,
+                      viewport,
+                      slide,
+                      transform: { coordinateSpace: "slide-emu", basisWidth: 12_192_000, basisHeight: 6_858_000, scale: 1 },
+                      captureTarget
+                    })
+                  }}
                 />
               </div>
             ) : searchFilePreview.kind === "html" ? (
@@ -6924,19 +7404,53 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             ) : searchFilePreview.kind === "image" ? (
               <div className="workspace-artifact-image">
                 <img src={String(searchFilePreview.previewUrl || "")} alt={searchFilePreview.name || "image"} />
-                <DocumentAnchorOverlay
-                  anchors={brainDocumentAnchors}
+                <DocumentMarkingLayer
                   active={documentAnnotationActive}
-                  selectedAnchorId={documentAnnotationCandidate?.anchorId || null}
-                  onSelectAnchor={setDocumentAnnotationCandidate}
+                  tool={documentMarkingTool}
+                  color={documentMarkingColor}
+                  savedAnnotations={savedFileAnnotations}
+                  pendingMark={documentAnnotationPendingMark}
+                  onComplete={({ rect, viewport, host }) => handlePreviewMark({
+                    format: "image",
+                    rect,
+                    viewport,
+                    transform: { coordinateSpace: "pixels", basisWidth: viewport.width, basisHeight: viewport.height, scale: 1 },
+                    captureTarget: host
+                  })}
                 />
               </div>
             ) : searchFilePreview.kind === "video" ? (
-              <div className="workspace-artifact-video">
-                <video controls preload="metadata" src={String(searchFilePreview.previewUrl || "")}>
-                  当前环境无法播放该视频。
-                </video>
-              </div>
+              <WorkspaceVideoViewer
+                previewUrl={String(searchFilePreview.previewUrl || "")}
+                name={searchFilePreview.name}
+              />
+            ) : searchFilePreview.kind === "spreadsheet" ? (
+              <WorkspaceSpreadsheetViewer
+                sheets={Array.isArray(searchFilePreview.sheets) ? searchFilePreview.sheets : []}
+                name={searchFilePreview.name}
+                marking={{
+                  annotationActive: documentAnnotationActive,
+                  markingTool: documentMarkingTool,
+                  markingColor: documentMarkingColor,
+                  savedAnnotations: savedFileAnnotations,
+                  pendingMark: documentAnnotationPendingMark,
+                  onMarkComplete: ({ rect, viewport, sheet, columnCount, rowCount, captureTarget }) => handlePreviewMark({
+                    format: "xlsx",
+                    rect,
+                    viewport,
+                    sheet,
+                    columnCount,
+                    rowCount,
+                    transform: {
+                      coordinateSpace: "sheet-grid",
+                      basisWidth: Math.max(columnCount, 26),
+                      basisHeight: Math.max(rowCount, 50),
+                      scale: 1
+                    },
+                    captureTarget
+                  })
+                }}
+              />
             ) : searchFilePreview.binary ? (
               <div className="search-file-preview-state">这是二进制文件，无法以文本方式预览。</div>
             ) : (
@@ -6944,8 +7458,12 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 {searchFilePreview.truncated ? (
                   <div className="search-file-preview-notice">文件较大，仅显示前 512 KB。</div>
                 ) : null}
-                <pre><code>{(() => {
+                <div className="workspace-artifact-text-shell">
+                  <pre><code>{(() => {
                   const contentLines = String(searchFilePreview.content || "").split("\n");
+                  const textMarks = activeTextAnnotationFormat && activeBrainFile
+                    ? renderTextLineMarks({ annotations: savedFileAnnotations, fileId: activeBrainFile.id, format: activeTextAnnotationFormat })
+                    : [];
                   return contentLines.map((line: string, index: number) => {
                     const lineNumber = index + 1;
                     const citationSelected = Boolean(searchFilePreview.line)
@@ -6954,28 +7472,47 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     const ttsSelected = ttsFollow?.scope === "preview"
                       && lineNumber >= ttsFollow.line
                       && lineNumber <= ttsFollow.endLine;
+                    const lineMark = textMarks.find((mark) => mark.line === lineNumber);
                     const className = [
                       "preview-line",
                       citationSelected ? "selected" : "",
-                      ttsSelected ? "tts-active" : ""
+                      ttsSelected ? "tts-active" : "",
+                      lineMark?.tool === "highlight" ? "document-marking-line highlight" : "",
+                      lineMark?.tool === "select-rect" ? "document-marking-line select-rect" : ""
                     ].filter(Boolean).join(" ");
                     return (
                       <span
-                        className={`${className}${documentAnnotationCandidate?.anchorId === `${activeTextAnnotationFormat}:line:${lineNumber}` ? " annotation-candidate" : ""}`}
+                        className={className}
                         data-preview-line={lineNumber}
                         key={lineNumber}
-                        onClick={() => {
-                          if (!documentAnnotationActive || !activeTextAnnotationFormat) return;
-                          setDocumentAnnotationCandidate(createTextLineAnchor(activeTextAnnotationFormat, lineNumber, line));
-                        }}
+                        style={lineMark ? ({ ["--mark-color" as string]: lineMark.color } as React.CSSProperties) : undefined}
                       >
                         <i>{lineNumber}</i>{line}{index < contentLines.length - 1 ? "\n" : ""}
                       </span>
                     );
                   });
                 })()}</code></pre>
+                  {activeTextAnnotationFormat ? (
+                    <DocumentMarkingLayer
+                      active={documentAnnotationActive}
+                      tool={documentMarkingTool}
+                      color={documentMarkingColor}
+                      savedAnnotations={savedFileAnnotations}
+                      pendingMark={documentAnnotationPendingMark}
+                      onComplete={({ rect, viewport, host }) => handlePreviewMark({
+                        format: activeTextAnnotationFormat,
+                        rect,
+                        viewport,
+                        transform: { coordinateSpace: "pixels", basisWidth: viewport.width, basisHeight: viewport.height, scale: 1 },
+                        lines: String(searchFilePreview.content || "").split("\n"),
+                        captureTarget: host
+                      })}
+                    />
+                  ) : null}
+                </div>
               </>
             )}
+            </div>
           </section>
         ) : renderPreviewPanel(openLocalFilePreview)}</section>
     );
@@ -8033,7 +8570,6 @@ function selectSearchTarget(workspaceId?: string, threadId?: string, filePath?: 
     }
     if (filePath) {
       openLocalFilePreview(filePath, workspaceId ? { workspaceId } : undefined);
-      setPreviewPlacement("center");
     } else {
       setSearchFilePreview(null);
     }
@@ -8384,9 +8920,8 @@ function renderWorkspaceModules() {
 
     const brainToolsCentered = activeFeature === "new-chat" && brainResourcePlacement === "center" && previewPlacement !== "side";
     const brainToolsSide = activeFeature === "new-chat" && brainResourcePlacement === "side" && previewPlacement !== "side";
-    const mainModule = brainToolsCentered
-      ? renderBrainResourcePanel("center")
-      : previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
+    // Expand must keep chat like artifact-workbench open-file — never swap chat out for Tools.
+    const mainModule = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
       ? renderPreviewModule("center")
       : isThreadSidebarSelection
         ? renderChatModule()
@@ -8424,8 +8959,23 @@ function renderWorkspaceModules() {
         ) : null}
         {renderSidebarModule()}
         {mainModule}
-        {/* 七场景右侧专业面板：不依赖必须已选中 BRAIN 对话；仅在打开通用文件侧栏时临时让位。 */}
+        {/* 七场景右侧专业面板：不依赖必须已选中 BRAIN 对话；仅在打开通用文件侧栏时临时让位。
+            Expand (.center) keeps chat + Tools side-by-side (hide left nav only). */}
+        {brainToolsCentered ? renderBrainResourcePanel("center") : null}
         {brainToolsSide ? renderBrainResourcePanel("side") : null}
+        {/* Residual expand after 收起 — workspace-frame host so empty home / new-chat (hidden topbar) and no-project still show panel-right. */}
+        {activeFeature === "new-chat" && brainResourcePlacement === "hidden" && previewPlacement !== "side" ? (
+          <button
+            type="button"
+            className="preview-icon-button preview-panel-toggle brain-tools-restore-toggle"
+            title="显示侧栏"
+            aria-label="显示侧栏"
+            data-testid="brain-tools-restore-toggle"
+            onClick={() => setBrainResourcePlacement("side")}
+          >
+            <span className="preview-panel-glyph hidden"><SidebarIcon name="panel-right" /></span>
+          </button>
+        ) : null}
         {previewPlacement === "side" && activeFeature === "new-chat" ? renderPreviewModule("side") : null}
         {renderSearchDialog()}
         {workspaceFileMenu && selectedWorkspace?.id ? <LocalFileContextMenu

@@ -4,6 +4,13 @@ import {
   ensureProgrammingSkillReferences,
   PROGRAMMING_SKILL_TEMPLATE_MARKER
 } from "./programming-skill-seed.js";
+import {
+  SCENE_TOOLS_TEMPLATE_MARKER,
+  SCENE_KNOWLEDGE_FILENAME,
+  SCENE_TOOLS_ROUTING_FILENAME,
+  ensureSceneProjectInit,
+  normalizeSceneKey
+} from "./scene-knowledge-seed.js";
 
 /**
  * Hermes/PAHF-style active user-shadow learning for project-manager.
@@ -87,8 +94,14 @@ export function isDefaultProjectOsScaffold(text) {
 }
 
 const fileWriteQueues = new Map();
+/** Wait budget for a live peer holding a fresh lock before failing activate/writes. */
 const LOCK_TIMEOUT_MS = 10_000;
 const LOCK_RETRY_MS = 20;
+/**
+ * Cross-process lock age after which we treat the file as abandoned.
+ * Writers only hold during tiny markdown appends; a multi-second hold means a crash left the .lock behind.
+ */
+const LOCK_STALE_MS = 30_000;
 
 function safeName(value) {
   const normalized = String(value || "project")
@@ -385,6 +398,70 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** True when `pid` still exists (signal 0). EPERM means alive but inaccessible. */
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "EPERM") return true;
+    return false;
+  }
+}
+
+/**
+ * Parse lock metadata written by acquireFileLock.
+ * @returns {{ pid: number, createdAt: string, ageMs: number } | null}
+ */
+async function readLockMetadata(lockPath) {
+  try {
+    const raw = await fs.readFile(lockPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const pid = Number(parsed?.pid);
+    const createdAt = String(parsed?.createdAt || "");
+    const createdMs = Date.parse(createdAt);
+    return {
+      pid: Number.isInteger(pid) ? pid : NaN,
+      createdAt,
+      ageMs: Number.isFinite(createdMs) ? Math.max(0, Date.now() - createdMs) : Number.POSITIVE_INFINITY
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove abandoned locks left by crashed agentd/desktop processes.
+ * Clears when: metadata unreadable, holder PID is dead, or lock age >= LOCK_STALE_MS.
+ * @returns {Promise<boolean>} true if the lock path is gone (or was cleared)
+ */
+async function tryClearStaleLock(lockPath) {
+  const meta = await readLockMetadata(lockPath);
+  if (!meta) {
+    try {
+      await fs.access(lockPath);
+    } catch (error) {
+      if (error?.code === "ENOENT") return true;
+    }
+    await fs.rm(lockPath, { force: true });
+    return true;
+  }
+  const alive = isPidAlive(meta.pid);
+  if (!alive || meta.ageMs >= LOCK_STALE_MS) {
+    await fs.rm(lockPath, { force: true });
+    return true;
+  }
+  return false;
+}
+
+async function describeLockHolder(lockPath) {
+  const meta = await readLockMetadata(lockPath);
+  if (!meta) return "holder=unknown/unreadable";
+  const alive = isPidAlive(meta.pid);
+  return `holderPid=${Number.isInteger(meta.pid) ? meta.pid : "?"} alive=${alive} ageMs=${Number.isFinite(meta.ageMs) ? Math.round(meta.ageMs) : "?"}`;
+}
+
 async function acquireFileLock(filePath) {
   const lockPath = `${filePath}.lock`;
   const startedAt = Date.now();
@@ -404,8 +481,16 @@ async function acquireFileLock(filePath) {
     } catch (error) {
       if (handle) await handle.close().catch(() => undefined);
       if (error?.code !== "EEXIST") throw error;
+      // Crash leftovers must not block activate/workspace for the full timeout.
+      if (await tryClearStaleLock(lockPath)) continue;
       if (Date.now() - startedAt > LOCK_TIMEOUT_MS) {
-        throw new Error(`Timed out waiting for user shadow lock: ${lockPath}`);
+        // Final steal attempt in case the holder died while we waited.
+        if (await tryClearStaleLock(lockPath)) continue;
+        const holder = await describeLockHolder(lockPath);
+        throw new Error(
+          `Timed out waiting for user shadow lock: ${lockPath} (${holder}). `
+          + "If no codeCN/agentd process is writing this file, delete the .lock and retry thread activate."
+        );
       }
       await sleep(LOCK_RETRY_MS);
     }
@@ -549,17 +634,18 @@ ${body}
 `;
 }
 
-function buildSkillMarkdown(projectName) {
+function buildSkillMarkdown(projectName, brainWorkspaceKey = "explore") {
+  const sceneKey = normalizeSceneKey(brainWorkspaceKey);
   return `---
 name: ${safeName(projectName)}-project-manager
-description: Always-on Project OS + preference shadow for this workspace. Own PAHF personalization under .codecn; durable architecture lives in repo-root CODECN.md. When coding (especially Java/Spring), enforce seeded programming guardrails, Javadoc, encoding, and backend design references.
+description: Always-on Project OS + preference shadow for this workspace. Own PAHF personalization under .codecn; durable architecture lives in repo-root CODECN.md. Enforce scene Tools sub-architecture (except explore) and seeded programming guardrails when coding.
 metadata:
-  short-description: Project OS, preferences, and coding guardrails
+  short-description: Project OS, scene Tools, preferences, coding guardrails
 ---
 
 # ${projectName} Project Manager
 
-This skill is the always-on shadow for ${projectName}. It combines Claude Code–style **Project OS** (repo-root \`CODECN.md\`) with a Hermes/PAHF **personalization** loop (runtime-managed preference files) and seeded **programming guardrails** for reliable code edits.
+This skill is the always-on shadow for ${projectName}. It combines Claude Code–style **Project OS** (repo-root \`CODECN.md\`) with a Hermes/PAHF **personalization** loop (runtime-managed preference files), **scene Tools routing**, and seeded **programming guardrails** for reliable code edits.
 
 ## Project OS (repo layer)
 
@@ -567,6 +653,13 @@ This skill is the always-on shadow for ${projectName}. It combines Claude Code�
 2. When architecture, build/test commands, directory layout, or lasting conventions change, **update \`CODECN.md\` with workspace tools**.
 3. You may edit \`CODECN.md\`, \`docs/**\`, and normal project source files.
 4. Do **not** use tools to create or edit \`.codecn\`, \`.codebuddy\`, skill \`references/\`, memory, or session-summary files — the runtime owns those after each turn.
+
+## ${SCENE_TOOLS_TEMPLATE_MARKER}
+
+1. Read \`references/${SCENE_KNOWLEDGE_FILENAME}\` and \`references/${SCENE_TOOLS_ROUTING_FILENAME}\` for this project's BRAIN scene (\`${sceneKey}\`).
+2. Except **场景学习探索 / explore**, every deliverable that touches the scene MUST use the registered **right-side Tools sub-architecture** (music DAW 生成/音轨/标记切片/导出, video pipeline, quant panels, data Julius, document review, etc.). Do not satisfy with prose-only or bare gateway media tools that skip the panel.
+3. Prefer scene Agent tools (\`music.*\`, \`video.*\`, \`quant.*\`, \`data.*\`, document tools) over bare Auto \`music_generate\` / \`video_generate\` when those scene tools are registered.
+4. After Tools writes, tell the user which right-side tab to inspect.
 
 ## Required Workflow (PAHF)
 
@@ -592,6 +685,8 @@ When the user request edits, generates, completes, or documents source code—es
 - \`references/learning-open-questions.md\`: open preference questions to ask before acting.
 - \`references/session-digest.md\`: append-only session summaries.
 - \`references/project-knowledge.md\`: short CODECN.md candidate index only (not the architecture source of truth).
+- \`references/${SCENE_KNOWLEDGE_FILENAME}\`: BRAIN scene rules knowledge baseline for this project.
+- \`references/${SCENE_TOOLS_ROUTING_FILENAME}\`: mandatory right-side Tools sub-architecture routing.
 - \`references/programming-guardrails.md\`: coding reliability, encoding, Java safety, Spring structure, patch/recovery, evaluation.
 - \`references/java-javadoc-rules.md\`: mandatory Java method Javadoc rules.
 - \`references/backend-technical-design-framework.md\`: mandatory Spring/backend design sections.
@@ -602,6 +697,7 @@ export class UserShadow {
   constructor(input = {}) {
     this.workspacePath = path.resolve(input.workspacePath);
     this.projectName = input.projectName || path.basename(this.workspacePath);
+    this.brainWorkspaceKey = normalizeSceneKey(input.brainWorkspaceKey);
     this.skillName = `${safeName(this.projectName)}-project-manager`;
     this.skillPath = path.join(this.workspacePath, ".codecn", "skills", this.skillName);
     this.referencesPath = path.join(this.skillPath, "references");
@@ -670,23 +766,32 @@ export class UserShadow {
       || !existingSkill.includes("CODECN.md")
       || !existingSkill.includes("Project OS")
       || !existingSkill.includes(PROGRAMMING_SKILL_TEMPLATE_MARKER)
-      || !existingSkill.includes("references/programming-guardrails.md")) {
-      await fs.writeFile(skillFile, buildSkillMarkdown(this.projectName), "utf8");
+      || !existingSkill.includes("references/programming-guardrails.md")
+      || !existingSkill.includes(SCENE_TOOLS_TEMPLATE_MARKER)
+      || !existingSkill.includes(SCENE_KNOWLEDGE_FILENAME)) {
+      await fs.writeFile(skillFile, buildSkillMarkdown(this.projectName, this.brainWorkspaceKey), "utf8");
     }
     await ensureProgrammingSkillReferences(this.referencesPath, fs.writeFile.bind(fs), fs.mkdir.bind(fs));
+    await ensureSceneProjectInit({
+      workspacePath: this.workspacePath,
+      projectName: this.projectName,
+      brainWorkspaceKey: this.brainWorkspaceKey
+    });
     const outputRulesPath = this.outputRulesPath();
     await appendUnique(outputRulesPath, "# User Output Rules", DEFAULT_OUTPUT_RULES);
     await sanitizeOutputRules(outputRulesPath);
     await appendUnique(path.join(this.referencesPath, "project-knowledge.md"), "# Project Knowledge", [
       `Project path: ${this.workspacePath}`,
-      `Architecture and lasting conventions live in repo-root ${PROJECT_OS_FILENAME}; this file only keeps a short CODECN candidate index.`
+      `BRAIN scene: ${this.brainWorkspaceKey}`,
+      `Architecture and lasting conventions live in repo-root ${PROJECT_OS_FILENAME}; this file only keeps a short CODECN candidate index.`,
+      `Scene Tools routing: see references/${SCENE_TOOLS_ROUTING_FILENAME} and references/${SCENE_KNOWLEDGE_FILENAME}.`
     ]);
     await appendUnique(path.join(this.referencesPath, "session-digest.md"), "# Session Digest", []);
     const openPath = this.openQuestionsPath();
     if (!(await readText(openPath))) {
       await writeOpenQuestionsFile(openPath, []);
     }
-    return { skillName: this.skillName, skillPath: this.skillPath };
+    return { skillName: this.skillName, skillPath: this.skillPath, brainWorkspaceKey: this.brainWorkspaceKey };
   }
 
   async readOpenQuestions() {

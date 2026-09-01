@@ -42,6 +42,23 @@ function commandVersion(deps: EngineDiscoveryDependencies, executable: string, a
   }
 }
 
+/** Resolve a PATH-only name to an absolute executable when possible. */
+function locateOnPath(deps: EngineDiscoveryDependencies, name: string) {
+  try {
+    const lookup = deps.platform === "win32"
+      ? deps.lookupCommand("where.exe", [name])
+      : deps.lookupCommand("which", [name]);
+    if (lookup.status !== 0) return "";
+    const first = String(lookup.stdout ?? "")
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find(Boolean);
+    return first || "";
+  } catch {
+    return "";
+  }
+}
+
 /** Discovers local runtimes and game editors without installing them. */
 export class EngineDiscoveryService {
   private readonly deps: EngineDiscoveryDependencies;
@@ -98,11 +115,18 @@ export class EngineDiscoveryService {
 
   async resolve(engineId: EngineId): Promise<ResolvedEngine | null> {
     for (const candidate of this.systemCandidates(engineId)) {
-      const resolved = candidate.includes("/") || candidate.includes("\\")
+      const hasPathSep = candidate.includes("/") || candidate.includes("\\");
+      let resolved = hasPathSep
         ? await pathExecutable(this.deps, candidate)
         : candidate;
       if (!resolved) continue;
+      if (!hasPathSep) {
+        const absolute = locateOnPath(this.deps, resolved);
+        if (absolute) resolved = absolute;
+      }
       const version = commandVersion(this.deps, resolved, engineId === "node" ? ["--version"] : ["-version"]);
+      // Skip PATH names that cannot actually run (avoids brain-core process.spawn ENOENT).
+      if (!version && !(resolved.includes("/") || resolved.includes("\\"))) continue;
       if (resolved.includes("/") || resolved.includes("\\")) {
         try { await access(resolved, constants.X_OK); } catch { /* PATH lookup below */ }
       }

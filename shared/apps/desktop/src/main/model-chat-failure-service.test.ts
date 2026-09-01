@@ -102,6 +102,20 @@ test("persists a visible failure assistant when approval/media fail with empty s
   assert.equal(state.state.messages[0].excludeFromModelContext, true);
 });
 
+test("labels agent loop stall failures with a dedicated failure code", async () => {
+  const state = fixture();
+  await state.service.persistFailure({
+    workspace: { id: "ws" },
+    thread: { id: "thread" },
+    requestId: "request-stall",
+    turnId: "turn-stall",
+    reasoningSummary: "",
+    error: new Error("Agent loop stalled: no tool progress across 4 consecutive steps.")
+  });
+  assert.equal(state.events.at(-1)?.code, "agent_loop_stalled");
+  assert.equal(state.reports[0].context.failureCode, "agent_loop_stalled");
+});
+
 test("persists streamed partial content when a turn fails mid-generation", async () => {
   const state = fixture();
   await state.service.persistFailure({

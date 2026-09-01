@@ -66,6 +66,7 @@ interface DesktopSessionRuntimeCompositionDeps {
     approvalId: string;
     decision: "approve" | "deny";
   }) => Promise<{ sideEffectAllowed: boolean; offline?: boolean; status?: string }>;
+  rememberApprovedCommand?: (input: { toolName: string; command: string }) => Promise<void> | void;
 }
 
 export function registerDesktopSessionRuntimeComposition(deps: DesktopSessionRuntimeCompositionDeps) {
@@ -129,7 +130,8 @@ export function registerDesktopSessionRuntimeComposition(deps: DesktopSessionRun
     clearCanceledRequest: deps.clearCanceledModelRequest,
     appendDebugLog: deps.appendDesktopDebugLog,
     observeAgentEvents: deps.observeRemoteAgentEvents,
-    resolveSpringApproval: deps.resolveSpringApproval
+    resolveSpringApproval: deps.resolveSpringApproval,
+    rememberApprovedCommand: deps.rememberApprovedCommand
   });
   registerGoalIpcHandlers({ storage: deps.codexStorage, getActiveThreadId: deps.getActiveThreadId, processUuid: deps.processUuid });
   registerTerminalIpcHandlers({

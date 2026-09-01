@@ -18,6 +18,16 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
   const pendingNavigationKey = useRef<string | null>(null);
 
   useEffect(() => {
+    const onAppCommand = (event: Event) => {
+      const command = (event as CustomEvent<{ command?: string }>).detail?.command;
+      if (command === "expand-sidebar") setSidebarCollapsed(false);
+      if (command === "collapse-sidebar") setSidebarCollapsed(true);
+    };
+    window.addEventListener("codecn:app-command", onAppCommand as EventListener);
+    return () => window.removeEventListener("codecn:app-command", onAppCommand as EventListener);
+  }, []);
+
+  useEffect(() => {
     if (!activeThread) return;
     const activeKey = `${activeThread.workspaceId}:${activeThread.threadId}`;
     setThreadHistory((current) => {

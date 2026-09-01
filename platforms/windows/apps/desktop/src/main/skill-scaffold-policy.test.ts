@@ -21,6 +21,8 @@ test("generates a valid skill scaffold and escaped OpenAI metadata", () => {
   assert.match(markdown, /## Core Rules/);
   assert.match(markdown, /## Encoding Rules/);
   assert.match(markdown, /## Patch Strategy/);
+  assert.match(markdown, /## Scene Tools \(BRAIN\)/);
+  assert.match(markdown, /right-side Tools sub-architecture/);
   assert.match(markdown, /## Post-Change Evaluation/);
   assert.match(markdown, /metadata:\s*\n\s*short-description:/);
   assert.match(markdown, /references\/java-javadoc-rules\.md/);

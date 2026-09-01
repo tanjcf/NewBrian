@@ -76,6 +76,23 @@ export function buildDesktopDeviceFingerprint(input: {
   };
 }
 
+/**
+ * Node/Electron fetch rejects header values outside ByteString (code points > 255).
+ * Chinese Windows hostnames must be ASCII-folded before entering X-Desktop-* headers.
+ */
+export function sanitizeDesktopHeaderValue(value: string, fallback = "desktop") {
+  const normalized = String(value || "")
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]+/g, "-")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/[-\s]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .trim()
+    .slice(0, 128);
+  return normalized || fallback;
+}
+
 export function createDesktopAuthHeaders(input: {
   accessToken?: string;
   device: DesktopDeviceFingerprint;
@@ -85,16 +102,16 @@ export function createDesktopAuthHeaders(input: {
   const headers: Record<string, string> = {
     Accept: "application/json",
     "X-Desktop-Client": "codecn",
-    "X-Request-Id": (input.createRequestId ?? randomUUID)(),
-    "X-Desktop-Device-Id": input.device.device_id,
-    "X-Desktop-Device-Name": input.device.device_name,
-    "X-Desktop-Device-Type": input.device.device_type,
-    "X-Desktop-OS-Name": input.device.os_name,
-    "X-Desktop-OS-Version": input.device.os_version,
-    "X-Desktop-App-Version": input.device.app_version,
-    "X-Desktop-Mac-Id": input.device.mac_id,
-    "X-Desktop-Motherboard-Id": input.device.motherboard_id,
-    "X-Desktop-Disk-Id": input.device.disk_id,
+    "X-Request-Id": sanitizeDesktopHeaderValue((input.createRequestId ?? randomUUID)(), "request"),
+    "X-Desktop-Device-Id": sanitizeDesktopHeaderValue(input.device.device_id, "device"),
+    "X-Desktop-Device-Name": sanitizeDesktopHeaderValue(input.device.device_name, "desktop"),
+    "X-Desktop-Device-Type": sanitizeDesktopHeaderValue(input.device.device_type, "desktop"),
+    "X-Desktop-OS-Name": sanitizeDesktopHeaderValue(input.device.os_name, "win32"),
+    "X-Desktop-OS-Version": sanitizeDesktopHeaderValue(input.device.os_version, "unknown"),
+    "X-Desktop-App-Version": sanitizeDesktopHeaderValue(input.device.app_version, "0"),
+    "X-Desktop-Mac-Id": sanitizeDesktopHeaderValue(input.device.mac_id, "mac"),
+    "X-Desktop-Motherboard-Id": sanitizeDesktopHeaderValue(input.device.motherboard_id, "board"),
+    "X-Desktop-Disk-Id": sanitizeDesktopHeaderValue(input.device.disk_id, "disk"),
     "X-Desktop-Platform": mapDesktopReleasePlatform(input.platform ?? input.device.os_name)
   };
   if (input.accessToken?.trim()) headers.Authorization = `Bearer ${input.accessToken.trim()}`;

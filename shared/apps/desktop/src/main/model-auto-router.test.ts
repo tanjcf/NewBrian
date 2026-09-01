@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { ModelRoutingProfile } from "@codex-forge/protocol";
 
+const { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } = await import(
+  new URL("../shared/product-flags.ts", import.meta.url).href
+);
+
 const {
   MODEL_AUTO_ID,
   AUTO_NO_CONSTRAINT_MATCH_MESSAGE,
@@ -23,6 +27,8 @@ const {
   isMusicCapableModel,
   is3dCapableModel,
   isSpecializedNonChatModel,
+  looksLikeImageGenerationRequest,
+  looksLikeMediaCapabilityQuestion,
   looksLikeMusicGenerationRequest,
   messagesHaveImageAttachments,
   latestUserMessageHasImageAttachments,
@@ -32,6 +38,12 @@ const {
   resolveModelAutoDecision,
   routingTierForTaskClass
 } = await import(new URL("./model-auto-router.ts", import.meta.url).href);
+
+test("distinguishes a media capability question from a generation command", () => {
+  assert.equal(looksLikeMediaCapabilityQuestion("你会生成图片吗"), true);
+  assert.equal(looksLikeImageGenerationRequest("你会生成图片吗"), false);
+  assert.equal(looksLikeImageGenerationRequest("帮我生成一张青石谷入口图片"), true);
+});
 
 const { parseAuthorizedModelPayload } = await import(
   new URL("./authorized-model-catalog.ts", import.meta.url).href
@@ -132,9 +144,14 @@ test("isModelAutoSelection recognizes auto case-insensitively", () => {
   assert.equal(isModelAutoSelection("deepseek-v4-pro"), false);
 });
 
-test("classifyAutoTaskClass prefers government skills and keywords", () => {
-  assert.equal(classifyAutoTaskClass({ selectedSkillNames: ["government-research-writing"] }), "gov_write");
-  assert.equal(classifyAutoTaskClass({ text: "请写一份政务调研报告" }), "gov_write");
+test("classifyAutoTaskClass prefers government skills and keywords when product is enabled", () => {
+  if (GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) {
+    assert.equal(classifyAutoTaskClass({ selectedSkillNames: ["government-research-writing"] }), "gov_write");
+    assert.equal(classifyAutoTaskClass({ text: "请写一份政务调研报告" }), "gov_write");
+  } else {
+    assert.equal(classifyAutoTaskClass({ selectedSkillNames: ["government-research-writing"] }), "chat");
+    assert.equal(classifyAutoTaskClass({ text: "请写一份政务调研报告" }), "research");
+  }
   assert.equal(classifyAutoTaskClass({ text: "修复 typescript 编译报错" }), "code");
   assert.equal(classifyAutoTaskClass({ text: "你好" }), "chat");
   assert.equal(routingTierForTaskClass("chat"), "light");
@@ -166,6 +183,27 @@ test("C1 Auto greetings are handled by main-agent direct path", () => {
   assert.ok(decision.model.reason_codes.includes("main_agent_model"));
   assert.ok(decision.model.reason_codes.includes("subscription_authorized"));
   assert.equal(decision.degraded, false);
+});
+
+test("C1c Auto code tasks prefer light orchestrator model with delegate-first routing", () => {
+  const decision = resolveModelAutoDecision({
+    requestedModel: MODEL_AUTO_ID,
+    availableModels,
+    latestUserText: "修复整个项目的 TypeScript 编译错误并补测试",
+    selectedSkillNames: [],
+    permissionMode: "agent",
+    reasoningEffort: "medium",
+    runId: "run-code-delegate",
+    threadId: "thread-1",
+    optimizeFor: "balanced",
+    nowIso: () => "2026-08-05T00:00:00.000Z"
+  });
+
+  assert.equal(decision.task_class, "code");
+  assert.equal(decision.model.selected, "deepseek-v4-flash");
+  assert.ok(decision.model.reason_codes.includes("auto_orchestrator_delegate_first"));
+  assert.ok(decision.model.reason_codes.includes("prefer_flash_for_orchestrator"));
+  assert.equal(decision.orchestrator?.handled_by, "router");
 });
 
 test("C1b Auto default agent outside subscription cannot use main-direct path", () => {
@@ -556,6 +594,8 @@ test("Auto synthesizes economics and prefers pro for heavy delivery", () => {
 });
 
 test("government skill on Auto selects gov-capable higher tier", () => {
+  if (!GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED) return;
+
   const decision = resolveModelAutoDecision({
     requestedModel: MODEL_AUTO_ID,
     availableModels,
@@ -630,6 +670,11 @@ test("TokenHub specialty models are classified for Auto pools", () => {
     provider: "腾讯混元",
     capabilities: ["image", "image-generation", "text-to-image"]
   }), true);
+  assert.equal(isImageGenerationCapableModel({
+    model: "minimax-m3",
+    provider: "TokenHub",
+    capabilities: ["chat", "text", "vision", "video-understanding", "multimodal", "tools"]
+  }), false);
   assert.equal(isVisionCapableModel({
     model: "hy-image-v3",
     provider: "腾讯混元",

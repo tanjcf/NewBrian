@@ -359,7 +359,11 @@ function syncSnapshot(nextSnapshot: PhaseOneSnapshot, threadId = selectedThreadI
     }));
 
   if (threadId) {
-    updateThreadMessages(threadId, (current) => reconcileThreadDisplayMessages(current, nextChatMessages));
+    updateThreadMessages(
+      threadId,
+      (current) => reconcileThreadDisplayMessages(current, nextChatMessages),
+      { display: true }
+    );
   } else {
     setChatMessages(nextChatMessages);
   }

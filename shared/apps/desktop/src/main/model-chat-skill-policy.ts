@@ -157,8 +157,9 @@ export function selectModelChatSkills(input: ModelChatSkillSelectionInput): Mode
     }
   } else {
     // OFF (default): never auto-inject specialty via heuristics.
-    // Project-manager shadow is still attached below as always-on context.
-    automaticSkillNames = [];
+    // Non-specialty project/global skills may still auto-wake from matchSkills
+    // so workspace skills are not permanently dead until the user finds Settings.
+    automaticSkillNames = automaticSkillNames.filter((name) => !isSpecialtyComposerSkill(name));
   }
 
   // Simple chat (greetings + short casual turns): no automatic skill wrapping.

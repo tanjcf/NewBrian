@@ -1,9 +1,14 @@
-param(
+﻿param(
   [string]$WorkspacePath = "",
   [int]$DebugPort = 9555
 )
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+$codecnLocalDevEnv = Join-Path (Split-Path $repoRoot -Parent) "spring-app\scripts\codecn-local-dev.ps1"
+if (Test-Path -LiteralPath $codecnLocalDevEnv) {
+  . $codecnLocalDevEnv
+}
 $appRoot = Join-Path $repoRoot ".materialized\windows\apps\desktop"
 $entry = Join-Path $appRoot "out\main\index.js"
 $electron = Join-Path $appRoot "node_modules\electron\dist\electron.exe"
@@ -18,6 +23,5 @@ if (-not (Test-Path -LiteralPath $electron)) {
 if (-not $WorkspacePath) { $WorkspacePath = Join-Path $env:USERPROFILE ".codecn" }
 $env:CODECN_WORKSPACE_PATH = $WorkspacePath
 $env:CODECN_E2E_REMOTE_DEBUG_PORT = [string]$DebugPort
-$env:CODECN_E2E_AUTH_BYPASS = "1"
 Start-Process -FilePath $electron -ArgumentList "." -WorkingDirectory $appRoot -WindowStyle Normal
 Write-Output (ConvertTo-Json @{ appRoot = $appRoot; workspacePath = $WorkspacePath; debugPort = $DebugPort })

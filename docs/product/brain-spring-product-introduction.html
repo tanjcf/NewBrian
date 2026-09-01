@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BRAIN + Spring 企业级智能生产平台产品介绍" />
+  <title>BRAIN × Spring｜企业级智能生产平台</title>
+  <style>
+    :root {
+      --ink: #13231f;
+      --muted: #61706b;
+      --paper: #f4f3ed;
+      --panel: rgba(255,255,255,.78);
+      --line: rgba(19,35,31,.12);
+      --green: #1d6b52;
+      --lime: #cce87b;
+      --orange: #e56e3d;
+      --shadow: 0 24px 80px rgba(28,50,42,.12);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; color: var(--ink); background: var(--paper);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      overflow-x: hidden;
+    }
+    button, a { font: inherit; }
+    button { color: inherit; }
+    .noise { position: fixed; inset: 0; pointer-events: none; opacity: .035; z-index: 20; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E"); }
+    .wrap { width: min(1180px, calc(100% - 40px)); margin: auto; }
+    nav { position: sticky; top: 0; z-index: 15; backdrop-filter: blur(18px); background: rgba(244,243,237,.82); border-bottom: 1px solid var(--line); }
+    nav .wrap { height: 72px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 800; letter-spacing: -.03em; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: #fff; background: var(--ink); }
+    .text-brand { color: #4f535b; font-size: 22px; font-weight: 700; letter-spacing: .28em; }
+    .hero-product-name { margin-bottom: 14px; color: #5b5f66; font-size: clamp(52px,8vw,88px); font-weight: 500; letter-spacing: .25em; line-height: 1; }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    .nav-links a:hover { color: var(--ink); }
+    .pill { border: 0; border-radius: 999px; padding: 11px 18px; cursor: pointer; background: var(--ink); color: #fff; transition: .25s ease; }
+    .pill:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(19,35,31,.18); }
+    .hero { min-height: 760px; padding: 96px 0 80px; position: relative; }
+    .hero::before { content: ""; position: absolute; width: 520px; height: 520px; right: -180px; top: -130px; background: radial-gradient(circle, rgba(204,232,123,.78), transparent 67%); filter: blur(4px); }
+    .eyebrow { display: inline-flex; align-items: center; gap: 9px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--green); background: rgba(255,255,255,.55); font-size: 13px; font-weight: 700; }
+    .dot { width: 7px; height: 7px; background: var(--lime); border-radius: 50%; box-shadow: 0 0 0 5px rgba(204,232,123,.24); }
+    h1 { max-width: 880px; margin: 28px 0 24px; font-size: clamp(54px, 8vw, 100px); line-height: .94; letter-spacing: -.07em; font-weight: 850; }
+    h1 span { color: var(--green); }
+    .hero-copy { max-width: 670px; font-size: clamp(17px, 2vw, 21px); line-height: 1.75; color: var(--muted); }
+    .hero-actions { display: flex; gap: 12px; margin-top: 34px; flex-wrap: wrap; }
+    .secondary { border: 1px solid var(--line); background: rgba(255,255,255,.65); color: var(--ink); }
+    .proof { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 66px; max-width: 700px; }
+    .proof-item { padding: 18px 0; border-top: 1px solid var(--line); }
+    .proof-item strong { display: block; font-size: 27px; letter-spacing: -.04em; }
+    .proof-item small { color: var(--muted); }
+    .float-card { position: absolute; right: max(30px, calc((100vw - 1180px)/2)); bottom: 65px; width: 330px; padding: 18px; background: rgba(255,255,255,.72); border: 1px solid rgba(255,255,255,.85); border-radius: 24px; box-shadow: var(--shadow); backdrop-filter: blur(16px); transform: rotate(2deg); }
+    .float-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    .status { color: var(--green); font-weight: 700; }
+    .task { margin-top: 16px; padding: 15px; border-radius: 15px; background: var(--ink); color: #fff; }
+    .task small { color: rgba(255,255,255,.58); }
+    .progress { height: 6px; margin-top: 14px; border-radius: 9px; background: rgba(255,255,255,.15); overflow: hidden; }
+    .progress i { display: block; height: 100%; width: 76%; border-radius: inherit; background: var(--lime); animation: breathe 2.5s ease-in-out infinite; }
+    @keyframes breathe { 50% { opacity: .5; } }
+    section { padding: 105px 0; }
+    .section-head { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 48px; }
+    .kicker { color: var(--orange); font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h2 { margin: 10px 0 0; max-width: 760px; font-size: clamp(36px, 5vw, 62px); letter-spacing: -.055em; line-height: 1.04; }
+    .section-head p { max-width: 350px; color: var(--muted); line-height: 1.7; }
+    .workspace-shell { display: grid; grid-template-columns: 250px 1fr; min-height: 560px; border: 1px solid var(--line); border-radius: 28px; overflow: hidden; background: rgba(255,255,255,.68); box-shadow: var(--shadow); }
+    .workspace-nav { padding: 22px; background: rgba(19,35,31,.97); color: #fff; }
+    .workspace-nav h3 { margin: 2px 0 22px; font-size: 15px; }
+    .workspace-button { width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px; margin: 4px 0; border: 0; border-radius: 11px; text-align: left; cursor: pointer; color: rgba(255,255,255,.62); background: transparent; transition: .2s; }
+    .workspace-button:hover, .workspace-button.active { color: #fff; background: rgba(255,255,255,.1); }
+    .workspace-button.active { box-shadow: inset 3px 0 var(--workspace-color, var(--lime)); }
+    .workspace-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: rgba(255,255,255,.08); }
+    .workspace-main { display: grid; grid-template-columns: 1fr 210px; }
+    .chat { padding: 34px; display: flex; flex-direction: column; }
+    .chat-title { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+    .chat-title h3 { margin: 0; font-size: 20px; }
+    .mode-badge { padding: 6px 10px; border-radius: 999px; color: var(--green); background: rgba(29,107,82,.08); font-size: 12px; }
+    .conversation { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 36px 0; }
+    .bubble { max-width: 84%; padding: 15px 17px; border-radius: 17px; line-height: 1.6; font-size: 14px; }
+    .bubble.user { align-self: flex-end; background: var(--ink); color: #fff; border-bottom-right-radius: 4px; }
+    .bubble.brain { background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+    .bubble .mini-label { display: block; margin-bottom: 8px; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+    .composer { display: flex; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+    .composer input { min-width: 0; flex: 1; padding: 5px 8px; border: 0; outline: none; background: transparent; color: var(--ink); }
+    .send { width: 36px; height: 36px; border: 0; border-radius: 11px; cursor: pointer; background: var(--lime); }
+    .tool-panel { padding: 24px 16px; border-left: 1px solid var(--line); background: rgba(244,243,237,.55); }
+    .tool-panel h4 { margin: 2px 8px 15px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+    .tool-card { padding: 13px; margin-bottom: 9px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.74); }
+    .tool-card strong { display: block; font-size: 13px; margin-bottom: 4px; }
+    .tool-card small { color: var(--muted); }
+    .architecture { background: var(--ink); color: #fff; position: relative; overflow: hidden; }
+    .architecture::after { content:""; position:absolute; width:500px; height:500px; left:-250px; bottom:-280px; border:1px solid rgba(204,232,123,.2); border-radius:50%; box-shadow: 0 0 0 90px rgba(204,232,123,.025), 0 0 0 180px rgba(204,232,123,.018); }
+    .architecture .section-head p { color: rgba(255,255,255,.55); }
+    .architecture-board { position: relative; z-index: 2; display: grid; grid-template-columns: 1fr 100px 1fr; align-items: stretch; }
+    .arch-side { padding: 36px; border: 1px solid rgba(255,255,255,.12); border-radius: 24px; background: rgba(255,255,255,.04); }
+    .arch-side.active { border-color: var(--lime); background: rgba(204,232,123,.08); }
+    .arch-tag { display: inline-block; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.08); color: var(--lime); font-size: 12px; }
+    .arch-side h3 { margin: 22px 0 12px; font-size: 28px; }
+    .arch-side p { min-height: 72px; color: rgba(255,255,255,.58); line-height: 1.7; }
+    .arch-list { display: grid; gap: 10px; margin-top: 26px; }
+    .arch-list div { padding: 12px 14px; border-radius: 11px; background: rgba(255,255,255,.055); font-size: 13px; }
+    .bridge { display: grid; place-items: center; color: var(--lime); }
+    .bridge span { width: 60px; height: 60px; display: grid; place-items: center; border: 1px solid rgba(204,232,123,.35); border-radius: 50%; animation: rotate 12s linear infinite; }
+    @keyframes rotate { to { transform: rotate(360deg); } }
+    .arch-toggle { display: flex; justify-content: center; gap: 8px; margin-top: 30px; }
+    .arch-toggle button { padding: 9px 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; cursor: pointer; color: rgba(255,255,255,.6); background: transparent; }
+    .arch-toggle button.active { color: var(--ink); background: var(--lime); }
+    .value-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .value-card { min-height: 250px; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.62); transition: .3s ease; }
+    .value-card:hover { transform: translateY(-6px); background: #fff; box-shadow: var(--shadow); }
+    .value-num { font-size: 13px; color: var(--orange); font-weight: 800; }
+    .value-card h3 { margin: 44px 0 14px; font-size: 24px; letter-spacing: -.03em; }
+    .value-card p { color: var(--muted); line-height: 1.7; font-size: 14px; }
+    .security-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+    .security-card { padding: 26px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
+    .security-card h3 { margin-top: 0; }
+    .security-row { display: flex; align-items: center; gap: 11px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 14px; }
+    .check { color: var(--green); font-weight: 900; }
+    .flowline { margin: 40px 0 0; display: flex; align-items: center; justify-content: center; gap: 9px; flex-wrap: wrap; color: var(--muted); }
+    .flowline b { padding: 10px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--line); color: var(--ink); font-size: 13px; }
+    .definition-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; max-width: 760px; margin-top: 30px; }
+    .definition-card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.62); }
+    .definition-card strong { display: block; margin-bottom: 6px; color: var(--green); font-size: 13px; }
+    .definition-card span { font-size: 15px; line-height: 1.55; }
+    .pain-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+    .pain-card { min-height: 205px; padding: 25px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.62); }
+    .pain-tag { display: inline-flex; padding: 5px 9px; border-radius: 999px; color: var(--orange); background: rgba(229,110,61,.1); font-size: 12px; font-weight: 800; }
+    .pain-card:nth-child(3n+2) .pain-tag { color: var(--green); background: rgba(29,107,82,.09); }
+    .pain-card:nth-child(3n) .pain-tag { color: #7251a8; background: rgba(114,81,168,.09); }
+    .pain-card h3 { margin: 26px 0 10px; font-size: 21px; }
+    .pain-card p { color: var(--muted); font-size: 14px; line-height: 1.65; }
+    .memory-banner { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 25px; margin-top: 16px; padding: 26px 28px; border-radius: 20px; color: #fff; background: var(--green); }
+    .memory-banner strong { display: block; font-size: 22px; }
+    .memory-banner p { margin: 6px 0 0; color: rgba(255,255,255,.68); }
+    .memory-pulse { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.32); box-shadow: 0 0 0 10px rgba(255,255,255,.05), 0 0 0 20px rgba(255,255,255,.025); font-size: 25px; }
+    .scenario-layout { display: grid; grid-template-columns: 270px 1fr; gap: 16px; }
+    .scenario-tabs { display: grid; gap: 8px; align-content: start; }
+    .scenario-tab { width: 100%; padding: 14px 16px; border: 1px solid var(--line); border-radius: 13px; text-align: left; cursor: pointer; color: var(--muted); background: rgba(255,255,255,.55); transition: .2s; }
+    .scenario-tab:hover, .scenario-tab.active { color: var(--green); border-color: rgba(29,107,82,.34); background: #fff; box-shadow: inset 3px 0 var(--lime); }
+    .scenario-detail { min-height: 405px; padding: 30px; border: 1px solid var(--line); border-radius: 22px; background: #fff; box-shadow: var(--shadow); }
+    .scenario-detail-top { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+    .scenario-detail h3 { margin: 0; font-size: 28px; }
+    .scenario-detail > p { color: var(--muted); line-height: 1.7; }
+    .scenario-steps { display: grid; gap: 9px; margin-top: 22px; }
+    .scenario-step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 13px; border-radius: 13px; background: var(--paper); }
+    .scenario-step b:first-child { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--green); background: rgba(29,107,82,.09); font-size: 12px; }
+    .scenario-step strong { display: block; font-size: 14px; }
+    .scenario-step small { color: var(--muted); }
+    .scenario-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
+    .scenario-chips span { padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; }
+    .compare-board { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    .compare-card { padding: 27px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.65); }
+    .compare-card.new { color: #fff; background: var(--ink); }
+    .compare-card h3 { margin: 8px 0 22px; font-size: 23px; }
+    .compare-row { display: flex; gap: 10px; padding: 11px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.55; }
+    .compare-card.new .compare-row { border-color: rgba(255,255,255,.12); color: rgba(255,255,255,.72); }
+    .compare-symbol { flex: 0 0 auto; color: var(--orange); font-weight: 900; }
+    .compare-card.new .compare-symbol { color: var(--lime); }
+    .cta { padding: 80px 0 110px; }
+    .cta-box { position: relative; overflow: hidden; padding: 64px; border-radius: 30px; color: #fff; background: var(--green); }
+    .cta-box::after { content:"B"; position:absolute; right:-10px; bottom:-105px; font-weight:900; font-size:310px; color:rgba(255,255,255,.06); line-height:1; }
+    .cta-box h2 { max-width: 730px; margin-top: 0; }
+    .cta-box p { max-width: 600px; color: rgba(255,255,255,.7); line-height: 1.75; }
+    .cta-box .pill { position: relative; z-index: 2; margin-top: 15px; background: var(--lime); color: var(--ink); }
+    footer { padding: 25px 0 45px; color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; }
+    footer .wrap { display: flex; justify-content: space-between; gap: 20px; }
+    .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
+    .reveal.visible { opacity: 1; transform: none; }
+    .toast { position: fixed; right: 24px; bottom: 24px; z-index: 30; padding: 14px 18px; border-radius: 13px; color: #fff; background: var(--ink); box-shadow: var(--shadow); opacity: 0; transform: translateY(15px); pointer-events: none; transition: .25s; }
+    .toast.show { opacity: 1; transform: none; }
+    @media (max-width: 900px) {
+      .nav-links a { display: none; }
+      .hero { min-height: auto; padding-top: 70px; }
+      .float-card { display: none; }
+      .section-head { align-items: start; flex-direction: column; }
+      .workspace-shell { grid-template-columns: 1fr; }
+      .workspace-nav { display: flex; overflow-x: auto; padding: 12px; }
+      .workspace-nav h3 { display: none; }
+      .workspace-button { min-width: 145px; }
+      .workspace-main { grid-template-columns: 1fr; }
+      .tool-panel { display: grid; grid-template-columns: repeat(3, 1fr); border-left: 0; border-top: 1px solid var(--line); }
+      .tool-panel h4 { grid-column: 1/-1; }
+      .architecture-board { grid-template-columns: 1fr; gap: 14px; }
+      .bridge { height: 70px; transform: rotate(90deg); }
+      .value-grid { grid-template-columns: 1fr 1fr; }
+      .pain-grid { grid-template-columns: 1fr 1fr; }
+      .scenario-layout { grid-template-columns: 1fr; }
+      .scenario-tabs { grid-template-columns: repeat(3,1fr); }
+    }
+    @media (max-width: 620px) {
+      .wrap { width: min(100% - 24px, 1180px); }
+      h1 { font-size: 49px; }
+      section { padding: 75px 0; }
+      .proof { grid-template-columns: 1fr; }
+      .workspace-main { min-width: 0; }
+      .chat { padding: 22px 16px; }
+      .tool-panel { grid-template-columns: 1fr; }
+      .value-grid, .security-demo { grid-template-columns: 1fr; }
+      .pain-grid, .definition-grid, .compare-board { grid-template-columns: 1fr; }
+      .scenario-tabs { grid-template-columns: 1fr 1fr; }
+      .memory-banner { grid-template-columns: 1fr; }
+      .memory-pulse { display: none; }
+      .arch-side { padding: 25px; }
+      .cta-box { padding: 40px 25px; }
+      footer .wrap { flex-direction: column; }
+    }
+    /* Visual language follows the supplied "新脑子" reference page. */
+    :root {
+      --ink: #172033; --muted: #667085; --paper: #f7f8fb;
+      --panel: #ffffff; --line: #d9e0ea; --green: #2563eb;
+      --lime: #14b8a6; --orange: #b45309;
+      --shadow: 0 18px 55px rgba(23,32,51,.09);
+    }
+    body { background: radial-gradient(circle at top left,rgba(37,99,235,.12),transparent 34rem),linear-gradient(180deg,#fbfcff 0%,#f7f8fb 42%,#eef3f9 100%); line-height: 1.72; }
+    .noise { display: none; }
+    nav { background: rgba(247,248,251,.84); border-color: rgba(217,224,234,.72); }
+    nav .wrap { height: 64px; }
+    .brand { letter-spacing: .2px; }
+    .brand-mark { background: linear-gradient(135deg,#2563eb,#14b8a6); box-shadow: 0 10px 24px rgba(37,99,235,.28); }
+    .nav-links { gap: 16px; }
+    .nav-links a { padding: 7px 8px; border-radius: 10px; }
+    .nav-links a:hover { color: #2563eb; background: #e8f0ff; }
+    .pill { border-radius: 12px; background: #2563eb; box-shadow: 0 12px 24px rgba(37,99,235,.22); }
+    .pill:hover { background: #1d4ed8; box-shadow: 0 12px 24px rgba(37,99,235,.25); }
+    .secondary { color: var(--ink); border-color: var(--line); background: #fff; box-shadow: none; }
+    .secondary:hover { color: #2563eb; border-color: rgba(37,99,235,.42); background: #e8f0ff; box-shadow: none; }
+    .hero { min-height: 650px; padding: 88px 0 68px; text-align: center; }
+    .hero::before { display: none; }
+    .eyebrow { color: #2563eb; border-color: var(--line); background: rgba(255,255,255,.72); }
+    .dot { background: #14b8a6; box-shadow: 0 0 0 6px rgba(20,184,166,.12); }
+    h1 { max-width: 940px; margin: 24px auto 22px; font-size: clamp(48px,7vw,82px); line-height: 1.05; letter-spacing: 0; }
+    h1 span { color: #2563eb; }
+    .hero-copy { max-width: 760px; margin: auto; color: var(--muted); font-size: 18px; }
+    .definition-grid { margin: 28px auto 0; text-align: left; }
+    .definition-card { border-radius: 16px; background: rgba(255,255,255,.72); box-shadow: 0 12px 30px rgba(23,32,51,.05); }
+    .definition-card strong { color: #2563eb; }
+    .hero-actions { justify-content: center; }
+    .proof { margin: 52px auto 0; }
+    .proof-item strong { letter-spacing: 0; }
+    .float-card { display: none; }
+    section { padding: 62px 0; }
+    .section-head { margin-bottom: 28px; }
+    .kicker { color: #2563eb; letter-spacing: .1em; }
+    h2 { font-size: clamp(30px,3.6vw,46px); line-height: 1.18; letter-spacing: 0; }
+    .pain-card,.value-card,.security-card,.compare-card,.scenario-detail { border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(23,32,51,.05); }
+    .pain-card { min-height: 190px; }
+    .pain-tag { color: #b45309; background: #fff2df; }
+    .pain-card:nth-child(3n+2) .pain-tag { color: #7c3aed; background: #f0e9ff; }
+    .pain-card:nth-child(3n) .pain-tag { color: #0f766e; background: #e7f6f3; }
+    .memory-banner { color: var(--ink); border: 1px solid var(--line); background: #fff; box-shadow: 0 12px 32px rgba(23,32,51,.05); }
+    .memory-banner p { color: var(--muted); }
+    .memory-pulse { color: #2563eb; border-color: rgba(37,99,235,.25); box-shadow: 0 0 0 10px rgba(37,99,235,.05),0 0 0 20px rgba(20,184,166,.03); }
+    .workspace-shell { border-radius: 18px; background: rgba(255,255,255,.82); }
+    .workspace-nav { color: var(--ink); background: #f0f4f8; border-right: 1px solid var(--line); }
+    .workspace-button { color: var(--muted); }
+    .workspace-button:hover,.workspace-button.active { color: #2563eb; background: #e8f0ff; }
+    .workspace-button.active { box-shadow: inset 3px 0 #2563eb; }
+    .workspace-icon { background: #fff; border: 1px solid var(--line); }
+    .mode-badge { color: #2563eb; background: #e8f0ff; }
+    .bubble.user { background: #2563eb; }
+    .bubble.brain { box-shadow: 0 8px 22px rgba(23,32,51,.04); }
+    .bubble .mini-label { color: #2563eb; }
+    .send { color: #fff; background: #2563eb; }
+    .tool-panel { background: #f7f8fb; }
+    .scenario-tab:hover,.scenario-tab.active { color: #2563eb; border-color: rgba(37,99,235,.42); background: #e8f0ff; box-shadow: none; }
+    .scenario-step { background: #f0f4f8; }
+    .scenario-step b:first-child { color: #2563eb; background: #e8f0ff; }
+    .architecture { color: var(--ink); background: transparent; }
+    .architecture::after { display: none; }
+    .architecture .section-head p { color: var(--muted); }
+    .architecture-board { grid-template-columns: 1fr 80px 1fr; }
+    .arch-side { color: var(--ink); border-color: var(--line); background: #fff; box-shadow: 0 12px 32px rgba(23,32,51,.05); }
+    .arch-side.active { border-color: rgba(37,99,235,.48); background: #e8f0ff; }
+    .arch-tag { color: #2563eb; background: #e8f0ff; }
+    .arch-side p { color: var(--muted); }
+    .arch-list div { background: #f0f4f8; }
+    .bridge { color: #2563eb; }
+    .bridge span { border-color: rgba(37,99,235,.35); }
+    .arch-toggle button { color: var(--muted); border-color: var(--line); background: #fff; }
+    .arch-toggle button.active { color: #fff; background: #2563eb; }
+    .value-card h3 { margin-top: 36px; letter-spacing: 0; }
+    .value-num { color: #2563eb; }
+    .compare-card.new { background: linear-gradient(135deg,#172033,#1d4ed8); }
+    .compare-card.new .arch-tag { color: #fff; background: rgba(255,255,255,.13); }
+    .compare-card.new .compare-symbol { color: #5eead4; }
+    .check { color: #0f766e; }
+    .flowline b { background: #fff; }
+    .company-shell { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr); gap: 18px; }
+    .company-story,.company-principles { padding: 32px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(23,32,51,.05); }
+    .company-name { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .company-name-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(135deg,#2563eb,#14b8a6); font-weight: 800; }
+    .company-name strong { display: block; font-size: 20px; }
+    .company-name small { color: var(--muted); }
+    .company-story > p { color: var(--muted); line-height: 1.85; }
+    .industry-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .industry-chips span { padding: 7px 12px; border-radius: 999px; color: #2563eb; background: #e8f0ff; font-size: 13px; font-weight: 600; }
+    .principle { padding: 17px 0; border-top: 1px solid var(--line); }
+    .principle:first-of-type { border-top: 0; }
+    .principle b { display: block; margin-bottom: 4px; color: #2563eb; }
+    .principle span { color: var(--muted); font-size: 14px; }
+    .delivery-statement { margin-top: 22px; padding: 17px; border-radius: 14px; color: #0f766e; background: #e7f6f3; font-weight: 700; line-height: 1.65; }
+    .prototype-shell { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: var(--shadow); }
+    .prototype-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #f7f8fb; }
+    .prototype-title strong { display: block; }
+    .prototype-title small { color: var(--muted); }
+    .prototype-actions { display: flex; gap: 8px; }
+    .prototype-actions span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; color: #2563eb; background: #fff; font-size: 12px; font-weight: 600; }
+    .prototype-body { display: grid; grid-template-columns: 210px minmax(0,1fr) 260px; min-height: 430px; }
+    .level-list,.actor-panel { padding: 18px; background: #f7f8fb; }
+    .level-list { border-right: 1px solid var(--line); }
+    .actor-panel { border-left: 1px solid var(--line); }
+    .prototype-label { margin-bottom: 13px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .level-item { padding: 12px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; font-size: 13px; }
+    .level-item.active { color: #2563eb; border-color: rgba(37,99,235,.25); background: #e8f0ff; }
+    .level-item small { display: block; margin-top: 3px; color: var(--muted); }
+    .viewport { position: relative; display: grid; place-items: center; min-height: 430px; background: linear-gradient(180deg,#edf4fb 0 52%,#d7e1e8 52% 54%,#b8c5ca 54%); }
+    .viewport::before { content:""; position:absolute; inset:0; opacity:.18; background-image: linear-gradient(rgba(23,32,51,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(23,32,51,.18) 1px,transparent 1px); background-size:32px 32px; }
+    .viewport-copy { position: relative; z-index: 1; max-width: 330px; padding: 22px; border-radius: 16px; text-align: center; color: #fff; background: rgba(23,32,51,.78); backdrop-filter: blur(8px); }
+    .viewport-copy strong { display: block; font-size: 18px; }
+    .viewport-copy span { color: rgba(255,255,255,.68); font-size: 13px; }
+    .actor-node { position: relative; padding: 8px 8px 8px 21px; border-radius: 8px; font-size: 12px; }
+    .actor-node::before { content:""; position:absolute; left:8px; top:15px; width:5px; height:5px; border-radius:50%; background:#14b8a6; }
+    .actor-node.child { margin-left: 13px; color: var(--muted); }
+    .prototype-foot { display: flex; justify-content: space-between; gap: 15px; padding: 13px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .prototype-foot a { color: #2563eb; text-decoration: none; font-weight: 700; }
+    .cta-box { background: linear-gradient(135deg,#172033,#1d4ed8); }
+    .cta-box::after { display: none; }
+    .cta-box .pill { color: #172033; background: #fff; box-shadow: none; }
+    .toast { background: #172033; }
+    @media (max-width:900px) {
+      .workspace-nav { border-right: 0; border-bottom: 1px solid var(--line); }
+      .architecture-board { grid-template-columns: 1fr; }
+      .company-shell { grid-template-columns: 1fr; }
+      .prototype-body { grid-template-columns: 180px 1fr; }
+      .actor-panel { display: none; }
+    }
+    @media (max-width:620px) {
+      .hero { padding-top: 52px; }
+      h1 { font-size: 47px; }
+      .nav-links { gap: 8px; }
+      .nav-links .pill { display: none; }
+      .prototype-body { grid-template-columns: 1fr; }
+      .level-list { display: none; }
+      .prototype-actions span:nth-child(n+3) { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+  <nav>
+    <div class="wrap">
+      <a class="brand text-brand" href="#top" aria-label="BRAIN 首页">BRAIN</a>
+      <div class="nav-links">
+        <a href="#pain">为什么</a><a href="#workspaces">工作台</a><a href="#prototype">原型</a><a href="#scenarios">场景</a><a href="#architecture">架构</a><a href="#value">产品价值</a><a href="#company">关于我们</a>
+        <button class="pill" data-scroll="#experience">体验产品</button>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <header class="hero wrap" id="top">
+      <div class="hero-product-name">BRAIN</div>
+      <div class="eyebrow"><span class="dot"></span>核心产品「新脑子」· 组织的 AI 工作助手</div>
+      <h1>不止回答，<br><span>持续交付。</span></h1>
+      <p class="hero-copy">BRAIN 理解目标、记住偏好、调度工具并持续完成任务；Spring 提供可信、可管、可规模化的企业控制面。让个人更高效，让团队更专业，让 AI 真正进入工作流程。</p>
+      <div class="definition-grid">
+        <div class="definition-card"><strong>产品定位</strong><span>面向企业与个人用户的本地优先 AI 智能生产平台。</span></div>
+        <div class="definition-card"><strong>核心价值</strong><span>越用越懂使用者，从提出目标持续推进到成果交付。</span></div>
+      </div>
+      <div class="hero-actions">
+        <button class="pill" data-scroll="#workspaces">探索七大工作台 ↓</button>
+        <button class="pill secondary" data-scroll="#architecture">查看双端架构</button>
+      </div>
+      <div class="proof">
+        <div class="proof-item"><strong>7</strong><small>专业工作台</small></div>
+        <div class="proof-item"><strong>Local-first</strong><small>项目正文默认留在本机</small></div>
+        <div class="proof-item"><strong>1 Control Plane</strong><small>统一模型与治理</small></div>
+      </div>
+      <aside class="float-card" aria-label="任务运行状态">
+        <div class="float-top"><span>当前任务</span><span class="status">● 执行中</span></div>
+        <div class="task"><small>数据与决策</small><div>分析 Q3 经营数据并生成决策简报</div><div class="progress"><i></i></div></div>
+      </aside>
+    </header>
+
+    <section id="pain">
+      <div class="wrap">
+        <div class="section-head reveal"><div><div class="kicker">Why a new brain</div><h2>工具越来越多，工作却没有变简单</h2></div><p>真正的低效来自信息分散、流程断裂和重复执行，而不是缺少一个新的对话框。</p></div>
+        <div class="pain-grid">
+          <article class="pain-card reveal"><span class="pain-tag">工具分散</span><h3>系统越用越多</h3><p>文档、表格、会议、知识库和项目系统各自独立，员工不断切换与搬运内容。</p></article>
+          <article class="pain-card reveal"><span class="pain-tag">信息分散</span><h3>经验难以复用</h3><p>客户资料、历史成果和业务数据散落各处，每次任务都像从零开始。</p></article>
+          <article class="pain-card reveal"><span class="pain-tag">重复劳动</span><h3>链路反复发生</h3><p>周报、纪要、方案、分析和汇报持续消耗时间，却很少沉淀为可复用能力。</p></article>
+          <article class="pain-card reveal"><span class="pain-tag">止于回答</span><h3>普通 AI 难以执行</h3><p>能生成一段内容，却难围绕目标拆解步骤、调用工具、处理异常并完成交付。</p></article>
+          <article class="pain-card reveal"><span class="pain-tag">千篇一律</span><h3>输出不懂使用者</h3><p>内容看似完整，却不贴合个人表达、企业口径、专业结构和真实业务语境。</p></article>
+          <article class="pain-card reveal"><span class="pain-tag">企业顾虑</span><h3>能力必须安全可控</h3><p>权限、数据隔离、来源追溯、模型成本和敏感信息边界都需要统一治理。</p></article>
+        </div>
+        <div class="memory-banner reveal"><div><strong>用得越多，就越懂使用者</strong><p>在明确授权与安全边界内，逐步沉淀写作风格、常用结构、项目知识与工作偏好。</p></div><span class="memory-pulse">◎</span></div>
+      </div>
+    </section>
+
+    <section id="workspaces">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div><div class="kicker">One brain, seven workspaces</div><h2>一个 BRAIN，进入七种专业工作状态</h2></div>
+          <p>工作台改变工具、面板与产物类型，但项目、文件、对话和任务始终在同一个上下文里。</p>
+        </div>
+        <div class="workspace-shell reveal" id="experience">
+          <aside class="workspace-nav" id="workspaceNav"><h3>切换工作台</h3></aside>
+          <div class="workspace-main">
+            <div class="chat">
+              <div class="chat-title"><h3 id="workspaceTitle">数据与决策</h3><span class="mode-badge" id="workspaceBadge">分析模式</span></div>
+              <div class="conversation">
+                <div class="bubble user" id="userPrompt">分析这份销售表，找出利润下滑的主要原因。</div>
+                <div class="bubble brain"><span class="mini-label">BRAIN 已规划</span><span id="brainReply">我将读取工作簿结构，验证公式与异常值，生成趋势图，并输出一份带来源定位的经营决策简报。</span></div>
+              </div>
+              <form class="composer" id="demoForm"><input id="demoInput" aria-label="输入体验指令" placeholder="输入一个任务，体验 BRAIN 如何规划…" /><button class="send" type="submit" aria-label="发送">↑</button></form>
+            </div>
+            <aside class="tool-panel"><h4>专业工具</h4><div id="toolCards"></div></aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="prototype">
+      <div class="wrap">
+        <div class="section-head reveal"><div><div class="kicker">Real product prototype</div><h2>游戏制作，不是聊天壳，而是工程级工作台</h2></div><p>能力结构来自现有 BRAIN Level Editor 原型：对话描述玩法，右栏按关卡编辑 Actor 树，一关对应一个 `.umap`。</p></div>
+        <div class="prototype-shell reveal">
+          <div class="prototype-bar"><div class="prototype-title"><strong>青丘九尾 · BRAIN Level Editor</strong><small>山门解谜 · L_Trial_Phase1</small></div><div class="prototype-actions"><span>▶ Play</span><span>✦ AI 补全本关</span><span>✦ 敌人</span><span>✦ Boss</span><span>✦ NPC</span></div></div>
+          <div class="prototype-body">
+            <aside class="level-list"><div class="prototype-label">关卡列表 · 3</div><div class="level-item active">1 · 山门解谜<small>L_Trial_Phase1.umap</small></div><div class="level-item">2 · 试炼战斗<small>L_Trial_Phase2.umap</small></div><div class="level-item">3 · 石狐 Boss<small>L_Trial_Phase3.umap</small></div></aside>
+            <div class="viewport"><div class="viewport-copy"><strong>L_Trial_Phase1 · Perspective</strong><span>简化视口 · 不暴露复杂材质图节点</span></div></div>
+            <aside class="actor-panel"><div class="prototype-label">Content / Outliner</div><div class="actor-node">FoxFire_Brazier</div><div class="actor-node child">M_FoxFire · 发光材质</div><div class="actor-node">Guide_NPC</div><div class="actor-node child">对白 / 目标 / 巡逻</div><div class="actor-node">BP_TrialGate</div><div class="actor-node child">蓝图级逻辑</div><div class="actor-node">Enemy_Spawn</div><div class="actor-node child">仇恨 / 技能表 / 血条</div></aside>
+          </div>
+          <div class="prototype-foot"><span>AI 生成敌人、Boss、NPC、材质、动作、对白与逻辑</span><a href="../../../spring-app/docs/prototypes/game-workspace.html">打开完整交互原型 →</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="scenarios">
+      <div class="wrap">
+        <div class="section-head reveal"><div><div class="kicker">Real work scenarios</div><h2>从一句目标，到一份可直接使用的成果</h2></div><p>选择一个场景，查看 BRAIN 如何组织上下文、调用专业工具并持续推进。</p></div>
+        <div class="scenario-layout reveal">
+          <div class="scenario-tabs" id="scenarioTabs"></div>
+          <article class="scenario-detail" aria-live="polite">
+            <div class="scenario-detail-top"><h3 id="scenarioTitle">个人办公</h3><span class="mode-badge" id="scenarioTag">周报 / 邮件 / 汇报</span></div>
+            <p id="scenarioDesc"></p><div class="scenario-steps" id="scenarioSteps"></div><div class="scenario-chips" id="scenarioChips"></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="architecture" id="architecture">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div><div class="kicker">Client + control plane</div><h2>本地生产力，与云端治理力各司其职</h2></div>
+          <p>边界清晰，才能兼顾隐私、速度、成本和企业管理。</p>
+        </div>
+        <div class="architecture-board reveal">
+          <article class="arch-side active" id="brainArch"><span class="arch-tag">用户设备 · BRAIN</span><h3>本地智能生产端</h3><p>理解当前项目，调用文件、终端、文档与媒体工具，把对话转化为真实产物。</p><div class="arch-list"><div>项目 / 对话 / 文件 / 产物</div><div>Agent 编排与审批</div><div>Rust Core 安全执行</div><div>七大专业工作台</div></div></article>
+          <div class="bridge"><span>↔</span></div>
+          <article class="arch-side" id="springArch"><span class="arch-tag">企业服务 · Spring</span><h3>远程业务控制面</h3><p>统一处理企业身份、套餐、模型路由、联网搜索、额度、审计和策略下发。</p><div class="arch-list"><div>账号 / 设备 / 权限</div><div>模型与搜索路由</div><div>计量 / 限流 / 成本</div><div>管理员策略中心</div></div></article>
+        </div>
+        <div class="arch-toggle reveal"><button class="active" data-focus="brain">聚焦 BRAIN</button><button data-focus="spring">聚焦 Spring</button><button data-focus="both">查看协同</button></div>
+      </div>
+    </section>
+
+    <section id="value">
+      <div class="wrap">
+        <div class="section-head reveal"><div><div class="kicker">From chat to delivery</div><h2>不止回答问题，更完成工作闭环</h2></div><p>围绕一个持续目标，把信息、行动和成果连接起来。</p></div>
+        <div class="value-grid">
+          <article class="value-card reveal"><span class="value-num">01 / CONTEXT</span><h3>持续理解项目</h3><p>对话不再是孤岛。BRAIN 将文件、历史任务、工作台状态和产物串成可延续的项目上下文。</p></article>
+          <article class="value-card reveal"><span class="value-num">02 / ACTION</span><h3>真实调用工具</h3><p>从读取文档、分析数据到执行代码、生成媒体，关键操作经过权限判断、用户审批和可取消任务。</p></article>
+          <article class="value-card reveal"><span class="value-num">03 / OUTPUT</span><h3>交付可用产物</h3><p>输出不仅是文字回答，还包括报告、表格、演示文稿、代码、音视频与可追踪的任务结果。</p></article>
+          <article class="value-card reveal"><span class="value-num">04 / ROUTING</span><h3>模型自动路由</h3><p>Spring 按快速、推理、代码、文档等能力统一路由模型，普通用户无需理解复杂配置。</p></article>
+          <article class="value-card reveal"><span class="value-num">05 / GOVERNANCE</span><h3>企业统一治理</h3><p>服务端集中管理账号、套餐、工作台开关、额度和降级链，兼顾体验稳定与成本可控。</p></article>
+          <article class="value-card reveal"><span class="value-num">06 / SCALE</span><h3>跨平台可扩展</h3><p>公共能力共享，Windows、macOS 与 Ubuntu 保留各自系统适配，能力从桌面端平滑延伸。</p></article>
+        </div>
+        <div class="compare-board reveal">
+          <article class="compare-card"><span class="pain-tag">传统方式</span><h3>人负责搬运、整理与重复执行</h3><div class="compare-row"><span class="compare-symbol">×</span><span>频繁切换工具，人工复制和整理资料。</span></div><div class="compare-row"><span class="compare-symbol">×</span><span>每次重新校准格式、风格、结构与口径。</span></div><div class="compare-row"><span class="compare-symbol">×</span><span>复杂任务需要半天到数天才形成初稿。</span></div></article>
+          <article class="compare-card new"><span class="arch-tag">使用 BRAIN</span><h3>AI 负责推进，人负责判断与优化</h3><div class="compare-row"><span class="compare-symbol">✓</span><span>围绕目标组织资料、调用工具、持续执行。</span></div><div class="compare-row"><span class="compare-symbol">✓</span><span>复用项目知识与个人偏好，输出越来越贴合。</span></div><div class="compare-row"><span class="compare-symbol">✓</span><span>所有关键动作可审批、可取消、可追溯。</span></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="security">
+      <div class="wrap">
+        <div class="section-head reveal"><div><div class="kicker">Trust by architecture</div><h2>安全不是开关，是产品边界</h2></div><p>公司密钥、用户私钥和项目正文拥有不同的信任域与数据路径。</p></div>
+        <div class="security-demo reveal">
+          <article class="security-card"><h3>本地数据面</h3><div class="security-row"><span class="check">✓</span>项目文件与完整对话默认保留在用户设备</div><div class="security-row"><span class="check">✓</span>高风险写入与命令需要明确审批</div><div class="security-row"><span class="check">✓</span>私有模型密钥进入系统安全凭证库</div></article>
+          <article class="security-card"><h3>服务控制面</h3><div class="security-row"><span class="check">✓</span>公司模型与搜索密钥只存在服务端</div><div class="security-row"><span class="check">✓</span>请求正文仅按任务需要短暂中转</div><div class="security-row"><span class="check">✓</span>计量只保留请求、成本、耗时与状态</div></article>
+        </div>
+        <div class="flowline reveal"><b>用户意图</b><span>→</span><b>BRAIN 本地上下文</b><span>→</span><b>最小必要请求</b><span>→</span><b>Spring 策略控制</b><span>→</span><b>可信能力</b></div>
+      </div>
+    </section>
+
+    <section id="company">
+      <div class="wrap">
+        <div class="section-head reveal"><div><div class="kicker">About Wangjie Technology</div><h2>北京望界科技有限公司</h2></div><p>专注企业级私有化 AI 软件产品研发，把 AI 真正交付到业务一线。</p></div>
+        <div class="company-shell reveal">
+          <article class="company-story">
+            <div class="company-name"><span class="company-name-mark">望</span><div><strong>北京望界科技有限公司</strong><small>企业级私有化 AI 软件产品研发</small></div></div>
+            <p>核心产品「新脑子」定位为组织的 AI 工作助手：接收业务目标，自动拆解任务，结合企业内部知识，通过多智能体协同，直接输出可交付业务成果。</p>
+            <p>产品面向能源、金融、制造、农业等行业客户，支持内网隔离、信创适配，保障企业业务数据完全本地留存。同时拓展 AI 智能助力农场解决方案，服务规模化种植与畜牧园区数字化升级。</p>
+            <div class="industry-chips"><span>能源</span><span>金融</span><span>制造</span><span>农业</span><span>规模化种植</span><span>畜牧园区</span></div>
+          </article>
+          <aside class="company-principles">
+            <div class="kicker">OUR PRINCIPLES</div>
+            <div class="principle"><b>业务为先</b><span>从真实业务目标出发，而不是从技术展示出发。</span></div>
+            <div class="principle"><b>可信 AI</b><span>支持私有化部署、内网隔离、信创适配与数据本地留存。</span></div>
+            <div class="principle"><b>落地为王</b><span>以可投入业务使用、可验收的成果作为交付标准。</span></div>
+            <div class="delivery-statement">拒绝仅可演示的 Demo，交付真正可投入业务使用的私有化 AI 软件。</div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta"><div class="wrap"><div class="cta-box reveal"><h2>让每个专业团队，都拥有一套可治理的智能生产系统。</h2><p>BRAIN 负责贴近工作的最后一公里，Spring 负责企业级服务的稳定与边界。两者协同，把 AI 从一次性问答变成持续交付能力。</p><button class="pill" data-scroll="#workspaces">返回产品体验 ↑</button></div></div></section>
+  </main>
+  <footer><div class="wrap"><span>北京望界科技有限公司 · BRAIN「新脑子」</span><span>业务为先 · 可信 AI · 落地为王</span></div></footer>
+  <div class="toast" id="toast">任务已接收，BRAIN 正在规划执行路径</div>
+
+  <script>
+    const workspaces = [
+      { icon:'↗', name:'量化交易', badge:'研究模式', color:'#79d0b0', prompt:'分析这只股票近一年的趋势与风险。', reply:'我将获取历史行情与最新公告，计算关键指标，展示 K 线，并给出带来源与时间标记的研究结论。', tools:['行情与 K 线','模拟组合','策略雷达'] },
+      { icon:'◇', name:'游戏制作', badge:'制作模式', color:'#d9b4ff', prompt:'把这个世界观拆成第一章可玩关卡。', reply:'我会把故事节拍转化为地图流线、战斗遭遇、资产清单与可验收的原型任务。', tools:['世界与角色','关卡设计','可玩原型'] },
+      { icon:'▷', name:'视频制作', badge:'成片模式', color:'#ffb58c', prompt:'把这段文案做成 30 秒品牌短片。', reply:'我将拆解脚本与分镜，规划旁白、镜头和时间线，按镜生成素材并输出可预览版本。', tools:['脚本分镜','AI 按镜生成','时间线预览'] },
+      { icon:'♫', name:'音乐创作', badge:'创作模式', color:'#f3d76b', prompt:'创作一段克制、温暖的产品主题音乐。', reply:'我会确定情绪曲线、速度与配器，生成试听版本，并保留可继续调整的音乐工程。', tools:['歌词与风格','AI 生成试听','混音与导出'] },
+      { icon:'▦', name:'数据与决策', badge:'分析模式', color:'#cce87b', prompt:'分析这份销售表，找出利润下滑的主要原因。', reply:'我将读取工作簿结构，验证公式与异常值，生成趋势图，并输出一份带来源定位的经营决策简报。', tools:['数据导入','统计与图表','决策 Flow'] },
+      { icon:'⌘', name:'软件与自动化', badge:'Agent 模式', color:'#8bc6ff', prompt:'检查这个项目并修复导致构建失败的问题。', reply:'我会先定位失败链路，制定最小修改方案，经审批后修改代码、运行测试，并交付验证结果。', tools:['代码 Agent','受控终端','Flow 自动化'] },
+      { icon:'▤', name:'文档创作', badge:'审阅模式', color:'#ff9fae', prompt:'审阅这份合同，标出高风险条款并提出修改。', reply:'我将结构化读取文档，按页和段落定位风险，生成可追踪的批注与修订版本，原文件保持只读。', tools:['多格式读取','定位标记','版本修订'] }
+    ];
+    const nav = document.getElementById('workspaceNav');
+    const title = document.getElementById('workspaceTitle');
+    const badge = document.getElementById('workspaceBadge');
+    const prompt = document.getElementById('userPrompt');
+    const reply = document.getElementById('brainReply');
+    const toolCards = document.getElementById('toolCards');
+    function selectWorkspace(index) {
+      const item = workspaces[index];
+      document.querySelectorAll('.workspace-button').forEach((el, i) => el.classList.toggle('active', i === index));
+      title.textContent = item.name; badge.textContent = item.badge; prompt.textContent = item.prompt; reply.textContent = item.reply;
+      toolCards.innerHTML = item.tools.map((tool, i) => `<div class="tool-card"><strong>${tool}</strong><small>${['已连接','可调用','任务就绪'][i]}</small></div>`).join('');
+    }
+    workspaces.forEach((item, index) => {
+      const button = document.createElement('button'); button.className = 'workspace-button'; button.style.setProperty('--workspace-color', item.color);
+      button.innerHTML = `<span class="workspace-icon">${item.icon}</span><span>${item.name}</span>`; button.addEventListener('click', () => selectWorkspace(index)); nav.appendChild(button);
+    });
+    selectWorkspace(4);
+    const scenarios = [
+      { title:'个人办公', tag:'周报 / 邮件 / 汇报', desc:'把散落的工作记录、邮件和资料转化为符合个人风格、可以直接发送的办公成果。', steps:[['输入目标','例如：根据本周进展整理一份周报。'],['适配习惯','复用常用结构、语气和格式偏好。'],['交付成果','输出可编辑、可追踪、可复用的版本。']], chips:['周报生成','邮件回复','汇报整理','文档润色'] },
+      { title:'研究报告', tag:'资料 / 数据 / 来源', desc:'基于行业资料、数据表格和历史成果，形成结构清晰、观点可信、来源可追溯的专业报告。', steps:[['读取资料','结构化提取文档、表格与关键证据。'],['形成判断','组织章节、验证数据、提炼核心观点。'],['生成报告','统一文风并保留事实来源定位。']], chips:['章节结构','数据分析','来源追溯','风格复用'] },
+      { title:'销售支持', tag:'客户 / 方案 / 跟进', desc:'从客户背景与沟通记录出发，调用产品知识与历史案例，持续完善销售方案和跟进材料。', steps:[['理解客户','识别行业、角色、诉求和决策条件。'],['组织方案','匹配产品能力、案例与价值主张。'],['持续跟进','生成方案、纪要和后续沟通内容。']], chips:['客户画像','销售方案','拜访纪要','跟进邮件'] },
+      { title:'会议管理', tag:'纪要 / 行动项 / 责任人', desc:'从会议内容中提炼结论、争议与待办，并转化为责任清晰、时间明确的行动清单。', steps:[['读取内容','导入会议记录或转写文本。'],['提炼结论','识别决策、风险、争议和依赖。'],['推动落实','整理责任人、时间点和跟进任务。']], chips:['会议纪要','行动清单','责任人','任务跟进'] },
+      { title:'项目推进', tag:'计划 / 执行 / 交付', desc:'围绕持续目标拆解任务、调用文件和工具、处理执行异常，并沉淀阶段性产物。', steps:[['明确目标','固定范围、约束和验收条件。'],['受控执行','调用专业工具，关键动作请求审批。'],['验证交付','运行检查并输出结果与证据。']], chips:['任务拆解','工具调用','审批控制','成果验收'] },
+      { title:'企业安全', tag:'权限 / 隔离 / 治理', desc:'通过 BRAIN 本地数据面与 Spring 企业控制面，让敏感资料、模型能力和执行权限各守边界。', steps:[['最小上下文','只发送当前任务必要的受限内容。'],['策略治理','统一身份、模型、搜索、额度和限流。'],['全程可控','高风险动作审批，计量与错误可追溯。']], chips:['本地优先','密钥隔离','权限审批','成本治理'] }
+    ];
+    const scenarioTabs = document.getElementById('scenarioTabs');
+    function selectScenario(index) {
+      const item = scenarios[index];
+      document.querySelectorAll('.scenario-tab').forEach((el, i) => el.classList.toggle('active', i === index));
+      document.getElementById('scenarioTitle').textContent = item.title;
+      document.getElementById('scenarioTag').textContent = item.tag;
+      document.getElementById('scenarioDesc').textContent = item.desc;
+      document.getElementById('scenarioSteps').innerHTML = item.steps.map((step, i) => `<div class="scenario-step"><b>${String(i+1).padStart(2,'0')}</b><div><strong>${step[0]}</strong><small>${step[1]}</small></div></div>`).join('');
+      document.getElementById('scenarioChips').innerHTML = item.chips.map(chip => `<span>${chip}</span>`).join('');
+    }
+    scenarios.forEach((item, index) => {
+      const button = document.createElement('button'); button.className = 'scenario-tab'; button.textContent = item.title; button.addEventListener('click', () => selectScenario(index)); scenarioTabs.appendChild(button);
+    });
+    selectScenario(0);
+    document.querySelectorAll('[data-scroll]').forEach(button => button.addEventListener('click', () => document.querySelector(button.dataset.scroll).scrollIntoView({ behavior:'smooth' })));
+    document.querySelectorAll('.arch-toggle button').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.arch-toggle button').forEach(b => b.classList.remove('active')); button.classList.add('active');
+      const focus = button.dataset.focus; document.getElementById('brainArch').classList.toggle('active', focus === 'brain' || focus === 'both'); document.getElementById('springArch').classList.toggle('active', focus === 'spring' || focus === 'both');
+    }));
+    const observer = new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); }), { threshold:.12 });
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+    document.getElementById('demoForm').addEventListener('submit', event => {
+      event.preventDefault(); const input = document.getElementById('demoInput'); if (!input.value.trim()) { input.focus(); return; }
+      prompt.textContent = input.value.trim(); reply.textContent = `任务已识别。我会在“${title.textContent}”工作台中组织上下文、选择工具、执行并生成可追踪产物。涉及写入或外部操作时会先请求你的批准。`;
+      input.value = ''; const toast = document.getElementById('toast'); toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2600);
+    });
+  </script>
+</body>
+</html>

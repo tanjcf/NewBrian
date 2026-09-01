@@ -13,6 +13,7 @@ import { SidebarIcon } from "./app/SidebarIcon";
 import { markThreadActiveInCatalog } from "./app/thread-order";
 import { compactModelAttachment } from "./app/model-attachment-policy";
 import { isComposerThreadRunning, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { snapshotToDisplayMessages } from "./app/thread-hydration";
 import { combineComposerQuote } from "./app/composer-quote";
 import { markApprovalActivitiesSettling, mergeAssistantActivityItems } from "./app/assistant-activity-merge";
 import { parseUsageExceptionCommand } from "./app/usage-exception-command";
@@ -26,7 +27,8 @@ import {
   createAndActivateNewChatThread,
   NewChatThreadActivationError,
   resolveNewChatWorkspaceId,
-  shouldCreateChatThreadBeforeSend
+  shouldCreateChatThreadBeforeSend,
+  shouldCreateStandaloneChatThreadBeforeSend
 } from "./app/new-chat-target";
 import {
   readThreadComposerSkills,
@@ -46,6 +48,7 @@ import type {
   WorkspaceThreadRecord,
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
+import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
 import {
   SettingsNavIcon,
   SettingsSwitch,
@@ -109,6 +112,9 @@ function normalizeModelErrorMessage(error: unknown) {
     .trim();
   if (/fetch failed|failed to fetch|econnrefused|econnreset|enotfound|eai_again/i.test(message)) {
     return "无法连接模型服务，请检查网络或模型网关地址后重试。";
+  }
+  if (/this operation was aborted|aborterror|model request aborted|agent loop was cancelled/i.test(message)) {
+    return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
   }
   if (/did not include assistant content or tool calls/i.test(message)) {
     return "模型本轮没有产出可见回复或工具调用。已保存当前进度，请点「重试并从断点继续」，或补充更具体的要求后再试。";
@@ -257,40 +263,53 @@ export function App() {
     // 切换线程时立刻从缓存恢复消息，避免在 activateWorkspaceThread 返回前仍显示上一个线程的内容（串线程展示）。
     if (next) {
       const cached = threadMessagesRef.current.get(next);
-      if (cached) {
+      if (cached?.length) {
         chatMessagesRef.current = cached;
         setChatMessagesState(cached);
-      } else {
-        // Only clear when actually switching threads. Same-id reselect is handled above.
+      } else if (previous !== next) {
         chatMessagesRef.current = [];
         setChatMessagesState([]);
       }
-      const workspaceId = selectedWorkspaceIdRef.current;
-      if (api && workspaceId) {
-        void api.activateWorkspaceThread({ workspaceId, threadId: next }).then((nextSnapshot) => {
-          if (selectedThreadIdRef.current !== next) return;
-          const restoredMessages = nextSnapshot.messages
-            .filter((message) => message.role === "user" || message.role === "assistant")
-            .map((message) => ({
-              id: message.id,
-              role: message.role as "user" | "assistant",
-              content: message.content,
-              reasoningSummary: message.reasoningSummary,
-              excludeFromModelContext: message.excludeFromModelContext,
-              createdAt: message.createdAt,
-              attachments: message.attachments
-            }));
-          // Never hard-replace in-memory streaming/failure progress with a thinner
-          // durable snapshot (approval settle / activate races used to blank the thread).
-          const current = threadMessagesRef.current.get(next) ?? chatMessagesRef.current;
-          const reconciled = reconcileThreadDisplayMessages(current, restoredMessages);
-          threadMessagesRef.current.set(next, reconciled);
-          chatMessagesRef.current = reconciled;
-          setChatMessagesState(reconciled);
-          setSnapshot(nextSnapshot);
-        }).catch(() => undefined);
-      }
     }
+  };
+
+  const hydrateWorkspaceThread = (
+    workspaceId: string,
+    threadId: string,
+    options?: { display?: boolean }
+  ) => {
+    if (!api || !workspaceId || !threadId) return;
+    void api.activateWorkspaceThread({ workspaceId, threadId }).then((nextSnapshot) => {
+      if (selectedThreadIdRef.current !== threadId) return;
+      const restoredMessages = snapshotToDisplayMessages(nextSnapshot);
+      const current = threadMessagesRef.current.get(threadId) ?? chatMessagesRef.current;
+      const reconciled = reconcileThreadDisplayMessages(current, restoredMessages);
+      updateThreadMessages(threadId, () => reconciled, { display: options?.display ?? true });
+      setSnapshot(nextSnapshot);
+    }).catch(() => undefined);
+  };
+
+  const selectWorkspaceThread = (
+    workspaceId: string,
+    threadId: string,
+    options?: { force?: boolean }
+  ) => {
+    const normalizedWorkspaceId = String(workspaceId || "").trim();
+    const normalizedThreadId = String(threadId || "").trim();
+    if (!normalizedThreadId) return;
+    if (normalizedWorkspaceId) {
+      selectedWorkspaceIdRef.current = normalizedWorkspaceId;
+      setSelectedWorkspaceIdState(normalizedWorkspaceId);
+    }
+    const switching = selectedThreadIdRef.current !== normalizedThreadId;
+    if (switching) {
+      setSelectedThreadId(normalizedThreadId);
+    } else if (!options?.force) {
+      return;
+    }
+    hydrateWorkspaceThread(normalizedWorkspaceId || selectedWorkspaceIdRef.current, normalizedThreadId, {
+      display: true
+    });
   };
   useEffect(() => {
     if (desktopPreferences.permissions?.fullAccess) {
@@ -317,13 +336,14 @@ export function App() {
 
   const updateThreadMessages = (
     threadId: string,
-    updater: ModelChatMessage[] | ((current: ModelChatMessage[]) => ModelChatMessage[])
+    updater: ModelChatMessage[] | ((current: ModelChatMessage[]) => ModelChatMessage[]),
+    options?: { display?: boolean }
   ) => {
     const current = threadMessagesRef.current.get(threadId) ??
       (selectedThreadIdRef.current === threadId ? chatMessagesRef.current : []);
     const next = typeof updater === "function" ? updater(current) : updater;
     threadMessagesRef.current.set(threadId, next);
-    if (selectedThreadIdRef.current === threadId) {
+    if (options?.display || selectedThreadIdRef.current === threadId) {
       chatMessagesRef.current = next;
       setChatMessagesState(next);
     }
@@ -903,6 +923,9 @@ export function App() {
   });
   const conversationTurns = useMemo<ConversationTurn[]>(() => {
     if (chatMessages.length === 0) {
+      if (selectedThread?.id && !isComposingNewThread) {
+        return [];
+      }
       return [
         {
           id: "thread-summary",
@@ -954,7 +977,7 @@ export function App() {
     }
 
     return turns;
-  }, [chatMessages, isCurrentThreadAskingModel, latestAssistantMessage]);
+  }, [chatMessages, isComposingNewThread, isCurrentThreadAskingModel, latestAssistantMessage, selectedThread?.id]);
   const latestUserMessage =
     [...chatMessages].reverse().find((message) => message.role === "user")?.content ??
     "继续推进当前项目窗口的对话任务流。";
@@ -1345,13 +1368,19 @@ export function App() {
     setLoginForm(updater);
   }
 
-  async function askModel(draftOverride?: QueuedComposerDraft) {
+  async function askModel(draftOverride?: QueuedComposerDraft & {
+    forceStandaloneChat?: boolean;
+    forceProjectThread?: boolean;
+    brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
+  }) {
     const draftQuestion = draftOverride?.question ?? question;
     const draftImages = draftOverride?.images ?? composerImages;
     const draftTools = draftOverride?.tools ?? selectedComposerTools;
     const draftSkill = draftOverride?.skill ?? selectedComposerSkill;
     const draftSkillContext = draftOverride?.skillContext ?? composerSkillContext;
     const draftModes = draftOverride?.modes ?? composerModes;
+    const forceStandaloneChat = Boolean(draftOverride?.forceStandaloneChat);
+    const forceProjectThread = Boolean(draftOverride?.forceProjectThread);
     const recoveryDraft = cloneNewChatComposerDraft({
       question: draftQuestion,
       images: draftImages,
@@ -1373,13 +1402,9 @@ export function App() {
       await startUsageExceptionFeedback(usageExceptionCommand.description, draftQuestion);
       return;
     }
-    if (!draftOverride) {
-      setQuestion("");
-      setComposerImages([]);
-      setSelectedComposerTools([]);
-      setComposerSkillContext("");
-      setComposerModes([]);
-    }
+    // Fresh composer sends often pass a draft override (question/images/tools).
+    // Only queued-draft replays carry createdAt; those must not clear or re-queue.
+    const isQueuedDraftReplay = Boolean(draftOverride?.createdAt);
     const currentWorkspaceId = selectedWorkspaceIdRef.current || selectedWorkspaceId;
     const currentWorkspace =
       safeWorkspaceCatalog.find((workspace) => workspace.id === currentWorkspaceId) ??
@@ -1394,7 +1419,7 @@ export function App() {
       activeThreadRequestIds: Object.fromEntries(activeThreadRequestsRef.current.entries())
     });
 
-    if (currentThreadIsAsking && !draftOverride) {
+    if (currentThreadIsAsking && !isQueuedDraftReplay) {
       if (desktopPreferences.editor?.followBehavior === "guide") {
         setChatStatus("当前对话正在运行。已启用引导模式，请先停止或批准当前运行后再发送下一条。");
         return;
@@ -1413,22 +1438,51 @@ export function App() {
       setQueuedComposerDraft(nextDraft);
       setQuestion("");
       setComposerImages([]);
+      setSelectedComposerTools([]);
+      setComposerSkillContext("");
+      setComposerModes([]);
       setChatStatus("当前对话正在处理中，已将下一条消息加入排队。");
       return;
     }
+    if (!isQueuedDraftReplay) {
+      setQuestion("");
+      setComposerImages([]);
+      setSelectedComposerTools([]);
+      setComposerSkillContext("");
+      setComposerModes([]);
+    }
 
+    const effectiveChatUsesProject = forceStandaloneChat ? false : (forceProjectThread ? true : chatUsesProject);
+    const effectiveNewThreadScope: "project" | "chat" = forceStandaloneChat
+      ? "chat"
+      : (forceProjectThread ? "project" : newThreadScope);
+    if (forceStandaloneChat) {
+      setChatUsesProject(false);
+      setNewThreadScope("chat");
+    } else if (forceProjectThread) {
+      setChatUsesProject(true);
+      setNewThreadScope("project");
+    }
     let composingNewThread = shouldCreateChatThreadBeforeSend({
       isComposingNewThread,
       currentThreadId: currentThread?.id || currentThreadId
     });
-    const composingThreadScope = newThreadScope === "chat" && chatUsesProject ? "project" : newThreadScope;
+    const composingThreadScope = effectiveNewThreadScope === "chat" && effectiveChatUsesProject ? "project" : effectiveNewThreadScope;
     let targetWorkspaceId = composingNewThread
       ? resolveNewChatWorkspaceId({
-          scope: newThreadScope,
-          chatUsesProject,
+          scope: effectiveNewThreadScope,
+          chatUsesProject: effectiveChatUsesProject,
           selectedWorkspaceId: currentWorkspaceId
         })
       : currentWorkspaceId;
+    if (forceStandaloneChat) {
+      targetWorkspaceId = INTERNAL_CHAT_WORKSPACE_ID;
+      composingNewThread = shouldCreateStandaloneChatThreadBeforeSend({
+        isComposingNewThread,
+        currentWorkspaceId,
+        currentThreadId: currentThread?.id || currentThreadId
+      });
+    }
     let targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ??
       (targetWorkspaceId === currentWorkspaceId ? currentWorkspace : undefined);
     let targetThread = targetWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
@@ -1456,7 +1510,10 @@ export function App() {
             workspaceId: targetWorkspaceId,
             title: titleText,
             summary: composingThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新线程。",
-            scope: composingThreadScope
+            scope: composingThreadScope,
+            ...(targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID && draftOverride?.brainWorkspaceKey
+              ? { brainWorkspaceKey: draftOverride.brainWorkspaceKey }
+              : {})
           }),
           retainCatalog: setWorkspaceCatalog,
           activateWorkspaceThread: (input) => api.activateWorkspaceThread(input)
@@ -1470,7 +1527,12 @@ export function App() {
         setSelectedThreadId(createdThread.thread.id);
         syncSnapshot(createdThread.snapshot, createdThread.thread.id);
         setIsComposingNewThread(false);
-        setNewThreadScope("chat");
+        if (forceProjectThread) {
+          setNewThreadScope("project");
+          setChatUsesProject(true);
+        } else {
+          setNewThreadScope("chat");
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (error instanceof NewChatThreadActivationError) {
@@ -2729,6 +2791,7 @@ export function App() {
         sortThreadsForMenu={sortThreadsForMenu}
         setSelectedWorkspaceId={setSelectedWorkspaceId}
         setSelectedThreadId={setSelectedThreadId}
+        selectWorkspaceThread={selectWorkspaceThread}
         setUnreadThreadIds={setUnreadThreadIds}
         pinnedThreadIds={pinnedThreadIds}
         unreadThreadIds={unreadThreadIds}

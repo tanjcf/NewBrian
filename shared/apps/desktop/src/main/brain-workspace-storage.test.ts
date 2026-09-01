@@ -322,6 +322,15 @@ test("persists annotations and enforces file project ownership", () => {
     assert.equal(storage.listAnnotations("owner-a", project.id)[0]?.id, annotation.id);
     assert.deepEqual(storage.listAnnotations("owner-a", project.id)[0]?.anchor, anchor);
     assert.equal(annotation.instruction, "替换为新内容");
+    assert.equal(annotation.geometry.displayIndex, 1);
+    assert.equal(annotation.geometry.style.tool, "select-rect");
+    const marked = storage.createAnnotation({
+      ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1,
+      anchor, instruction: "高亮段落",
+      geometry: { style: { tool: "highlight", color: "#2196F3" } }
+    });
+    assert.equal(marked.geometry.displayIndex, 2);
+    assert.equal(marked.geometry.style.color, "#2196F3");
     const dismissed = storage.createAnnotation({
       ownerId: "owner-a", projectId: project.id, fileId: file.id, fileVersion: 1,
       anchor, instruction: "不再修改", status: "DISMISSED", supersedesAnnotationId: annotation.id

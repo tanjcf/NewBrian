@@ -20,7 +20,8 @@ import type { NativeWebSearchProjection } from "./model-chat-step-service.js";
 import type { WrittenArtifact } from "./output-summary.js";
 import type { SkillDescriptor } from "./skill-selection.js";
 import type { ThreadStateFile } from "./thread-state-factory.js";
-import { isAutoModelFallbackEnabled } from "./model-auto-router.ts";
+import { isAutoModelFallbackEnabled, isModelAutoSelection, MODEL_AUTO_ID } from "./model-auto-router.ts";
+import { resolveAutoParentDisplayName } from "./auto-parent-display-policy.ts";
 import {
   resolveMediaGenerationKind,
   shouldRunMediaGenerationTurn
@@ -34,6 +35,32 @@ import {
 } from "./model-chat-timing.ts";
 // @ts-expect-error Node's native TypeScript test runner requires the source extension.
 import { expandLetterChoiceRequest } from "./letter-choice-policy.ts";
+// @ts-expect-error Node's native TypeScript test runner requires the source extension.
+import { appendAutoDelegateTurnConstraint } from "./auto-orchestrator-policy.ts";
+
+function orphanToolRepairContext(
+  runtime: { sessionMachine?: { events?: unknown[] } },
+  error?: unknown
+): {
+  failureReason?: string;
+  supplementalEvents: Array<{ type: string; payload?: unknown; turnId?: string }>;
+} {
+  const failureReason = error instanceof Error
+    ? error.message
+    : error != null
+      ? String(error)
+      : undefined;
+  const supplementalEvents = (runtime.sessionMachine?.events ?? [])
+    .filter((event): event is Record<string, unknown> =>
+      typeof event === "object" && event !== null && typeof (event as { type?: unknown }).type === "string"
+    )
+    .map((event) => ({
+      type: String(event.type),
+      payload: event.payload,
+      turnId: typeof event.turnId === "string" ? event.turnId : undefined
+    }));
+  return { failureReason, supplementalEvents };
+}
 
 interface ModelChatRuntime extends ModelChatGoalRuntime {
   getToolDescriptors(): Array<{
@@ -124,11 +151,13 @@ export interface ModelChatServiceDependencies {
       notes?: string;
       [key: string]: unknown;
     };
+    autoParentDisplayName?: string;
   }>;
   persistAutoDecision?: (input: {
     workspace: WorkspaceCatalogItem;
     thread: WorkspaceThreadRecord;
     turnId: string;
+    model?: string;
     decision: Record<string, unknown>;
   }) => Promise<unknown>;
   startTask: (input: {
@@ -269,6 +298,8 @@ export interface ModelChatServiceDependencies {
     workspace: WorkspaceCatalogItem;
     thread: WorkspaceThreadRecord;
     turnId: string;
+    failureReason?: string;
+    supplementalEvents?: Array<{ type: string; payload?: unknown; turnId?: string }>;
   }) => Promise<unknown>;
   persistCancellation: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord, turnId: string) => Promise<unknown>;
   persistFailure: (input: {
@@ -396,15 +427,16 @@ export class ModelChatService {
       emitReasoningSummary("正在分析请求目标、约束与当前上下文，过程会持续更新。\n");
       if (prepared.autoDecision?.mode === "auto" || String(prepared.autoDecision?.model?.requested || "").toLowerCase() === "auto") {
         const decision = prepared.autoDecision;
+        const parentAutoLabel = resolveAutoParentDisplayName(prepared.autoParentDisplayName);
         const optimize = decision.optimize_for ? `，Optimize=${decision.optimize_for}` : "";
         emitReasoningSummary(
-          `大模型 Auto：任务=${decision.task_class || "general"}，套餐内预估 ${decision.model.selected}${optimize}`
+          `大模型 Auto：任务=${decision.task_class || "general"}，编排 ${parentAutoLabel}${optimize}`
           + `（出站 model=auto，由网关按订阅选型并记账${decision.notes ? `；${decision.notes}` : ""}）。\n`
         );
         this.dependencies.publishActivity({
           type: "complete",
           title: "大模型 Auto",
-          detail: `auto → ${decision.model.selected} · ${decision.task_class || "general"}${decision.optimize_for ? ` · ${decision.optimize_for}` : ""}`
+          detail: `auto → ${parentAutoLabel} · ${decision.task_class || "general"}${decision.optimize_for ? ` · ${decision.optimize_for}` : ""}`
         }, input.requestId);
         await this.dependencies.persistAutoDecision?.({
           workspace,
@@ -434,7 +466,10 @@ export class ModelChatService {
             : "已识别重复选项抱怨，将按已完成进度继续推进。\n"
         );
       }
-      const mediaKind = this.dependencies.runMediaGeneration
+      // Auto: model chooses image_generate/video_generate via tool_calls — never short-circuit.
+      // Pinned models may still use the legacy media short-circuit path.
+      const mediaKind = !isModelAutoSelection(input.model)
+        && this.dependencies.runMediaGeneration
         && shouldRunMediaGenerationTurn({ autoDecision: prepared.autoDecision })
         ? resolveMediaGenerationKind({ autoDecision: prepared.autoDecision })
         : null;
@@ -504,6 +539,7 @@ export class ModelChatService {
             workspace,
             thread,
             turnId,
+            model: mediaModel,
             latestUserRequest,
             result,
             reasoningSummary: reasoningSummaryParts.join(""),
@@ -608,7 +644,7 @@ export class ModelChatService {
         setRuntimeState: (state) => runtime.setThreadState(state)
       });
       let state = preparedContext.state;
-      const requestMessages = letterChoice.expanded
+      let requestMessages = letterChoice.expanded
         ? (() => {
           let lastUserIndex = -1;
           for (let index = preparedContext.requestMessages.length - 1; index >= 0; index -= 1) {
@@ -623,6 +659,12 @@ export class ModelChatService {
           );
         })()
         : preparedContext.requestMessages;
+      if (prepared.autoDecision?.mode === "auto" && prepared.autoDecision.allow_auto_delegate) {
+        requestMessages = appendAutoDelegateTurnConstraint(requestMessages, {
+          taskClass: prepared.autoDecision.task_class,
+          latestUserText: latestUserRequest
+        });
+      }
       const effectiveSystemPrompt = this.dependencies.buildSystemPrompt({
         baseSystemPrompt: input.systemPrompt,
         composerModes,
@@ -637,7 +679,10 @@ export class ModelChatService {
         personalizationGuidance: shadowLearning?.personalizationGuidance,
         localKnowledgeText,
         sceneKnowledgeText,
-        projectOs
+        brainWorkspaceKey: workspace.brainWorkspaceKey,
+        projectOs,
+        autoMode: prepared.autoDecision?.mode === "auto",
+        autoTaskClass: prepared.autoDecision?.task_class
       });
       if (state.context) {
         state = await this.dependencies.updateModelContext({
@@ -774,7 +819,12 @@ export class ModelChatService {
         result = loopRun.result;
         if (this.dependencies.isCanceled(input.requestId)) {
           await this.dependencies.persistCancellation(workspace, thread, turnId);
-          await this.dependencies.repairOrphanToolCalls?.({ workspace, thread, turnId });
+          await this.dependencies.repairOrphanToolCalls?.({
+            workspace,
+            thread,
+            turnId,
+            ...orphanToolRepairContext(runtime, "当前任务已停止。")
+          });
           throw new Error("当前任务已停止。");
         }
         const alreadyFlushed = loopRun.flushedEventCount ?? flushedEventCount;
@@ -802,7 +852,12 @@ export class ModelChatService {
         if (goalSession?.accounting) goalSession.accounting.lastError = error instanceof Error ? error.message : String(error);
         if (this.dependencies.isCanceled(input.requestId)) {
           await this.dependencies.persistCancellation(workspace, thread, turnId);
-          await this.dependencies.repairOrphanToolCalls?.({ workspace, thread, turnId });
+          await this.dependencies.repairOrphanToolCalls?.({
+            workspace,
+            thread,
+            turnId,
+            ...orphanToolRepairContext(runtime, error)
+          });
           throw error;
         }
         await this.dependencies.persistFailure({
@@ -814,7 +869,12 @@ export class ModelChatService {
           partialContent: streamedContent,
           error
         });
-        await this.dependencies.repairOrphanToolCalls?.({ workspace, thread, turnId });
+        await this.dependencies.repairOrphanToolCalls?.({
+          workspace,
+          thread,
+          turnId,
+          ...orphanToolRepairContext(runtime, error)
+        });
         throw error;
       }
       await this.dependencies.persistSuccess({

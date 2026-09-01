@@ -1,9 +1,37 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
 import type { BrainVideoRenderState, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { RustCoreRequest, RustCoreResponse } from "@codex-forge/protocol/rust-core";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import { buildLayeredVideoFfmpegArgs, type VideoRenderLayerClip } from "./video-layered-ffmpeg.js";
+
+export { buildLayeredVideoFfmpegArgs, type VideoRenderLayerClip } from "./video-layered-ffmpeg.js";
+
+/** Project-relative font for drawtext (avoids Windows `C:` filtergraph parse failures). */
+async function ensureProjectDrawtextFont(projectRoot: string): Promise<string> {
+  const relative = ".brain-video/fonts/export.ttf";
+  const absolute = resolve(projectRoot, relative);
+  if (!existsSync(absolute)) {
+    await mkdir(dirname(absolute), { recursive: true });
+    const sources = process.platform === "win32"
+      ? ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/msyh.ttc"]
+      : process.platform === "darwin"
+        ? ["/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"]
+        : ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"];
+    for (const source of sources) {
+      if (!existsSync(source)) continue;
+      try {
+        await copyFile(source, absolute);
+        break;
+      } catch {
+        /* try next */
+      }
+    }
+  }
+  return existsSync(absolute) ? relative.replaceAll("\\", "/") : "";
+}
 
 type RustRequestInput = Omit<RustCoreRequest, "protocol_version">;
 export interface VideoRenderRustClient { request(input: RustRequestInput): Promise<RustCoreResponse> }
@@ -15,6 +43,11 @@ export interface VideoRenderOptions {
   outputRelativePath: string;
   mediaRelativePaths?: string[];
   audioClips?: Array<{ relativePath: string; startMs: number; volume: number }>;
+  /**
+   * Multi-track layout from pipeline editor. When set, FFmpeg composites by track:
+   * same video trackId → time-ordered overlays / xfade; higher V tracks over lower; audio amix; text drawtext.
+   */
+  layerClips?: VideoRenderLayerClip[];
   /** When true and no media clips exist, synthesize a short black MP4 via lavfi. */
   allowSyntheticMedia?: boolean;
   acquireRustCore: (binding: { projectId: string; projectRoot: string; workspaceType: "video" }) => Promise<VideoRenderRustClient>;
@@ -116,15 +149,43 @@ export class VideoRenderService {
       : (this.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
     const output = safeRelativePath(input.outputRelativePath, "BRAIN_VIDEO_OUTPUT_PATH_INVALID");
     if (!/\.mp4$/iu.test(output)) throw new Error("BRAIN_VIDEO_OUTPUT_FORMAT_UNSUPPORTED");
-    const media = (input.mediaRelativePaths || []).map((item) => safeRelativePath(item, "BRAIN_VIDEO_MEDIA_NOT_FOUND"));
-    const audioClips = (input.audioClips || []).map((clip) => ({
-      relativePath: safeRelativePath(clip.relativePath, "BRAIN_VIDEO_AUDIO_NOT_FOUND"),
-      startMs: Math.max(0, Math.round(Number(clip.startMs) || 0)),
-      volume: Math.max(0, Math.min(2, Number(clip.volume) || 0))
-    }));
-    if (!media.length && !input.allowSyntheticMedia) throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
+    const layerClips = (input.layerClips || []).map((clip) => {
+      const trackType = clip.trackType === "audio" ? "audio" as const : clip.trackType === "text" ? "text" as const : "video" as const;
+      return {
+        relativePath: trackType === "text"
+          ? undefined
+          : safeRelativePath(String(clip.relativePath || ""), trackType === "audio" ? "BRAIN_VIDEO_AUDIO_NOT_FOUND" : "BRAIN_VIDEO_MEDIA_NOT_FOUND"),
+        trackId: String(clip.trackId || (trackType === "audio" ? "a1" : "v1")),
+        trackType,
+        startMs: Math.max(0, Math.round(Number(clip.startMs) || 0)),
+        durationMs: clip.durationMs === undefined ? undefined : Math.max(100, Math.round(Number(clip.durationMs) || 0)),
+        volume: Math.max(0, Math.min(2, Number(clip.volume) ?? 1)),
+        transition: clip.transition ? String(clip.transition) : undefined,
+        transitionMs: clip.transitionMs === undefined ? undefined : Math.max(0, Math.round(Number(clip.transitionMs) || 0)),
+        text: clip.text ? String(clip.text) : undefined,
+        fontSize: clip.fontSize === undefined ? undefined : Math.max(12, Math.round(Number(clip.fontSize) || 48)),
+        color: clip.color ? String(clip.color) : undefined,
+        x: clip.x === undefined ? undefined : Math.min(1, Math.max(0, Number(clip.x))),
+        y: clip.y === undefined ? undefined : Math.min(1, Math.max(0, Number(clip.y))),
+        scale: clip.scale === undefined ? undefined : Math.max(0.2, Math.min(5, Number(clip.scale) || 1))
+      };
+    });
+    const useLayers = layerClips.some((clip) => clip.trackType === "video" || clip.trackType === "text");
+    const media = useLayers
+      ? layerClips.filter((clip) => clip.trackType === "video").map((clip) => String(clip.relativePath || ""))
+      : (input.mediaRelativePaths || []).map((item) => safeRelativePath(item, "BRAIN_VIDEO_MEDIA_NOT_FOUND"));
+    const audioClips = useLayers
+      ? []
+      : (input.audioClips || []).map((clip) => ({
+        relativePath: safeRelativePath(clip.relativePath, "BRAIN_VIDEO_AUDIO_NOT_FOUND"),
+        startMs: Math.max(0, Math.round(Number(clip.startMs) || 0)),
+        volume: Math.max(0, Math.min(2, Number(clip.volume) || 0))
+      }));
+    if (!media.length && !layerClips.some((c) => c.trackType === "text") && !input.allowSyntheticMedia) {
+      throw new Error("BRAIN_VIDEO_MEDIA_NOT_FOUND");
+    }
     let concatListRelative: string | undefined;
-    if (media.length > 1) {
+    if (!useLayers && media.length > 1) {
       concatListRelative = `.brain-video/concat-${renderId}.txt`;
       const listAbsolute = resolve(input.projectRoot, concatListRelative);
       await mkdir(dirname(listAbsolute), { recursive: true });
@@ -141,11 +202,15 @@ export class VideoRenderService {
       await mkdir(dirname(resolve(input.projectRoot, subtitleRelative)), { recursive: true });
       await writeFile(resolve(input.projectRoot, subtitleRelative), body, "utf8");
     }
-    const args = buildVideoFfmpegArgs(media, output, concatListRelative, audioClips, subtitleRelative, {
+    const videoSettings = {
       width: input.timeline.width,
       height: input.timeline.height,
       fps: input.timeline.fps
-    });
+    };
+    const projectFont = useLayers ? await ensureProjectDrawtextFont(input.projectRoot) : "";
+    const args = useLayers
+      ? buildLayeredVideoFfmpegArgs(layerClips, output, videoSettings, subtitleRelative, { fontfile: projectFont })
+      : buildVideoFfmpegArgs(media, output, concatListRelative, audioClips, subtitleRelative, videoSettings);
     const command = `${executable} ${args.join(" ")}`;
     if (!(await this.options.confirmRender({ projectId: input.projectId, command, outputRelativePath: output }))) throw new Error("BRAIN_VIDEO_RENDER_DECLINED");
     await this.options.prepareOutput?.(input.projectRoot, output);

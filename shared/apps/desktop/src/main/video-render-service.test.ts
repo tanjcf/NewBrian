@@ -70,6 +70,80 @@ test("video render refuses a timeline without a media input", async () => {
   assert.equal(acquired, false);
 });
 
+test("video render layers tracks with xfade and drawtext", async () => {
+  const calls: any[] = [];
+  const service = new VideoRenderService({
+    acquireRustCore: async () => ({ request: async (input: any) => { calls.push(input); return { status: "completed", result: { success: true } } as any; } }),
+    confirmRender: async () => true,
+    platform: "win32"
+  });
+  await service.start("owner", {
+    projectId: "p1",
+    projectRoot: "C:/project",
+    timeline,
+    outputRelativePath: "renders/out.mp4",
+    layerClips: [
+      { relativePath: "media/a.mp4", trackId: "v1", trackType: "video", startMs: 0, durationMs: 2000, transition: "dissolve", transitionMs: 250 },
+      { relativePath: "media/b.mp4", trackId: "v1", trackType: "video", startMs: 2000, durationMs: 2000 },
+      { relativePath: "media/c.mp4", trackId: "v2", trackType: "video", startMs: 500, durationMs: 1500 },
+      { trackId: "v2", trackType: "text", startMs: 800, durationMs: 1200, text: "标题", fontSize: 42, color: "#ffcc00" }
+    ]
+  });
+  const args = calls[1].payload.args as string[];
+  const filter = args[args.indexOf("-filter_complex") + 1]!;
+  assert.match(filter, /xfade=transition=dissolve/);
+  assert.match(filter, /drawtext=text='标题'/);
+  assert.match(filter, /overlay=eof_action=pass/);
+});
+
+test("video render maps blur transition to xfade hblur", async () => {
+  const calls: any[] = [];
+  const service = new VideoRenderService({
+    acquireRustCore: async () => ({ request: async (input: any) => { calls.push(input); return { status: "completed", result: { success: true } } as any; } }),
+    confirmRender: async () => true,
+    platform: "win32"
+  });
+  await service.start("owner", {
+    projectId: "p1",
+    projectRoot: "C:/project",
+    timeline,
+    outputRelativePath: "renders/out.mp4",
+    layerClips: [
+      { relativePath: "media/a.mp4", trackId: "v1", trackType: "video", startMs: 0, durationMs: 2000, transition: "blur", transitionMs: 250 },
+      { relativePath: "media/b.mp4", trackId: "v1", trackType: "video", startMs: 2000, durationMs: 2000 }
+    ]
+  });
+  const args = calls[1].payload.args as string[];
+  const filter = args[args.indexOf("-filter_complex") + 1]!;
+  assert.match(filter, /xfade=transition=hblur/);
+  assert.doesNotMatch(filter, /concat=n=2:v=1:a=0/);
+});
+
+test("video render defaults missing transition to hard cut (concat, no xfade)", async () => {
+  const calls: any[] = [];
+  const service = new VideoRenderService({
+    acquireRustCore: async () => ({ request: async (input: any) => { calls.push(input); return { status: "completed", result: { success: true } } as any; } }),
+    confirmRender: async () => true,
+    platform: "win32"
+  });
+  await service.start("owner", {
+    projectId: "p1",
+    projectRoot: "C:/project",
+    timeline,
+    outputRelativePath: "renders/out.mp4",
+    layerClips: [
+      { relativePath: "media/a.mp4", trackId: "v1", trackType: "video", startMs: 0, durationMs: 2000 },
+      { relativePath: "media/b.mp4", trackId: "v1", trackType: "video", startMs: 2000, durationMs: 2000 },
+      { relativePath: "media/c.mp4", trackId: "v1", trackType: "video", startMs: 4000, durationMs: 2000, transition: "cut" },
+      { relativePath: "media/d.mp4", trackId: "v1", trackType: "video", startMs: 6000, durationMs: 2000, transition: "none" }
+    ]
+  });
+  const args = calls[1].payload.args as string[];
+  const filter = args[args.indexOf("-filter_complex") + 1]!;
+  assert.doesNotMatch(filter, /xfade=/);
+  assert.match(filter, /concat=n=2:v=1:a=0/);
+});
+
 test("video render supports multi-clip concat demuxer", async () => {
   const calls: any[] = [];
   const root = mkdtempSync(join(tmpdir(), "brain-video-concat-"));

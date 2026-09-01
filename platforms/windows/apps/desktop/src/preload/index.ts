@@ -205,7 +205,16 @@ contextBridge.exposeInMainWorld("codecn", {
   saveBrainVideoPipeline: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineSave, input),
   markBrainVideoShot: (input: { projectId: string; shotIndex: number; ready: boolean }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoMarkShot, input),
   cookBrainVideoPipeline: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineCook, input),
-  generateBrainSceneMedia: (input: { projectId: string; kind: "video" | "music" | "image"; prompt: string; model?: string; shotIndex?: number }) =>
+  generateBrainSceneMedia: (input: {
+    projectId: string;
+    kind: "video" | "music" | "image";
+    prompt: string;
+    model?: string;
+    shotIndex?: number;
+    size?: string;
+    imageUrl?: string;
+    lastFrameImageUrl?: string;
+  }) =>
     ipcRenderer.invoke(brainWorkspaceIpcChannels.sceneMediaGenerate, input),
   getBrainMusicDaw: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawGet, input),
   saveBrainMusicDaw: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawSave, input),
@@ -217,6 +226,20 @@ contextBridge.exposeInMainWorld("codecn", {
   ensureBrainEngine: (input: { engineId: string }): Promise<{ engineId: string; executable: string; source: string; version: string }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentEnsure, input),
   ensureBrainEnginesForScene: (input: { workspaceKey: string }): Promise<Array<{ engineId: string; executable: string; source: string; version: string }>> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentEnsureScene, input),
   getBrainFilePreviewUrl: (input: { projectId: string; fileId: string }): Promise<string> => ipcRenderer.invoke(brainWorkspaceIpcChannels.filePreviewUrl, input),
+  importBrainMedia: (input: {
+    projectId: string;
+    sourcePath?: string;
+    fileName?: string;
+    mimeType?: string;
+    bytesBase64?: string;
+    folder?: "imports" | "audio" | "clips" | "refs";
+  }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.mediaImport, input),
+  peelBrainMedia: (input: {
+    projectId: string;
+    relativePath?: string;
+    fileId?: string;
+    mode?: "unlink" | "probe";
+  }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.mediaPeel, input),
   importVideoSubtitles: (input: { projectId: string; srt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoSubtitleImport, input),
   exportVideoSubtitles: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoSubtitleExport, input),
   listBrainAnnotations: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationList, input),

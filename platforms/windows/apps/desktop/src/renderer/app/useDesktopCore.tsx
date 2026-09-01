@@ -359,7 +359,11 @@ function syncSnapshot(nextSnapshot: PhaseOneSnapshot, threadId = selectedThreadI
     }));
 
   if (threadId) {
-    updateThreadMessages(threadId, (current) => reconcileThreadDisplayMessages(current, nextChatMessages));
+    updateThreadMessages(
+      threadId,
+      (current) => reconcileThreadDisplayMessages(current, nextChatMessages),
+      { display: true }
+    );
   } else {
     setChatMessages(nextChatMessages);
   }
@@ -647,7 +651,12 @@ useEffect(() => {
               setSelectedThreadId("");
               setIsComposingNewThread(true);
               syncSnapshot(nextSnapshot);
-              setErrorMessage("原项目或任务已不存在，已恢复到可用工作区。");
+              try {
+                localStorage.removeItem("codecn.lastSelectedThreadId.v1");
+              } catch {
+                // Local storage recovery is best-effort; the in-memory selection is already valid.
+              }
+              setErrorMessage("");
             } else {
               throw error;
             }
@@ -940,7 +949,12 @@ useEffect(() => {
           setSelectedThreadId("");
           setIsComposingNewThread(true);
         }
-        setErrorMessage("原任务已不存在，已恢复到可用工作区。请新建任务或选择其他任务。");
+        try {
+          localStorage.removeItem("codecn.lastSelectedThreadId.v1");
+        } catch {
+          // Local storage recovery is best-effort; the in-memory selection is already valid.
+        }
+        setErrorMessage("");
       } catch (recoveryError) {
         setSelectedThreadId("");
         setIsComposingNewThread(true);

@@ -35,6 +35,15 @@ export function shouldCreateChatThreadBeforeSend(input: {
   return input.isComposingNewThread || !String(input.currentThreadId || "").trim();
 }
 
+export function shouldCreateStandaloneChatThreadBeforeSend(input: {
+  isComposingNewThread: boolean;
+  currentWorkspaceId?: string;
+  currentThreadId?: string;
+}) {
+  return shouldCreateChatThreadBeforeSend(input)
+    || input.currentWorkspaceId !== INTERNAL_CHAT_WORKSPACE_ID;
+}
+
 export class NewChatThreadActivationError extends Error {
   readonly activationError: unknown;
   readonly catalog: WorkspaceCatalogItem[];

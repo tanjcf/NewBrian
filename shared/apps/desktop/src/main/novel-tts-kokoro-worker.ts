@@ -11,7 +11,7 @@
  *   parent -> { type: "dispose" }  → child exits
  */
 import { parentPort } from "node:worker_threads";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -138,12 +138,39 @@ async function encodeWav(audio: any): Promise<Buffer> {
 }
 
 async function loadKokoro() {
+  const moduleRoots = [
+    process.env.CODECN_KOKORO_MODULE_ROOT || "",
+    process.cwd(),
+    typeof process.resourcesPath === "string"
+      ? path.join(process.resourcesPath, "app.asar.unpacked")
+      : "",
+    typeof process.resourcesPath === "string" ? process.resourcesPath : ""
+  ].filter(Boolean);
+
+  const errors: string[] = [];
+  for (const root of moduleRoots) {
+    try {
+      const kokoroPkg = join(root, "node_modules", "@uzen", "kokoro-js", "package.json");
+      const rootPkg = join(root, "package.json");
+      const require = createRequire(
+        existsSync(kokoroPkg) ? kokoroPkg : existsSync(rootPkg) ? rootPkg : join(root, "noop.js")
+      );
+      const entry = require.resolve("@uzen/kokoro-js");
+      return await import(pathToFileURL(entry).href);
+    } catch (error) {
+      errors.push(`${root}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   try {
-    const require = createRequire(join(process.cwd(), "package.json"));
-    const entry = require.resolve("@uzen/kokoro-js");
-    return await import(pathToFileURL(entry).href);
-  } catch {
     return await import("@uzen/kokoro-js");
+  } catch (error) {
+    const detail = errors.length
+      ? errors.join(" | ")
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    throw new Error(`Kokoro 运行时未安装（${detail}）。`);
   }
 }
 

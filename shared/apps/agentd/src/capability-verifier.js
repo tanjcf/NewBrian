@@ -27,6 +27,7 @@ function officePathHint(pathValue) {
   if (path.endsWith(".docx")) return "docx";
   if (path.endsWith(".pptx")) return "pptx";
   if (path.endsWith(".xlsx")) return "xlsx";
+  if (path.endsWith(".html") || path.endsWith(".htm")) return "html";
   return "";
 }
 
@@ -41,11 +42,16 @@ export async function verifyBuiltinArtifactResult(output) {
   const inspectedPdf = type === "application/pdf"
     && size > 0
     && Number(artifact?.pages) > 0;
+  const inspectedHtml = size > 0 && (
+    format === "html"
+    || type.includes("text/html")
+    || Boolean(officePathHint(artifact?.path) === "html")
+  );
   const inspectedOffice = size > 0 && (
     format === "docx" || format === "pptx" || format === "xlsx" || format === "pdf"
     || /wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet|application\/pdf|application\/octet-stream/.test(type)
   ) && Boolean(officePathHint(artifact?.path) || ["docx", "pptx", "xlsx", "pdf"].includes(format));
-  if (!artifact?.path || (!providerVerified && !inspectedPdf && !inspectedOffice)) {
+  if (!artifact?.path || (!providerVerified && !inspectedPdf && !inspectedOffice && !inspectedHtml)) {
     return {
       status: "failed",
       reason: `Provider did not return a verified artifact. keys=${Object.keys(output).join(",")} artifact=${JSON.stringify(output.artifact ?? null)}`
@@ -57,6 +63,8 @@ export async function verifyBuiltinArtifactResult(output) {
       ? ["artifact-path", "provider-artifact-verification"]
       : inspectedPdf
         ? ["artifact-path", "pdf-signature", "pdf-page-count"]
+        : inspectedHtml
+          ? ["artifact-path", "html-slide-deck"]
         : ["artifact-path", "office-size-and-extension"]
   };
 }

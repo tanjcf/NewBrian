@@ -1,8 +1,8 @@
 /**
  * Client for spring-app media generation APIs.
  *
- * Preferred path for image/video: Auto tools `/v1/auto/tools/invoke`
- * (`image_generate` / `video_generate`, server-owned).
+ * Preferred path for image/video/music: Auto tools `/v1/auto/tools/invoke`
+ * (`image_generate` / `video_generate` / `music_generate`, server-owned).
  * Legacy specialty paths remain for music/3d and fallback.
  */
 
@@ -16,6 +16,16 @@ import {
 
 export type MediaGenerationKind = "image" | "video" | "music" | "3d";
 
+export type GenerationJobProgress = {
+  state?: string;
+  done?: boolean;
+  percent?: number;
+  bytes_generated?: number;
+  message?: string;
+  poll_attempts?: number;
+  updated_at?: string;
+};
+
 export type GenerationJobSnapshot = {
   id: string;
   kind?: string;
@@ -24,6 +34,7 @@ export type GenerationJobSnapshot = {
   resultJson?: string;
   errorCode?: string;
   errorMessage?: string;
+  progress?: GenerationJobProgress;
 };
 
 export type MediaCorrelationIds = {
@@ -45,8 +56,10 @@ export type CreateMediaGenerationInput = {
   kind: MediaGenerationKind;
   model: string;
   prompt: string;
-  /** Optional reference image URL (image-to-video / 3d). */
+  /** Optional first-frame / reference image URL (image-to-video). */
   imageUrl?: string;
+  /** Optional last-frame image URL (MiniMax H3 first+last I2V). */
+  lastFrameImageUrl?: string;
   idempotencyKey?: string;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
@@ -64,11 +77,29 @@ export type PollMediaGenerationInput = {
 
 export type RunMediaGenerationInput = CreateMediaGenerationInput & {
   pollIntervalMs?: number;
-  maxWaitMs?: number;
   onProgress?: (job: GenerationJobSnapshot) => void;
 };
 
-export type AutoMediaToolName = "image_generate" | "video_generate";
+export type AutoMediaToolName = "image_generate" | "video_generate" | "music_generate";
+
+export const DEFAULT_AUTO_MEDIA_POLL_INTERVAL_MS = 1_500;
+
+export class MediaGenerationHttpError extends Error {
+  readonly status: number;
+  readonly payload: unknown;
+
+  constructor(status: number, message: string, payload: unknown) {
+    super(message);
+    this.name = "MediaGenerationHttpError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+export function isMediaGenerationAuthenticationError(error: unknown): boolean {
+  return error instanceof MediaGenerationHttpError
+    && (error.status === 401 || error.status === 403);
+}
 
 export type RunAutoMediaToolInput = {
   gatewayBaseUrl: string;
@@ -77,9 +108,14 @@ export type RunAutoMediaToolInput = {
   prompt: string;
   model?: string;
   imageUrl?: string;
+  /** Optional last-frame image URL for MiniMax H3 first+last I2V. */
+  lastFrameImageUrl?: string;
+  style?: string;
+  duration?: number;
+  /** Output size for image/video tools, e.g. 1920x1080 or 16:9 (forwarded to spring-app). */
+  size?: string;
   idempotencyKey?: string;
   wait?: boolean;
-  maxWaitMs?: number;
   /** Client poll interval when wait=false (OpenClaw-style). */
   pollIntervalMs?: number;
   signal?: AbortSignal;
@@ -102,6 +138,7 @@ function reportCorrelation(
 export function toolNameForMediaKind(kind: MediaGenerationKind): AutoMediaToolName | null {
   if (kind === "image") return "image_generate";
   if (kind === "video") return "video_generate";
+  if (kind === "music") return "music_generate";
   return null;
 }
 
@@ -132,6 +169,47 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function parseProgress(value: unknown): GenerationJobProgress | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const progress: GenerationJobProgress = {};
+  if (record.state != null) progress.state = String(record.state);
+  if (record.done != null) progress.done = Boolean(record.done);
+  if (record.percent != null && Number.isFinite(Number(record.percent))) {
+    progress.percent = Math.max(0, Math.min(100, Math.round(Number(record.percent))));
+  }
+  if (record.bytes_generated != null && Number.isFinite(Number(record.bytes_generated))) {
+    const bytes = Math.max(0, Math.floor(Number(record.bytes_generated)));
+    if (bytes > 0) progress.bytes_generated = bytes;
+  }
+  if (record.message != null) progress.message = String(record.message).trim();
+  if (record.poll_attempts != null && Number.isFinite(Number(record.poll_attempts))) {
+    progress.poll_attempts = Math.max(0, Math.floor(Number(record.poll_attempts)));
+  }
+  if (record.updated_at != null) progress.updated_at = String(record.updated_at);
+  return Object.keys(progress).length ? progress : undefined;
+}
+
+export function formatGenerationJobProgress(progress: GenerationJobProgress | undefined, state: string): string {
+  if (progress?.message) {
+    const parts = [progress.message];
+    if (progress.percent != null) parts.push(`${progress.percent}%`);
+    if (progress.bytes_generated != null) parts.push(formatByteSize(progress.bytes_generated));
+    return parts.join(" · ");
+  }
+  if (progress?.percent != null) {
+    return `进度 ${progress.percent}%`;
+  }
+  return `任务 ${state}`;
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 export function parseGenerationJobSnapshot(payload: unknown): GenerationJobSnapshot {
   const body = asRecord(payload) ?? {};
   const id = String(body.id ?? body.platformJobId ?? body.task_id ?? "").trim();
@@ -149,7 +227,8 @@ export function parseGenerationJobSnapshot(payload: unknown): GenerationJobSnaps
       : String(body.errorCode ?? body.error_code ?? ""),
     errorMessage: body.errorMessage == null && body.error_message == null
       ? undefined
-      : String(body.errorMessage ?? body.error_message ?? "")
+      : String(body.errorMessage ?? body.error_message ?? ""),
+    progress: parseProgress(body.progress)
   };
 }
 
@@ -244,6 +323,11 @@ export async function createMediaGenerationJob(
   if (input.imageUrl) {
     body.image_url = input.imageUrl;
     body.image = { url: input.imageUrl };
+    body.first_frame = input.imageUrl;
+  }
+  if (input.lastFrameImageUrl) {
+    body.last_frame = input.lastFrameImageUrl;
+    body.last_frame_image = input.lastFrameImageUrl;
   }
   const headers = withSpringCorrelationHeaders({
     "Content-Type": "application/json",
@@ -362,7 +446,8 @@ export async function getAutoMediaToolJob(input: {
     state: record.state ?? record.status ?? "queued",
     resultJson: record.result_json ?? record.resultJson,
     errorCode: record.error_code ?? record.errorCode,
-    errorMessage: record.error ?? record.errorMessage
+    errorMessage: record.error ?? record.errorMessage,
+    progress: record.progress
   });
   return {
     job,
@@ -372,7 +457,7 @@ export async function getAutoMediaToolJob(input: {
 }
 
 /**
- * Invoke spring-app Auto media tool (image_generate / video_generate).
+ * Invoke spring-app Auto media tool (image_generate / video_generate / music_generate).
  *
  * OpenClaw-style default: submit with {@code wait=false}, return task id, then
  * poll `/auto/tools/jobs/{id}` with progress callbacks. Server still owns keys
@@ -395,6 +480,14 @@ export async function runAutoMediaTool(
   };
   if (input.model) argumentsBody.model = input.model;
   if (input.imageUrl) argumentsBody.image_url = input.imageUrl;
+  if (input.lastFrameImageUrl) argumentsBody.last_frame = input.lastFrameImageUrl;
+  if (input.style) argumentsBody.style = input.style;
+  if (input.duration != null && Number.isFinite(input.duration)) {
+    argumentsBody.duration = input.duration;
+  }
+  if (input.size && String(input.size).trim()) {
+    argumentsBody.size = String(input.size).trim();
+  }
   const headers = withSpringCorrelationHeaders({
     "Content-Type": "application/json",
     Authorization: `Bearer ${input.bearerToken}`,
@@ -438,12 +531,16 @@ export async function runAutoMediaTool(
     }
     const record = asRecord(payload);
     const message = String(record?.message ?? record?.detail ?? record?.error ?? "Not Found");
-    throw new Error(`Auto 媒体工具失败（404）：${message}`);
+    throw new MediaGenerationHttpError(404, `Auto 媒体工具失败（404）：${message}`, payload);
   }
   if (!response.ok && response.status !== 202) {
     const record = asRecord(payload);
     const message = String(record?.message ?? record?.error ?? `HTTP ${response.status}`);
-    throw new Error(`Auto 媒体工具失败（${response.status}）：${message}`);
+    throw new MediaGenerationHttpError(
+      response.status,
+      `Auto 媒体工具失败（${response.status}）：${message}`,
+      payload
+    );
   }
   reportCorrelation("auto/tools/invoke", correlation, payload, input.onCorrelationMismatch);
   const record = asRecord(payload) ?? {};
@@ -454,7 +551,8 @@ export async function runAutoMediaTool(
     state: record.state ?? record.status ?? "queued",
     resultJson: record.result_json ?? record.resultJson,
     errorCode: record.error_code ?? record.errorCode,
-    errorMessage: record.error ?? record.errorMessage
+    errorMessage: record.error ?? record.errorMessage,
+    progress: record.progress
   });
   input.onProgress?.(job);
   let reply = String(record.reply || "").trim();
@@ -463,7 +561,7 @@ export async function runAutoMediaTool(
   // OpenClaw path: client polls while the provider runs (progress stays visible).
   if (!waitOnServer && job.id && !isTerminalGenerationState(job.state)
     && extractMediaUrlsFromResult(job.resultJson).length === 0) {
-    const pollIntervalMs = Math.max(1, input.pollIntervalMs ?? 2_000);
+    const pollIntervalMs = Math.max(1, input.pollIntervalMs ?? DEFAULT_AUTO_MEDIA_POLL_INTERVAL_MS);
     while (!isTerminalGenerationState(job.state)
       && extractMediaUrlsFromResult(job.resultJson).length === 0) {
       await sleep(pollIntervalMs, input.signal);
@@ -489,13 +587,21 @@ export async function runAutoMediaTool(
     job = { ...job, state: "SUCCEEDED" };
   }
   if (/failed|cancelled|expired/i.test(job.state)) {
-    throw new Error(job.errorMessage || `${input.toolName} 失败（${job.state}）`);
+    const detail = reply
+      || job.errorMessage
+      || job.errorCode
+      || `${input.toolName} 失败（${job.state}）`;
+    throw new Error(detail);
   }
   return {
     job,
     tool,
     reply: reply || formatMediaGenerationReply({
-      kind: input.toolName === "video_generate" ? "video" : "image",
+      kind: input.toolName === "video_generate"
+        ? "video"
+        : input.toolName === "music_generate"
+          ? "music"
+          : "image",
       model: input.model || "",
       job
     })
@@ -519,7 +625,7 @@ export async function runMediaGenerationJob(
     return job;
   }
 
-  const pollIntervalMs = Math.max(1_500, input.pollIntervalMs ?? 3_000);
+  const pollIntervalMs = Math.max(1_000, input.pollIntervalMs ?? DEFAULT_AUTO_MEDIA_POLL_INTERVAL_MS);
   while (!isTerminalGenerationState(job.state)) {
     await sleep(pollIntervalMs, input.signal);
     job = await getMediaGenerationJob({

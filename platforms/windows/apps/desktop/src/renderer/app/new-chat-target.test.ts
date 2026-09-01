@@ -7,7 +7,8 @@ const {
   NewChatThreadActivationError,
   createAndActivateNewChatThread,
   resolveNewChatWorkspaceId,
-  shouldCreateChatThreadBeforeSend
+  shouldCreateChatThreadBeforeSend,
+  shouldCreateStandaloneChatThreadBeforeSend
 } = await import(
   new URL("./new-chat-target.ts", import.meta.url).href
 ) as typeof import("./new-chat-target.js");
@@ -63,6 +64,30 @@ test("creates a thread before sending from an empty new-chat surface", () => {
     isComposingNewThread: false,
     currentThreadId: "thread-1"
   }), false);
+});
+
+test("reuses the active internal-chat thread for later standalone messages", () => {
+  assert.equal(shouldCreateStandaloneChatThreadBeforeSend({
+    isComposingNewThread: false,
+    currentWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID,
+    currentThreadId: "thread-existing"
+  }), false);
+});
+
+test("reuses a just-created internal-chat thread before the catalog refresh catches up", () => {
+  assert.equal(shouldCreateStandaloneChatThreadBeforeSend({
+    isComposingNewThread: false,
+    currentWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID,
+    currentThreadId: "thread-just-created"
+  }), false);
+});
+
+test("creates a standalone thread when the selected thread belongs to another workspace", () => {
+  assert.equal(shouldCreateStandaloneChatThreadBeforeSend({
+    isComposingNewThread: false,
+    currentWorkspaceId: "workspace-project",
+    currentThreadId: "thread-project"
+  }), true);
 });
 
 test("retains the created catalog before activation can fail", async () => {

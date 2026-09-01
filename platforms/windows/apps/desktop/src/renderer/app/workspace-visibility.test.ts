@@ -87,6 +87,49 @@ test("keeps only projected project threads in project search results", () => {
   );
 });
 
+test("sceneChatWorkspaces binds INTERNAL_CHAT threads to the active scene", () => {
+  const sceneCatalog = [
+    workspace({
+      id: INTERNAL_CHAT_WORKSPACE_ID,
+      name: "__internal_chat__",
+      path: "C:\\codeCN\\tmp",
+      threads: [
+        { id: "explore-chat", title: "Explore hi", summary: "", scope: "chat", brainWorkspaceKey: "explore", updatedAt: "2026-07-23T00:00:00.000Z" },
+        { id: "doc-chat", title: "Doc hi", summary: "", scope: "chat", brainWorkspaceKey: "document", updatedAt: "2026-07-23T00:00:00.000Z" },
+        { id: "legacy-chat", title: "Legacy", summary: "", scope: "chat", updatedAt: "2026-07-23T00:00:00.000Z" }
+      ]
+    }),
+    workspace({
+      id: "workspace-explore",
+      name: "New projecta",
+      brainWorkspaceKey: "explore",
+      threads: [
+        { id: "proj-1", title: "Project thread", summary: "", scope: "project", updatedAt: "2026-07-23T00:00:00.000Z" },
+        { id: "proj-chat", title: "Project chat", summary: "", scope: "chat", updatedAt: "2026-07-23T00:00:00.000Z" }
+      ]
+    })
+  ];
+
+  const exploreChats = visibility.sceneChatWorkspaces(sceneCatalog, "explore");
+  assert.deepEqual(
+    exploreChats.flatMap((item) => item.threads.map((thread) => `${item.id}:${thread.id}`)),
+    [
+      `${INTERNAL_CHAT_WORKSPACE_ID}:explore-chat`,
+      `${INTERNAL_CHAT_WORKSPACE_ID}:legacy-chat`,
+      "workspace-explore:proj-chat"
+    ]
+  );
+
+  const documentChats = visibility.sceneChatWorkspaces(sceneCatalog, "document");
+  assert.deepEqual(
+    documentChats.flatMap((item) => item.threads.map((thread) => `${item.id}:${thread.id}`)),
+    [
+      `${INTERNAL_CHAT_WORKSPACE_ID}:doc-chat`,
+      `${INTERNAL_CHAT_WORKSPACE_ID}:legacy-chat`
+    ]
+  );
+});
+
 test("hides subagent threads from project/chat catalogs and falls back to parent on activation", () => {
   const withSubagent = [
     workspace({

@@ -80,7 +80,21 @@ export class EnvironmentDiscoveryService {
     if (this.dependencies.platform === "win32") {
       const programFiles = this.dependencies.environment.ProgramFiles?.trim() || "C:\\Program Files";
       const programFilesX86 = this.dependencies.environment["ProgramFiles(x86)"]?.trim() || "C:\\Program Files (x86)";
-      return ["node", this.paths.join(programFiles, "nodejs", "node.exe"), this.paths.join(programFilesX86, "nodejs", "node.exe")];
+      const localAppData = this.dependencies.environment.LOCALAPPDATA?.trim() || "";
+      const userProfile = this.dependencies.environment.USERPROFILE?.trim() || "";
+      const candidates = [
+        "node",
+        "node.exe",
+        this.paths.join(programFiles, "nodejs", "node.exe"),
+        this.paths.join(programFilesX86, "nodejs", "node.exe"),
+        localAppData ? this.paths.join(localAppData, "Programs", "nodejs", "node.exe") : "",
+        userProfile ? this.paths.join(userProfile, "scoop", "apps", "nodejs", "current", "node.exe") : "",
+        userProfile ? this.paths.join(userProfile, "AppData", "Roaming", "nvm", "nodejs", "node.exe") : ""
+      ];
+      for (const entry of discoverHostToolPathEntries(this.dependencies.environment)) {
+        candidates.push(this.paths.join(entry, "node.exe"), this.paths.join(entry, "node"));
+      }
+      return candidates.filter(Boolean);
     }
     return ["node", "/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"];
   }
@@ -139,12 +153,31 @@ export class EnvironmentDiscoveryService {
       : this.detectCommandPath(candidate.trim());
   }
 
-  resolvePreferredNodeExecutable() {
-    for (const candidate of this.getSystemNodeCandidatePaths()) {
+  async resolvePreferredNodeExecutable() {
+    const seen = new Set<string>();
+    const consider = async (candidate: string) => {
       const normalized = candidate.includes(this.paths.sep) || candidate.includes("/") || candidate.includes("\\")
         ? this.paths.resolve(candidate)
         : this.detectCommandPath(candidate);
-      if (normalized?.trim()) return normalized.trim();
+      const path = String(normalized || "").trim();
+      if (!path || seen.has(path.toLowerCase())) return "";
+      seen.add(path.toLowerCase());
+      // Absolute defaults like Program Files\nodejs must be verified; GUI launches
+      // previously returned a missing path and bootstrap spawn failed with ENOENT.
+      return await this.pathExists(path) ? path : "";
+    };
+    for (const candidate of this.getSystemNodeCandidatePaths()) {
+      const found = await consider(candidate);
+      if (found) return found;
+    }
+    if (this.dependencies.platform === "win32") {
+      const registryPath = this.readWindowsRegistryPath();
+      for (const entry of registryPath.split(this.paths.delimiter)) {
+        const dir = entry.trim();
+        if (!dir) continue;
+        const found = await consider(this.paths.join(dir, "node.exe"));
+        if (found) return found;
+      }
     }
     return "";
   }

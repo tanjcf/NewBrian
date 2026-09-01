@@ -47,6 +47,17 @@ test("selects the first external non-zero MAC address", () => {
   assert.equal(policy.resolvePrimaryMacAddress({ empty: [] }), "");
 });
 
+test("sanitizes non-ASCII device names so Electron fetch headers stay ByteString-safe", () => {
+  assert.equal(policy.sanitizeDesktopHeaderValue("华为MateBook-X"), "MateBook-X");
+  assert.equal(policy.sanitizeDesktopHeaderValue("桌面主机"), "desktop");
+  const headers = policy.createDesktopAuthHeaders({
+    device: { ...device, device_name: "张三的笔记本" },
+    createRequestId: () => "request-fixed"
+  });
+  assert.equal(headers["X-Desktop-Device-Name"], "desktop");
+  assert.match(headers["X-Desktop-Device-Name"], /^[\x20-\x7E]+$/);
+});
+
 test("builds a fingerprint while exposing only hashed hardware identifiers", () => {
   let stableInput: Record<string, string> | undefined;
   const fingerprint = policy.buildDesktopDeviceFingerprint({

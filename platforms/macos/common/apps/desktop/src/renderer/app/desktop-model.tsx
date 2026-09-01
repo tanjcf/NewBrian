@@ -665,6 +665,7 @@ declare global {
         title: string;
         summary: string;
         scope?: "project" | "chat";
+        brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
       }) => Promise<WorkspaceCatalogItem[]>;
       forkWorkspaceThread: (input: {
         workspaceId: string;

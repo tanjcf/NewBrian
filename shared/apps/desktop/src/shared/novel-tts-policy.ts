@@ -93,7 +93,7 @@ export const NOVEL_TTS_KOKORO_VOICE_FILES = NOVEL_TTS_VOICES.map(
 );
 
 export const DEFAULT_NOVEL_TTS_VOICE_ID: NovelTtsVoiceId = "youth_bright";
-/** Voices offered in the UI. Product currently ships a single fixed voice. */
+/** Voices offered in the UI. Product currently ships a single fixed voice for novel. */
 export const NOVEL_TTS_SELECTABLE_VOICES: NovelTtsVoice[] = NOVEL_TTS_VOICES.filter(
   (voice) => voice.id === DEFAULT_NOVEL_TTS_VOICE_ID
 );

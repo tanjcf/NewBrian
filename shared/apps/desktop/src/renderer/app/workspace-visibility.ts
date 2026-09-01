@@ -36,7 +36,8 @@ export function filterWorkspaceCatalogByScene(
 /**
  * Resolve an execution workspace without ever borrowing a project from another
  * BRAIN scene. A missing scene project is an explicit empty state, not a reason
- * to fall back to the globally active workspace.
+ * to fall back to the globally active workspace. Callers may still allow
+ * projectless standalone chat (INTERNAL_CHAT) when this returns undefined.
  */
 export function resolveSceneExecutionWorkspace<T extends Pick<WorkspaceCatalogItem, "id" | "brainWorkspaceKey">>(
   workspaces: readonly T[],
@@ -136,6 +137,30 @@ export function chatWorkspaces(workspaces: readonly WorkspaceCatalogItem[]) {
     const threads = workspace.threads.filter((thread) => thread.scope === "chat" && isUserVisibleThread(thread));
     return threads.length > 0 ? [{ ...workspace, threads }] : [];
   });
+}
+
+/**
+ * Scene-bound 「聊天」 catalog: chat-scope threads on this scene's projects, plus
+ * INTERNAL_CHAT threads tagged with this scene (legacy untagged threads stay
+ * visible in every scene so existing chats are not hidden).
+ */
+export function sceneChatWorkspaces(
+  workspaces: readonly WorkspaceCatalogItem[],
+  sceneKey: BrainWorkspaceKey
+): WorkspaceCatalogItem[] {
+  const sceneProjects = filterWorkspaceCatalogByScene(workspaces, sceneKey).filter(isProjectVisible);
+  const fromProjects = chatWorkspaces(sceneProjects);
+  const internal = workspaces.find((workspace) => workspace.id === INTERNAL_CHAT_WORKSPACE_ID);
+  if (!internal) return fromProjects;
+
+  const threads = (internal.threads ?? []).filter((thread) => {
+    if (thread.scope !== "chat" || !isUserVisibleThread(thread)) return false;
+    const key = thread.brainWorkspaceKey;
+    if (!isBrainWorkspaceKey(key)) return true;
+    return key === sceneKey;
+  });
+  if (!threads.length) return fromProjects;
+  return [{ ...internal, threads }, ...fromProjects];
 }
 
 export function projectSearchResults(

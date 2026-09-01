@@ -168,3 +168,37 @@ test("absorbExchange persists active preference and digest", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("ensureProjectSkill clears stale lock left by dead pid", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-stale-lock-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "LockDemo" });
+    await shadow.ensureProjectSkill();
+    const lockPath = join(shadow.referencesPath, "session-digest.md.lock");
+    writeFileSync(
+      lockPath,
+      JSON.stringify({ pid: 999_999_991, createdAt: new Date(Date.now() - 120_000).toISOString() }),
+      "utf8"
+    );
+    const started = Date.now();
+    await shadow.ensureProjectSkill();
+    assert.ok(Date.now() - started < 3_000, "stale lock must clear without full timeout");
+    assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ensureProjectSkill clears corrupt lock metadata", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-corrupt-lock-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "CorruptLock" });
+    await shadow.ensureProjectSkill();
+    const lockPath = join(shadow.referencesPath, "session-digest.md.lock");
+    writeFileSync(lockPath, "not-json-lock", "utf8");
+    await shadow.ensureProjectSkill();
+    assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

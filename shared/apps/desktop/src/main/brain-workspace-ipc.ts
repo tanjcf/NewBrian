@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
-import { randomUUID } from "node:crypto";
-import { access } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { access, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import {
   brainWorkspaceIpcChannels,
   brainWorkspaceKeys,
@@ -28,6 +28,7 @@ import type { BrainFlowDefinition } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
+import { createDocumentRevisionProposal, syncDocumentRevisionTask } from "./document-revision-task.js";
 import { inspectGameProject } from "./game-project-inspector.js";
 import { GameRuntimeService } from "./game-runtime-service.js";
 import { VideoRuntimeService } from "./video-runtime-service.js";
@@ -50,7 +51,7 @@ import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-work
 import { validateDocumentOperation } from "@codex-forge/protocol/document-operation";
 import type { DataAnalysisService } from "./data-analysis-service.ts";
 import { FlowExecutionService } from "./flow-execution-service.ts";
-import { validateFlowDefinition } from "./flow-runtime.ts";
+import { contentHashHex, peelMediaAv, probeMediaAv } from "./video-media-peel.js";
 
 interface BrainWorkspaceIpcDependencies {
   storage: BrainWorkspaceStorage;
@@ -90,7 +91,19 @@ interface BrainWorkspaceIpcDependencies {
     prompt: string;
     model?: string;
     shotIndex?: number;
-  }) => Promise<{ content: string; kind: string }>;
+    size?: string;
+    /** First-frame / reference image (path, https, or data URL). */
+    imageUrl?: string;
+    /** Optional last-frame image for MiniMax H3 first+last I2V. */
+    lastFrameImageUrl?: string;
+  }) => Promise<{
+    content: string;
+    kind: string;
+    clipRelativePath?: string;
+    fileId?: string;
+    ready?: boolean;
+    jobId?: string;
+  }>;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -214,9 +227,398 @@ function parseVideoRenderStart(value: unknown) {
   };
 }
 
+type PipelineRenderShot = {
+  ready?: boolean;
+  clip?: string;
+  audio?: string;
+  transition?: string;
+};
+
+type PipelineTrackEdit = {
+  muted?: boolean;
+  inSec?: number;
+  outSec?: number;
+  offsetSec?: number;
+  videoTrackId?: string;
+  audioTrackId?: string;
+};
+
+type PipelineLane = {
+  id?: string;
+  kind?: string;
+  output?: boolean;
+  muted?: boolean;
+  solo?: boolean;
+  locked?: boolean;
+};
+
+function transitionGapSecForRender(value: string) {
+  const key = String(value || "").trim().toLowerCase();
+  // Default / empty / none / cut → hard cut (no timeline gap, no xfade).
+  if (!key || key === "cut" || key === "none" || /硬切/.test(key)) return 0;
+  if (key === "fade-0.6" || key === "0.6") return 0.6;
+  if (key === "fade" || key === "淡入淡出") return 0.3;
+  if (key === "dissolve" || key === "叠化") return 0.25;
+  if (key === "wipe-left" || key === "划像" || /wipe/.test(key)) return 0.25;
+  if (key === "blur" || /模糊/.test(key)) return 0.25;
+  return 0;
+}
+
+function clipDurationSecForRender(edit: PipelineTrackEdit | undefined) {
+  const inSec = Number.isFinite(edit?.inSec) ? Number(edit!.inSec) : 0;
+  const outSec = Number.isFinite(edit?.outSec) ? Number(edit!.outSec) : 4;
+  return Math.max(0.1, outSec - inSec);
+}
+
+function normalizeClipRelative(clip: string) {
+  const normalized = String(clip || "").replaceAll("\\", "/");
+  return normalized.includes("/") ? normalized : `media/clips/${normalized}`;
+}
+
+function normalizeAudioRelative(clip: string) {
+  const normalized = String(clip || "").replaceAll("\\", "/").replace(/^\.\//, "");
+  if (!normalized) return "";
+  return normalized.includes("/") ? normalized : `media/audio/${normalized}`;
+}
+
+function mediaKindFromName(name: string, mimeType = ""): "video" | "audio" | "image" | null {
+  const lower = `${name} ${mimeType}`.toLowerCase();
+  if (/\.(mp4|webm|mov|m4v|mkv)(?:\b|$)/i.test(lower) || lower.includes("video/")) return "video";
+  if (/\.(mp3|wav|m4a|aac|ogg|flac)(?:\b|$)/i.test(lower) || lower.includes("audio/")) return "audio";
+  if (/\.(png|jpe?g|webp|gif|bmp)(?:\b|$)/i.test(lower) || lower.includes("image/")) return "image";
+  return null;
+}
+
+function mimeForMediaName(name: string, kind: "video" | "audio" | "image", fallback = "") {
+  const lower = name.toLowerCase();
+  if (fallback.trim()) return fallback.trim();
+  if (kind === "video") {
+    if (lower.endsWith(".webm")) return "video/webm";
+    if (lower.endsWith(".mov")) return "video/quicktime";
+    return "video/mp4";
+  }
+  if (kind === "image") {
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+    if (lower.endsWith(".webp")) return "image/webp";
+    if (lower.endsWith(".gif")) return "image/gif";
+    return "image/png";
+  }
+  if (lower.endsWith(".wav")) return "audio/wav";
+  if (lower.endsWith(".m4a")) return "audio/mp4";
+  if (lower.endsWith(".aac")) return "audio/aac";
+  if (lower.endsWith(".ogg")) return "audio/ogg";
+  return "audio/mpeg";
+}
+
+async function importProjectMediaFile(input: {
+  projectRoot: string;
+  ownerId: string;
+  projectId: string;
+  storage: BrainWorkspaceStorage;
+  sourcePath?: string;
+  fileName?: string;
+  mimeType?: string;
+  bytesBase64?: string;
+  folder?: "imports" | "audio" | "clips" | "refs";
+}) {
+  const folder = input.folder || "imports";
+  let bytes: Buffer;
+  let logicalName: string;
+  if (input.bytesBase64) {
+    bytes = Buffer.from(String(input.bytesBase64), "base64");
+    logicalName = basename(String(input.fileName || `media-${Date.now()}.bin`).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_"));
+  } else {
+    const sourcePath = String(input.sourcePath || "").trim();
+    if (!sourcePath) throw new TypeError("sourcePath or bytesBase64 is required.");
+    const source = await realpath(sourcePath);
+    const sourceStat = await stat(source);
+    if (!sourceStat.isFile()) throw new Error("BRAIN_MEDIA_SOURCE_NOT_FILE");
+    if (sourceStat.size <= 0 || sourceStat.size > 512 * 1024 * 1024) throw new Error("BRAIN_MEDIA_SOURCE_SIZE_INVALID");
+    logicalName = basename(String(input.fileName || source).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_"));
+    bytes = await readFile(source);
+  }
+  if (!bytes.length) throw new Error("BRAIN_MEDIA_EMPTY");
+  const kind = mediaKindFromName(logicalName, input.mimeType || "");
+  if (!kind) throw new Error("BRAIN_MEDIA_TYPE_UNSUPPORTED");
+  if (folder === "refs" && kind !== "image") throw new Error("BRAIN_MEDIA_REFS_IMAGE_ONLY");
+  // Keep file extension aligned with payload MIME (MiniMax TTS is mp3 — never leave .wav).
+  if (kind === "audio" && input.mimeType) {
+    const mime = String(input.mimeType).toLowerCase();
+    const wantExt = mime.includes("wav")
+      ? ".wav"
+      : mime.includes("ogg")
+        ? ".ogg"
+        : mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")
+          ? ".m4a"
+          : ".mp3";
+    const currentExt = extname(logicalName).toLowerCase();
+    if (currentExt !== wantExt) {
+      logicalName = `${logicalName.replace(/\.[^.]+$/, "") || "media"}${wantExt}`;
+    }
+  }
+  const root = await realpath(input.projectRoot);
+  const safeStem = logicalName.replace(/\.[^.]+$/, "") || "media";
+  const ext = extname(logicalName)
+    || (kind === "video" ? ".mp4" : kind === "image" ? ".png" : ".wav");
+  const relativePath = `media/${folder}/${safeStem}-${Date.now()}${ext}`;
+  const target = resolve(root, relativePath);
+  const boundary = root.endsWith(sep) ? root : `${root}${sep}`;
+  if (!target.startsWith(boundary)) throw new Error("BRAIN_MEDIA_PATH_INVALID");
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, bytes);
+  const mimeType = mimeForMediaName(logicalName, kind, input.mimeType);
+  const existing = input.storage.listFiles(input.ownerId, input.projectId).find((file) => file.storageKey === relativePath);
+  const file = existing || input.storage.registerFile({
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    logicalName,
+    mimeType,
+    sizeBytes: bytes.length,
+    contentHash: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+    storageKey: relativePath
+  });
+  return { file: withoutOwner(file), relativePath, kind, mimeType };
+}
+
+async function buildPipelineLayerClips(
+  projectRoot: string,
+  state: {
+    shots?: PipelineRenderShot[];
+    trackEdits?: Record<string, PipelineTrackEdit>;
+    lanes?: PipelineLane[];
+    textClips?: Array<{
+      id?: string;
+      trackId?: string;
+      startSec?: number;
+      durationSec?: number;
+      text?: string;
+      fontSize?: number;
+      color?: string;
+      x?: number;
+      y?: number;
+      scale?: number;
+      width?: number;
+    }>;
+    clipInstances?: Array<{
+      id?: string;
+      kind?: string;
+      shotId?: string;
+      relativePath?: string;
+      trackId?: string;
+      startSec?: number;
+      durationSec?: number;
+      inSec?: number;
+      outSec?: number;
+      muted?: boolean;
+      volume?: number;
+      volumeKeyframes?: Array<{ t?: number; v?: number }>;
+    }>;
+  }
+) {
+  const shots = Array.isArray(state.shots) ? state.shots : [];
+  const trackEdits = state.trackEdits && typeof state.trackEdits === "object" ? state.trackEdits : {};
+  const lanes = Array.isArray(state.lanes) ? state.lanes : [];
+  const videoLaneById = new Map(lanes.filter((lane) => lane.kind === "video" && lane.id).map((lane) => [String(lane.id), lane]));
+  const audioLaneById = new Map(lanes.filter((lane) => lane.kind === "audio" && lane.id).map((lane) => [String(lane.id), lane]));
+  const videoStackOrder = new Map(
+    lanes.filter((lane) => lane.kind === "video" && lane.id).map((lane, index) => [String(lane.id), index])
+  );
+  const audioStackOrder = new Map(
+    lanes.filter((lane) => lane.kind === "audio" && lane.id).map((lane, index) => [String(lane.id), index])
+  );
+  const anyAudioSolo = [...audioLaneById.values()].some((lane) => lane.solo === true);
+
+  const layerClips: Array<{
+    relativePath?: string;
+    trackId: string;
+    trackType: "video" | "audio" | "text";
+    startMs: number;
+    durationMs: number;
+    volume: number;
+    volumeKeyframes?: Array<{ t: number; v: number }>;
+    stackOrder?: number;
+    transition?: string;
+    transitionMs?: number;
+    text?: string;
+    fontSize?: number;
+    color?: string;
+    x?: number;
+    y?: number;
+    scale?: number;
+  }> = [];
+
+  const instances = Array.isArray(state.clipInstances)
+    ? state.clipInstances.filter((item) => item && (item.kind === "video" || item.kind === "audio") && String(item.relativePath || "").trim())
+    : [];
+
+  if (instances.length) {
+    for (const instance of instances) {
+      const kind = instance.kind === "audio" ? "audio" : "video";
+      const trackId = String(instance.trackId || (kind === "video" ? "v1" : "a1"));
+      const startMs = Math.round(Math.max(0, Number(instance.startSec) || 0) * 1_000);
+      const inSec = Number.isFinite(instance.inSec) ? Number(instance.inSec) : 0;
+      const outSec = Number.isFinite(instance.outSec) ? Number(instance.outSec) : (Number(instance.durationSec) || 4) + inSec;
+      const durationMs = Math.round(Math.max(0.1, (Number(instance.durationSec) || (outSec - inSec) || 4)) * 1_000);
+      if (kind === "video") {
+        const videoLane = videoLaneById.get(trackId);
+        if (videoLane && videoLane.output === false) continue;
+        const relative = normalizeClipRelative(String(instance.relativePath));
+        try {
+          await access(join(projectRoot, relative));
+          const shotIndex = instance.shotId
+            ? Math.max(0, Number(String(instance.shotId).replace(/\D/g, "")) - 1)
+            : -1;
+          const shot = shotIndex >= 0 ? shots[shotIndex] : undefined;
+          const transition = shot ? String(shot.transition || "cut") : "cut";
+          layerClips.push({
+            relativePath: relative,
+            trackId,
+            trackType: "video",
+            startMs,
+            durationMs,
+            volume: 1,
+            stackOrder: videoStackOrder.get(trackId) ?? 0,
+            transition,
+            transitionMs: Math.round(transitionGapSecForRender(transition) * 1_000)
+          });
+        } catch {
+          // missing
+        }
+      } else {
+        const audioLane = audioLaneById.get(trackId);
+        const laneMuted = audioLane?.muted === true && audioLane?.solo !== true;
+        const clipMuted = instance.muted === true;
+        const soloBlocked = anyAudioSolo && audioLane?.solo !== true;
+        if (laneMuted || clipMuted || soloBlocked) continue;
+        const baseline = Math.max(0, Math.min(2, Number(instance.volume) || 1));
+        const keyframes = Array.isArray(instance.volumeKeyframes)
+          ? instance.volumeKeyframes
+            .map((item) => ({
+              t: Math.max(0, Number(item?.t) || 0),
+              v: Math.max(0, Math.min(2, Number(item?.v) || 1))
+            }))
+            .filter((item) => Number.isFinite(item.t) && Number.isFinite(item.v))
+          : undefined;
+        const relative = normalizeAudioRelative(String(instance.relativePath));
+        try {
+          await access(join(projectRoot, relative));
+          layerClips.push({
+            relativePath: relative,
+            trackId,
+            trackType: "audio",
+            startMs,
+            durationMs,
+            volume: baseline,
+            volumeKeyframes: keyframes?.length ? keyframes : undefined,
+            stackOrder: audioStackOrder.get(trackId) ?? 0
+          });
+        } catch {
+          // missing
+        }
+      }
+    }
+  } else {
+    let cursorSec = 0;
+    for (let index = 0; index < shots.length; index += 1) {
+      const shot = shots[index]!;
+      const shotKey = `shot-${index + 1}`;
+      const edit = trackEdits[shotKey] || {};
+      const durationSec = clipDurationSecForRender(edit);
+      const startSec = Math.max(0, cursorSec + (Number(edit.offsetSec) || 0));
+      const startMs = Math.round(startSec * 1_000);
+      const durationMs = Math.round(durationSec * 1_000);
+      const transition = index < shots.length - 1 ? String(shot.transition || "cut") : "cut";
+      const transitionMs = Math.round(transitionGapSecForRender(transition) * 1_000);
+
+      if (shot.ready === true && String(shot.clip || "").trim()) {
+        const videoTrackId = String(edit.videoTrackId || "v1");
+        const videoLane = videoLaneById.get(videoTrackId);
+        const videoEnabled = videoLane ? videoLane.output !== false : true;
+        if (videoEnabled) {
+          const relative = normalizeClipRelative(String(shot.clip));
+          try {
+            await access(join(projectRoot, relative));
+            layerClips.push({
+              relativePath: relative,
+              trackId: videoTrackId,
+              trackType: "video",
+              startMs,
+              durationMs,
+              volume: 1,
+              stackOrder: videoStackOrder.get(videoTrackId) ?? index,
+              transition,
+              transitionMs
+            });
+          } catch {
+            // missing on disk
+          }
+        }
+      }
+
+      const audioPath = String(shot.audio || "").trim();
+      if (audioPath) {
+        const audioTrackId = String(edit.audioTrackId || "a1");
+        const audioLane = audioLaneById.get(audioTrackId);
+        const laneMuted = audioLane?.muted === true && audioLane?.solo !== true;
+        const clipMuted = edit.muted === true;
+        const soloBlocked = anyAudioSolo && audioLane?.solo !== true;
+        const volume = (laneMuted || clipMuted || soloBlocked) ? 0 : 1;
+        if (volume > 0) {
+          const relative = normalizeAudioRelative(audioPath);
+          try {
+            await access(join(projectRoot, relative));
+            layerClips.push({
+              relativePath: relative,
+              trackId: audioTrackId,
+              trackType: "audio",
+              startMs,
+              durationMs,
+              volume,
+              stackOrder: audioStackOrder.get(audioTrackId) ?? index
+            });
+          } catch {
+            // missing narration file
+          }
+        }
+      }
+
+      const gap = index < shots.length - 1 ? transitionGapSecForRender(transition) : 0;
+      cursorSec += durationSec + gap;
+    }
+  }
+
+  for (const text of Array.isArray(state.textClips) ? state.textClips : []) {
+    const body = String(text.text || "").trim();
+    if (!body) continue;
+    const trackId = String(text.trackId || "v1");
+    const videoLane = videoLaneById.get(trackId);
+    if (videoLane && videoLane.output === false) continue;
+    layerClips.push({
+      trackId,
+      trackType: "text",
+      startMs: Math.max(0, Math.round((Number(text.startSec) || 0) * 1_000)),
+      durationMs: Math.max(100, Math.round((Number(text.durationSec) || 3) * 1_000)),
+      volume: 1,
+      stackOrder: videoStackOrder.get(trackId) ?? 0,
+      text: body,
+      fontSize: Math.max(12, Math.round(Number(text.fontSize) || 48)),
+      color: String(text.color || "#ffffff"),
+      x: Number.isFinite(Number(text.x)) ? Math.min(1, Math.max(0, Number(text.x))) : 0.5,
+      y: Number.isFinite(Number(text.y)) ? Math.min(1, Math.max(0, Number(text.y))) : 0.5,
+      scale: Math.max(0.2, Math.min(5, Number(text.scale) || 1))
+    });
+  }
+
+  return layerClips;
+}
+
 function parseSceneMediaGenerate(value: unknown) {
   const input = requireRecord(value, "Scene media generate");
-  rejectUnexpectedKeys(input, ["projectId", "kind", "prompt", "model", "shotIndex"], "Scene media generate");
+  rejectUnexpectedKeys(
+    input,
+    ["projectId", "kind", "prompt", "model", "shotIndex", "size", "imageUrl", "lastFrameImageUrl"],
+    "Scene media generate"
+  );
   const kind = requireString(input.kind, "kind");
   if (kind !== "video" && kind !== "music" && kind !== "image") throw new TypeError("kind must be video, music, or image.");
   const shotIndex = input.shotIndex === undefined ? undefined : requireFiniteNumber(input.shotIndex, "shotIndex");
@@ -228,7 +630,10 @@ function parseSceneMediaGenerate(value: unknown) {
     kind: kind as "video" | "music" | "image",
     prompt: requireString(input.prompt, "prompt"),
     model: optionalString(input.model, "model"),
-    shotIndex
+    shotIndex,
+    size: optionalString(input.size, "size"),
+    imageUrl: optionalString(input.imageUrl, "imageUrl"),
+    lastFrameImageUrl: optionalString(input.lastFrameImageUrl, "lastFrameImageUrl")
   };
 }
 function parseMusicProject(value: unknown) { const input = requireRecord(value, "Music timeline"); rejectUnexpectedKeys(input, ["projectId"], "Music timeline"); return { projectId: requireString(input.projectId, "projectId") }; }
@@ -693,6 +1098,131 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     const file = dependencies.storage.getFile(owner, project.id, requireString(input.fileId, "fileId"));
     return buildWorkspaceArtifactPreviewUrl(project.localWorkspaceId, file.storageKey);
   });
+  ipcMain.handle(brainWorkspaceIpcChannels.mediaImport, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Media import");
+    rejectUnexpectedKeys(
+      input,
+      ["projectId", "sourcePath", "fileName", "mimeType", "bytesBase64", "folder"],
+      "Media import"
+    );
+    const owner = await ownerId();
+    const project = dependencies.storage.getProject(owner, requireString(input.projectId, "projectId"));
+    if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
+    const projectRoot = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId);
+    const folderRaw = input.folder === undefined ? "imports" : requireString(input.folder, "folder");
+    if (folderRaw !== "imports" && folderRaw !== "audio" && folderRaw !== "clips" && folderRaw !== "refs") {
+      throw new TypeError("folder must be imports, audio, clips, or refs.");
+    }
+    return importProjectMediaFile({
+      projectRoot,
+      ownerId: owner,
+      projectId: project.id,
+      storage: dependencies.storage,
+      sourcePath: input.sourcePath === undefined ? undefined : requireString(input.sourcePath, "sourcePath"),
+      fileName: input.fileName === undefined ? undefined : requireString(input.fileName, "fileName"),
+      mimeType: input.mimeType === undefined ? undefined : requireString(input.mimeType, "mimeType"),
+      bytesBase64: input.bytesBase64 === undefined ? undefined : requireString(input.bytesBase64, "bytesBase64"),
+      folder: folderRaw as "imports" | "audio" | "clips" | "refs"
+    });
+  });
+  ipcMain.handle(brainWorkspaceIpcChannels.mediaPeel, async (_event, value: unknown) => {
+    const input = requireRecord(value, "Media peel");
+    rejectUnexpectedKeys(input, ["projectId", "relativePath", "fileId", "mode"], "Media peel");
+    const modeRaw = input.mode === undefined ? "unlink" : requireString(input.mode, "mode");
+    if (modeRaw !== "unlink" && modeRaw !== "probe") {
+      throw new TypeError("mode must be unlink or probe.");
+    }
+    const owner = await ownerId();
+    const project = dependencies.storage.getProject(owner, requireString(input.projectId, "projectId"));
+    if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
+    const projectRoot = await dependencies.resolveWorkspaceRoot(project.localWorkspaceId);
+    let relativePath = input.relativePath === undefined ? "" : requireString(input.relativePath, "relativePath").replaceAll("\\", "/");
+    if (!relativePath && input.fileId !== undefined) {
+      const file = dependencies.storage.getFile(owner, project.id, requireString(input.fileId, "fileId"));
+      relativePath = String(file.storageKey || "").replaceAll("\\", "/");
+    }
+    if (!relativePath) throw new TypeError("relativePath or fileId is required.");
+    const absolute = resolve(projectRoot, relativePath);
+    const rootBoundary = projectRoot.endsWith(sep) ? projectRoot : `${projectRoot}${sep}`;
+    if (!absolute.startsWith(rootBoundary) && absolute !== projectRoot) throw new Error("BRAIN_MEDIA_PATH_INVALID");
+
+    const ffmpeg = dependencies.ensureEngine
+      ? await dependencies.ensureEngine("ffmpeg")
+      : { executable: process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg" };
+    const ffprobe = dependencies.ensureEngine
+      ? await dependencies.ensureEngine("ffprobe")
+      : { executable: process.platform === "win32" ? "ffprobe.exe" : "ffprobe" };
+    const deps = {
+      ffmpegExecutable: String(ffmpeg.executable || "ffmpeg"),
+      ffprobeExecutable: String(ffprobe.executable || "ffprobe")
+    };
+
+    if (modeRaw === "probe") {
+      const probe = await probeMediaAv(absolute, deps);
+      return { ok: true, mode: "probe", relativePath, ...probe };
+    }
+
+    const peeled = await peelMediaAv({
+      projectRoot,
+      sourceAbsolutePath: absolute,
+      sourceRelativePath: relativePath,
+      logicalName: basename(relativePath)
+    }, deps);
+
+    const registerPeeled = (opts: {
+      relativePath: string;
+      bytes: Buffer;
+      kind: "video" | "audio";
+      logicalName: string;
+      mimeType: string;
+    }) => {
+      const existing = dependencies.storage.listFiles(owner, project.id).find((file) => file.storageKey === opts.relativePath);
+      const file = existing || dependencies.storage.registerFile({
+        ownerId: owner,
+        projectId: project.id,
+        logicalName: opts.logicalName,
+        mimeType: opts.mimeType,
+        sizeBytes: opts.bytes.length,
+        contentHash: contentHashHex(opts.bytes),
+        storageKey: opts.relativePath
+      });
+      return { file: withoutOwner(file), relativePath: opts.relativePath, kind: opts.kind, mimeType: opts.mimeType };
+    };
+
+    const video = peeled.videoRelativePath && peeled.videoBytes
+      ? registerPeeled({
+        relativePath: peeled.videoRelativePath,
+        bytes: peeled.videoBytes,
+        kind: "video",
+        logicalName: basename(peeled.videoRelativePath),
+        mimeType: "video/mp4"
+      })
+      : null;
+    const audioExt = peeled.audioExt || ".wav";
+    if (peeled.audioRelativePath && /\.mp4$/i.test(peeled.audioRelativePath)) {
+      throw new Error(`BRAIN_MEDIA_PEEL_AUDIO_BAD_EXT:${peeled.audioRelativePath}`);
+    }
+    const audio = peeled.audioRelativePath && peeled.audioBytes
+      ? registerPeeled({
+        relativePath: peeled.audioRelativePath,
+        bytes: peeled.audioBytes,
+        kind: "audio",
+        logicalName: basename(peeled.audioRelativePath),
+        mimeType: audioExt === ".m4a" ? "audio/mp4" : audioExt === ".wav" ? "audio/wav" : "audio/mpeg"
+      })
+      : null;
+
+    return {
+      ok: true,
+      mode: "unlink",
+      relativePath,
+      hasVideo: peeled.hasVideo,
+      hasAudio: peeled.hasAudio,
+      durationSec: peeled.durationSec,
+      video,
+      audio
+    };
+  });
   if (gamePreviews) {
     ipcMain.handle(brainWorkspaceIpcChannels.gamePreviewStart, async (_event, value: unknown) =>
       gamePreviews.start(await ownerId(), parseGamePreviewStart(value)));
@@ -927,26 +1457,50 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       const timeline = dependencies.video!.getTimeline(owner, input.projectId);
       let mediaRelativePaths = input.mediaRelativePaths;
       let allowSyntheticMedia = false;
+      let layerClips: Awaited<ReturnType<typeof buildPipelineLayerClips>> | undefined;
       if (input.source === "pipeline") {
-        allowSyntheticMedia = true;
-        if (!mediaRelativePaths) {
-          if (!videoRuntime) throw new Error("BRAIN_CORE_REQUIRED");
-          const pipeline = await videoRuntime.pipelineGet({ projectId: project.id, projectRoot });
-          const candidates = (pipeline.state?.shots || []).map((shot) => {
-            const clip = String(shot.clip || "").replaceAll("\\", "/");
-            const name = basename(clip) || clip;
-            return name.includes("/") ? name : `media/clips/${name}`;
-          }).filter(Boolean);
-          mediaRelativePaths = [];
-          for (const relative of candidates) {
-            try {
-              await access(join(projectRoot, relative));
-              mediaRelativePaths.push(relative);
-            } catch {
-              // clip not on disk yet — skip
-            }
-          }
+        // Pipeline mux uses multi-track layout + transitions + text from pipeline-editor.json.
+        allowSyntheticMedia = false;
+        if (!videoRuntime) throw new Error("BRAIN_CORE_REQUIRED");
+        const pipeline = await videoRuntime.pipelineGet({ projectId: project.id, projectRoot }) as {
+          state?: {
+            shots?: Array<{ ready?: boolean; clip?: string; audio?: string; transition?: string }>;
+            canvas?: { width?: number; height?: number; fps?: number };
+            trackEdits?: Record<string, PipelineTrackEdit>;
+            lanes?: PipelineLane[];
+            textClips?: Array<{ id?: string; trackId?: string; startSec?: number; durationSec?: number; text?: string; fontSize?: number; color?: string; x?: number; y?: number; scale?: number; width?: number }>;
+            clipInstances?: Array<{
+              id?: string;
+              kind?: string;
+              shotId?: string;
+              relativePath?: string;
+              trackId?: string;
+              startSec?: number;
+              durationSec?: number;
+              inSec?: number;
+              outSec?: number;
+              muted?: boolean;
+              volume?: number;
+              volumeKeyframes?: Array<{ t?: number; v?: number }>;
+            }>;
+          };
+        };
+        const canvas = pipeline.state?.canvas;
+        if (canvas?.width && canvas?.height) {
+          dependencies.video!.ensureTimeline(owner, input.projectId, {
+            title: timeline.title || "视频工程时间线",
+            width: Math.max(16, Math.round(Number(canvas.width) || 1920)),
+            height: Math.max(16, Math.round(Number(canvas.height) || 1080)),
+            fps: Math.max(1, Math.round(Number(canvas.fps) || timeline.fps || 30))
+          });
         }
+        layerClips = await buildPipelineLayerClips(projectRoot, pipeline.state || {});
+        if (!layerClips.some((clip) => clip.trackType === "video")) {
+          throw new Error("BRAIN_VIDEO_PIPELINE_CLIPS_MISSING");
+        }
+        mediaRelativePaths = layerClips
+          .filter((clip) => clip.trackType === "video" && clip.relativePath)
+          .map((clip) => String(clip.relativePath));
       } else if (!mediaRelativePaths) {
         mediaRelativePaths = timeline.clips
           .filter((clip) => clip.trackType === "video")
@@ -955,9 +1509,10 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       return dependencies.videoRender!.start(owner, {
         projectId: input.projectId,
         projectRoot,
-        timeline,
+        timeline: dependencies.video!.getTimeline(owner, input.projectId),
         outputRelativePath: input.outputRelativePath,
-        mediaRelativePaths,
+        mediaRelativePaths: layerClips ? undefined : mediaRelativePaths,
+        layerClips,
         allowSyntheticMedia
       });
     });
@@ -1089,6 +1644,7 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), fileId: requireString(input.fileId, "fileId"),
       fileVersion: Number(input.fileVersion), anchor: input.anchor as DocumentAnchor,
       instruction: requireString(input.instruction, "instruction"), status,
+      geometry: input.geometry && typeof input.geometry === "object" ? input.geometry as Record<string, unknown> : undefined,
       supersedesAnnotationId: typeof input.supersedesAnnotationId === "string" ? input.supersedesAnnotationId : undefined
     });
   });
@@ -1100,17 +1656,31 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
     const input = requireRecord(value, "Change set create");
     const diffJson = typeof input.diffJson === "string" ? input.diffJson : "{}";
     try { const parsed = JSON.parse(diffJson); if (parsed && typeof parsed === "object" && "format" in parsed) validateDocumentOperation(parsed); } catch (error) { throw new TypeError(error instanceof Error ? error.message : "document operation is invalid"); }
-    return dependencies.storage.createChangeSet({
-      ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), annotationId: requireString(input.annotationId, "annotationId"),
-      taskId: typeof input.taskId === "string" ? input.taskId : undefined, baseFileVersion: Number(input.baseFileVersion),
-      changeSummary: requireString(input.changeSummary, "changeSummary"), diffJson
+    const owner = await ownerId();
+    const projectId = requireString(input.projectId, "projectId");
+    const proposal = createDocumentRevisionProposal(dependencies.storage, {
+      ownerId: owner,
+      projectId,
+      annotationId: requireString(input.annotationId, "annotationId"),
+      baseFileVersion: Number(input.baseFileVersion),
+      changeSummary: requireString(input.changeSummary, "changeSummary"),
+      diffJson,
+      conversationId: typeof input.conversationId === "string" ? input.conversationId : undefined,
+      taskId: typeof input.taskId === "string" ? input.taskId : undefined
     });
+    return proposal.changeSet;
   });
   ipcMain.handle(brainWorkspaceIpcChannels.changeSetUpdate, async (_event, value: unknown) => {
     const input = requireRecord(value, "Change set update");
     const status = input.status;
     if (status !== "ACCEPTED" && status !== "REJECTED" && status !== "REVERTED") throw new TypeError("status is invalid");
-    return dependencies.storage.updateChangeSet({ ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"), changeSetId: requireString(input.changeSetId, "changeSetId"), status });
+    const owner = await ownerId();
+    const projectId = requireString(input.projectId, "projectId");
+    const changeSetId = requireString(input.changeSetId, "changeSetId");
+    const updated = dependencies.storage.updateChangeSet({ ownerId: owner, projectId, changeSetId, status });
+    if (status === "REJECTED") syncDocumentRevisionTask(dependencies.storage, { ownerId: owner, projectId, changeSetId, outcome: "rejected" });
+    if (status === "ACCEPTED") syncDocumentRevisionTask(dependencies.storage, { ownerId: owner, projectId, changeSetId, outcome: "accepted" });
+    return updated;
   });
   ipcMain.handle(brainWorkspaceIpcChannels.changeSetPreview, async (_event, value: unknown) => {
     const input = requireRecord(value, "Change set preview");
@@ -1118,7 +1688,12 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   });
   ipcMain.handle(brainWorkspaceIpcChannels.changeSetExport, async (_event, value: unknown) => {
     const input = requireRecord(value, "Change set export");
-    return revisions.export(await ownerId(), requireString(input.projectId, "projectId"), requireString(input.changeSetId, "changeSetId"));
+    const owner = await ownerId();
+    const projectId = requireString(input.projectId, "projectId");
+    const changeSetId = requireString(input.changeSetId, "changeSetId");
+    const result = await revisions.export(owner, projectId, changeSetId);
+    syncDocumentRevisionTask(dependencies.storage, { ownerId: owner, projectId, changeSetId, outcome: "exported" });
+    return result;
   });
   if (dependencies.quant) {
     const authorizeQuantProject = async (input: Record<string, unknown>) => {

@@ -12,7 +12,8 @@ test("diverts usage exception commands before clearing or ordinary chat submissi
   const chatIndex = uiSource.indexOf("api.chatWithModel", parserIndex);
   assert.ok(parserIndex >= 0 && parserIndex < clearIndex && clearIndex < chatIndex);
   assert.match(uiSource, /createUsageExceptionFeedbackPreview/);
-  assert.match(uiSource, /return;\s*}\s*if \(!draftOverride\)/s);
+  assert.match(uiSource, /const isQueuedDraftReplay = Boolean\(draftOverride\?\.createdAt\)/);
+  assert.match(uiSource, /if \(!isQueuedDraftReplay\)/);
 });
 
 test("renders a non-editable confirmation dialog with only cancel and confirm commands", () => {

@@ -4,15 +4,16 @@ import path from "node:path";
 import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import PptxGenJS from "pptxgenjs";
+import { writeHtmlDeck, writePptxDeck } from "./presentation-deck.js";
 
-const SUPPORTED_FORMATS = new Set(["pdf", "pptx", "xlsx", "docx"]);
+const SUPPORTED_FORMATS = new Set(["pdf", "pptx", "xlsx", "docx", "html"]);
 const PAGE_SIZE_ALIASES = new Set(["a3", "a4", "a5", "letter", "legal", "tabloid"]);
 const MIME_TYPES = {
   pdf: "application/pdf",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  html: "text/html; charset=utf-8"
 };
 
 function text(value, fallback = "") {
@@ -22,6 +23,66 @@ function text(value, fallback = "") {
 function rows(value) {
   if (!Array.isArray(value)) return [];
   return value.map((row) => Array.isArray(row) ? row.map((cell) => cell == null || ["string", "number", "boolean"].includes(typeof cell) ? (cell ?? "") : String(cell)) : []);
+}
+
+/**
+ * Split Markdown pipe tables out of prose so DOCX/PDF keep real tables instead of
+ * collapsing "| a | b |" lines into one overlapping paragraph.
+ */
+export function splitMarkdownTables(content) {
+  const lines = String(content ?? "").replace(/\r\n/g, "\n").split("\n");
+  const prose = [];
+  const tables = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    const isTableRow = /^\s*\|.+\|\s*$/.test(line);
+    if (!isTableRow) {
+      prose.push(line);
+      index += 1;
+      continue;
+    }
+    const block = [];
+    while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
+      block.push(lines[index]);
+      index += 1;
+    }
+    const parsed = block
+      .filter((row) => !/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(row))
+      .map((row) => row.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((cell) => cell.trim()));
+    if (parsed.length >= 2 && parsed.every((row) => row.length > 0)) {
+      tables.push(parsed);
+      if (prose.length && prose[prose.length - 1] !== "") prose.push("");
+    } else {
+      prose.push(...block);
+    }
+  }
+  return { text: prose.join("\n").replace(/\n{3,}/g, "\n\n").trim(), tables };
+}
+
+function appendDocxBody(children, body) {
+  const { text: remainder, tables } = splitMarkdownTables(body);
+  for (const paragraph of remainder.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)) {
+    for (const line of paragraph.split("\n").map((item) => item.trim()).filter(Boolean)) {
+      children.push(new Paragraph({ children: [new TextRun(line)], spacing: { after: 120 } }));
+    }
+  }
+  for (const tableRows of tables) {
+    children.push(buildDocxTable(tableRows));
+  }
+}
+
+function buildDocxTable(tableRows) {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: rows(tableRows).map((row, rowIndex) => new TableRow({
+      children: row.map((cell) => new TableCell({
+        children: [new Paragraph({
+          children: [new TextRun({ text: String(cell), bold: rowIndex === 0 })]
+        })]
+      }))
+    }))
+  });
 }
 
 /** True when the text contains CJK ideographs (Chinese prose context). */
@@ -212,36 +273,17 @@ async function generatePdf(input, target) {
   });
 }
 
-async function generatePptx(input, target) {
-  const deck = new PptxGenJS();
-  deck.layout = "LAYOUT_WIDE";
-  deck.author = "codeCN";
-  deck.subject = text(input.title, "Presentation");
-  deck.title = text(input.title, "Presentation");
-  deck.company = "codeCN";
-  deck.lang = "zh-CN";
-  deck.theme = { headFontFace: "Microsoft YaHei", bodyFontFace: "Microsoft YaHei", lang: "zh-CN" };
-  const slides = Array.isArray(input.slides) && input.slides.length ? input.slides : sections(input).map((section) => ({
-    title: section.heading || text(input.title, "Presentation"), body: section.body, bullets: section.bullets
-  }));
-  const titleSlide = deck.addSlide();
-  titleSlide.background = { color: "F5F8FC" };
-  titleSlide.addText(stripInlineMarkdown(text(input.title, "Presentation")), { x: 0.8, y: 2.2, w: 11.7, h: 0.8, fontFace: "Microsoft YaHei", fontSize: 28, bold: true, color: "17365D", align: "center", margin: 0 });
-  for (const source of slides) {
-    const slide = deck.addSlide();
-    slide.background = { color: "FFFFFF" };
-    slide.addShape(deck.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 0.16, fill: { color: "2F75B5" }, line: { color: "2F75B5" } });
-    slide.addText(stripInlineMarkdown(text(source?.title, "Section")), { x: 0.7, y: 0.45, w: 11.9, h: 0.55, fontFace: "Microsoft YaHei", fontSize: 24, bold: true, color: "17365D", margin: 0 });
-    const body = stripInlineMarkdown(text(source?.body));
-    const bullets = Array.isArray(source?.bullets)
-      ? source.bullets.map((item) => stripInlineMarkdown(text(item))).filter(Boolean)
-      : [];
-    const runs = [];
-    if (body) runs.push({ text: body, options: { breakLine: bullets.length > 0 } });
-    for (const bullet of bullets) runs.push({ text: bullet, options: { bullet: { indent: 18 }, breakLine: true } });
-    slide.addText(runs.length ? runs : [{ text: "", options: {} }], { x: 0.85, y: 1.35, w: 11.6, h: 5.25, fontFace: "Microsoft YaHei", fontSize: 18, color: "202124", breakLine: false, valign: "top", margin: 0.08, paraSpaceAfterPt: 12, fit: "shrink" });
+async function generatePptx(input, target, workspaceRoot) {
+  await writePptxDeck(input, target, sections, { workspaceRoot });
+  // Companion web deck for Cursor-style browser presentation / side preview.
+  const companion = target.replace(/\.pptx$/i, ".slides.html");
+  if (companion !== target) {
+    await writeHtmlDeck(input, companion, sections);
   }
-  await deck.writeFile({ fileName: target });
+}
+
+async function generateHtml(input, target) {
+  await writeHtmlDeck(input, target, sections);
 }
 
 async function generateXlsx(input, target) {
@@ -278,17 +320,13 @@ async function generateXlsx(input, target) {
 
 async function generateDocx(input, target) {
   const children = [new Paragraph({ heading: HeadingLevel.TITLE, alignment: "center", children: [new TextRun({ text: stripInlineMarkdown(normalizeArtifactMarkup(text(input.title, "Document"))), bold: true })] })];
+  if (Array.isArray(input.rows) && input.rows.length) {
+    children.push(buildDocxTable(input.rows));
+  }
   for (const section of sections(input)) {
     if (section.heading) children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(section.heading)] }));
-    if (section.body) {
-      for (const paragraph of section.body.split(/\n{2,}/).map((part) => part.replace(/\n+/g, "").trim()).filter(Boolean)) {
-        children.push(new Paragraph({ children: [new TextRun(paragraph)], spacing: { after: 160 } }));
-      }
-    }
+    if (section.body) appendDocxBody(children, section.body);
     for (const bullet of section.bullets) children.push(new Paragraph({ text: bullet, bullet: { level: 0 } }));
-  }
-  if (Array.isArray(input.rows) && input.rows.length) {
-    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: rows(input.rows).map((row) => new TableRow({ children: row.map((cell) => new TableCell({ children: [new Paragraph(String(cell))] })) })) }));
   }
   const document = new Document({ creator: "codeCN", title: text(input.title, "Document"), sections: [{ properties: {}, children }] });
   await fs.writeFile(target, await Packer.toBuffer(document));
@@ -308,7 +346,7 @@ export function validateArtifactCreateInput(input) {
   }
   if (!SUPPORTED_FORMATS.has(format)) {
     throw new Error(
-      `Unsupported artifact format: ${format || "missing"}. Use exactly one of: pdf, pptx, xlsx, docx. Do not pass page size (a4/letter) as format.`
+      `Unsupported artifact format: ${format || "missing"}. Use exactly one of: pdf, pptx, html, xlsx, docx. Do not pass page size (a4/letter) as format.`
     );
   }
 
@@ -376,10 +414,13 @@ export function validateDocumentCreateInput(input, format) {
       : []
   })).filter((section) => section.heading || section.body || section.bullets.length);
 
+  const tableRows = rows(input?.rows);
+
   return {
     title: title || "Document",
     content: content ? normalizeArtifactMarkup(content) : "",
     sections: normalizedSections,
+    rows: tableRows.length ? tableRows : undefined,
     targetPath,
     format: resolvedFormat
   };
@@ -402,13 +443,15 @@ function defaultArtifactTargetPath(title, format) {
   return `outputs/${slug}.${format}`;
 }
 
-export async function generateArtifact(input, target) {
+export async function generateArtifact(input, target, options = {}) {
   await fs.mkdir(path.dirname(target), { recursive: true });
   if (input.format === "pdf") await generatePdf(input, target);
-  if (input.format === "pptx") await generatePptx(input, target);
+  if (input.format === "pptx") await generatePptx(input, target, options.workspacePath);
+  if (input.format === "html") await generateHtml(input, target);
   if (input.format === "xlsx") await generateXlsx(input, target);
   if (input.format === "docx") await generateDocx(input, target);
   const stat = await fs.stat(target);
-  if (!stat.isFile() || stat.size < 100) throw new Error(`Generated ${input.format} artifact is empty.`);
+  const minBytes = input.format === "html" ? 40 : 100;
+  if (!stat.isFile() || stat.size < minBytes) throw new Error(`Generated ${input.format} artifact is empty.`);
   return { size: stat.size, type: MIME_TYPES[input.format] };
 }

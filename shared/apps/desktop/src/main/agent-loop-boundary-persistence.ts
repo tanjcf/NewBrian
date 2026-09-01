@@ -122,9 +122,56 @@ export interface OrphanToolResultPayload {
   };
 }
 
+export interface BuildOrphanToolResultOptions {
+  /** Turn-level failure (stall, auth, cancel) shown instead of a generic interrupted line. */
+  failureReason?: string;
+}
+
+export interface ToolBoundaryEventRecord {
+  type: string;
+  payload?: unknown;
+  turnId?: string;
+}
+
+/** Merge persisted thread events with in-memory tool_result events not yet projected. */
+export function mergeToolBoundaryEventsForOrphanRepair(
+  persisted: ToolBoundaryEventRecord[],
+  supplemental: ToolBoundaryEventRecord[] = [],
+  turnId?: string
+): Array<{ type: string; payload?: unknown }> {
+  const matchesTurn = (event: ToolBoundaryEventRecord) =>
+    !turnId || !event.turnId || event.turnId === turnId;
+  const merged: Array<{ type: string; payload?: unknown }> = persisted
+    .filter(matchesTurn)
+    .map((event) => ({ type: event.type, payload: event.payload }));
+  const persistedResultIds = new Set(
+    merged
+      .filter((event) => event.type === "tool_result" && isRecord(event.payload) && event.payload.callId)
+      .map((event) => String((event.payload as { callId: unknown }).callId))
+  );
+  for (const event of supplemental) {
+    if (!matchesTurn(event) || event.type !== "tool_result" || !isRecord(event.payload) || !event.payload.callId) {
+      continue;
+    }
+    const callId = String(event.payload.callId);
+    if (persistedResultIds.has(callId)) continue;
+    merged.push({ type: event.type, payload: event.payload });
+    persistedResultIds.add(callId);
+  }
+  return merged;
+}
+
+function orphanInterruptedOutput(failureReason?: string): string {
+  const reason = String(failureReason ?? "").trim();
+  if (!reason) return "Tool call interrupted before a result was persisted.";
+  if (/^Tool call interrupted/i.test(reason)) return reason;
+  return `Tool call interrupted: ${reason}`;
+}
+
 /** Pair orphan tool_call events with synthetic interrupted tool_result payloads. */
 export function buildOrphanToolResultPayloads(
-  events: Array<{ type: string; payload?: unknown }>
+  events: Array<{ type: string; payload?: unknown }>,
+  options: BuildOrphanToolResultOptions = {}
 ): OrphanToolResultPayload[] {
   const openCalls = new Map<string, { name: string; replaySafe: boolean }>();
   for (const event of events) {
@@ -141,6 +188,7 @@ export function buildOrphanToolResultPayloads(
       openCalls.delete(String(event.payload.callId));
     }
   }
+  const output = orphanInterruptedOutput(options.failureReason);
   return [...openCalls.entries()].map(([callId, info]) => ({
     callId,
     name: info.name,
@@ -148,10 +196,46 @@ export function buildOrphanToolResultPayloads(
       ok: false as const,
       orphan: true as const,
       interrupted: true as const,
-      output: "Tool call interrupted before a result was persisted.",
+      output,
       replaySafe: info.replaySafe
     }
   }));
+}
+
+/** Recover tool_result payloads present in memory but missing from durable thread events. */
+export function extractRecoveredToolResultPayloads(
+  persisted: ToolBoundaryEventRecord[],
+  supplemental: ToolBoundaryEventRecord[] = [],
+  turnId?: string
+): Array<{ callId: string; name: string; result: Record<string, unknown> }> {
+  const matchesTurn = (event: ToolBoundaryEventRecord) =>
+    !turnId || !event.turnId || event.turnId === turnId;
+  const openCalls = new Map<string, string>();
+  for (const event of persisted.filter(matchesTurn)) {
+    if (!isRecord(event.payload)) continue;
+    if (event.type === "tool_call" && event.payload.id) {
+      openCalls.set(String(event.payload.id), String(event.payload.name ?? "unknown"));
+      continue;
+    }
+    if (event.type === "tool_result" && event.payload.callId) {
+      openCalls.delete(String(event.payload.callId));
+    }
+  }
+  const recovered: Array<{ callId: string; name: string; result: Record<string, unknown> }> = [];
+  for (const event of supplemental.filter(matchesTurn)) {
+    if (event.type !== "tool_result" || !isRecord(event.payload) || !event.payload.callId) continue;
+    const callId = String(event.payload.callId);
+    if (!openCalls.has(callId)) continue;
+    const result = event.payload.result;
+    if (!isRecord(result)) continue;
+    recovered.push({
+      callId,
+      name: String(event.payload.name ?? openCalls.get(callId) ?? "unknown"),
+      result
+    });
+    openCalls.delete(callId);
+  }
+  return recovered;
 }
 
 /**

@@ -71,7 +71,7 @@ test("treats a stale approval for a completed task as an idempotent no-op", asyn
   assert.equal(readResumed(), 0);
 });
 
-test("reconciles abandoned running children to failed when no active run remains", async () => {
+test("does not reconcile awaiting-approval checkpoints as abandoned runs", async () => {
   let failedReason = "";
   const task = { id: "task-1", childThreadId: "child", parentThreadId: "parent", status: "running" };
   const thread = { id: "child" };
@@ -80,6 +80,31 @@ test("reconciles abandoned running children to failed when no active run remains
     readCatalog: async () => ({ workspaces: [workspace] }),
     listTasks: () => [task],
     readState: async () => ({ agentCheckpoint: { status: "awaiting-approval" } }),
+    respondApproval: () => undefined,
+    run: async () => task,
+    observeRunFailure: () => undefined,
+    hasActiveRun: () => false,
+    failTask: (current, reason) => {
+      failedReason = reason;
+      current.status = "failed";
+      current.error = reason;
+      return { ...current };
+    }
+  } as never);
+  const tasks = await service.list({ workspaceId: "workspace", parentThreadId: "parent" });
+  assert.equal(tasks[0].status, "running");
+  assert.equal(failedReason, "");
+});
+
+test("reconciles abandoned running children to failed when no active run remains", async () => {
+  let failedReason = "";
+  const task = { id: "task-1", childThreadId: "child", parentThreadId: "parent", status: "running" };
+  const thread = { id: "child" };
+  const workspace = { id: "workspace", threads: [{ id: "parent" }, thread] };
+  const service = new DelegatedAgentIpcService({
+    readCatalog: async () => ({ workspaces: [workspace] }),
+    listTasks: () => [task],
+    readState: async () => ({ agentCheckpoint: { status: "running" } }),
     respondApproval: () => undefined,
     run: async () => task,
     observeRunFailure: () => undefined,

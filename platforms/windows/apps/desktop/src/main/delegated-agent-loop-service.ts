@@ -26,6 +26,8 @@ interface DelegatedAgentLoopServiceOptions {
   persistCheckpoint: (snapshot: any) => Promise<unknown>;
   onAwaitingApproval: (snapshot: DelegatedLoopSnapshot) => Promise<unknown>;
   waitForApproval: () => Promise<boolean>;
+  /** When true, delegated child tool gates auto-continue without blocking on UI approval. */
+  autoApprove?: boolean;
 }
 
 const checkpointEventTypes = new Set([
@@ -84,7 +86,7 @@ export async function runDelegatedAgentLoop(options: DelegatedAgentLoopServiceOp
     persistCurrentCheckpoint();
     await checkpointWrites;
     await options.onAwaitingApproval(loop);
-    const approved = await options.waitForApproval();
+    const approved = options.autoApprove ? true : await options.waitForApproval();
     loop = await options.runtime.resumeAgentApproval(approved, options.modelCallback);
   }
   persistCurrentCheckpoint();

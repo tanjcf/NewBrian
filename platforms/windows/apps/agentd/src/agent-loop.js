@@ -27,6 +27,22 @@ export function resolveMaxSteps(value) {
   return Math.floor(n);
 }
 
+function recentToolLoopBlockMessage(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "tool") continue;
+    try {
+      const parsed = JSON.parse(String(message.content ?? ""));
+      if (parsed?.deniedReason === "tool-loop" && parsed?.output) {
+        return String(parsed.output);
+      }
+    } catch {
+      // ignore malformed tool payloads
+    }
+  }
+  return "";
+}
+
 function toolMessage(call, result) {
   const content = {
     ok: result.ok,
@@ -240,6 +256,15 @@ export class AgentLoop {
     }));
   }
 
+  recordToolOutcome(call, result) {
+    this.messages.push(toolMessage(call, result));
+    this.onEvent({ type: "tool_result", payload: { callId: call.id, name: call.name, result } });
+    if (result?.deniedReason === "tool-loop") {
+      this.stepMadeProgress = true;
+    }
+    return result;
+  }
+
   async processToolCalls(calls) {
     for (let index = 0; index < calls.length; index += 1) {
       const rawCall = calls[index];
@@ -275,8 +300,8 @@ export class AgentLoop {
       this.onEvent({ type: "policy_decision", payload: { call, authorization } });
       if (authorization.decision === "deny") {
         const result = { ok: false, output: authorization.reason || "工具调用被安全策略拒绝。" };
-        this.messages.push(toolMessage(call, result));
         this.onEvent({ type: "tool_denied", payload: { call, authorization } });
+        this.recordToolOutcome(call, result);
         continue;
       }
       if (authorization.decision === "ask") {
@@ -289,9 +314,9 @@ export class AgentLoop {
       this.assertNotCancelled();
       const loopGuard = this.evaluateToolLoop(call);
       if (loopGuard?.block) {
-        this.messages.push(toolMessage(call, loopGuard.result));
         this.onEvent({ type: "tool_loop_blocked", payload: { call, loop: loopGuard.loop } });
         recordToolCall(this.toolLoopState, call.name, call.arguments, loopGuard.result, this.loopDetection);
+        this.recordToolOutcome(call, loopGuard.result);
         continue;
       }
       await this.execute(call, loopGuard?.warningMessage);
@@ -381,9 +406,14 @@ export class AgentLoop {
               steps: this.steps
             }
           });
-          throw new Error(
-            `Agent loop stalled: no tool progress across ${this.consecutiveNoProgressSteps} consecutive steps.`
-          );
+          {
+            const loopBlockMessage = recentToolLoopBlockMessage(this.messages);
+            throw new Error(
+              loopBlockMessage
+                ? `Agent loop stalled: ${loopBlockMessage}`
+                : `Agent loop stalled: no tool progress across ${this.consecutiveNoProgressSteps} consecutive steps.`
+            );
+          }
         }
       }
     }
@@ -395,7 +425,6 @@ export class AgentLoop {
   async execute(call, loopWarningMessage) {
     this.assertNotCancelled();
     let result = await this.toolRegistry.invoke(call.name, call.arguments, this.toolContext);
-    this.assertNotCancelled();
     if (result?.ok === true) this.stepMadeProgress = true;
     if (loopWarningMessage) {
       const baseOutput = String(result?.output ?? "");
@@ -407,9 +436,9 @@ export class AgentLoop {
           : `[tool-loop-warning] ${loopWarningMessage}`
       };
     }
-    this.messages.push(toolMessage(call, result));
+    this.recordToolOutcome(call, result);
     recordToolCall(this.toolLoopState, call.name, call.arguments, result, this.loopDetection);
-    this.onEvent({ type: "tool_result", payload: { callId: call.id, name: call.name, result } });
+    this.assertNotCancelled();
     return result;
   }
 
@@ -425,16 +454,16 @@ export class AgentLoop {
       this.onEvent({ type: "approval_resolved", payload: { call, approved: true } });
       const loopGuard = this.evaluateToolLoop(call);
       if (loopGuard?.block) {
-        this.messages.push(toolMessage(call, loopGuard.result));
         this.onEvent({ type: "tool_loop_blocked", payload: { call, loop: loopGuard.loop } });
         recordToolCall(this.toolLoopState, call.name, call.arguments, loopGuard.result, this.loopDetection);
+        this.recordToolOutcome(call, loopGuard.result);
       } else {
         await this.execute(call, loopGuard?.warningMessage);
       }
     } else {
       const result = { ok: false, output: "The user denied this tool call." };
-      this.messages.push(toolMessage(call, result));
       this.onEvent({ type: "approval_denied", payload: { call } });
+      this.recordToolOutcome(call, result);
     }
     this.status = "running";
     if (await this.processToolCalls(remainingCalls)) return this.snapshot();

@@ -194,8 +194,15 @@ test("selects, discloses, and fully injects skills for every model turn", () => 
   assert.match(modelChatPromptPolicySource, /"Complete SKILL\.md:"[\s\S]*skill\.instructions/);
   assert.match(modelChatPromptPolicySource, /所有用户可见的 Skill 调用说明、目标、计划步骤标题/);
   assert.match(modelChatPromptPolicySource, /不得输出完整思维链、英文草稿或内部自言自语/);
+  assert.match(modelChatPromptPolicySource, /buildUserSkillPlatformInheritanceInstruction/);
+  assert.match(modelChatPromptPolicySource, /buildAutoModeRoleInstruction/);
+  assert.match(modelChatServiceSource, /appendAutoDelegateTurnConstraint/);
+  assert.match(modelChatPromptPolicySource, /music_generate/);
+  assert.doesNotMatch(workspaceModulesSource, /RESEARCH_WRITING_PRODUCT_ENABLED\s*=\s*true/);
+  assert.match(workspaceModulesSource, /GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED/);
   assert.match(modelChatAgentLoopServiceSource, /systemPrompt: input\.effectiveSystemPrompt/);
-  assert.match(modelChatAgentLoopServiceSource, /permissionMode: input\.modelInput\.permissionMode \?\? "approval",[\s\S]*allowedToolNames: governmentRevisionPreview \? \[\] : remoteAllowedToolNames/);
+  assert.match(modelChatAgentLoopServiceSource, /permissionMode: input\.modelInput\.permissionMode === "full" \? "full" : "agent"/);
+  assert.match(modelChatAgentLoopServiceSource, /allowedToolNames: governmentRevisionPreview \? \[\] : remoteAllowedToolNames/);
   assert.doesNotMatch(source, /allowedToolNames: centralSkillNames\.includes\("government-research-writing"\)/);
   assert.doesNotMatch(source, /goalRuntimeEnabled \? \[\.\.\.GOAL_TOOL_NAMES,\s*"shell\.exec"/);
 });

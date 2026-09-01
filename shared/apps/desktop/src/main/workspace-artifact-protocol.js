@@ -74,6 +74,105 @@ export function parseWorkspaceArtifactPreviewUrl(requestUrl) {
 }
 
 /** MIME types used when serving HTML previews and sibling assets under the artifact protocol. */
+/**
+ * Parses an HTTP `Range: bytes=` header against a known file size.
+ * Returns inclusive start/end byte offsets, or null when invalid.
+ */
+export function parseByteRangeHeader(rangeHeader, totalSize) {
+  const raw = String(rangeHeader ?? "").trim();
+  if (!raw.startsWith("bytes=") || !Number.isFinite(totalSize) || totalSize <= 0) return null;
+  const [startPart, endPart = ""] = raw.slice("bytes=".length).split("-");
+  let start = startPart ? Number(startPart) : Number.NaN;
+  let end = endPart ? Number(endPart) : Number.NaN;
+  if (!startPart && endPart) {
+    const suffixLength = Number(endPart);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(0, totalSize - suffixLength);
+    end = totalSize - 1;
+  } else {
+    if (!Number.isFinite(start) || start < 0 || start >= totalSize) return null;
+    if (!Number.isFinite(end) || end < start) end = totalSize - 1;
+    if (end >= totalSize) end = totalSize - 1;
+  }
+  if (end < start) return null;
+  return { start, end };
+}
+
+/** Shared response headers for workspace artifact protocol bodies. */
+export function artifactProtocolResponseHeaders(mimeType, extra = {}) {
+  return {
+    "Content-Type": mimeType,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    ...extra
+  };
+}
+
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus"]);
+
+/** True when a path looks like an audio media file by extension. */
+export function isAudioArtifactPath(filePath) {
+  return AUDIO_EXTENSIONS.has(extname(String(filePath ?? "")).toLowerCase());
+}
+
+/**
+ * Sniff common audio containers from a file head.
+ * Needed when TTS/mp3 bytes were wrongly saved as `.wav` — Chromium respects
+ * Content-Type + nosniff and will not magic-sniff, so a wrong `audio/wav`
+ * header makes narration sound garbled in the preview adapter while OS players
+ * (which sniff) still sound fine.
+ */
+export function sniffAudioMimeFromBytes(head) {
+  if (!head || head.length < 4) return "";
+  const b0 = head[0];
+  const b1 = head[1];
+  const b2 = head[2];
+  const b3 = head[3];
+  // RIFF....WAVE
+  if (
+    b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46
+    && head.length >= 12
+    && head[8] === 0x57 && head[9] === 0x41 && head[10] === 0x56 && head[11] === 0x45
+  ) {
+    return "audio/wav";
+  }
+  // OggS
+  if (b0 === 0x4f && b1 === 0x67 && b2 === 0x67 && b3 === 0x53) return "audio/ogg";
+  // ID3… or MPEG frame sync (11 set bits)
+  if (b0 === 0x49 && b1 === 0x44 && b2 === 0x33) return "audio/mpeg";
+  if (b0 === 0xff && (b1 & 0xe0) === 0xe0) return "audio/mpeg";
+  // fLaC
+  if (b0 === 0x66 && b1 === 0x4c && b2 === 0x61 && b3 === 0x43) return "audio/flac";
+  // ftyp....M4A / mp4 audio
+  if (
+    head.length >= 12
+    && b4IsFtyp(head)
+  ) {
+    const brand = String.fromCharCode(head[8], head[9], head[10], head[11]).toLowerCase();
+    if (brand === "m4a " || brand === "mp42" || brand === "isom" || brand === "mp41") {
+      return "audio/mp4";
+    }
+  }
+  return "";
+}
+
+function b4IsFtyp(head) {
+  return head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
+}
+
+/**
+ * Resolve response Content-Type for artifact protocol.
+ * For audio paths, prefer sniffed payload type over a mismatched extension.
+ */
+export function resolveArtifactMimeType(filePath, headBytes) {
+  const byExt = mimeTypeForArtifactPath(filePath);
+  if (!isAudioArtifactPath(filePath)) return byExt;
+  const sniffed = sniffAudioMimeFromBytes(headBytes);
+  if (sniffed) return sniffed;
+  return byExt;
+}
+
 export function mimeTypeForArtifactPath(filePath) {
   const extension = extname(String(filePath ?? "")).toLowerCase();
   switch (extension) {
@@ -115,6 +214,15 @@ export function mimeTypeForArtifactPath(filePath) {
       return "audio/mpeg";
     case ".wav":
       return "audio/wav";
+    case ".m4a":
+      return "audio/mp4";
+    case ".aac":
+      return "audio/aac";
+    case ".ogg":
+    case ".opus":
+      return "audio/ogg";
+    case ".flac":
+      return "audio/flac";
     case ".mp4":
     case ".m4v":
       return "video/mp4";

@@ -30,8 +30,9 @@ test("discovers canonical Windows Conda and Node candidates", () => {
     "C:\\Users\\test\\miniconda3\\Scripts\\conda.exe",
     "C:\\Users\\test\\anaconda3\\Scripts\\conda.exe"
   ]);
-  assert.deepEqual(service.getSystemNodeCandidatePaths().slice(0, 2), [
+  assert.deepEqual(service.getSystemNodeCandidatePaths().slice(0, 3), [
     "node",
+    "node.exe",
     "C:\\Program Files\\nodejs\\node.exe"
   ]);
   assert.equal(service.getManagedCondaExecutable(), "C:\\state\\conda\\Scripts\\conda.exe");
@@ -43,8 +44,40 @@ test("uses command lookup before managed Conda and exposes supported installer s
     source: "system",
     condaPath: "C:\\tools\\conda.exe"
   });
-  assert.equal(service.resolvePreferredNodeExecutable(), "C:\\tools\\conda.exe");
+  assert.equal(await service.resolvePreferredNodeExecutable(), "C:\\tools\\conda.exe");
   assert.equal(service.getManagedCondaInstallerSpec()?.installMode, "windows-exe");
+});
+
+test("does not return a missing Program Files Node path that would spawn ENOENT", async () => {
+  const service = createService({
+    lookupCommand: () => ({ status: 1, stdout: "" }),
+    accessPath: async () => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    }
+  });
+  assert.equal(await service.resolvePreferredNodeExecutable(), "");
+});
+
+test("accepts Node from registry Path directories when Program Files is empty", async () => {
+  const service = createService({
+    lookupCommand: (_executable, args) => {
+      const hive = String(args?.[1] || "");
+      if (hive.includes("HKCU") || hive.includes("HKLM")) {
+        return {
+          status: 0,
+          stdout: "\r\n    Path    REG_SZ    C:\\Users\\test\\tools\\nodejs\r\n"
+        };
+      }
+      return { status: 1, stdout: "" };
+    },
+    accessPath: async (targetPath) => {
+      if (String(targetPath).toLowerCase().endsWith("\\node.exe") && String(targetPath).includes("tools\\nodejs")) {
+        return undefined;
+      }
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    }
+  });
+  assert.equal(await service.resolvePreferredNodeExecutable(), "C:\\Users\\test\\tools\\nodejs\\node.exe");
 });
 
 test("prefers runnable Windows command shims over extensionless where.exe results", () => {

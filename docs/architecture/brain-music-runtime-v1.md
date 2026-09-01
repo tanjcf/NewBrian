@@ -20,7 +20,7 @@ BRAIN 主框架
 | 主框架 | `WorkspaceModules.tsx` | `brainWorkspaceKey === "music"` |
 | music UI | `MusicWorkspace.tsx`, timeline / lyrics 面板 | 专业 Tab |
 | music IPC | `brain:music:*` | `brain-workspace.ts` |
-| AI 生成 | 规划 `music_generate`（对齐 `video_generate`） | spring-app Auto 子工具 |
+| AI 生成 | **`music.song.generate`**（场景 Tools；内部 `music_generate`） | 右侧 DAW「生成/音轨」+ spring-app |
 | 合成 Engine | music render → **`process.run`** FFmpeg | 多轨混音、格式转换 |
 | 规划 Rust 模块 | `rust/brain-core/src/music/`（待建） | `music.*` 统一前缀 |
 

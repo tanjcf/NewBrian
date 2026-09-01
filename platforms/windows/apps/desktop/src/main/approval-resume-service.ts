@@ -11,6 +11,7 @@ import {
   formatApprovalResumeFailureMessage,
   isTerminalAgentLoopFailure
 } from "./approval-resume-failure-policy.ts";
+import { extractPendingApprovalCommand } from "./approval-memory.ts";
 
 interface ApprovalResumeServiceOptions {
   getTasks: () => Map<string, any>;
@@ -55,6 +56,11 @@ interface ApprovalResumeServiceOptions {
     name: string;
     approvalMessage?: string;
   }) => Promise<{ approvalId?: string; sideEffectAllowed: boolean; offline?: boolean }>;
+  /**
+   * Persist an approved shell command so identical later calls skip the approval UI.
+   * Called after a successful local approve, before/while the tool runs.
+   */
+  rememberApprovedCommand?: (input: { toolName: string; command: string }) => Promise<void> | void;
 }
 
 /** Owns approval resume as one ordered transaction across runtime, UI, rollout, and thread state. */
@@ -143,6 +149,25 @@ export class ApprovalResumeService {
       if (!approved && springResult.sideEffectAllowed === true) {
         // Defensive: deny must never open side effects.
         throw new Error("审批拒绝状态异常：服务端仍允许副作用。");
+      }
+    }
+
+    if (approved && this.options.rememberApprovedCommand) {
+      try {
+        const loopPending = targetRuntime.getAgentLoopSnapshot?.()?.pending
+          ?? targetRuntime.getSnapshot?.()?.pending
+          ?? null;
+        const pendingCommand = extractPendingApprovalCommand(
+          targetRuntime.getSnapshot?.() ?? null,
+          loopPending
+        );
+        if (pendingCommand?.command) {
+          await this.options.rememberApprovedCommand(pendingCommand);
+        }
+      } catch (error) {
+        await this.options.appendDebugLog(
+          `approval memory persist failed: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
 

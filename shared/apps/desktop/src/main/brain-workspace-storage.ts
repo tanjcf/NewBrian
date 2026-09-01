@@ -5,6 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 import {
   brainWorkspaceKeys,
   brainWorkspaceModes,
+  normalizeAnnotationGeometry,
+  validateAnnotationGeometry,
+  type AnnotationGeometry,
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
 import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
@@ -62,7 +65,7 @@ export interface BrainConversationRecord {
 
 export interface BrainAnnotationRecord {
   id: string; fileId: string; fileVersion: number; pageOrSheet: string; annotationType: string;
-  anchor: DocumentAnchor; instruction: string; status: "OPEN" | "APPLIED" | "DISMISSED";
+  anchor: DocumentAnchor; geometry: AnnotationGeometry; instruction: string; status: "OPEN" | "APPLIED" | "DISMISSED";
   supersedesAnnotationId: string; selectedText: string; createdBy: string; createdAt: string;
 }
 export interface BrainChangeSetRecord { id: string; annotationId: string; taskId: string; baseFileVersion: number; resultFileVersion: number; changeSummary: string; diffJson: string; status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "REVERTED"; createdAt: string; reviewedAt: string; }
@@ -540,10 +543,12 @@ function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
 }
 
 function mapAnnotation(row: Record<string, unknown>): BrainAnnotationRecord {
+  const geometry = normalizeAnnotationGeometry(JSON.parse(String(row.geometry_json || "{}")));
   return {
     id: String(row.id), fileId: String(row.file_id), fileVersion: Number(row.file_version),
     pageOrSheet: String(row.page_or_sheet), annotationType: String(row.annotation_type),
-    anchor: JSON.parse(String(row.anchor_json || "{}")) as DocumentAnchor,
+    anchor: JSON.parse(String(row.anchor_json || row.structural_anchor_json || "{}")) as DocumentAnchor,
+    geometry,
     instruction: String(row.instruction || ""),
     status: String(row.status || "OPEN") as BrainAnnotationRecord["status"],
     supersedesAnnotationId: String(row.supersedes_annotation_id || ""),
@@ -1301,7 +1306,7 @@ export class BrainWorkspaceStorage {
 
   createAnnotation(input: {
     ownerId: string; projectId: string; fileId: string; fileVersion: number;
-    anchor: DocumentAnchor; instruction: string;
+    anchor: DocumentAnchor; instruction: string; geometry?: Partial<AnnotationGeometry> & { style?: Partial<AnnotationGeometry["style"]> };
     status?: "OPEN" | "APPLIED" | "DISMISSED"; supersedesAnnotationId?: string;
   }): BrainAnnotationRecord {
     this.getProject(input.ownerId, input.projectId);
@@ -1325,10 +1330,29 @@ export class BrainWorkspaceStorage {
     const pageOrSheet = input.anchor.format === "xlsx"
       ? input.anchor.sheet
       : "page" in input.anchor ? String(input.anchor.page) : "";
+    const displayIndex = Number((this.database.prepare(
+      "SELECT COUNT(*) AS total FROM brain_annotation WHERE file_id = ? AND file_version = ?"
+    ).get(input.fileId, input.fileVersion) as { total: number }).total) + 1;
+    const geometry: AnnotationGeometry = {
+      style: {
+        tool: input.geometry?.style?.tool === "highlight" ? "highlight" : "select-rect",
+        color: input.geometry?.style?.color?.trim() || normalizeAnnotationGeometry(undefined).style.color
+      },
+      displayIndex,
+      ...(typeof input.geometry?.snapshotPath === "string" && input.geometry.snapshotPath.trim()
+        ? { snapshotPath: input.geometry.snapshotPath.trim() }
+        : {}),
+      ...(typeof input.geometry?.snapshotUrl === "string" && input.geometry.snapshotUrl.trim()
+        ? { snapshotUrl: input.geometry.snapshotUrl.trim() }
+        : {}),
+    };
+    try { validateAnnotationGeometry(geometry); } catch (error) {
+      throw new BrainStorageError("BRAIN_ANNOTATION_INVALID", error instanceof Error ? error.message : "Annotation geometry is invalid");
+    }
     const record: BrainAnnotationRecord = {
       id: `annotation_${randomUUID()}`, fileId: input.fileId, fileVersion: input.fileVersion,
       pageOrSheet, annotationType: input.anchor.locator.kind, anchor: structuredClone(input.anchor),
-      instruction, status, supersedesAnnotationId, selectedText: input.anchor.selectedText ?? "",
+      geometry, instruction, status, supersedesAnnotationId, selectedText: input.anchor.selectedText ?? "",
       createdBy: input.ownerId, createdAt: nowIso()
     };
     this.database.prepare(`
@@ -1336,11 +1360,26 @@ export class BrainWorkspaceStorage {
         id, file_id, file_version, page_or_sheet, annotation_type, geometry_json,
         structural_anchor_json, selected_text, created_by, created_at,
         anchor_json, instruction, status, supersedes_annotation_id
-      ) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(record.id, record.fileId, record.fileVersion, record.pageOrSheet, record.annotationType,
-      record.selectedText, record.createdBy, record.createdAt, JSON.stringify(record.anchor), record.instruction,
-      record.status, record.supersedesAnnotationId);
+      JSON.stringify(record.geometry), JSON.stringify(record.anchor), record.selectedText, record.createdBy, record.createdAt,
+      JSON.stringify(record.anchor), record.instruction, record.status, record.supersedesAnnotationId);
     return record;
+  }
+
+  updateAnnotationStatus(input: {
+    ownerId: string; projectId: string; annotationId: string;
+    status: BrainAnnotationRecord["status"];
+  }): BrainAnnotationRecord {
+    this.getProject(input.ownerId, input.projectId);
+    const row = this.database.prepare("SELECT a.* FROM brain_annotation a JOIN brain_file f ON f.id = a.file_id WHERE a.id = ? AND f.project_id = ? AND f.owner_id = ?")
+      .get(input.annotationId, input.projectId, input.ownerId) as Record<string, unknown> | undefined;
+    if (!row) throw new BrainStorageError("BRAIN_ANNOTATION_NOT_FOUND", "Annotation does not belong to project");
+    if (!["OPEN", "APPLIED", "DISMISSED"].includes(input.status)) {
+      throw new BrainStorageError("BRAIN_INPUT_INVALID", "annotation status is invalid");
+    }
+    this.database.prepare("UPDATE brain_annotation SET status = ? WHERE id = ?").run(input.status, input.annotationId);
+    return mapAnnotation({ ...row, status: input.status });
   }
 
   listAnnotations(ownerId: string, projectId: string): BrainAnnotationRecord[] {

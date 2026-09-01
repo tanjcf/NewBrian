@@ -4,10 +4,12 @@ import test from "node:test";
 const {
   extractMediaUrlsFromResult,
   formatMediaGenerationReply,
+  isMediaGenerationAuthenticationError,
   mediaKindFromOrchestratorChannel,
   parseGenerationJobSnapshot,
   runAutoMediaTool,
-  runMediaGenerationJob
+  runMediaGenerationJob,
+  toolNameForMediaKind
 } = await import(new URL("./media-generation-gateway.ts", import.meta.url).href);
 
 const {
@@ -28,6 +30,20 @@ test("parses platform generation job snapshots", () => {
   assert.deepEqual(extractMediaUrlsFromResult(job.resultJson), ["https://cdn.example/a.mp4"]);
 });
 
+test("extracts minimax music audio url from TokenHub-shaped payloads", () => {
+  const urls = extractMediaUrlsFromResult(JSON.stringify({
+    base_resp: { status_code: 0, status_msg: "success" },
+    data: {
+      audio: "https://aigc-output-audio-file.example.cos.ap-guangzhou.myqcloud.com/demo.mp3",
+      status: 2
+    },
+    extra_info: { music_size: 753988 },
+    tokenhub_usage: { total_tokens: 100000 }
+  }));
+  assert.equal(urls.length, 1);
+  assert.match(urls[0]!, /demo\.mp3$/);
+});
+
 test("extracts nested video urls from TokenHub-shaped payloads", () => {
   const urls = extractMediaUrlsFromResult(JSON.stringify({
     ErrCode: 0,
@@ -42,6 +58,7 @@ test("maps orchestrator channels to media kinds", () => {
   assert.equal(mediaKindFromOrchestratorChannel("music_gen"), "music");
   assert.equal(mediaKindFromOrchestratorChannel("three_d_gen"), "3d");
   assert.equal(mediaKindFromOrchestratorChannel("text_chat"), null);
+  assert.equal(toolNameForMediaKind("music"), "music_generate");
 });
 
 test("resolves image turn from auto decision", () => {
@@ -144,6 +161,42 @@ test("runAutoMediaTool OpenClaw path polls jobs until succeeded", async () => {
   assert.match(result.reply, /async\.mp4/);
 });
 
+test("runAutoMediaTool stops polling when aborted", async () => {
+  const controller = new AbortController();
+  let polls = 0;
+  const pending = runAutoMediaTool({
+    gatewayBaseUrl: "http://127.0.0.1:8790/v1",
+    bearerToken: "secret",
+    toolName: "music_generate",
+    prompt: "轻音乐",
+    wait: false,
+    pollIntervalMs: 20,
+    signal: controller.signal,
+    fetchImpl: (async (url, init) => {
+      const method = String(init?.method || "GET").toUpperCase();
+      if (method === "POST") {
+        return new Response(JSON.stringify({
+          ok: false,
+          tool: "music_generate",
+          job_id: "job-stuck",
+          status: "running",
+          state: "RUNNING"
+        }), { status: 202 });
+      }
+      polls += 1;
+      if (polls >= 2) controller.abort(new Error("USER_CANCELLED"));
+      return new Response(JSON.stringify({
+        ok: false,
+        tool: "music_generate",
+        job_id: "job-stuck",
+        status: "running",
+        state: "RUNNING"
+      }), { status: 200 });
+    }) as typeof fetch
+  });
+  await assert.rejects(pending, /USER_CANCELLED|aborted/i);
+});
+
 test("executeMediaGenerationTurn prefers Auto tools then falls back on 404", async () => {
   const calls: string[] = [];
   const result = await executeMediaGenerationTurn({
@@ -176,6 +229,26 @@ test("executeMediaGenerationTurn prefers Auto tools then falls back on 404", asy
   assert.ok(calls.some((item) => item.includes("/auto/tools/invoke")));
   assert.ok(calls.some((item) => item.includes("/images/generations")));
   assert.match(result.content, /legacy\.png/);
+});
+
+test("preserves Auto media HTTP auth status for a single refresh-and-retry decision", async () => {
+  await assert.rejects(
+    () => runAutoMediaTool({
+      gatewayBaseUrl: "http://127.0.0.1:8790/v1",
+      bearerToken: "expired",
+      toolName: "image_generate",
+      prompt: "卡通壁纸",
+      fetchImpl: (async () => new Response(
+        JSON.stringify({ error: "invalid desktop access token or local api key" }),
+        { status: 401 }
+      )) as typeof fetch
+    }),
+    (error: unknown) => {
+      assert.equal(isMediaGenerationAuthenticationError(error), true);
+      assert.equal((error as { status?: number }).status, 401);
+      return true;
+    }
+  );
 });
 
 test("domain 404 from an available Auto media route never falls back to legacy video", async () => {
@@ -251,7 +324,6 @@ test("runMediaGenerationJob posts then polls until succeeded", async () => {
     model: "pixverse-video-v6.0",
     prompt: "夜景延时",
     pollIntervalMs: 1,
-    maxWaitMs: 1_000,
     fetchImpl: fetchImpl as typeof fetch
   });
   assert.equal(job.state, "SUCCEEDED");
@@ -285,7 +357,6 @@ test("hy-image sync completion skips poll when POST already succeeded", async ()
     model: "hy-image-v3",
     prompt: "卡通壁纸",
     pollIntervalMs: 1,
-    maxWaitMs: 1_000,
     fetchImpl: fetchImpl as typeof fetch
   });
   assert.equal(job.state, "SUCCEEDED");
@@ -319,7 +390,6 @@ test("hy-image skips poll when resultJson already has URL even if state is queue
     model: "hy-image-v3",
     prompt: "卡通壁纸",
     pollIntervalMs: 1,
-    maxWaitMs: 1_000,
     fetchImpl: fetchImpl as typeof fetch
   });
   assert.equal(job.state, "SUCCEEDED");
@@ -329,4 +399,27 @@ test("hy-image skips poll when resultJson already has URL even if state is queue
     model: "hy-image-v3",
     job
   }), /queued-but-ready\.png/);
+});
+
+test("runAutoMediaTool surfaces Spring reply text for failed jobs", async () => {
+  await assert.rejects(() => runAutoMediaTool({
+    gatewayBaseUrl: "http://127.0.0.1:8790/v1",
+    bearerToken: "secret",
+    toolName: "video_generate",
+    prompt: "图生视频",
+    wait: true,
+    fetchImpl: (async (url) => {
+      if (String(url).includes("/auto/tools/invoke")) {
+        return new Response(JSON.stringify({
+          ok: false,
+          job_id: "job-failed-1",
+          tool: "video_generate",
+          state: "FAILED",
+          error: "",
+          reply: "视频生成失败（任务 job-failed-1）：参考图地址无效"
+        }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch
+  }), /参考图地址无效/);
 });
