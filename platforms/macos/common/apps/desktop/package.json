@@ -1,6 +1,6 @@
 {
   "name": "@codecn-mac/desktop",
-  "version": "0.1.10",
+  "version": "1.4.0",
   "description": "codeCN desktop coding agent for macOS",
   "author": "codeCN",
   "private": true,
@@ -16,6 +16,8 @@
     "package:mac:arm64": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --arm64",
     "package:mac:intel": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --x64",
     "package:mac:dir": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dir",
+    "package:mac:arm64:test": "node build/package-mac-channel.cjs --channel test --arch arm64",
+    "package:mac:intel:test": "node build/package-mac-channel.cjs --channel test --arch x64",
     "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "test:main": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts",
     "test:storage": "node --experimental-strip-types --test src/main/codex-storage.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts src/main/thread-message-reconciliation.test.ts",

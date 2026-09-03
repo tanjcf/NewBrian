@@ -9144,7 +9144,7 @@ function createMainWindow() {
       height: 42
     },
     webPreferences: {
-      preload: join(appDirectory, "../preload/index.mjs"),
+      preload: join(appDirectory, "../preload/index.cjs"),
       contextIsolation: true,
       sandbox: false
     }
@@ -9635,6 +9635,17 @@ function registerIpc() {
     const threadId = String(input?.threadId || "").trim();
     if (!threadId) throw new Error("get-goal 需要 threadId。");
     return codexStorage.getGoal(threadId);
+  });
+
+  ipcMain.handle("phase1:get-goal-execution", async (_event, input?: { threadId?: string }) => {
+    const threadId = String(input?.threadId || "").trim();
+    if (!threadId) throw new Error("get-goal-execution 需要 threadId。");
+    const getGoalSnapshot = (codexStorage as unknown as {
+      getGoalSnapshot?: (id: string) => unknown;
+    }).getGoalSnapshot;
+    return typeof getGoalSnapshot === "function"
+      ? getGoalSnapshot.call(codexStorage, threadId)
+      : null;
   });
 
   ipcMain.handle("phase1:create-goal", async (_event, input: { objective: string; tokenBudget?: number; threadId?: string }) => {

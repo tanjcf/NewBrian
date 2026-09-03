@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
+  AnswerGoalQuestionInput,
+  ActivateWorkspaceThreadInput,
+  AddFeatureItemInput,
+  AddWorkspaceInput,
+  AddWorkspaceThreadInput,
+  ArchiveWorkspaceThreadInput,
   AutomationSpec,
   BrainConversationCreateInput,
   BrainConversationDto,
@@ -40,226 +46,125 @@ import type {
   BrainTaskCreateInput,
   BrainTaskDto,
   BrainTaskUpdateInput,
+  ExportWorkspaceThreadHtmlInput,
+  ExportWorkspaceThreadHtmlResult,
+  CreateGoalInput,
+  CancelModelRequestInput,
+  CreateGoalQuestionInput,
+  CreateUsageExceptionFeedbackPreviewInput,
+  CreateBlankWorkspaceInput,
+  ComposerAttachment,
+  DesktopAppUpdateStartResult,
+  DesktopAppUpdateStatus,
+  DesktopAppUpdateVerifyInput,
+  DesktopAppUpdateVerifyResult,
+  DesktopBootstrapStatus,
+  DesktopAuthChangeEmailInput,
+  DesktopAuthChangePasswordInput,
+  DesktopAuthLoginInput,
+  DesktopAuthSendCodeInput,
+  DesktopAuthStatus,
+  DesktopPreferences,
+  DesktopPolicyRule,
+  DeleteFeatureItemInput,
+  FeatureConfigPayload,
+  GoalThreadInput,
+  GovernmentWritingSpecificationGoalInput,
+  SaveGovernmentWritingSpecificationInput,
+  ConfirmGovernmentWritingSpecificationInput,
+  SaveGovernmentWritingSuggestionsInput,
+  ApplyGovernmentWritingSuggestionsInput,
+  GuideModelRequestInput,
+  ConfirmUsageExceptionFeedbackInput,
+  HolonFeedbackInput,
+  HolonKnowledgeSnapshot,
+  HolonKnowledgeSnapshotInput,
+  HolonSyncStatus,
+  HolonWorkItemIdInput,
+  GeneratePatchInput,
+  ForkWorkspaceThreadInput,
+  McpDiscoveredTool,
+  McpServerConfig,
+  McpServerHealth,
+  McpServerInspection,
+  McpToolCallResult,
+  McpToolCallInput,
+  CreateWorkspaceWorktreeInput,
+  ListDelegatedAgentsInput,
+  LearningCandidateInput,
+  LearningListInput,
+  LearningRollbackInput,
+  LearningSearchInput,
+  MergeDelegatedAgentResultsInput,
   MobilePairingState,
+  ModelConfig,
+  ModelChatInput,
+  OpenClawSkillInstallClawHubInput,
+  OpenClawSkillInstallPathInput,
+  OpenClawSkillInstallResultPayload,
+  OpenClawSkillInspectPathInput,
+  OpenClawSkillExportZipInput,
+  OpenClawSkillExportZipResult,
+  OpenClawSkillSearchHit,
+  OpenClawSkillSearchInput,
+  OpenClawSkillSelectInstallInput,
+  OpenWorkspaceFilePreviewEvent,
+  UninstallWritingSkillsInput,
+  UninstallWritingSkillsResult,
+  OpenLogLocationResult,
+  OpenComposerAttachmentInput,
+  OpenSkillLocationInput,
+  OpenSystemToolInput,
   PhaseOneSnapshot,
   PluginSpec,
+  PluginCatalogQuery,
+  PluginCatalogSnapshot,
+  PluginInstallInput,
+  PluginKeyInput,
+  PluginOperationResult,
+  PluginSetEnabledInput,
+  SearchResultSpec,
+  ShowAppMenuInput,
+  ReplaceGoalPlanInput,
+  RespondApprovalInput,
+  RenameWorkspaceInput,
+  RenameWorkspaceThreadInput,
+  RecordMessageFeedbackInput,
+  ResearchWritingExportInput,
+  ResearchWritingIntakeInput,
+  ResearchWritingPayload,
   RendererDiagnosticInput,
   RendererFailureInput,
-  SearchResultSpec,
-  SkillSpec,
   SynthesizeNovelSpeechInput,
   SynthesizeNovelSpeechResult,
-  WorkspaceCatalogItem
+  SaveComposerClipboardFileInput,
+  RespondDelegatedAgentApprovalInput,
+  RunDelegatedAgentInput,
+  SetGoalPausedInput,
+  SkillSpec,
+  SystemToolEntry,
+  StartHolonWorkItemInput,
+  TerminalSessionSnapshot,
+  UpdateGoalInput,
+  UpdateFeatureItemInput,
+  UpdateGoalObjectiveInput,
+  OpenWorkspaceLocationInput,
+  WorkspaceIdInput,
+  WorkspaceThreadInput,
+  WorkspaceFileActionInput,
+  WorkspaceArtifactPreview,
+  WorkspaceFileInput,
+  WorkspaceReviewInput,
+  SwitchWorkspaceBranchInput,
+  WorkspaceBranchStatus,
+  WorkspaceCatalogItem,
+  WorkspaceHeaderStatus,
+  WindowControlAction,
+  WorkspaceReviewChanges,
+  UsageExceptionFeedbackPreview,
+  UsageExceptionFeedbackSubmissionResult
 } from "@codex-forge/protocol";
 import { brainWorkspaceIpcChannels, desktopIpcChannels } from "@codex-forge/protocol";
-
-interface McpServerConfig {
-  id: string;
-  name: string;
-  transport: "stdio" | "sse";
-  command: string;
-  args: string[];
-  url: string;
-  env: Record<string, string>;
-  enabled: boolean;
-}
-
-interface McpServerHealth {
-  ok: boolean;
-  code?: string;
-  detail: string;
-  checkedAt: string;
-  running?: boolean;
-}
-
-interface McpServerInspection {
-  ok: boolean;
-  detail: string;
-  checkedAt: string;
-  serverInfo?: string;
-  protocolVersion?: string;
-  tools: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>;
-}
-
-interface McpDiscoveredTool {
-  id: string;
-  serverId: string;
-  serverName: string;
-  name: string;
-  description: string;
-  inputSchema?: Record<string, unknown>;
-  protocolVersion?: string;
-  discoveredAt: string;
-}
-
-interface McpToolCallResult {
-  ok: boolean;
-  toolName: string;
-  serverName: string;
-  detail: string;
-  content: string;
-}
-
-interface SystemToolEntry {
-  id: string;
-  label: string;
-  kind: "developer" | "system";
-  icon: string;
-  available: boolean;
-}
-
-interface TerminalSessionSnapshot {
-  cwd: string;
-  shell: string;
-  prompt: string;
-  isRunning: boolean;
-  lines: string[];
-  launchedAt?: string;
-  lastExitCode?: number | null;
-}
-
-interface DesktopAgreementConfig {
-  enabled: boolean;
-  tos_title?: string;
-  tos_content_html?: string;
-  policy_title?: string;
-  policy_content_html?: string;
-}
-
-interface DesktopAuthStatus {
-  authenticated: boolean;
-  loading: boolean;
-  mode: "session_cookie" | "desktop_token" | "none";
-  base_url: string;
-  user?: {
-    email: string;
-    display_name: string;
-    role: string;
-    plan: string;
-    avatar_text: string;
-  };
-  agreement?: DesktopAgreementConfig;
-  last_error?: string;
-  last_checked_at?: string;
-}
-
-interface DesktopBootstrapStatus {
-  overall: {
-    status: "ready" | "manual_required" | "pending" | "running";
-    currentTaskId?: string;
-    message?: string;
-    updatedAt?: string;
-    totalTasks: number;
-    completedTasks: number;
-    progressPercent: number;
-  };
-  tasks: Array<{
-    id: string;
-    label: string;
-    status: "pending" | "running" | "ready" | "manual_required";
-    detail?: string;
-    startedAt?: string;
-    completedAt?: string;
-  }>;
-  conda: {
-    status: "ready" | "manual_required" | "pending";
-    initializedAt?: string;
-    updatedAt?: string;
-    source?: "system" | "managed";
-    condaPath?: string;
-    reason?: string;
-  };
-}
-
-interface DesktopPreferences {
-  appearance: {
-    theme: "light" | "dark" | "system";
-    density: "comfortable" | "compact";
-    reduceMotion: boolean;
-    accentColor: string;
-    backgroundColor: string;
-    foregroundColor: string;
-    uiFontFamily: string;
-    codeFontFamily: string;
-    contrast: number;
-    uiFontSize: number;
-    codeFontSize: number;
-    sidebarTranslucent: boolean;
-    pointerCursor: boolean;
-    diffMarks: "color" | "marks";
-  };
-  configuration: {
-    requireApprovalForShell: boolean;
-    saveResponses: boolean;
-    telemetryEnabled: boolean;
-  };
-  personalization: {
-    workMode: "coding" | "everyday";
-    proactiveUpdates: boolean;
-    includeVerificationSummary: boolean;
-    reviewFindingsFirst: boolean;
-  };
-  permissions: {
-    fullAccess: boolean;
-  };
-  hooks: {
-    beforeCommand: boolean;
-    afterCommand: boolean;
-    beforeCommit: boolean;
-    afterTask: boolean;
-    beforeCommandScript: string;
-    afterCommandScript: string;
-    beforeCommitScript: string;
-    afterTaskScript: string;
-  };
-  git: {
-    statusCommand: string;
-    branchPrefix: string;
-    showDiffBeforeCommit: boolean;
-    confirmBeforePush: boolean;
-    pullRequestMergeMethod: "merge" | "squash";
-    forcePushWithLease: boolean;
-    createDraftPullRequests: boolean;
-    autoDeleteOldWorktrees: boolean;
-    autoDeleteWorktreeLimit: number;
-    commitInstructions: string;
-  };
-  environment: {
-    defaultOpenTarget: "visual-studio" | "system" | "explorer";
-    terminalShell: string;
-    extraEnv: Record<string, string>;
-    autoBootstrapConda: boolean;
-  };
-  editor: {
-    language: "auto" | "zh-CN" | "en-US";
-    sendShortcut: "enter" | "mod-enter";
-    followBehavior: "queue" | "guide";
-  };
-  popup: {
-    shortcut: string;
-    defaultProjectlessChat: boolean;
-  };
-  dictation: {
-    microphone: "system" | "default";
-    holdShortcut: string;
-    toggleShortcut: string;
-    keepBarVisible: boolean;
-    dictionaryOpen: boolean;
-    dictionaryEntries: Array<{ timestamp: string; phrase: string }>;
-  };
-  worktree: {
-    defaultIsolated: boolean;
-    keepArchived: boolean;
-    rootDir: string;
-  };
-  browser: {
-    autoOpenPreview: boolean;
-    preserveTabs: boolean;
-    highResScreenshots: boolean;
-    previewUrl: string;
-  };
-  shortcuts: Record<string, string>;
-}
 
 contextBridge.exposeInMainWorld("codecn", {
   listBrainWorkspaces: (): Promise<BrainWorkspaceDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceList),
@@ -275,6 +180,7 @@ contextBridge.exposeInMainWorld("codecn", {
   getBrainConversation: (input: BrainConversationGetInput): Promise<BrainConversationDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.conversationGet, input),
   listBrainMessages: (input: BrainConversationGetInput): Promise<BrainMessageDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.messageList, input),
   appendBrainMessage: (input: BrainMessageAppendInput): Promise<BrainMessageDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.messageAppend, input),
+  rustConversation: (input: { projectId: string; workspaceType: string; operation: `conversation.${string}`; payload: Record<string, unknown> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.rustConversation, input),
   getBrainDraft: (input: BrainConversationGetInput): Promise<{ content: string; updatedAt: string } | null> => ipcRenderer.invoke(brainWorkspaceIpcChannels.draftGet, input),
   saveBrainDraft: (input: BrainDraftSaveInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.draftSave, input),
   listBrainFiles: (input: BrainProjectGetInput): Promise<BrainFileDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.fileList, input),
@@ -289,6 +195,7 @@ contextBridge.exposeInMainWorld("codecn", {
   startBrainGamePreview: (input: { projectId: string; conversationId?: string }): Promise<BrainGamePreviewState> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gamePreviewStart, input),
   getBrainGamePreviewStatus: (input: BrainProjectGetInput): Promise<BrainGamePreviewState> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gamePreviewStatus, input),
   stopBrainGamePreview: (input: BrainProjectGetInput): Promise<BrainGamePreviewState> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gamePreviewStop, input),
+  createBrainGameWebTemplate: (input: BrainProjectGetInput): Promise<{ engine: "web"; previewCommand: string; previewUrl: string }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameWebTemplateCreate, input),
   exportBrainGameDesign: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameDesignExport, input),
   getBrainGameLevelEditor: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameLevelEditorGet, input),
   saveBrainGameLevelEditor: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.gameLevelEditorSave, input),
@@ -298,24 +205,43 @@ contextBridge.exposeInMainWorld("codecn", {
   saveBrainVideoPipeline: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineSave, input),
   markBrainVideoShot: (input: { projectId: string; shotIndex: number; ready: boolean }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoMarkShot, input),
   cookBrainVideoPipeline: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoPipelineCook, input),
+  generateBrainSceneMedia: (input: {
+    projectId: string;
+    kind: "video" | "music" | "image";
+    prompt: string;
+    model?: string;
+    shotIndex?: number;
+    size?: string;
+    imageUrl?: string;
+    lastFrameImageUrl?: string;
+  }) =>
+    ipcRenderer.invoke(brainWorkspaceIpcChannels.sceneMediaGenerate, input),
   getBrainMusicDaw: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawGet, input),
   saveBrainMusicDaw: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawSave, input),
   cookBrainMusicDaw: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicDawCook, input),
   getBrainDataAnalysis: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisGet, input),
   saveBrainDataAnalysis: (input: { projectId: string; state: unknown }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisSave, input),
   cookBrainDataAnalysis: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisCook, input),
-  listSoftwareScripts: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareScriptsList, input),
-  startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStart, input),
-  getSoftwareTaskStatus: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStatus, input),
-  cancelSoftwareTask: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskCancel, input),
-  openSoftwareProjectTerminal: (input: BrainProjectGetInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTerminalOpen, input),
-  saveBrainFlow: (input: BrainFlowSaveInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowSave, input),
-  getBrainFlow: (input: BrainFlowIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowGet, input),
-  startBrainFlow: (input: BrainFlowStartInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunStart, input),
-  getBrainFlowRun: (input: BrainFlowRunIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunGet, input),
-  cancelBrainFlow: (input: BrainFlowRunIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunCancel, input),
-  createBrainFlowSchedule: (input: BrainFlowScheduleCreateInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowScheduleCreate, input),
-  listBrainFlowSchedules: (input: BrainFlowScheduleListInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowScheduleList, input),
+  discoverBrainEngines: (): Promise<Array<{ engineId: string; executable: string; source: string; version: string }>> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentDiscover),
+  ensureBrainEngine: (input: { engineId: string }): Promise<{ engineId: string; executable: string; source: string; version: string }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentEnsure, input),
+  ensureBrainEnginesForScene: (input: { workspaceKey: string }): Promise<Array<{ engineId: string; executable: string; source: string; version: string }>> => ipcRenderer.invoke(brainWorkspaceIpcChannels.environmentEnsureScene, input),
+  getBrainFilePreviewUrl: (input: { projectId: string; fileId: string }): Promise<string> => ipcRenderer.invoke(brainWorkspaceIpcChannels.filePreviewUrl, input),
+  importBrainMedia: (input: {
+    projectId: string;
+    sourcePath?: string;
+    fileName?: string;
+    mimeType?: string;
+    bytesBase64?: string;
+    folder?: "imports" | "audio" | "clips" | "refs";
+  }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.mediaImport, input),
+  peelBrainMedia: (input: {
+    projectId: string;
+    relativePath?: string;
+    fileId?: string;
+    mode?: "unlink" | "probe";
+  }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.mediaPeel, input),
+  importVideoSubtitles: (input: { projectId: string; srt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoSubtitleImport, input),
+  exportVideoSubtitles: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoSubtitleExport, input),
   listBrainAnnotations: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationList, input),
   createBrainAnnotation: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.annotationCreate, input),
   listBrainChangeSets: (input: BrainProjectGetInput): Promise<BrainChangeSetDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.changeSetList, input),
@@ -345,60 +271,140 @@ contextBridge.exposeInMainWorld("codecn", {
   createQuantStrategySchedule: (input: { projectId: string; skillId: string; exchange: "SSE" | "SZSE" | "BSE"; runAt: string; symbol: string; quantity: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleCreate, input),
   setQuantStrategyScheduleEnabled: (input: { projectId: string; scheduleId: string; enabled: boolean }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleSetEnabled, input),
   listQuantStrategyRuns: (input: { projectId: string; scheduleId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantScheduleRunList, input),
-  bootstrap: () => ipcRenderer.invoke("phase1:bootstrap"),
-  getSnapshot: () => ipcRenderer.invoke("phase1:get-snapshot"),
-  getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke("phase1:get-goal", input),
-  createGoal: (input: { objective: string; tokenBudget?: number; threadId: string }) => ipcRenderer.invoke("phase1:create-goal", input),
-  updateGoal: (input: { status: "complete" | "blocked"; tokensUsed?: number; timeUsedSeconds?: number; threadId: string }) =>
-    ipcRenderer.invoke("phase1:update-goal", input),
-  getAuthStatus: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke("phase1:get-auth-status"),
-  getBillingSubscription: (): Promise<Record<string, unknown>> => ipcRenderer.invoke("phase1:get-billing-subscription"),
-  sendLoginCode: (input: {
-    email: string;
-  }): Promise<Record<string, unknown>> => ipcRenderer.invoke("phase1:send-login-code", input),
-  loginAuth: (input: {
-    email: string;
-    password?: string;
-    agreement_accepted: boolean;
-    captcha?: string;
-  }): Promise<DesktopAuthStatus> => ipcRenderer.invoke("phase1:login-auth", input),
-  logoutAuth: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke("phase1:logout-auth"),
-  queueWorkspaceScan: () => ipcRenderer.invoke("phase1:queue-workspace-scan"),
-  queueGitStatus: () => ipcRenderer.invoke("phase1:queue-git-status"),
-  queueShellCommand: (command: string) => ipcRenderer.invoke("phase1:queue-shell-command", command),
-  openSystemTerminal: (cwd: string) => ipcRenderer.invoke("phase1:open-system-terminal", cwd),
-  respondApproval: (input: boolean | { approved: boolean; requestId?: string }) => ipcRenderer.invoke("phase1:respond-approval", input),
-  generatePatch: (input: { filePath: string; searchText: string; replaceText: string }) =>
-    ipcRenderer.invoke("phase1:generate-patch", input),
-  applyPatch: () => ipcRenderer.invoke("phase1:apply-patch"),
-  getModelConfig: () => ipcRenderer.invoke("phase1:get-model-config"),
-  getDesktopPreferences: (): Promise<DesktopPreferences> => ipcRenderer.invoke("phase1:get-desktop-preferences"),
+  getVideoTimeline: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoTimelineGet, input),
+  saveVideoTimeline: (input: { projectId: string; title: string; width: number; height: number; fps: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoTimelineSave, input),
+  addVideoClip: (input: { projectId: string; trackType: "video" | "audio" | "subtitle"; sourceFileId: string; startMs: number; durationMs: number; sourceInMs: number; volume?: number; text?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoClipAdd, input),
+  startVideoRender: (input: { projectId: string; outputRelativePath: string; source?: "timeline" | "pipeline"; mediaRelativePaths?: string[] }) =>
+    ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderStart, input),
+  getVideoRenderStatus: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderStatus, input),
+  cancelVideoRender: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.videoRenderCancel, input),
+  getMusicTimeline: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicTimelineGet, input),
+  saveMusicTimeline: (input: { projectId: string; title: string; sampleRate: number; channels: 1 | 2 }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicTimelineSave, input),
+  addMusicClip: (input: { projectId: string; trackType: "audio" | "midi"; sourceFileId: string; startMs: number; durationMs: number; sourceInMs: number; gain: number; pan: number }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicClipAdd, input),
+  listDataDatasets: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetList, input),
+  saveDataDataset: (input: Record<string, unknown>) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetSave, input),
+  importDataCsv: (input: { projectId: string; fileId: string; datasetId: string; name: string; updatedAt: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetImportCsv, input),
+  importDataXlsx: (input: { projectId: string; fileId: string; datasetId: string; name: string; updatedAt: string; sheetName?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetImportXlsx, input),
+  listDataXlsxSheets: (input: { projectId: string; fileId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetXlsxSheets, input),
+  readDataRows: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataDatasetRows, input),
+  summarizeData: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisSummarize, input),
+  aggregateData: (input: { projectId: string; datasetId: string; groupBy: string[]; metrics: Array<{ column: string; operation: "sum" | "count" | "avg" | "min" | "max"; as?: string }>; topN?: number; orderBy?: { metric: string; direction: "asc" | "desc" }; periodColumn?: string; compareMetric?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisAggregate, input),
+  listDataAnalyses: (input: { projectId: string; datasetId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.dataAnalysisList, input),
+  listSoftwareScripts: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareScriptsList, input),
+  startSoftwareTask: (input: { projectId: string; scriptId: string; conversationId?: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStart, input),
+  getSoftwareTaskStatus: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskStatus, input),
+  cancelSoftwareTask: (input: { taskId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTaskCancel, input),
+  openSoftwareProjectTerminal: (input: BrainProjectGetInput): Promise<{ ok: boolean }> => ipcRenderer.invoke(brainWorkspaceIpcChannels.softwareTerminalOpen, input),
+  saveBrainFlow: (input: BrainFlowSaveInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowSave, input),
+  getBrainFlow: (input: BrainFlowIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowGet, input),
+  listBrainFlows: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowList, input),
+  getLatestBrainFlowRun: (input: BrainProjectGetInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunLatest, input),
+  startBrainFlow: (input: BrainFlowStartInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunStart, input),
+  getBrainFlowRun: (input: BrainFlowRunIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunGet, input),
+  cancelBrainFlow: (input: BrainFlowRunIdInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowRunCancel, input),
+  createBrainFlowSchedule: (input: BrainFlowScheduleCreateInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowScheduleCreate, input),
+  listBrainFlowSchedules: (input: BrainFlowScheduleListInput) => ipcRenderer.invoke(brainWorkspaceIpcChannels.flowScheduleList, input),
+  inspectMusicMedia: (input: { projectId: string; sourceFileId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicMediaInspect, input),
+  startMusicRender: (input: { projectId: string; outputRelativePath: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicRenderStart, input),
+  getMusicRenderStatus: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicRenderStatus, input),
+  cancelMusicRender: (input: { renderId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.musicRenderCancel, input),
+  bootstrap: () => ipcRenderer.invoke(desktopIpcChannels.core.bootstrap),
+  getSnapshot: () => ipcRenderer.invoke(desktopIpcChannels.core.getSnapshot),
+  getGoal: (input?: { threadId?: string }) => ipcRenderer.invoke(desktopIpcChannels.goal.get, input),
+  getGoalExecution: (input?: GoalThreadInput) => ipcRenderer.invoke(desktopIpcChannels.goal.getExecution, input),
+  createGoal: (input: CreateGoalInput) => ipcRenderer.invoke(desktopIpcChannels.goal.create, input),
+  updateGoal: (input: UpdateGoalInput) => ipcRenderer.invoke(desktopIpcChannels.goal.update, input),
+  setGoalPaused: (input: SetGoalPausedInput) => ipcRenderer.invoke(desktopIpcChannels.goal.setPaused, input),
+  updateGoalObjective: (input: UpdateGoalObjectiveInput) => ipcRenderer.invoke(desktopIpcChannels.goal.updateObjective, input),
+  deleteGoal: (input?: GoalThreadInput) => ipcRenderer.invoke(desktopIpcChannels.goal.delete, input),
+  replaceGoalPlan: (input: ReplaceGoalPlanInput) => ipcRenderer.invoke(desktopIpcChannels.goal.replacePlan, input),
+  createGoalQuestion: (input: CreateGoalQuestionInput) => ipcRenderer.invoke(desktopIpcChannels.goal.createQuestion, input),
+  answerGoalQuestion: (input: AnswerGoalQuestionInput) => ipcRenderer.invoke(desktopIpcChannels.goal.answerQuestion, input),
+  getGovernmentWritingSpecification: (input: GovernmentWritingSpecificationGoalInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.get, input),
+  saveGovernmentWritingSpecification: (input: SaveGovernmentWritingSpecificationInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.save, input),
+  saveGovernmentWritingSuggestions: (input: SaveGovernmentWritingSuggestionsInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.saveSuggestions, input),
+  applyGovernmentWritingSuggestions: (input: ApplyGovernmentWritingSuggestionsInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.applySuggestions, input),
+  confirmGovernmentWritingSpecification: (input: ConfirmGovernmentWritingSpecificationInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.confirm, input),
+  getAuthStatus: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.getStatus),
+  getBillingSubscription: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.getBillingSubscription),
+  sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
+  loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
+  changeAuthPassword: (input: DesktopAuthChangePasswordInput): Promise<{ ok: boolean; detail: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),
+  changeAuthEmail: (input: DesktopAuthChangeEmailInput): Promise<{ ok: boolean; detail: string; email: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changeEmail, input),
+  logoutAuth: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.logout),
+  getNextWorkItem: () => ipcRenderer.invoke(desktopIpcChannels.holon.getNextWorkItem),
+  startWorkItem: (input: StartHolonWorkItemInput) => ipcRenderer.invoke(desktopIpcChannels.holon.startWorkItem, input),
+  cancelWorkItem: (input: HolonWorkItemIdInput) => ipcRenderer.invoke(desktopIpcChannels.holon.cancelWorkItem, input),
+  getWorkItemState: (input: HolonWorkItemIdInput) => ipcRenderer.invoke(desktopIpcChannels.holon.getWorkItemState, input),
+  getKnowledgeSnapshot: (input: HolonKnowledgeSnapshotInput): Promise<HolonKnowledgeSnapshot> =>
+    ipcRenderer.invoke(desktopIpcChannels.holon.getKnowledgeSnapshot, input),
+  getHolonSyncStatus: (): Promise<HolonSyncStatus> => ipcRenderer.invoke(desktopIpcChannels.holon.getSyncStatus),
+  listLearningCandidates: (input?: LearningListInput) => ipcRenderer.invoke(desktopIpcChannels.learning.listCandidates, input),
+  searchPrivateKnowledge: (input: LearningSearchInput) => ipcRenderer.invoke(desktopIpcChannels.learning.searchPrivateKnowledge, input),
+  approveLearningCandidate: (input: LearningCandidateInput) => ipcRenderer.invoke(desktopIpcChannels.learning.approveCandidate, input),
+  rejectLearningCandidate: (input: LearningCandidateInput) => ipcRenderer.invoke(desktopIpcChannels.learning.rejectCandidate, input),
+  rollbackPrivateSkill: (input: LearningRollbackInput) => ipcRenderer.invoke(desktopIpcChannels.learning.rollbackPrivateSkill, input),
+  syncUserKnowledge: (input?: { projectWorkspacePath?: string; projectKey?: string; forceFullPull?: boolean }) =>
+    ipcRenderer.invoke(desktopIpcChannels.knowledge.sync, input ?? {}),
+  submitHolonFeedback: (input: HolonFeedbackInput) => ipcRenderer.invoke(desktopIpcChannels.holon.submitFeedback, input),
+  queueWorkspaceScan: () => ipcRenderer.invoke(desktopIpcChannels.core.queueWorkspaceScan),
+  queueGitStatus: () => ipcRenderer.invoke(desktopIpcChannels.core.queueGitStatus),
+  queueShellCommand: (command: string) => ipcRenderer.invoke(desktopIpcChannels.core.queueShellCommand, command),
+  openSystemTerminal: (cwd: string) => ipcRenderer.invoke(desktopIpcChannels.terminal.openSystem, cwd),
+  respondApproval: (input: RespondApprovalInput) => ipcRenderer.invoke(desktopIpcChannels.core.respondApproval, input),
+  generatePatch: (input: GeneratePatchInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.core.generatePatch, input),
+  applyPatch: () => ipcRenderer.invoke(desktopIpcChannels.core.applyPatch),
+  getModelConfig: (): Promise<ModelConfig> => ipcRenderer.invoke(desktopIpcChannels.model.getConfig),
+  generateResearchWritingIntake: (input: ResearchWritingIntakeInput) => ipcRenderer.invoke(desktopIpcChannels.researchWriting.generateIntake, input),
+  reviewResearchWriting: (payload: ResearchWritingPayload) =>
+    ipcRenderer.invoke(desktopIpcChannels.researchWriting.review, payload),
+  exportResearchWriting: (input: ResearchWritingExportInput) =>
+    ipcRenderer.invoke(desktopIpcChannels.researchWriting.export, input),
+  getDesktopPreferences: (): Promise<DesktopPreferences> => ipcRenderer.invoke(desktopIpcChannels.preferences.get),
   saveDesktopPreferences: (preferences: DesktopPreferences): Promise<DesktopPreferences> =>
-    ipcRenderer.invoke("phase1:save-desktop-preferences", preferences),
-  getDesktopBootstrapStatus: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke("phase1:get-desktop-bootstrap-status"),
-  startDesktopBootstrap: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke("phase1:start-desktop-bootstrap"),
-  retryDesktopCondaBootstrap: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke("phase1:retry-desktop-conda-bootstrap"),
-  getMcpServers: (): Promise<McpServerConfig[]> => ipcRenderer.invoke("phase1:get-mcp-servers"),
-  getFeatureConfig: (): Promise<{
-    skills: SkillSpec[];
-    plugins: PluginSpec[];
-    automations: AutomationSpec[];
-  }> => ipcRenderer.invoke("phase1:get-feature-config"),
-  addFeatureItem: (input: {
-    kind: "skills" | "plugins" | "automations";
-    item: Record<string, string>;
-  }) => ipcRenderer.invoke("phase1:add-feature-item", input),
-  updateFeatureItem: (input: {
-    kind: "skills" | "plugins" | "automations";
-    id: string;
-    item: Record<string, string>;
-  }) => ipcRenderer.invoke("phase1:update-feature-item", input),
-  deleteFeatureItem: (input: {
-    kind: "skills" | "plugins" | "automations";
-    id: string;
-  }) => ipcRenderer.invoke("phase1:delete-feature-item", input),
-  searchWorkspaces: (query: string): Promise<SearchResultSpec[]> => ipcRenderer.invoke("phase1:search-workspaces", query),
-  readWorkspaceFile: (input: { workspaceId: string; filePath: string }): Promise<{
+    ipcRenderer.invoke(desktopIpcChannels.preferences.save, preferences),
+  getDesktopBootstrapStatus: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke(desktopIpcChannels.bootstrap.getStatus),
+  startDesktopBootstrap: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke(desktopIpcChannels.bootstrap.start),
+  retryDesktopCondaBootstrap: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke(desktopIpcChannels.bootstrap.retryConda),
+  getMcpServers: (): Promise<McpServerConfig[]> => ipcRenderer.invoke(desktopIpcChannels.mcp.getServers),
+  getFeatureConfig: (): Promise<FeatureConfigPayload> => ipcRenderer.invoke(desktopIpcChannels.features.getConfig),
+  listRepositoryPlugins: (input: PluginCatalogQuery = {}): Promise<PluginCatalogSnapshot> =>
+    ipcRenderer.invoke(desktopIpcChannels.plugins.list, input),
+  getRepositoryPlugin: (input: PluginKeyInput): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.plugins.get, input),
+  installRepositoryPlugin: (input: PluginInstallInput): Promise<PluginOperationResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.plugins.install, input),
+  setRepositoryPluginEnabled: (input: PluginSetEnabledInput): Promise<PluginOperationResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.plugins.setEnabled, input),
+  removeRepositoryPlugin: (input: PluginKeyInput): Promise<PluginOperationResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.plugins.remove, input),
+  reconcileRepositoryPlugins: (): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.plugins.reconcile),
+  addFeatureItem: (input: AddFeatureItemInput): Promise<FeatureConfigPayload> => ipcRenderer.invoke(desktopIpcChannels.features.addItem, input),
+  updateFeatureItem: (input: UpdateFeatureItemInput): Promise<FeatureConfigPayload> => ipcRenderer.invoke(desktopIpcChannels.features.updateItem, input),
+  deleteFeatureItem: (input: DeleteFeatureItemInput): Promise<FeatureConfigPayload> => ipcRenderer.invoke(desktopIpcChannels.features.deleteItem, input),
+  searchOpenClawSkills: (input: OpenClawSkillSearchInput = {}): Promise<OpenClawSkillSearchHit[]> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.search, input),
+  installOpenClawSkillFromClawHub: (input: OpenClawSkillInstallClawHubInput): Promise<OpenClawSkillInstallResultPayload> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.installClawHub, input),
+  installOpenClawSkillFromPath: (input: OpenClawSkillInstallPathInput): Promise<OpenClawSkillInstallResultPayload> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.installPath, input),
+  selectAndInstallOpenClawSkill: (input: OpenClawSkillSelectInstallInput = {}): Promise<OpenClawSkillInstallResultPayload | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.selectAndInstall, input),
+  inspectOpenClawSkillPath: (input: OpenClawSkillInspectPathInput): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.inspectPath, input),
+  exportOpenClawSkillZip: (input: OpenClawSkillExportZipInput): Promise<OpenClawSkillExportZipResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.exportZip, input),
+  uninstallWritingSkills: (input: UninstallWritingSkillsInput = {}): Promise<UninstallWritingSkillsResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.uninstallWritingSkills, input),
+  searchWorkspaces: (query: string): Promise<SearchResultSpec[]> => ipcRenderer.invoke(desktopIpcChannels.search.workspaces, query),
+  readWorkspaceFile: (input: WorkspaceFileInput): Promise<{
     path: string;
     name: string;
     language: string;
@@ -406,40 +412,43 @@ contextBridge.exposeInMainWorld("codecn", {
     binary: boolean;
     truncated: boolean;
     size: number;
-  }> => ipcRenderer.invoke("phase1:read-workspace-file", input),
-  startMobilePairing: (): Promise<MobilePairingState> => ipcRenderer.invoke("phase1:start-mobile-pairing"),
-  getMobilePairingStatus: (): Promise<MobilePairingState> => ipcRenderer.invoke("phase1:get-mobile-pairing-status"),
-  stopMobilePairing: (): Promise<MobilePairingState> => ipcRenderer.invoke("phase1:stop-mobile-pairing"),
-  listWorkspaces: (): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke("phase1:list-workspaces"),
-  addWorkspace: (input: { name: string; path: string }): Promise<WorkspaceCatalogItem[]> =>
-    ipcRenderer.invoke("phase1:add-workspace", input),
-  createBlankWorkspace: (input: { name: string }): Promise<WorkspaceCatalogItem[]> =>
-    ipcRenderer.invoke("phase1:create-blank-workspace", input),
+  }> => ipcRenderer.invoke(desktopIpcChannels.workspaceFiles.read, input),
+  previewWorkspaceFile: (input: WorkspaceFileInput): Promise<WorkspaceArtifactPreview> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspaceFiles.preview, input),
+  openWorkspaceFile: (input: WorkspaceFileInput): Promise<{ ok: boolean; detail: string; path: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspaceFiles.open, input),
+  performWorkspaceFileAction: (input: WorkspaceFileActionInput): Promise<{ ok: boolean; detail: string; content?: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspaceFiles.performAction, input),
+  startMobilePairing: (): Promise<MobilePairingState> => ipcRenderer.invoke(desktopIpcChannels.mobile.startPairing),
+  getMobilePairingStatus: (): Promise<MobilePairingState> => ipcRenderer.invoke(desktopIpcChannels.mobile.getPairingStatus),
+  stopMobilePairing: (): Promise<MobilePairingState> => ipcRenderer.invoke(desktopIpcChannels.mobile.stopPairing),
+  listWorkspaces: (): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.list),
+  addWorkspace: (input: AddWorkspaceInput): Promise<WorkspaceCatalogItem[]> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspace.add, input),
+  createBlankWorkspace: (input: CreateBlankWorkspaceInput): Promise<WorkspaceCatalogItem[]> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspace.createBlank, input),
   selectWorkspaceFolder: (): Promise<string | null> =>
-    ipcRenderer.invoke("phase1:select-workspace-folder"),
-  selectComposerImages: (): Promise<Array<{ name: string; path: string; url: string }>> =>
-    ipcRenderer.invoke("phase1:select-composer-images"),
-  importComposerAttachments: (input: { paths: string[] }): Promise<Array<{ name: string; path: string; url: string }>> =>
-    ipcRenderer.invoke("phase1:import-composer-attachments", input),
-  showInputContextMenu: (): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke("phase1:show-input-context-menu"),
-  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
-  saveComposerClipboardFile: (input: { name: string; mimeType: string; data: ArrayBuffer }): Promise<{ name: string; path: string; url: string }> =>
-    ipcRenderer.invoke("phase1:save-composer-clipboard-file", input),
-  renameWorkspace: (input: { workspaceId: string; name: string }): Promise<WorkspaceCatalogItem[]> =>
-    ipcRenderer.invoke("phase1:rename-workspace", input),
-  removeWorkspace: (input: { workspaceId: string }): Promise<WorkspaceCatalogItem[]> =>
-    ipcRenderer.invoke("phase1:remove-workspace", input),
-  openWorkspaceLocation: (input: { workspaceId: string; target: "finder" | "vscode" | "system" }): Promise<{ ok: boolean; detail: string }> =>
-    ipcRenderer.invoke("phase1:open-workspace-location", input),
-  openSkillLocation: (input: { id?: string; name?: string }): Promise<{ ok: boolean; detail: string }> =>
-    ipcRenderer.invoke("phase1:open-skill-location", input),
-  openLogLocation: (): Promise<{
-    ok: boolean;
+    ipcRenderer.invoke(desktopIpcChannels.workspace.selectFolder),
+  selectComposerImages: (): Promise<{
+    attachments: ComposerAttachment[];
+    skipped: Array<{ name: string; reason: string }>;
     detail: string;
-    path: string;
-    files: { debug: string; diagnostics: string; auth: string; sqlite: string };
-  }> => ipcRenderer.invoke("phase1:open-log-location"),
+  }> => ipcRenderer.invoke(desktopIpcChannels.composer.selectImages),
+  openComposerAttachment: (input: OpenComposerAttachmentInput): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.composer.openAttachment, input),
+  showInputContextMenu: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(desktopIpcChannels.window.showInputContextMenu),
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+  saveComposerClipboardFile: (input: SaveComposerClipboardFileInput): Promise<ComposerAttachment> =>
+    ipcRenderer.invoke(desktopIpcChannels.composer.saveClipboardFile, input),
+  renameWorkspace: (input: RenameWorkspaceInput): Promise<WorkspaceCatalogItem[]> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspace.rename, input),
+  removeWorkspace: (input: WorkspaceIdInput): Promise<WorkspaceCatalogItem[]> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspace.remove, input),
+  openWorkspaceLocation: (input: OpenWorkspaceLocationInput): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspace.openLocation, input),
+  openSkillLocation: (input: OpenSkillLocationInput): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.system.openSkillLocation, input),
   reportRendererFailure: (input: RendererFailureInput): Promise<{ ok: boolean; id: string }> =>
     ipcRenderer.invoke(desktopIpcChannels.system.reportRendererFailure, input),
   reportRendererDiagnostic: (input: RendererDiagnosticInput): Promise<{ ok: boolean; id: string }> =>
@@ -448,93 +457,81 @@ contextBridge.exposeInMainWorld("codecn", {
     ipcRenderer.invoke(desktopIpcChannels.system.synthesizeNovelSpeech, input),
   cancelNovelSpeech: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(desktopIpcChannels.system.cancelNovelSpeech),
-  getWorkspaceHeaderStatus: (workspaceId: string): Promise<{ branch: string; changes: number; additions: number; deletions: number; githubCliAvailable: boolean }> =>
-    ipcRenderer.invoke("phase1:get-workspace-header-status", workspaceId),
-  getReviewChanges: (input: { workspaceId?: string; threadId?: string }): Promise<{
-    workspaceId: string;
-    threadId: string;
-    files: Array<{ filePath: string; status: string; additions: number; deletions: number; diff: string; source: string }>;
-    additions: number;
-    deletions: number;
-  }> => ipcRenderer.invoke("phase1:get-review-changes", input),
-  getWorkspaceBranches: (workspaceId: string): Promise<{ current: string; branches: string[]; changedFiles: number }> => ipcRenderer.invoke("phase1:get-workspace-branches", workspaceId),
-  switchWorkspaceBranch: (input: { workspaceId: string; branch: string; create?: boolean }): Promise<{ current: string; branches: string[]; changedFiles: number }> => ipcRenderer.invoke("phase1:switch-workspace-branch", input),
-  recordMessageFeedback: (input: { workspaceId?: string; threadId?: string; messageId: string; rating: "helpful" | "unhelpful" }): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke("phase1:record-message-feedback", input),
-  addWorkspaceThread: (input: {
-    workspaceId: string;
-    title: string;
-    summary: string;
-    scope?: "project" | "chat";
-  }): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke("phase1:add-workspace-thread", input),
-  forkWorkspaceThread: (input: {
-    workspaceId: string;
-    sourceThreadId: string;
-    title: string;
-  }): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke("phase1:fork-workspace-thread", input),
-  runDelegatedAgent: (input: { workspaceId: string; childThreadId: string }) =>
-    ipcRenderer.invoke("phase1:run-delegated-agent", input),
-  mergeDelegatedAgentResults: (input: { workspaceId: string; parentThreadId: string; childThreadIds: string[] }) =>
-    ipcRenderer.invoke("phase1:merge-delegated-agent-results", input),
+  createUsageExceptionFeedbackPreview: (
+    input: CreateUsageExceptionFeedbackPreviewInput
+  ): Promise<UsageExceptionFeedbackPreview> =>
+    ipcRenderer.invoke(desktopIpcChannels.usageExceptionFeedback.createPreview, input),
+  confirmUsageExceptionFeedback: (
+    input: ConfirmUsageExceptionFeedbackInput
+  ): Promise<UsageExceptionFeedbackSubmissionResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.usageExceptionFeedback.confirm, input),
+  getAppUpdateStatus: (): Promise<DesktopAppUpdateStatus> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.getStatus),
+  startAppUpdate: (): Promise<DesktopAppUpdateStartResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.start),
+  verifyAppUpdate: (input?: DesktopAppUpdateVerifyInput): Promise<DesktopAppUpdateVerifyResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.verify, input),
+  onAppUpdateProgress: (
+    listener: (progress: import("@codex-forge/protocol").DesktopAppUpdateProgress) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      progress: import("@codex-forge/protocol").DesktopAppUpdateProgress
+    ) => listener(progress);
+    ipcRenderer.on(desktopIpcChannels.appUpdate.progress, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.appUpdate.progress, handler);
+  },
+  openLogLocation: (): Promise<OpenLogLocationResult> => ipcRenderer.invoke(desktopIpcChannels.system.openLogLocation),
+  getWorkspaceHeaderStatus: (workspaceId: string): Promise<WorkspaceHeaderStatus> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspaceGit.getHeaderStatus, workspaceId),
+  getReviewChanges: (input: WorkspaceReviewInput): Promise<WorkspaceReviewChanges> => ipcRenderer.invoke(desktopIpcChannels.workspaceGit.getReviewChanges, input),
+  getWorkspaceBranches: (workspaceId: string): Promise<WorkspaceBranchStatus> => ipcRenderer.invoke(desktopIpcChannels.workspaceGit.getBranches, workspaceId),
+  switchWorkspaceBranch: (input: SwitchWorkspaceBranchInput): Promise<WorkspaceBranchStatus> => ipcRenderer.invoke(desktopIpcChannels.workspaceGit.switchBranch, input),
+  recordMessageFeedback: (input: RecordMessageFeedbackInput): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspaceGit.recordFeedback, input),
+  addWorkspaceThread: (input: AddWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.addThread, input),
+  forkWorkspaceThread: (input: ForkWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.forkThread, input),
+  runDelegatedAgent: (input: RunDelegatedAgentInput) => ipcRenderer.invoke(desktopIpcChannels.collaboration.run, input),
+  listDelegatedAgents: (input: ListDelegatedAgentsInput) => ipcRenderer.invoke(desktopIpcChannels.collaboration.list, input),
+  respondDelegatedAgentApproval: (input: RespondDelegatedAgentApprovalInput) => ipcRenderer.invoke(desktopIpcChannels.collaboration.respondApproval, input),
+  mergeDelegatedAgentResults: (input: MergeDelegatedAgentResultsInput) => ipcRenderer.invoke(desktopIpcChannels.collaboration.mergeResults, input),
   // Reserved for the worktree settings flow. Keep this exposed only while the
   // main-process handler remains audited for workspace-id validation.
-  createWorkspaceWorktree: (input: { workspaceId: string; branchName?: string }): Promise<{ ok: boolean; detail: string; path: string }> =>
-    ipcRenderer.invoke("phase1:create-workspace-worktree", input),
-  renameWorkspaceThread: (input: {
-    workspaceId: string;
-    threadId: string;
-    title: string;
-    summary: string;
-  }): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke("phase1:rename-workspace-thread", input),
-  deleteWorkspaceThread: (input: {
-    workspaceId: string;
-    threadId: string;
-  }): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke("phase1:delete-workspace-thread", input),
-  activateWorkspaceThread: (input: { workspaceId: string; threadId: string }) =>
-    ipcRenderer.invoke("phase1:activate-workspace-thread", input),
-  saveModelConfig: (config: {
-    provider: string;
-    baseUrl: string;
-    apiKey: string;
-    wireApi: "responses" | "chat.completions";
-    model: string;
-    reviewModel: string;
-    reasoningEffort: "low" | "medium" | "high" | "xhigh";
-    disableResponseStorage: boolean;
-    systemPrompt: string;
-    toolContext?: string;
-  }) => ipcRenderer.invoke("phase1:save-model-config", config),
-  saveMcpServers: (servers: McpServerConfig[]) => ipcRenderer.invoke("phase1:save-mcp-servers", servers),
-  testMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke("phase1:test-mcp-server", server),
-  startMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke("phase1:start-mcp-server", server),
-  stopMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke("phase1:stop-mcp-server", server),
-  getMcpServerLogs: (serverId: string): Promise<string[]> => ipcRenderer.invoke("phase1:get-mcp-server-logs", serverId),
-  clearMcpServerLogs: (serverId: string): Promise<string[]> => ipcRenderer.invoke("phase1:clear-mcp-server-logs", serverId),
-  inspectMcpServer: (server: McpServerConfig): Promise<McpServerInspection> => ipcRenderer.invoke("phase1:inspect-mcp-server", server),
-  getMcpDiscoveredTools: (): Promise<McpDiscoveredTool[]> => ipcRenderer.invoke("phase1:get-mcp-discovered-tools"),
-  getSystemTools: (): Promise<SystemToolEntry[]> => ipcRenderer.invoke("phase1:get-system-tools"),
-  getPolicyRules: () => ipcRenderer.invoke("phase1:get-policy-rules"),
-  savePolicyRules: (rules: Array<{
-    id?: string;
-    toolName?: string;
-    commandPrefix?: string;
-    decision: "allow" | "ask" | "deny";
-    enabled?: boolean;
-    reason?: string;
-  }>) => ipcRenderer.invoke("phase1:save-policy-rules", rules),
-  openSystemTool: (input: string | { toolId: string; workspaceId?: string }): Promise<{ ok: boolean; detail: string }> =>
-    ipcRenderer.invoke("phase1:open-system-tool", input),
-  openBrowserPreview: (url?: string): Promise<{ ok: boolean; url: string }> => ipcRenderer.invoke("phase1:open-browser-preview", url),
-  closeBrowserPreview: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("phase1:close-browser-preview"),
-  captureBrowserPreview: (): Promise<{ ok: boolean; path: string; url: string }> => ipcRenderer.invoke("phase1:capture-browser-preview"),
-  controlWindow: (action: "minimize" | "maximize" | "close"): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke("phase1:window-control", action),
-  showAppMenu: (input: { menu: "file" | "edit" | "view" | "window" | "help"; x: number; y: number }): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke("phase1:show-app-menu", input),
+  createWorkspaceWorktree: (input: CreateWorkspaceWorktreeInput): Promise<{ ok: boolean; detail: string; path: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspaceGit.createWorktree, input),
+  renameWorkspaceThread: (input: RenameWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.renameThread, input),
+  archiveWorkspaceThread: (input: ArchiveWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.archiveThread, input),
+  deleteWorkspaceThread: (input: WorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.deleteThread, input),
+  activateWorkspaceThread: (input: ActivateWorkspaceThreadInput) => ipcRenderer.invoke(desktopIpcChannels.workspace.activateThread, input),
+  exportWorkspaceThreadHtml: (input: ExportWorkspaceThreadHtmlInput): Promise<ExportWorkspaceThreadHtmlResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.workspace.exportThreadHtml, input),
+  saveModelConfig: (config: ModelConfig): Promise<ModelConfig> =>
+    ipcRenderer.invoke(desktopIpcChannels.model.saveConfig, config),
+  saveMcpServers: (servers: McpServerConfig[]) => ipcRenderer.invoke(desktopIpcChannels.mcp.saveServers, servers),
+  testMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.testServer, server),
+  startMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.startServer, server),
+  stopMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.stopServer, server),
+  getMcpServerLogs: (serverId: string): Promise<string[]> => ipcRenderer.invoke(desktopIpcChannels.mcp.getLogs, serverId),
+  clearMcpServerLogs: (serverId: string): Promise<string[]> => ipcRenderer.invoke(desktopIpcChannels.mcp.clearLogs, serverId),
+  inspectMcpServer: (server: McpServerConfig): Promise<McpServerInspection> => ipcRenderer.invoke(desktopIpcChannels.mcp.inspectServer, server),
+  getMcpDiscoveredTools: (): Promise<McpDiscoveredTool[]> => ipcRenderer.invoke(desktopIpcChannels.mcp.getDiscoveredTools),
+  getSystemTools: (): Promise<SystemToolEntry[]> => ipcRenderer.invoke(desktopIpcChannels.system.getTools),
+  getPolicyRules: (): Promise<DesktopPolicyRule[]> => ipcRenderer.invoke(desktopIpcChannels.policy.getRules),
+  savePolicyRules: (rules: DesktopPolicyRule[]): Promise<DesktopPolicyRule[]> =>
+    ipcRenderer.invoke(desktopIpcChannels.policy.saveRules, rules),
+  openSystemTool: (input: string | OpenSystemToolInput): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.system.openTool, input),
+  openBrowserPreview: (url?: string): Promise<{ ok: boolean; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.openPreview, url),
+  closeBrowserPreview: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.closePreview),
+  captureBrowserPreview: (): Promise<{ ok: boolean; path: string; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.capturePreview),
+  controlWindow: (action: WindowControlAction): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(desktopIpcChannels.window.control, action),
+  showAppMenu: (input: ShowAppMenuInput): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(desktopIpcChannels.window.showAppMenu, input),
   onAppCommand: (listener: (command: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, command: string) => listener(command);
-    ipcRenderer.on("phase1:app-command", handler);
-    return () => ipcRenderer.removeListener("phase1:app-command", handler);
+    ipcRenderer.on(desktopIpcChannels.window.appCommand, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.window.appCommand, handler);
   },
   onDictationCommand: (
     listener: (command: { action: "start" | "toggle"; source: "hold" | "toggle" }) => void
@@ -543,8 +540,8 @@ contextBridge.exposeInMainWorld("codecn", {
       _event: Electron.IpcRendererEvent,
       command: { action: "start" | "toggle"; source: "hold" | "toggle" }
     ) => listener(command);
-    ipcRenderer.on("phase1:dictation-command", handler);
-    return () => ipcRenderer.removeListener("phase1:dictation-command", handler);
+    ipcRenderer.on(desktopIpcChannels.window.dictationCommand, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.window.dictationCommand, handler);
   },
   onMobileAction: (
     listener: (action: { action: string; workspaceId?: string; threadId?: string }) => void
@@ -553,82 +550,82 @@ contextBridge.exposeInMainWorld("codecn", {
       _event: Electron.IpcRendererEvent,
       action: { action: string; workspaceId?: string; threadId?: string }
     ) => listener(action);
-    ipcRenderer.on("phase1:mobile-action", handler);
-    return () => ipcRenderer.removeListener("phase1:mobile-action", handler);
+    ipcRenderer.on(desktopIpcChannels.mobile.action, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.mobile.action, handler);
   },
   onAssistantActivity: (
-    listener: (activity: { type: "patch" | "run" | "complete"; title: string; detail: string; requestId?: string }) => void
+    listener: (activity: { type: "patch" | "run" | "complete"; title: string; detail: string; requestId?: string; [key: string]: unknown }) => void
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      activity: { type: "patch" | "run" | "complete"; title: string; detail: string; requestId?: string }
+      activity: { type: "patch" | "run" | "complete"; title: string; detail: string; requestId?: string; [key: string]: unknown }
     ) => listener(activity);
-    ipcRenderer.on("phase1:assistant-activity", handler);
-    return () => ipcRenderer.removeListener("phase1:assistant-activity", handler);
+    ipcRenderer.on(desktopIpcChannels.events.assistantActivity, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.assistantActivity, handler);
   },
   onOpenWorkspaceFilePreview: (
-    listener: (event: {
-      workspaceId: string;
-      filePath: string;
-      kind?: "image" | "video" | "pdf" | "docx" | "pptx" | "html" | "text";
-    }) => void
+    listener: (event: OpenWorkspaceFilePreviewEvent) => void
   ): (() => void) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      payload: {
-        workspaceId: string;
-        filePath: string;
-        kind?: "image" | "video" | "pdf" | "docx" | "pptx" | "html" | "text";
-      }
-    ) => listener(payload);
+    const handler = (_event: Electron.IpcRendererEvent, payload: OpenWorkspaceFilePreviewEvent) => listener(payload);
     ipcRenderer.on(desktopIpcChannels.events.openWorkspaceFilePreview, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.events.openWorkspaceFilePreview, handler);
   },
   onModelStreamDelta: (
-    listener: (update: { requestId: string; delta: string }) => void
+    listener: (update: { requestId: string; delta: string; reset?: boolean }) => void
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      update: { requestId: string; delta: string }
+      update: { requestId: string; delta: string; reset?: boolean }
     ) => listener(update);
-    ipcRenderer.on("phase1:model-stream-delta", handler);
-    return () => ipcRenderer.removeListener("phase1:model-stream-delta", handler);
+    ipcRenderer.on(desktopIpcChannels.model.streamDelta, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.model.streamDelta, handler);
+  },
+  onModelReasoningDelta: (
+    listener: (update: { requestId: string; delta: string; reset?: boolean }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      update: { requestId: string; delta: string; reset?: boolean }
+    ) => listener(update);
+    ipcRenderer.on(desktopIpcChannels.events.modelReasoningDelta, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.modelReasoningDelta, handler);
   },
   onSnapshotUpdate: (listener: (snapshot: PhaseOneSnapshot) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, snapshot: PhaseOneSnapshot) => listener(snapshot);
-    ipcRenderer.on("phase1:snapshot-update", handler);
-    return () => ipcRenderer.removeListener("phase1:snapshot-update", handler);
+    ipcRenderer.on(desktopIpcChannels.events.snapshotUpdate, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.snapshotUpdate, handler);
   },
-  getTerminalSession: (): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke("phase1:get-terminal-session"),
-  writeTerminalInput: (input: string): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke("phase1:write-terminal-input", input),
-  restartTerminalSession: (): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke("phase1:restart-terminal-session"),
+  onQuantMarketUpdated: (listener: (payload: { projectId: string; query: unknown; bars: unknown[] }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; query: unknown; bars: unknown[] }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.quantMarketUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantMarketUpdated, handler);
+  },
+  onQuantScreenerUpdated: (listener: (payload: { projectId: string; result: unknown }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; result: unknown }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.quantScreenerUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantScreenerUpdated, handler);
+  },
+  onQuantPortfolioUpdated: (listener: (payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; skillId?: string; title?: string; activity?: unknown; deleted?: boolean; schedule?: unknown; note?: unknown }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.quantPortfolioUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.quantPortfolioUpdated, handler);
+  },
+  onDataWorkspaceUpdated: (listener: (payload: { projectId: string; reason?: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { projectId: string; reason?: string }) => listener(payload);
+    ipcRenderer.on(desktopIpcChannels.events.dataWorkspaceUpdated, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.events.dataWorkspaceUpdated, handler);
+  },
+  getTerminalSession: (): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.getSession),
+  writeTerminalInput: (input: string): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.writeInput, input),
+  restartTerminalSession: (): Promise<TerminalSessionSnapshot> => ipcRenderer.invoke(desktopIpcChannels.terminal.restartSession),
   onTerminalUpdate: (listener: (snapshot: TerminalSessionSnapshot) => void) => {
     const subscription = (_event: Electron.IpcRendererEvent, snapshot: TerminalSessionSnapshot) => listener(snapshot);
-    ipcRenderer.on("phase1:terminal-update", subscription);
-    return () => ipcRenderer.removeListener("phase1:terminal-update", subscription);
+    ipcRenderer.on(desktopIpcChannels.terminal.update, subscription);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.terminal.update, subscription);
   },
-  callMcpTool: (input: { toolId: string; query: string; args?: Record<string, unknown> }): Promise<McpToolCallResult> =>
-    ipcRenderer.invoke("phase1:call-mcp-tool", input),
-  chatWithModel: (input: {
-    requestId: string;
-    workspaceId?: string;
-    threadId?: string;
-    provider: string;
-    baseUrl: string;
-    apiKey: string;
-    wireApi: "responses" | "chat.completions";
-    model: string;
-    reviewModel: string;
-    reasoningEffort: "low" | "medium" | "high" | "xhigh";
-    disableResponseStorage: boolean;
-    systemPrompt: string;
-    messages: Array<{
-      id?: string;
-      role: "system" | "user" | "assistant";
-      content: string;
-      createdAt?: string;
-      attachments?: Array<{ name: string; path: string; url: string }>;
-    }>;
-  }) => ipcRenderer.invoke("phase1:chat-with-model", input),
-  cancelModelRequest: (input?: { requestId?: string }) => ipcRenderer.invoke("phase1:cancel-model-request", input)
+  callMcpTool: (input: McpToolCallInput): Promise<McpToolCallResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.mcp.callTool, input),
+  chatWithModel: (input: ModelChatInput) => ipcRenderer.invoke(desktopIpcChannels.model.chat, input),
+  cancelModelRequest: (input?: CancelModelRequestInput) => ipcRenderer.invoke(desktopIpcChannels.model.cancelRequest, input),
+  guideModelRequest: (input: GuideModelRequestInput) => ipcRenderer.invoke(desktopIpcChannels.model.guideRequest, input)
 });
