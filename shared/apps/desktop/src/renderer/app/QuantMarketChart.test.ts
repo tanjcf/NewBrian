@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { drillTargetForBar } from "./QuantMarketChart.logic.ts";
+import { drillTargetForBar, movingAverage } from "./QuantMarketChart.logic.ts";
 
 const sample = {
   timestamp: "2026-05-15T00:00:00+08:00",
@@ -33,4 +33,9 @@ test("daily bar opens day-path view from known OHLC without inventing minutes", 
   assert.equal(target.endDate, "2026-05-15");
   assert.equal(target.dayPath?.high, 12);
   assert.equal(target.dayPath?.low, 9);
+});
+
+test("moving averages preserve leading gaps and calculate rolling close averages", () => {
+  const bars = [10, 12, 14, 16].map((close, index) => ({ ...sample, timestamp: `2026-05-${10 + index}`, close }));
+  assert.deepEqual(movingAverage(bars, 3), [null, null, 12, 14]);
 });

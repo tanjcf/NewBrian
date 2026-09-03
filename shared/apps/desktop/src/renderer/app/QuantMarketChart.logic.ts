@@ -18,6 +18,14 @@ export type QuantChartDrillTarget = {
   dayPath?: QuantChartBar;
 };
 
+export function movingAverage(bars: QuantChartBar[], period: number): Array<number | null> {
+  return bars.map((_bar, index) => {
+    if (index + 1 < period) return null;
+    const window = bars.slice(index + 1 - period, index + 1);
+    return window.reduce((sum, bar) => sum + Number(bar.close), 0) / period;
+  });
+}
+
 export function isoLocal(value: Date): string {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }

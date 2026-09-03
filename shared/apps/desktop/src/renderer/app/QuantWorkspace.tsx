@@ -68,7 +68,7 @@ export function QuantWorkspace({
   compact?: boolean;
   activeView?: "market" | "portfolio" | "strategy" | "radar" | "research";
 }) {
-  const { state: ui, setState: setUi, hydrated } = useWorkspaceSceneState(projectId, "quant", defaultQuantUi);
+  const { state: ui, setState: setUi, hydrated } = useWorkspaceSceneState(projectId || workspaceId, "quant", defaultQuantUi);
   const symbol = ui.symbol;
   const interval = ui.interval;
   const adjustment = ui.adjustment;
@@ -132,7 +132,7 @@ export function QuantWorkspace({
   const isSymbolWatched = Boolean(activeWatchlistGroup?.symbols.includes(symbol));
 
   const refreshWatchlistQuotes = async () => {
-    if (!projectId || !window.codecn?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
+    if (!window.codecn?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
       setWatchlistQuotes({});
       return;
     }
@@ -140,7 +140,6 @@ export function QuantWorkspace({
     const entries = await Promise.all(activeWatchlistGroup.symbols.map(async (item) => {
       try {
         const result = await window.codecn.queryQuantBars({
-          projectId,
           query: { symbol: item, interval: "1d", adjustment: "none", startDate: startDate || undefined, endDate: endDate || undefined }
         });
         const bars = Array.isArray(result) ? result.filter((bar) => typeof bar?.close === "number") : [];
@@ -169,14 +168,14 @@ export function QuantWorkspace({
   };
 
   const refreshMarketOverview = async () => {
-    if (!projectId || !window.codecn?.queryQuantMarketOverview) {
-      setMarketOverviewStatus("当前项目尚未连接大盘服务");
+    if (!window.codecn?.queryQuantMarketOverview) {
+      setMarketOverviewStatus("大盘服务不可用");
       return;
     }
     setMarketOverviewBusy(true);
     setMarketOverviewStatus("正在通过 Spring 读取 AKShare…");
     try {
-      const result = await window.codecn.queryQuantMarketOverview({ projectId, limit: 20 });
+      const result = await window.codecn.queryQuantMarketOverview({ limit: 20 });
       setMarketOverview(result && typeof result === "object" ? result as Record<string, any> : null);
       setMarketOverviewStatus("已读取真实大盘数据");
     } catch (error) {
@@ -198,10 +197,10 @@ export function QuantWorkspace({
     setUi((current) => ({ ...current, symbol: code }));
   };
   const runScreener = async () => {
-    if (!projectId || !window.codecn?.queryQuantMarketScreener) { setScreenerStatus("选股服务尚未连接"); return; }
+    if (!window.codecn?.queryQuantMarketScreener) { setScreenerStatus("选股服务不可用"); return; }
     const criteria = Object.fromEntries(Object.entries(screenerCriteria).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)]));
     setScreenerBusy(true); setScreenerStatus("正在读取 AKShare A 股快照…");
-    try { const result = await window.codecn.queryQuantMarketScreener({ projectId, criteria: { ...criteria, limit: 30 } }); setScreenerResult(result); setScreenerStatus(`已筛选 ${Array.isArray(result?.items) ? result.items.length : 0} 只真实股票`); }
+    try { const result = await window.codecn.queryQuantMarketScreener({ criteria: { ...criteria, limit: 30 } }); setScreenerResult(result); setScreenerStatus(`已筛选 ${Array.isArray(result?.items) ? result.items.length : 0} 只真实股票`); }
     catch (error) { setScreenerResult(null); setScreenerStatus(`选股失败：${error instanceof Error ? error.message : String(error)}`); }
     finally { setScreenerBusy(false); }
   };
@@ -345,12 +344,11 @@ export function QuantWorkspace({
   }, [projectId]);
 
   useEffect(() => {
-    if (!hydrated || !projectId || !window.codecn?.createQuantSession || !window.codecn?.queryQuantBars) return;
+    if (!hydrated || !window.codecn?.queryQuantBars) return;
     let active = true;
     const intervalValue = interval === "周线" ? "1w" : interval === "月线" ? "1mo" : "1d";
     const adjustmentValue = adjustment === "后复权" ? "backward" : adjustment === "不复权" ? "none" : "forward";
-    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 })
-      .then(() => window.codecn.queryQuantBars({ projectId, query: { symbol, interval: intervalValue, adjustment: adjustmentValue, startDate: startDate || undefined, endDate: endDate || undefined } }))
+    void window.codecn.queryQuantBars({ query: { symbol, interval: intervalValue, adjustment: adjustmentValue, startDate: startDate || undefined, endDate: endDate || undefined } })
       .then((result: any[]) => {
         if (!active) return;
         const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
@@ -373,7 +371,7 @@ export function QuantWorkspace({
         }
       });
     return () => { active = false; };
-  }, [projectId, symbol, interval, adjustment, startDate, endDate, queryVersion, hydrated]);
+  }, [projectId, workspaceId, symbol, interval, adjustment, startDate, endDate, queryVersion, hydrated]);
 
   useEffect(() => {
     if (!projectId || !window.codecn?.getQuantActivity) return;

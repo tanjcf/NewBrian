@@ -3,6 +3,7 @@ import type { MarketDataQuery, QuantBar } from "@codex-forge/protocol/quant-type
 export interface DesktopMarketBarsClientDependencies {
   readGatewayOrigin: () => Promise<string>;
   readAccessToken: () => Promise<string>;
+  refreshAccessToken: () => Promise<string>;
   createHeaders: (input: { accessToken: string }) => Record<string, string>;
   fetchImpl?: typeof fetch;
 }
@@ -32,7 +33,18 @@ export class DesktopMarketBarsClient {
       throw new DesktopMarketBarsError("MARKET_BARS_SYMBOL_REQUIRED", "Symbol is required.");
     }
 
-    const accessToken = (await this.dependencies.readAccessToken()).trim();
+    const refreshAccessToken = async () => {
+      try {
+        return (await this.dependencies.refreshAccessToken()).trim();
+      } catch {
+        return "";
+      }
+    };
+
+    let accessToken = (await this.dependencies.readAccessToken()).trim();
+    if (!accessToken) {
+      accessToken = await refreshAccessToken();
+    }
     if (!accessToken) {
       throw new DesktopMarketBarsError(
         "MARKET_BARS_AUTH_REQUIRED",
@@ -41,28 +53,53 @@ export class DesktopMarketBarsClient {
     }
 
     const gatewayOrigin = (await this.dependencies.readGatewayOrigin()).replace(/\/+$/u, "");
-    const response = await this.fetchImpl(`${gatewayOrigin}/api/desktop/v1/market-bars`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        ...this.dependencies.createHeaders({ accessToken })
-      },
-      body: JSON.stringify({
-        symbol,
-        interval: input.interval,
-        startDate: input.startDate,
-        endDate: input.endDate,
-        adjustment: input.adjustment
-      })
-    });
+    const requestBars = (activeAccessToken: string) => this.fetchImpl(
+      `${gatewayOrigin}/api/desktop/v1/market-bars`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          ...this.dependencies.createHeaders({ accessToken: activeAccessToken })
+        },
+        body: JSON.stringify({
+          symbol,
+          interval: input.interval,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          adjustment: input.adjustment
+        })
+      }
+    );
+
+    let response = await requestBars(accessToken);
+    if (response.status === 401 || response.status === 403) {
+      const refreshedAccessToken = await refreshAccessToken();
+      if (refreshedAccessToken) {
+        accessToken = refreshedAccessToken;
+        response = await requestBars(accessToken);
+      }
+    }
 
     if (!response.ok) {
-      const hint = response.status === 502
-        ? " Spring 无法从 AKShare（app.akshare.base-url）拉取 K 线，请确认适配器已启动。"
+      const errorPayload = await response.clone().json().catch(() => null) as {
+        code?: unknown;
+        message?: unknown;
+        request_id?: unknown;
+      } | null;
+      const upstreamMessage = typeof errorPayload?.message === "string"
+        ? errorPayload.message.trim()
         : "";
+      const requestId = typeof errorPayload?.request_id === "string" && errorPayload.request_id.trim()
+        ? ` (request_id: ${errorPayload.request_id.trim()})`
+        : "";
+      const message = upstreamMessage
+        ? `Market bars failed with HTTP ${response.status}: ${upstreamMessage}${requestId}`
+        : `Market bars failed with HTTP ${response.status}.`;
       throw new DesktopMarketBarsError(
-        `MARKET_BARS_HTTP_${response.status}`,
-        `Market bars failed with HTTP ${response.status}.${hint}`
+        typeof errorPayload?.code === "string" && errorPayload.code.trim()
+          ? errorPayload.code.trim()
+          : `MARKET_BARS_HTTP_${response.status}`,
+        message
       );
     }
 

@@ -746,6 +746,7 @@ const videoRenderService = new VideoRenderService({
 const desktopMarketBarsClient = new DesktopMarketBarsClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  refreshAccessToken: refreshDesktopAccessTokenForGateway,
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
     accessToken,
     device: collectDesktopDeviceFingerprint()
@@ -8293,6 +8294,22 @@ function registerIpc() {
       }
       return { content: result.content, kind: input.kind, jobId: String(result.job.id || "") };
     }
+  });
+  ipcMain.handle(desktopIpcChannels.quantMarket.queryBars, async (_event, value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("Quant market request is invalid.");
+    return desktopMarketBarsClient.queryBars((value as { query?: unknown }).query as any);
+  });
+  ipcMain.handle(desktopIpcChannels.quantMarket.queryOverview, async (_event, value: unknown) => {
+    const input = value && typeof value === "object" && !Array.isArray(value) ? value as { limit?: unknown } : {};
+    const limit = input.limit === undefined ? 20 : Number(input.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError("Quant market limit must be an integer between 1 and 100.");
+    return desktopMarketOverviewClient.queryOverview(limit);
+  });
+  ipcMain.handle(desktopIpcChannels.quantMarket.queryScreener, async (_event, value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("Quant screener request is invalid.");
+    const criteria = (value as { criteria?: unknown }).criteria;
+    if (!criteria || typeof criteria !== "object" || Array.isArray(criteria)) throw new TypeError("Quant screener criteria are invalid.");
+    return desktopMarketOverviewClient.queryScreener(criteria as Record<string, unknown>);
   });
   registerDataImportIpc({ dataImport: new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot), resolveOwnerId: resolveBrainLocalOwnerId });
   registerPluginRepositoryHandlers();

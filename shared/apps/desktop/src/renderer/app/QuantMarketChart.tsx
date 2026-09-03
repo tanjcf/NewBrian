@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import "./QuantMarketChart.css";
 import {
   drillTargetForBar,
+  movingAverage,
   type IntervalLabel,
   type QuantChartBar,
   type QuantChartDrillTarget
@@ -35,19 +37,37 @@ export function QuantMarketChart({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [crosshairOn, setCrosshairOn] = useState(false);
   const [pointer, setPointer] = useState<{ x: number; y: number; index: number } | null>(null);
+  const [visibleStart, setVisibleStart] = useState(0);
+  const [visibleEnd, setVisibleEnd] = useState(bars.length);
+
+  useEffect(() => {
+    setVisibleStart(Math.max(0, bars.length - 60));
+    setVisibleEnd(bars.length);
+    setPointer(null);
+  }, [bars]);
+
+  const visibleBars = useMemo(
+    () => bars.slice(Math.min(visibleStart, Math.max(0, bars.length - 1)), Math.max(visibleStart + 1, visibleEnd)),
+    [bars, visibleEnd, visibleStart]
+  );
+  const averages = useMemo(() => ({
+    ma5: movingAverage(visibleBars, 5),
+    ma10: movingAverage(visibleBars, 10),
+    ma20: movingAverage(visibleBars, 20)
+  }), [visibleBars]);
 
   const chart = useMemo(() => {
     const width = 760;
     const priceHeight = 250;
     const volumeHeight = 70;
-    if (!bars.length) {
+    if (!visibleBars.length) {
       return { width, priceHeight, volumeHeight, high: 0, low: 0, maxVolume: 1, step: width, bodyWidth: 3, y: () => 0 };
     }
-    const high = Math.max(...bars.map((bar) => bar.high));
-    const low = Math.min(...bars.map((bar) => bar.low));
+    const high = Math.max(...visibleBars.map((bar) => bar.high));
+    const low = Math.min(...visibleBars.map((bar) => bar.low));
     const span = Math.max(high - low, 1e-9);
-    const maxVolume = Math.max(...bars.map((bar) => Number(bar.volume)), 1);
-    const step = width / Math.max(bars.length, 1);
+    const maxVolume = Math.max(...visibleBars.map((bar) => Number(bar.volume)), 1);
+    const step = width / Math.max(visibleBars.length, 1);
     const bodyWidth = Math.max(3, Math.min(12, step * 0.55));
     return {
       width,
@@ -60,7 +80,7 @@ export function QuantMarketChart({
       bodyWidth,
       y: (price: number) => 10 + ((high - price) / span) * (priceHeight - 20)
     };
-  }, [bars]);
+  }, [visibleBars]);
 
   const dayPath = useMemo(() => {
     if (!dayPathBar) return null;
@@ -82,7 +102,7 @@ export function QuantMarketChart({
   }, [dayPathBar]);
 
   const totalHeight = chart.priceHeight + chart.volumeHeight;
-  const hoverBar = pointer && bars[pointer.index] ? bars[pointer.index] : null;
+  const hoverBar = pointer && visibleBars[pointer.index] ? visibleBars[pointer.index] : null;
 
   const clientToSvg = (clientX: number, clientY: number) => {
     const svg = svgRef.current;
@@ -95,27 +115,29 @@ export function QuantMarketChart({
   };
 
   const indexAtX = (x: number) => {
-    if (!bars.length) return 0;
-    return Math.max(0, Math.min(bars.length - 1, Math.floor(x / chart.step)));
+    if (!visibleBars.length) return 0;
+    return Math.max(0, Math.min(visibleBars.length - 1, Math.floor(x / chart.step)));
   };
 
   const handleMove = (event: MouseEvent<SVGSVGElement>) => {
     if (dayPathBar) return;
     const point = clientToSvg(event.clientX, event.clientY);
     if (!point) return;
+    setCrosshairOn(true);
     setPointer({ x: point.x, y: point.y, index: indexAtX(point.x) });
   };
 
   const handleLeave = () => {
-    if (!crosshairOn) setPointer(null);
+    setPointer(null);
+    setCrosshairOn(false);
   };
 
   const handleClick = (event: MouseEvent<SVGSVGElement>) => {
     if (dayPathBar) return;
     const point = clientToSvg(event.clientX, event.clientY);
-    if (!point || !bars.length) return;
+    if (!point || !visibleBars.length) return;
     const index = indexAtX(point.x);
-    const bar = bars[index];
+    const bar = visibleBars[index];
     if (!bar) return;
     setCrosshairOn(true);
     setPointer({ x: point.x, y: point.y, index });
@@ -133,6 +155,9 @@ export function QuantMarketChart({
         <strong>{symbol}</strong>
         <span>{interval} · {adjustment} · 区间 {returnPercent}%</span>
       </div>
+      {!dayPathBar && bars.length ? <div className="brain-quant-chart-legend" aria-label="K 线图例">
+        <span><i className="candle" />日K</span><span><i className="ma5" />MA5</span><span><i className="ma10" />MA10</span><span><i className="ma20" />MA20</span><span><i className="volume" />成交量</span>
+      </div> : null}
       {!bars.length && !dayPathBar ? (
         <div className="brain-quant-chart-empty">
           <strong>暂无行情数据</strong>
@@ -192,7 +217,10 @@ export function QuantMarketChart({
             onMouseLeave={handleLeave}
             onClick={handleClick}
           >
-            {bars.map((bar, index) => {
+            <g className="brain-quant-gridlines" stroke="currentColor" opacity=".1">
+              {[0, 1, 2, 3, 4].map((line) => <line key={line} x1="0" x2={chart.width} y1={10 + line * ((chart.priceHeight - 20) / 4)} y2={10 + line * ((chart.priceHeight - 20) / 4)} />)}
+            </g>
+            {visibleBars.map((bar, index) => {
               const x = chart.step * index + chart.step / 2;
               const up = bar.close >= bar.open;
               const bodyTop = chart.y(Math.max(bar.open, bar.close));
@@ -216,11 +244,15 @@ export function QuantMarketChart({
                     y={chart.priceHeight + chart.volumeHeight - volumeHeight}
                     width={chart.bodyWidth}
                     height={volumeHeight}
-                    fill={color}
-                    opacity="0.55"
+                    fill="#c7cdd5"
+                    opacity="0.9"
                   />
                 </g>
               );
+            })}
+            {([['ma5', '#f0a020'], ['ma10', '#3b82f6'], ['ma20', '#8b5cf6']] as const).map(([key, color]) => {
+              const points = averages[key].map((value, index) => value == null ? null : `${chart.step * index + chart.step / 2},${chart.y(value)}`).filter(Boolean).join(' ');
+              return <polyline key={key} points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />;
             })}
             {crosshairOn && pointer ? (
               <g className="brain-quant-crosshair" pointerEvents="none">
@@ -232,15 +264,15 @@ export function QuantMarketChart({
               <g pointerEvents="none">
                 <rect
                   x={Math.min(Math.max(pointer.x + 10, 4), chart.width - 168)}
-                  y={Math.min(Math.max(pointer.y - 58, 4), chart.priceHeight - 70)}
+                  y={Math.min(Math.max(pointer.y - 76, 4), chart.priceHeight - 158)}
                   width="160"
-                  height="64"
+                  height="154"
                   rx="6"
                   fill="rgba(15,23,42,0.92)"
                 />
                 <text
                   x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)}
-                  y={Math.min(Math.max(pointer.y - 38, 22), chart.priceHeight - 52)}
+                  y={Math.min(Math.max(pointer.y - 56, 22), chart.priceHeight - 138)}
                   fill="#fff"
                   fontSize="11"
                 >
@@ -248,34 +280,42 @@ export function QuantMarketChart({
                 </text>
                 <text
                   x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)}
-                  y={Math.min(Math.max(pointer.y - 20, 40), chart.priceHeight - 34)}
+                  y={Math.min(Math.max(pointer.y - 36, 42), chart.priceHeight - 118)}
                   fill="#fca5a5"
                   fontSize="12"
                   data-testid="brain-quant-hover-high"
                 >
-                  最高 {Number(hoverBar.high).toFixed(2)}
+                  开 {Number(hoverBar.open).toFixed(2)}  收 {Number(hoverBar.close).toFixed(2)}
                 </text>
                 <text
                   x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)}
-                  y={Math.min(Math.max(pointer.y - 4, 56), chart.priceHeight - 18)}
+                  y={Math.min(Math.max(pointer.y - 16, 62), chart.priceHeight - 98)}
                   fill="#86efac"
                   fontSize="12"
                   data-testid="brain-quant-hover-low"
                 >
-                  最低 {Number(hoverBar.low).toFixed(2)}
+                  最低 {Number(hoverBar.low).toFixed(2)}  最高 {Number(hoverBar.high).toFixed(2)}
                 </text>
+                <text x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)} y={Math.min(Math.max(pointer.y + 4, 82), chart.priceHeight - 78)} fill="#f0a020" fontSize="12">MA5 {averages.ma5[pointer.index]?.toFixed(2) ?? "--"}</text>
+                <text x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)} y={Math.min(Math.max(pointer.y + 24, 102), chart.priceHeight - 58)} fill="#93c5fd" fontSize="12">MA10 {averages.ma10[pointer.index]?.toFixed(2) ?? "--"}</text>
+                <text x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)} y={Math.min(Math.max(pointer.y + 44, 122), chart.priceHeight - 38)} fill="#c4b5fd" fontSize="12">MA20 {averages.ma20[pointer.index]?.toFixed(2) ?? "--"}</text>
+                <text x={Math.min(Math.max(pointer.x + 18, 12), chart.width - 160)} y={Math.min(Math.max(pointer.y + 64, 142), chart.priceHeight - 18)} fill="#d1d5db" fontSize="12">成交量 {Number(hoverBar.volume).toLocaleString()}</text>
               </g>
             ) : null}
           </svg>
           <div className="brain-quant-chart-axis">
-            <span>{String(bars[0]?.timestamp || "").slice(5, 10)}</span>
+            <span>{String(visibleBars[0]?.timestamp || "").slice(0, 10)}</span>
             <span>
               {hoverBar
                 ? `当前柱 最高 ${Number(hoverBar.high).toFixed(2)} / 最低 ${Number(hoverBar.low).toFixed(2)}`
                 : `最高 ${chart.high.toFixed(2)} / 最低 ${chart.low.toFixed(2)}`}
             </span>
-            <span>{String(bars.at(-1)?.timestamp || "").slice(5, 10)}</span>
+            <span>{String(visibleBars.at(-1)?.timestamp || "").slice(0, 10)}</span>
           </div>
+          {bars.length > 1 ? <div className="brain-quant-datazoom" aria-label="拖动缩放 K 线区间">
+            <input aria-label="区间起点" type="range" min="0" max={bars.length - 1} value={visibleStart} onChange={(event) => setVisibleStart(Math.min(Number(event.target.value), visibleEnd - 1))} />
+            <input aria-label="区间终点" type="range" min="1" max={bars.length} value={visibleEnd} onChange={(event) => setVisibleEnd(Math.max(Number(event.target.value), visibleStart + 1))} />
+          </div> : null}
         </>
       )}
     </div>

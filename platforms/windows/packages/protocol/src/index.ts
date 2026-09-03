@@ -831,6 +831,11 @@ export const desktopIpcChannels = {
   knowledge: {
     sync: "phase1:sync-user-knowledge"
   },
+  quantMarket: {
+    queryBars: "desktop:quant-market:bars-query",
+    queryOverview: "desktop:quant-market:overview-query",
+    queryScreener: "desktop:quant-market:screener-query"
+  },
   plugins: {
     list: "plugins:list",
     get: "plugins:get",
