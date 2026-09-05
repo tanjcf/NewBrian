@@ -1,0 +1,41 @@
+{
+  "caseId": "GAME-CHAT-LEVEL-TOOLS",
+  "timestamp": "2026-08-24T10:52:44.812Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "submit",
+    "port": 9555
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "submit",
+      "port": 9555
+    },
+    {
+      "type": "connect",
+      "port": 9555
+    }
+  ],
+  "assertions": [
+    {
+      "name": "execution",
+      "passed": false,
+      "detail": "Page.captureScreenshot timed out"
+    }
+  ],
+  "result": "FAIL",
+  "firstFailure": "Page.captureScreenshot timed out",
+  "screenshots": [
+    "failure.png"
+  ],
+  "finalState": {
+    "title": "codeCN",
+    "selectedScene": "game",
+    "activeView": null,
+    "visibleText": "文件\n编辑\n查看\n窗口\n帮助\n游戏制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n页面游戏验收-1787568018242\n页面游戏验收-1787568063807\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该聊什么？\n＋\n请求批准\n选择技能\nAuto·均衡 中\n↑\nChoose project\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n页面游戏验收-1787568063807\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n关卡\n项目与文件\n游戏策划\n角色与世界观\n战斗设计\n资产与测试\n游戏制作\n页面游戏验收-1787568063807\n重新检查\n工程类型\nWeb 游戏\n扫描范围\n3 项\n工程标记\npackage.json\n项目资产\n0\n脚本\n0\n场景\n0\n图片\n0\n音频\n0\n视频\n0\n模型\n2\n其他\n项目脚手架AI 策划 + 手动编辑 + 导出 UE5 可打开工程\nWeb 试玩UE5 工程\n一键生成 package.json 与本地试玩入口（5173）。创建 Web 游戏模板\n可运行预览\nnpm run start\n启动前会显示系统确认框；命令由主进程重新检查工程后确定，本面板不能传入或修改命令。\n启动试玩",
+    "rendererError": null
+  }
+}

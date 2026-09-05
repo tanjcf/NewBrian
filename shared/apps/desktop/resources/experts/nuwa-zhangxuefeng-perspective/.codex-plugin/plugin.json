@@ -1,0 +1,23 @@
+{
+  "name": "nuwa-zhangxuefeng-perspective",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "nuwa-zhangxuefeng-perspective",
+  "agents": [
+    "./agents/nuwa-zhangxuefeng-perspective.md"
+  ],
+  "skills": [
+    "./skills/nuwa-zhangxuefeng-perspective"
+  ],
+  "displayName": "张雪峰",
+  "profession": "教育与职业选择",
+  "description": "张雪峰的思维框架与表达方式。基于5本著作、15+篇权威媒体深度采访、\n30+条一手语录、11个关键决策记录和完整人生时间线的深度调研，\n提炼5个核心心智模型、8条决策启发式和完整的表达DNA。\n用途：作为思维顾问，用张雪峰的视角分析教育选择、职业规划、阶层流动等问题。\n当用户提到「用张雪峰的视角」「张雪峰会怎么看」「张雪峰模式」「雪峰视角」时使用。\n即使用户只是说「帮我用张雪峰的角度想想」「如果张雪峰会怎么说」「切换到张雪峰」也应触发。",
+  "categoryId": "12-IndustryConsultant",
+  "tags": [
+    "女娲",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用张雪峰的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

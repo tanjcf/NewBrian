@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/andrej-karpathy-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "38a6b1c609569ce4407d524444faca461a257343c9ee4f6f1923fc4d41ae6b32",
+  "files": {
+    ".codex-plugin/plugin.json": "b968cedd97eb674f662d7882bacddfcb6c48c2fe3faca22709302593877cd68b",
+    "agents/nuwa-andrej-karpathy-perspective.md": "ef4de2f88240bd934d939bb78f3889f9b023cf2a58e7ed9d0f5cb0b98cc42f1b",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-andrej-karpathy-perspective/FIDELITY.md": "e280838d641ff7f63b3bfcdb2f93e0085a7c08fdbdce0044580eb451aa85f145",
+    "skills/nuwa-andrej-karpathy-perspective/references/research/01-writings.md": "c3c61b3994af20db1636c91087e771fdb028ae903f252e5882d759de51da35c3",
+    "skills/nuwa-andrej-karpathy-perspective/references/research/02-conversations.md": "7c12e9baac817380b7bc58ad58db2b5700e9346a160de2f1d83a2160f45d428c",
+    "skills/nuwa-andrej-karpathy-perspective/references/research/03-expression-dna.md": "683ea74b9aa758a8d66de8ff6bce697b675bf67e82684a2f8c52f78caeb96f2e",
+    "skills/nuwa-andrej-karpathy-perspective/references/research/04-external-views.md": "ec60e1da235fdcbff915c860ec0754e47e31e05e72341725f352cf5f53e53cf4",
+    "skills/nuwa-andrej-karpathy-perspective/references/research/05-decisions.md": "5d898c4c85db8f7b3dd11e85ad783de752888ce4d1509759b42af0384c30b5c0",
+    "skills/nuwa-andrej-karpathy-perspective/references/research/06-timeline.md": "7d6942f89eb1b6ac487dc68c8ac3f4a30c222fd0ad2523c6cf5ac95763456159",
+    "skills/nuwa-andrej-karpathy-perspective/SKILL.md": "0ee03d2c4977479dd8cf5320528015fe57ac68336d9642b062ca819975355498",
+    "skills/nuwa-andrej-karpathy-perspective/UPSTREAM-SKILL.md": "38a6b1c609569ce4407d524444faca461a257343c9ee4f6f1923fc4d41ae6b32"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

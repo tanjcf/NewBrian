@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { basename, dirname, join, normalize, relative, resolve, sep } from "node:path";
+import { parse } from "yaml";
 
 export const OPENCLAW_SKILL_MARKERS = ["SKILL.md", "skill.md", "skills.md", "SKILL.MD"] as const;
 export const SPRING_SKILL_MARKERS = ["skill/SKILL.md", "skill/skill.md"] as const;
@@ -27,27 +28,12 @@ export interface OpenClawSkillSecurityScan {
   hasScripts: boolean;
 }
 
-function unquote(value: string) {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
 /** Parse AgentSkills / OpenClaw SKILL.md frontmatter. */
 export function parseOpenClawSkillFrontmatter(source: string, fallbackName: string) {
   const match = /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
-  const fields: Record<string, string> = {};
-  if (match) {
-    for (const line of match[1].split(/\r?\n/)) {
-      const field = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-      if (field) fields[field[1]] = unquote(field[2]);
-    }
-  }
+  const parsed = match ? parse(match[1], { maxAliasCount: 20 }) : {};
+  const fields = Object.fromEntries(Object.entries(parsed && typeof parsed === "object" ? parsed : {})
+    .filter(([, value]) => typeof value === "string")) as Record<string, string>;
   return {
     name: (fields.name || fallbackName).trim(),
     description: (fields.description || "").trim(),

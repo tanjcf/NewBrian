@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/steve-jobs-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "613c8100027c8c669e3e95ced382778bcb40d1c6894e4a160be9beed6707d1dc",
+  "files": {
+    ".codex-plugin/plugin.json": "8dc8ac52aa900b35aef77381c3a280a7919274a47723c3de0e620231489aac1a",
+    "agents/nuwa-steve-jobs-perspective.md": "3510e14eb71f5392b7c01c5a51355ec0fd6e4114f8690712a8add5119f57a0a5",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-steve-jobs-perspective/FIDELITY.md": "d5fe0f6f4dec52cc69639a20e4b1c9141adefdcecdeaa09076d86cd6a50a84cd",
+    "skills/nuwa-steve-jobs-perspective/references/demo-conversation-2026-04-05.md": "9e5717bd9d5ee91a25880e34f4ab79f6fe274f399fb0b9fed86640295a387fcb",
+    "skills/nuwa-steve-jobs-perspective/references/research/01-writings.md": "6cc7503ade87b0f2a7905942e8df4ead3a2cf47dbe3801ad2ea8ad35e3a7f980",
+    "skills/nuwa-steve-jobs-perspective/references/research/02-conversations.md": "8ffbd265e7c4d2b5c8450a0408d31a4262ed82e2c240e546230bad2534765fa2",
+    "skills/nuwa-steve-jobs-perspective/references/research/03-expression-dna.md": "1651d36ca6718d44d4ed4e7dfa937bd444a350bdc39fd953581c48d288f34a95",
+    "skills/nuwa-steve-jobs-perspective/references/research/04-external-views.md": "17b60d3fc3e3da3f628d119b433923ab5be4645de8b4a6b415eb802f8ccd9085",
+    "skills/nuwa-steve-jobs-perspective/references/research/05-decisions.md": "1e2de6ad67b02aae9cce5fa42d5ecb1e06c3b9f4fcca081484a9650d189e74e1",
+    "skills/nuwa-steve-jobs-perspective/references/research/06-timeline.md": "830b7ac15202c48e98b6258976491ae11018d2394f1c149d0d6a21b82ea71b28",
+    "skills/nuwa-steve-jobs-perspective/SKILL.md": "9abbac5a8bd5f6eef8a4936e0aa0823b92c27f7040cbac169fa1f21fe7e70646",
+    "skills/nuwa-steve-jobs-perspective/UPSTREAM-SKILL.md": "613c8100027c8c669e3e95ced382778bcb40d1c6894e4a160be9beed6707d1dc"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "caseId": "GAME-BOUND-INSPECT-WEB-ISOLATED",
+  "timestamp": "2026-08-24T07:21:00.635Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "submit",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "submit",
+      "port": 9350
+    },
+    {
+      "type": "connect",
+      "port": 9350
+    },
+    {
+      "type": "bind-game-fixture",
+      "gameRoot": "I:\\G盘迁移备份\\workrpase\\BRAIN\\tmp-game-e2e",
+      "fixture": {
+        "projectId": "project_9d585685-5732-443a-bd7d-b8fc541a02d5",
+        "workspaceId": "workspace-1787555971756-d6d228",
+        "conversationId": "conversation_62d93a12-b5fb-495c-ae76-b961010057f1"
+      }
+    },
+    {
+      "type": "switch-scene",
+      "scene": "game"
+    },
+    {
+      "type": "new-chat"
+    },
+    {
+      "type": "submit",
+      "text": "请读取当前绑定的真实游戏工程状态，返回工程类型、关卡数量、资产数量和试玩入口，不要编造数据。"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "execution",
+      "passed": false,
+      "detail": "Runtime.evaluate timed out"
+    }
+  ],
+  "result": "FAIL",
+  "firstFailure": "Runtime.evaluate timed out",
+  "screenshots": [
+    "before.png",
+    "submitted.png"
+  ],
+  "finalState": null
+}

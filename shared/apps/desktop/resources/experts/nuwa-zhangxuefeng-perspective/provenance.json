@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/zhangxuefeng-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "ec00f43777f57df80f575420f6306851eb77cb01802514a11b6cb067ba464eed",
+  "files": {
+    ".codex-plugin/plugin.json": "dc77a93e167306b92b2c178e086c6417e6cd5b9c4c4db47abf93a67af28dab29",
+    "agents/nuwa-zhangxuefeng-perspective.md": "90cebc89ed883716cedfe2dd3a7c27a3c5bc6945f431843da89795ff575db84d",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-zhangxuefeng-perspective/FIDELITY.md": "a261551607ecff4c96ca030ac218f0a70a60dbdc9b88c9058e1eeb8aee848c7f",
+    "skills/nuwa-zhangxuefeng-perspective/references/research/01-writings.md": "0fa0e574cc4319f7c10fe4d731ff4a789610dc412fbb0d15f7389fa5dacd459f",
+    "skills/nuwa-zhangxuefeng-perspective/references/research/02-conversations.md": "12176da8e1135056894f78d5e27dc2264d4b1928f946df25695227e9ce4da5c4",
+    "skills/nuwa-zhangxuefeng-perspective/references/research/03-expression-dna.md": "9c36b8e9a4c311153b419e9d315d5c3f8235e3ec9e76ae760cdb1a118628aec6",
+    "skills/nuwa-zhangxuefeng-perspective/references/research/04-external-views.md": "62d27a133ee62462c39453b07a3f44cdf8a4bf6574d62bafd14909ed929910d7",
+    "skills/nuwa-zhangxuefeng-perspective/references/research/05-decisions.md": "c364099a11b7d10d1d4242e604da73dd64c36730221d88e7115aeac8fe1a3011",
+    "skills/nuwa-zhangxuefeng-perspective/references/research/06-timeline.md": "eef186f76d4ab5b8d568a3b32abdad2d93d129b6f2c7f5266816aa8132a06b41",
+    "skills/nuwa-zhangxuefeng-perspective/SKILL.md": "f8c84cc5542f8562a4f28352549ec7c1e47c10f536bd5d0fdb6227398b78ed5b",
+    "skills/nuwa-zhangxuefeng-perspective/UPSTREAM-SKILL.md": "ec00f43777f57df80f575420f6306851eb77cb01802514a11b6cb067ba464eed"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

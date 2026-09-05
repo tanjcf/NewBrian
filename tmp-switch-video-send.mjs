@@ -1,0 +1,3 @@
+import { readFile } from 'node:fs/promises';
+import { createSceneTestCdpClient } from './platforms/windows/apps/desktop/scripts/scene-test-cdp-client.mjs';
+const c=await createSceneTestCdpClient(9566); await c.switchWorkspace('video'); await c.mouseClickButtonText('新对话'); await new Promise(r=>setTimeout(r,700)); const p=await readFile('tmp-video-prompt.txt','utf8'); await c.clearAndType('textarea[placeholder*="可向 codeCN"]',p); await c.mouseClickSelector('button[title="发送"]'); console.log('sent'); await new Promise(r=>setTimeout(r,20000)); console.log((await c.evaluate(`document.body.innerText.slice(-1800)`))); c.close();

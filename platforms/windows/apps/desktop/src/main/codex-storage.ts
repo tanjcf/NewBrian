@@ -1039,6 +1039,24 @@ export class CodexStorage {
     this.appendGoalEvent(threadId, goalId, "question_answered", { questionId, answer: normalizedAnswer });
   }
 
+  listExpertQuestions(threadId: string, goalId: string) {
+    return (this.goals.prepare(`SELECT question_id AS questionId, prompt, status, answer,
+      options_json AS optionsJson FROM goal_questions
+      WHERE thread_id = ? AND goal_id = ? AND question_id LIKE 'expert-%'
+      ORDER BY created_at_ms DESC`).all(threadId, goalId) as Array<any>)
+      .map(row => ({ ...row, options: JSON.parse(row.optionsJson) }));
+  }
+
+  markExpertPreferenceApplied(threadId: string, goalId: string, questionId: string) {
+    this.goals.prepare("UPDATE goal_questions SET status = 'applied' WHERE thread_id = ? AND goal_id = ? AND question_id = ? AND status = 'answered'")
+      .run(threadId, goalId, questionId);
+  }
+
+  hasExpertActivation(threadId: string, goalId: string, expertId: string) {
+    return Boolean(this.goals.prepare("SELECT 1 FROM goal_events WHERE thread_id = ? AND goal_id = ? AND event_type = 'expert_activated' AND json_extract(payload_json, '$.expertId') = ? LIMIT 1")
+      .get(threadId, goalId, expertId));
+  }
+
   getGoalSnapshot(threadId: string): PersistedGoalSnapshot | null {
     const goal = this.getGoal(threadId);
     if (!goal) return null;

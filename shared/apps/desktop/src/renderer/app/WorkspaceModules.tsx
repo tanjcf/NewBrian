@@ -5203,12 +5203,13 @@ function renderSidebarModule() {
     if (selectedBrainConversationId) {
       setSelectedSidebarRow(`brain-conversation:${selectedBrainConversationId}`);
     }
-    // Briefly surface the handoff in composer, then send through normal askModel path.
-    focusComposerInputWithContent(question);
-    window.requestAnimationFrame(() => {
-      composerTextareaRef.current?.focus();
-      void submitComposerRequest({ question });
-    });
+    const workspace = resolveSceneExecutionWorkspace(normalizeWorkspaceCatalog(workspaceCatalog), "video",
+      selectedBrainProject?.localWorkspaceId, selectedWorkspace?.id);
+    if (!workspace || workspace.brainWorkspaceKey !== "video") {
+      setErrorMessage("视频工程尚未绑定，生成请求未发送到其他工程。");
+      return;
+    }
+    void askModel({ question, forceProjectThread: true, targetWorkspaceId: workspace.id, brainWorkspaceKey: "video" });
   };
 
   function renderBrainChatModule() {
@@ -6224,13 +6225,14 @@ function renderChatModule() {
             && goalExecution?.goal?.status === "active"
             && goalExecution?.pendingQuestion ? (() => {
             const isIntakeQuestion = goalExecution.pendingQuestion.questionId === "requirement-clarification";
+            const isExpertQuestion = goalExecution.pendingQuestion.questionId.startsWith("expert-");
             return (
             <section ref={(element) => {
               goalQuestionCardRef.current = element;
             }} className="goal-question-card" aria-live="polite" data-testid="goal-question-card">
               <header>
                 <strong>{goalExecution.pendingQuestion.prompt}</strong>
-                <span>目标需要你的决策</span>
+                <span>{isExpertQuestion ? "专家协作 · 等待你的选择" : "目标需要你的决策"}</span>
               </header>
               <div className="goal-question-options">
                 {goalExecution.pendingQuestion.options.map((option: any, index: number) => (
@@ -6241,6 +6243,10 @@ function renderChatModule() {
                     data-recommended={option.recommended ? "true" : "false"}
                     disabled={answeringGoalQuestion}
                     onClick={() => {
+                      if (isExpertQuestion && option.label === "调整分工") {
+                        document.querySelector<HTMLTextAreaElement>("[data-testid=goal-custom-adjustment-input]")?.focus();
+                        return;
+                      }
                       if (isIntakeQuestion && option.label === "我先补充信息") {
                         setChatStatus("请在下方输入框补充信息，或点击 + 上传材料后发送。");
                         document.querySelector<HTMLTextAreaElement>("[data-testid=\"composer-input\"]")?.focus();
@@ -6259,7 +6265,7 @@ function renderChatModule() {
                 const adjustment = goalCustomAdjustment.trim();
                 if (!adjustment || answeringGoalQuestion) return;
                 setGoalCustomAdjustment("");
-                void answerGoalDecision(isIntakeQuestion ? adjustment : `调整提纲：${adjustment}`);
+                void answerGoalDecision(isIntakeQuestion ? adjustment : `${isExpertQuestion ? "调整专家分工" : "调整提纲"}：${adjustment}`);
               }}>
                 <label htmlFor="goal-custom-adjustment-input">{isIntakeQuestion ? "补充信息" : "自定义调整意见"}</label>
                 <textarea
@@ -6269,7 +6275,7 @@ function renderChatModule() {
                   disabled={answeringGoalQuestion}
                   onChange={(event) => setGoalCustomAdjustment(event.target.value)}
                   rows={5}
-                  placeholder={isIntakeQuestion
+                  placeholder={isExpertQuestion ? "例如：只检查接口安全；暂时不安排交付验收；换一位擅长视频分镜的专家。" : isIntakeQuestion
                     ? "可补充使用场景、目标字数等信息，例如：\n用于全市年终工作会议发言；\n字数3500字左右。"
                     : "可逐条说明调整要求，例如：\n1. 安全生产放在第一部分；\n2. 增加“存在的问题”；\n3. 暂时不要生成正文和文件。"}
                 />
@@ -9148,7 +9154,7 @@ function renderWorkspaceModules() {
                     : activeFeature === "holon"
                       ? <HolonWorkspace threadId={selectedThread?.id} />
                       : activeFeature === "experts"
-                        ? <ExpertsMarketplace />
+                        ? <ExpertsMarketplace key={selectedBrainWorkspaceKey} workspaceKey={selectedBrainWorkspaceKey} />
                         : renderChatModule()
       )
       : renderChatModule();

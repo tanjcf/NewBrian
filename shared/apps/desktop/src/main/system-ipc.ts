@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import type { VideoVoiceAnalysisInput, VideoVoiceCasting } from "@codex-forge/protocol/brain-video-runtime";
 import {
   desktopIpcChannels,
   type OpenLogLocationResult,
@@ -15,6 +16,7 @@ import {
 type MaybePromise<T> = T | Promise<T>;
 
 interface SystemIpcServices {
+  analyzeVideoVoices?: (input: VideoVoiceAnalysisInput) => Promise<VideoVoiceCasting>;
   getTools: () => MaybePromise<SystemToolEntry[]>;
   openTool: (input: OpenSystemToolInput) => MaybePromise<SystemOpenResult>;
   openSkillLocation: (input: OpenSkillLocationInput) => MaybePromise<SystemOpenResult>;
@@ -106,6 +108,14 @@ export function parseSynthesizeNovelSpeechInput(input: unknown): SynthesizeNovel
 
 /** Register native system capabilities behind validated, data-only IPC contracts. */
 export function registerSystemIpcHandlers(services: SystemIpcServices) {
+  ipcMain.handle(desktopIpcChannels.system.analyzeVideoVoices, (_event, input: unknown) => {
+    if (!isRecord(input) || typeof input.script !== "string" || input.script.length > 40000
+      || !Array.isArray(input.shots) || input.shots.length > 200
+      || input.shots.some(s => !isRecord(s) || typeof s.id !== "string" || typeof s.line !== "string" || s.line.length > 4000 || typeof s.title !== "string")
+      || (input.preference !== undefined && (typeof input.preference !== "string" || input.preference.length > 2000))) throw new TypeError("剧本分析输入无效。");
+    if (!services.analyzeVideoVoices) throw new Error("当前平台未接入角色配音分析。");
+    return services.analyzeVideoVoices(input as unknown as VideoVoiceAnalysisInput);
+  });
   const channels = [
     ["system.getTools", desktopIpcChannels.system.getTools],
     ["system.openTool", desktopIpcChannels.system.openTool],

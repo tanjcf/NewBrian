@@ -1,0 +1,60 @@
+{
+  "name": "game-studios-delivery",
+  "version": "1.1.0",
+  "description": "用轻量 Quick Design 与故事完成门禁，推动游戏小改动可验收交付；完整工作室方法论参考 Claude-Code-Game-Studios。",
+  "expertType": "agent",
+  "agentName": "game-studios-delivery",
+  "agents": [
+    "./agents/game-studios-delivery.md"
+  ],
+  "skills": [
+    "./skills/game-studios-delivery"
+  ],
+  "displayName": {
+    "zh": "游戏设计与验收",
+    "en": "Game Design & Delivery"
+  },
+  "profession": {
+    "zh": "轻量游戏设计与故事完成检查",
+    "en": "Lightweight Game Design & Story Completion"
+  },
+  "displayDescription": {
+    "zh": "对调参、小机制与短周期功能做 Quick Design Spec，并按故事完成门禁验收；过大改动会引导回到完整系统设计。",
+    "en": "Produces Quick Design Specs for tuning, small mechanics, and short features, with story-done gates; redirects oversized changes to full system design."
+  },
+  "categoryId": "01-ProductDesign",
+  "defaultInitPrompt": {
+    "zh": "请说明游戏改动目标、现有系统、引擎/仓库约束与验收标准。",
+    "en": "Describe the change goal, existing systems, engine/repo constraints, and acceptance criteria."
+  },
+  "tags": [
+    {
+      "zh": "游戏设计",
+      "en": "Game Design"
+    },
+    {
+      "zh": "快速规格",
+      "en": "Quick Spec"
+    },
+    {
+      "zh": "故事验收",
+      "en": "Story Done"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为这次小改动写一份 Quick Design Spec",
+      "en": "Write a Quick Design Spec for this small change"
+    },
+    {
+      "zh": "检查当前故事是否达到 story-done 门禁",
+      "en": "Check whether the current story meets the story-done gate"
+    },
+    {
+      "zh": "判断这次改动该走轻量规格还是完整系统设计",
+      "en": "Decide whether this change needs a quick spec or full system design"
+    }
+  ],
+  "preferredWorkspaceKey": "game",
+  "workspaceKeys": ["game"]
+}

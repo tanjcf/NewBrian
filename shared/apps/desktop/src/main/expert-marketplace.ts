@@ -5,12 +5,14 @@
 
 import { promises as fs } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { expertWorkspaceKeys, isExpertAvailableInWorkspace } from "../shared/expert-workspace-policy.ts";
 
 export type ExpertType = "agent" | "team";
 
 export type LocalizedText = { en?: string; zh?: string } | string;
 
 export interface ExpertPackManifest {
+  workspaceKeys?: string[];
   name: string;
   version: string;
   description?: string;
@@ -42,6 +44,7 @@ export interface ExpertPackManifest {
 }
 
 export interface ExpertCatalogEntry {
+  workspaceKeys?: string[];
   id: string;
   name: string;
   expertType: ExpertType;
@@ -198,6 +201,7 @@ async function catalogFromRoot(input: {
       defaultInitPrompt: textOf(manifest.defaultInitPrompt, textOf((manifest.quickPrompts ?? [])[0])),
       avatar: manifest.avatar,
       preferredWorkspaceKey: manifest.preferredWorkspaceKey,
+      workspaceKeys: expertWorkspaceKeys({ ...manifest, id }),
       installed,
       enabled,
       source: input.source,
@@ -302,6 +306,7 @@ export async function setExpertEnabled(input: {
 }
 
 export async function summonExpertToThread(input: {
+  workspaceKey?: string;
   threadId: string;
   expertId: string;
   registryPath: string;
@@ -318,6 +323,9 @@ export async function summonExpertToThread(input: {
   });
   const expert = catalog.find((item) => item.id === input.expertId);
   if (!expert) throw new Error(`专家不存在：${input.expertId}`);
+  if (input.workspaceKey && !isExpertAvailableInWorkspace(expert, input.workspaceKey)) {
+    throw new Error("当前工作台不支持此专家；场景学习探索可使用全部专家。");
+  }
   if (!expert.installed) {
     await installExpertFromBuiltin({
       expertId: expert.id,
@@ -342,6 +350,7 @@ export async function clearExpertSummon(input: {
 }
 
 export async function resolveSummonedExpert(input: {
+  workspaceKey?: string;
   threadId: string;
   registryPath: string;
   builtinRoot: string;
@@ -357,6 +366,7 @@ export async function resolveSummonedExpert(input: {
   });
   const expert = catalog.find((item) => item.id === expertId && item.enabled !== false);
   if (!expert) return null;
+  if (input.workspaceKey && !isExpertAvailableInWorkspace(expert, input.workspaceKey)) return null;
   const context = buildExpertSummonContext(expert);
   try {
     const manifest = await readManifest(expert.rootPath);

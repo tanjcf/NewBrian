@@ -1,0 +1,78 @@
+{
+  "caseId": "EXPLORE-E2E-SIDEEFFECT",
+  "timestamp": "2026-08-25T04:46:05.358Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "port": 9356,
+    "mode": "sideeffect-retry"
+  },
+  "actions": [
+    {
+      "type": "before",
+      "cur": {
+        "selected": "explore",
+        "globalNav": [
+          "文件 0",
+          "产物 0",
+          "任务 0"
+        ],
+        "sceneNav": [],
+        "hasFakeTabs": false,
+        "panelHeader": "新建文件夹\n仅保存在本机",
+        "fileRows": [],
+        "empty": "项目还没有文件",
+        "busy": false,
+        "textTail": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n新建文件夹\n在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n5 分钟前\n推理输入 0.004 元/千tokens 推理输出 0.018 元/千t\n11 小时前\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n打开位置\n›\n已处理 刚刚\n查看源码\n\n用户目标：在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 explore-e2e-note.txt，内容写：场景学习探索E2E验收。不要只回复文字；必须产生真实文件并出现在右侧文件列表。；处理结果：文件已创建成功！ 创建结果： - 文件路径：explore-e2e-note.txt - 内容：场景学习探索E2E验收 - 大小：27 字节 该文件已出现在项目根目录下，右侧文件列表应该可以正常看到。 ### 文件变更 新建 1 个，编辑 0 个。 - 新建：explore-e2e-note.txt（27 字节）\n\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n新建文件夹\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n项目还没有文件"
+      }
+    },
+    {
+      "type": "submit",
+      "prompt": "只做一件事：调用真实工具，在当前已绑定的本地项目中写入 explore-e2e-note-2.txt，内容为「场景学习探索E2E验收2」。写完后刷新并确认右侧「文件」页签数量大于0。不要只口头说成功。"
+    },
+    {
+      "type": "after",
+      "after": {
+        "selected": "explore",
+        "globalNav": [
+          "文件 0",
+          "产物 0",
+          "任务 0"
+        ],
+        "sceneNav": [],
+        "hasFakeTabs": false,
+        "panelHeader": "新建文件夹\n仅保存在本机",
+        "fileRows": [],
+        "empty": "项目还没有文件",
+        "busy": false,
+        "textTail": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n新建文件夹\n在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n5 分钟前\n推理输入 0.004 元/千tokens 推理输出 0.018 元/千t\n11 小时前\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该在 新建文件夹 中做什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n新建文件夹\n本地模式\nmain\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n新建文件夹\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n项目还没有文件"
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "name": "selected-explore",
+      "passed": true
+    },
+    {
+      "name": "no-fake-tabs",
+      "passed": true
+    },
+    {
+      "name": "files-gt-0",
+      "passed": false,
+      "actual": {
+        "fileCount": 0,
+        "fileRows": [],
+        "empty": "项目还没有文件"
+      }
+    }
+  ],
+  "result": "PARTIAL",
+  "firstFailure": "files-gt-0:{\"fileCount\":0,\"fileRows\":[],\"empty\":\"项目还没有文件\"}",
+  "screenshots": [
+    "before.png",
+    "project-bound.png",
+    "submitted.png",
+    "after.png"
+  ]
+}

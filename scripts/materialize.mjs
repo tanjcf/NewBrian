@@ -31,7 +31,14 @@ const temporary = path.join(outputRoot, `.${target}-${process.pid}`);
 const ignoredDirectoryNames = new Set(["node_modules", "release", "tmp"]);
 
 function includeManagedSource(source) {
-  return !source.split(path.sep).some((segment) => ignoredDirectoryNames.has(segment));
+  if (source.split(path.sep).some((segment) => ignoredDirectoryNames.has(segment))) return false;
+  // Cargo output is not source. Copying it overwrites live executables on Windows
+  // and also imports stale binaries/cache from the source checkout.
+  const rustRelative = path.relative(rust, source);
+  if (rustRelative !== ".." && !rustRelative.startsWith(`..${path.sep}`) && !path.isAbsolute(rustRelative)) {
+    return !rustRelative.split(path.sep).includes("target");
+  }
+  return true;
 }
 
 for (const required of [shared, rust, ...overlayPaths]) {

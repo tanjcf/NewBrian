@@ -1,0 +1,60 @@
+{
+  "name": "music-composer",
+  "version": "1.0.0",
+  "description": "把音乐 brief 变成可修订的多轨结构方案，并在可用时导出可核验的 MIDI/工程说明。",
+  "expertType": "agent",
+  "agentName": "music-composer",
+  "agents": [
+    "./agents/music-composer.md"
+  ],
+  "skills": [
+    "./skills/music-composition-workflow"
+  ],
+  "displayName": {
+    "zh": "音乐编曲专家",
+    "en": "Music Composer"
+  },
+  "profession": {
+    "zh": "多轨编曲与符号音乐设计",
+    "en": "Multi-track Arrangement & Symbolic Music Design"
+  },
+  "displayDescription": {
+    "zh": "从时长、曲式、速度、调性与声部职责出发，规划可听、可改、可验收的编曲结构；有工具时再导出 MIDI 或工程说明。",
+    "en": "Plans audible, revisable arrangements from duration, form, tempo, tonality, and role contracts; exports MIDI or project notes when tools allow."
+  },
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "请提供时长、风格/情绪、乐器编制、参考限制、用途（BGM/主题曲等）与必须避开的元素。",
+    "en": "Provide duration, style/mood, instrumentation, reference limits, use case (BGM/theme), and elements to avoid."
+  },
+  "tags": [
+    {
+      "zh": "编曲",
+      "en": "Arrangement"
+    },
+    {
+      "zh": "MIDI",
+      "en": "MIDI"
+    },
+    {
+      "zh": "声部职责",
+      "en": "Role Contracts"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "按这个 brief 设计曲式与声部职责表",
+      "en": "Design form and instrument role contracts from this brief"
+    },
+    {
+      "zh": "诊断这段旋律/节奏问题并给出修订层",
+      "en": "Diagnose melody/rhythm issues and the revision layer to fix"
+    },
+    {
+      "zh": "导出或描述可导入 DAW 的多轨 MIDI 方案",
+      "en": "Export or describe a DAW-ready multi-track MIDI plan"
+    }
+  ],
+  "preferredWorkspaceKey": "music",
+  "workspaceKeys": ["music"]
+}

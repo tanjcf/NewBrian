@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/trump-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "aef251b00b513d7c36f7d169d666ed9a4795c598ee73c7586e074d4ce98841ed",
+  "files": {
+    ".codex-plugin/plugin.json": "fe9c897b726d40297d460e4babe7727fe009a069a004d08eb9340ec592248cef",
+    "agents/nuwa-trump-perspective.md": "2b3a6c8a940145c765b37f83418bafe06306d60588f0f4fa659a57bf44fe01e9",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-trump-perspective/FIDELITY.md": "9d3391c6eb1fdcf801603717145d18ed90963ebb1938549dcf2d22d9cb4420b2",
+    "skills/nuwa-trump-perspective/references/research/01-writings.md": "d0d14c78f92879e7569e5183ca4512743496fa17f27218fb02b752db210e1e7e",
+    "skills/nuwa-trump-perspective/references/research/02-conversations.md": "8460418a8880fb8db3093cf4edc619232e339d862ec7c1d169cccd2a5b9e45f8",
+    "skills/nuwa-trump-perspective/references/research/03-expression-dna.md": "5c677ee0dcb80eedefef14ccff67f3f63258201fe217d13a2ba90e6f18cf4e5c",
+    "skills/nuwa-trump-perspective/references/research/04-external-views.md": "ce96fbf0d5303bc4e84afa526d65d5cac63e1e437406bbbfa581996d20ffccc0",
+    "skills/nuwa-trump-perspective/references/research/05-decisions.md": "246eb49677f41508363f22616868096a24d7c6ea890439f3e211dfae7b23c5c0",
+    "skills/nuwa-trump-perspective/references/research/06-timeline.md": "24eacac0fad3459724f294ed8676f10cf7ef819ddfd8fd451ca09fba5b4842f4",
+    "skills/nuwa-trump-perspective/SKILL.md": "790917b3564ac4dc8993992aa4a86dbb9850a7ae55bd274db09f01d459fd82ed",
+    "skills/nuwa-trump-perspective/UPSTREAM-SKILL.md": "aef251b00b513d7c36f7d169d666ed9a4795c598ee73c7586e074d4ce98841ed"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

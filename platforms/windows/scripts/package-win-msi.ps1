@@ -1,4 +1,5 @@
 param(
+  [string]$Version,
   [switch]$SkipBuild,
   [ValidateSet("Test", "Production")]
   [string]$Channel = "Test",
@@ -24,6 +25,11 @@ if (-not (Test-Path -LiteralPath $asarPackageRoot)) {
 }
 $asarCli = Join-Path $asarPackageRoot "bin\asar.js"
 $desktopPackage = Get-Content (Join-Path $desktopRoot "package.json") -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot "msi-version.ps1")
+if (-not [string]::IsNullOrWhiteSpace($Version)) {
+  Assert-MsiVersion $Version
+  $desktopPackage.version = $Version
+}
 $isProduction = $Channel -eq "Production"
 $channelSlug = $Channel.ToLowerInvariant()
 $productName = $desktopPackage.name
@@ -322,8 +328,11 @@ try {
         $env:CODECN_MSI_INSTALL_DIR = $msiInstallDir
       }
       $dirArgs = @("--win", "dir", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
+      $dirArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
       if (-not $requireSignature) { $dirArgs += "--config.win.signAndEditExecutable=false" }
-      & node $electronBuilder @dirArgs
+      $builderStage = "application"
+      $builderLog = Join-Path $builderOut "electron-builder-application.log"
+      & node $electronBuilder @dirArgs 2>&1 | Tee-Object -FilePath $builderLog
       $lastBuilderExit = $LASTEXITCODE
       if ($lastBuilderExit -eq 0) {
         $unpackedRoot = Join-Path $builderOut "win-unpacked"
@@ -370,6 +379,11 @@ const asar = require(process.argv[1]);
 const archive = process.argv[2];
 const file = path.join(...String(process.argv[3]).split(/[\\/]+/).filter(Boolean));
 const text = asar.extractFile(archive, file).toString('utf8');
+const packagedVersion = JSON.parse(asar.extractFile(archive, 'package.json').toString('utf8')).version;
+if (packagedVersion !== process.argv[5]) {
+  console.error('Packaged application version does not match requested MSI version.');
+  process.exit(6);
+}
 if (text.includes('http://127.0.0.1:8790') || text.includes('http://localhost:8790')) {
   console.error('Packaged app.asar still contains a local business gateway endpoint.');
   process.exit(4);
@@ -386,7 +400,7 @@ if (!text.includes('Get-Process -Name')) {
   console.error('Packaged app.asar is missing the hidden Get-Process update wait loop.');
   process.exit(3);
 }
-"@ $asarPackageRoot $packagedAsar "out/main/index.js" $gatewayBaseUrl
+"@ $asarPackageRoot $packagedAsar "out/main/index.js" $gatewayBaseUrl $desktopPackage.version
         if ($LASTEXITCODE -ne 0) {
           throw "Unable to inspect the packaged desktop main bundle."
         }
@@ -407,8 +421,11 @@ process.stdout.write(asar.extractFile(archive, file));
         Write-Host "Verified packaged codeCN executable and icon resource." -ForegroundColor DarkGray
 
         $msiArgs = @("--win", "msi", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
+        $msiArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
         if (-not $requireSignature) { $msiArgs += "--config.win.signAndEditExecutable=false" }
-        & node $electronBuilder @msiArgs
+        $builderStage = "msi"
+        $builderLog = Join-Path $builderOut "electron-builder-msi.log"
+        & node $electronBuilder @msiArgs 2>&1 | Tee-Object -FilePath $builderLog
         $lastBuilderExit = $LASTEXITCODE
       }
     } finally {
@@ -440,7 +457,7 @@ process.stdout.write(asar.extractFile(archive, file));
 }
 
 if ($null -eq $generatedMsi) {
-  throw "electron-builder failed with exit code $lastBuilderExit after $maxPackageAttempts attempts"
+  throw "electron-builder failed at stage '$builderStage' with exit code $lastBuilderExit after $maxPackageAttempts attempts. Full log: $builderLog"
 }
 
 if (Test-Path -LiteralPath $generatedMsi) {
@@ -496,6 +513,5 @@ if ($emitUlit) {
   throw "Use package-win-ulit-patch.ps1 for ulit packages (full MSI rename is not a patch)."
 }
 } else {
-  Write-Host "MSI build finished, but no MSI artifact was found under: $builderOut" -ForegroundColor Yellow
-  Write-Host "Check: $builderOut" -ForegroundColor Yellow
+  throw "MSI build finished, but no MSI artifact was found under: $builderOut"
 }

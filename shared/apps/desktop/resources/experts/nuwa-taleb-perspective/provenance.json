@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/taleb-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "1cf11f88fafdd607e9cede458c134430bb44c199ca992624b2244392ed79d59e",
+  "files": {
+    ".codex-plugin/plugin.json": "165d1b3d8517b86695f04577d429000f3503f130dd0c0f2aa5bd0b4f5511087a",
+    "agents/nuwa-taleb-perspective.md": "5b92541305b9b4ee1bde27eac808d0e60e95a6b28779ec7b8893d451f45960db",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-taleb-perspective/FIDELITY.md": "8064484127206c1b51da6332801d472bd4d24093b569f32b57eabd58b2bc0fc5",
+    "skills/nuwa-taleb-perspective/references/research.md": "a2bd1565d4f8fd8fe160347479a1623cdafc86417ffb85a8a0daeab99ae40688",
+    "skills/nuwa-taleb-perspective/references/塔勒布外部批评调研.md": "0120ea9367cb3543d10ab4985701d3f1e498cf0d7b8442cdf5e87239d7d724e1",
+    "skills/nuwa-taleb-perspective/references/塔勒布思想体系调研.md": "5b93d2246040825a51999658d8e10ec515d535ff038c020a783d17d97f6f4a42",
+    "skills/nuwa-taleb-perspective/references/塔勒布深度对话调研.md": "d84f2bc913f6edb6b27c5e6b9c5468b0dd9ff98ca105b4fbc73246957922a52b",
+    "skills/nuwa-taleb-perspective/references/塔勒布碎片表达与社交媒体人格调研.md": "851398866e25987381a33808923ec954732cc61663bcb75c2258b0bdabf51578",
+    "skills/nuwa-taleb-perspective/references/塔勒布重大决策与实际行动调研-20260404.md": "9126637f6e6de717d71de2681e4972aed427d229ba31fed67beac09dcc760efe",
+    "skills/nuwa-taleb-perspective/SKILL.md": "ead33325f81e0d1b0a8be0277bed6d9f69889c0b2d6af30930803ee9c497fefe",
+    "skills/nuwa-taleb-perspective/UPSTREAM-SKILL.md": "1cf11f88fafdd607e9cede458c134430bb44c199ca992624b2244392ed79d59e"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

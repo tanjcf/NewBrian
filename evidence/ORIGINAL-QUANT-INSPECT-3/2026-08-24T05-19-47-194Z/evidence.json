@@ -1,0 +1,29 @@
+{
+  "caseId": "ORIGINAL-QUANT-INSPECT-3",
+  "timestamp": "2026-08-24T05:19:47.194Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "inspect",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "inspect",
+      "port": 9350
+    }
+  ],
+  "assertions": [
+    {
+      "name": "execution",
+      "passed": false,
+      "detail": "Electron executable is missing: I:\\G盘迁移备份\\workrpase\\BRAIN\\platforms\\windows\\apps\\desktop\\node_modules\\electron\\dist\\electron.exe"
+    }
+  ],
+  "result": "BLOCKED",
+  "firstFailure": "Electron executable is missing: I:\\G盘迁移备份\\workrpase\\BRAIN\\platforms\\windows\\apps\\desktop\\node_modules\\electron\\dist\\electron.exe",
+  "screenshots": [],
+  "finalState": null
+}

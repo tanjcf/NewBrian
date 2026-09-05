@@ -14,6 +14,24 @@ const claimedItem = {
   updated_at: "2026-07-22T00:00:00.000Z"
 };
 
+test("expert preferences use authenticated Spring endpoints and propagate save failures", async () => {
+  const { HolonControlPlaneService } = await serviceModule;
+  const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+  const service = new HolonControlPlaneService({
+    getConnection: async () => ({ gatewayOrigin: "http://120.48.151.202:8790", deviceId: "test", headers: { Authorization: "Bearer fixture" } }),
+    fetchImpl: async (url, init) => {
+      assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer fixture");
+      calls.push({ url: String(url), method: init?.method, body: init?.body });
+      return init?.method === "POST" ? new Response(JSON.stringify({ message: "cannot save" }), { status: 400 })
+        : new Response(JSON.stringify({ items: [{ scope: "global", scene: "software", expertId: "review", mode: "ask" }] }));
+    }
+  });
+  assert.equal((await service.expertPreferences("global"))[0].mode, "ask");
+  await assert.rejects(service.saveExpertPreference({ scope: "global", scene: "software", expertId: "review", mode: "auto" }), /HOLON_HTTP_400/);
+  assert.match(calls[0].url, /\/experts\/preferences\?scope=global$/);
+  assert.equal(JSON.parse(String(calls[1].body)).expertId, "review");
+});
+
 test("claims the authenticated device WorkItem without exposing credentials", async () => {
   const { HolonControlPlaneService } = await serviceModule;
   const requests: Array<{ url: string; headers: Headers }> = [];

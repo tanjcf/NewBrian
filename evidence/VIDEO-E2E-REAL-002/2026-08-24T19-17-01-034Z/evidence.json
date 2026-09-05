@@ -1,0 +1,822 @@
+{
+  "caseId": "VIDEO-E2E-REAL-002",
+  "startedAt": "2026-08-24T19:17:03.235Z",
+  "projectName": "视频E2E青石谷-1787599021035",
+  "prompt": "请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口宣传片”真实视频闭环：\n1. 生成策划、完整脚本、分镜、每镜时长、画面说明、旁白和字幕，并真实写入右侧脚本与分镜模块；\n2. 生成或导入真实视频、图片、中文配音、背景音乐和音效素材，右侧项目必须显示真实文件，不得使用模拟素材；\n3. 创建16:9、1920×1080、30fps时间线，把视频、音频和字幕写入对应轨道，完成裁剪、排序、转场、滤镜、字幕样式、淡入淡出和音画同步；\n4. 启动真实预览，检查画面、字幕和声音；然后把第二个镜头改为更慢的推进镜头，重新生成并再次预览；\n5. 最终用右侧Tools渲染导出MP4，验证文件真实存在、大小大于0且能播放，并在右侧保留素材、时间线、预览和导出记录。\n必须实际调用右侧Tools并展示每次工具执行，不能只回复方案或代码；任何能力不可用必须明确报告真实失败，不得编造文件或结果。",
+  "environment": {
+    "debugPort": 9350,
+    "input": "Windows user32 mouse_event + clipboard Ctrl+V"
+  },
+  "actions": [
+    {
+      "at": "2026-08-24T19:17:05.908Z",
+      "method": "Windows user32 mouse_event",
+      "target": "button[title=\"添加项目\"]",
+      "x": 517,
+      "y": 443,
+      "rect": {
+        "left": 302.796875,
+        "top": 381,
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:06.495Z",
+      "method": "Windows user32 mouse_event",
+      "target": "新建空白项目",
+      "x": 443,
+      "y": 497,
+      "rect": {
+        "left": 154.796875,
+        "top": 430,
+        "width": 176,
+        "height": 38
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:07.033Z",
+      "method": "Windows user32 mouse_event",
+      "target": "body input",
+      "x": 960,
+      "y": 524,
+      "rect": {
+        "left": 571,
+        "top": 456,
+        "width": 378,
+        "height": 40
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:07.831Z",
+      "method": "Windows clipboard + Ctrl+V",
+      "target": "project name input",
+      "text": "视频E2E青石谷-1787599021035"
+    },
+    {
+      "at": "2026-08-24T19:17:08.400Z",
+      "method": "Windows user32 mouse_event",
+      "target": "保存",
+      "x": 1118,
+      "y": 577,
+      "rect": {
+        "left": 887,
+        "top": 512,
+        "width": 62,
+        "height": 34
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:09.030Z",
+      "method": "Windows user32 mouse_event",
+      "target": ".new-chat-project-picker > button",
+      "x": 673,
+      "y": 515,
+      "rect": {
+        "left": 403.796875,
+        "top": 451.890625,
+        "width": 137.84375,
+        "height": 30
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:09.662Z",
+      "method": "Windows user32 mouse_event",
+      "target": "视频E2E青石谷-1787599021035",
+      "x": 734,
+      "y": 690,
+      "rect": {
+        "left": 412.796875,
+        "top": 626.890625,
+        "width": 242,
+        "height": 30
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:10.244Z",
+      "method": "Windows user32 mouse_event",
+      "target": "[data-testid=\"composer-input\"]",
+      "x": 902,
+      "y": 409,
+      "rect": {
+        "left": 450.59375,
+        "top": 333.390625,
+        "width": 502.609375,
+        "height": 56
+      }
+    },
+    {
+      "at": "2026-08-24T19:17:10.721Z",
+      "method": "Windows clipboard + Ctrl+V",
+      "target": "visible composer",
+      "text": "请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口宣传片”真实视频闭环：\n1. 生成策划、完整脚本、分镜、每镜时长、画面说明、旁白和字幕，并真实写入右侧脚本与分镜模块；\n2. 生成或导入真实视频、图片、中文配音、背景音乐和音效素材，右侧项目必须显示真实文件，不得使用模拟素材；\n3. 创建16:9、1920×1080、30fps时间线，把视频、音频和字幕写入对应轨道，完成裁剪、排序、转场、滤镜、字幕样式、淡入淡出和音画同步；\n4. 启动真实预览，检查画面、字幕和声音；然后把第二个镜头改为更慢的推进镜头，重新生成并再次预览；\n5. 最终用右侧Tools渲染导出MP4，验证文件真实存在、大小大于0且能播放，并在右侧保留素材、时间线、预览和导出记录。\n必须实际调用右侧Tools并展示每次工具执行，不能只回复方案或代码；任何能力不可用必须明确报告真实失败，不得编造文件或结果。"
+    },
+    {
+      "at": "2026-08-24T19:17:11.320Z",
+      "method": "Windows user32 mouse_event",
+      "target": "[data-testid=\"composer-send-button\"]",
+      "x": 1130,
+      "y": 470,
+      "rect": {
+        "left": 915.203125,
+        "top": 406.890625,
+        "width": 30,
+        "height": 30
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "name": "new project visible",
+      "pass": true,
+      "value": "视频E2E青石谷-1787599021035"
+    },
+    {
+      "name": "composer bound to new project",
+      "pass": true,
+      "value": "视频E2E青石谷-1787599021035"
+    },
+    {
+      "name": "submitted prompt visible",
+      "pass": true
+    }
+  ],
+  "checkpoints": [
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/00-start.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/01-video-scene.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/02-project-name.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/03-project-created.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/03a-project-picker.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/04-prompt-entered.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/05-submitted.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/06-progress.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/07-progress.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/08-progress.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/09-progress.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/10-progress.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/11-progress.png",
+    "evidence/VIDEO-E2E-REAL-002/2026-08-24T19-17-01-034Z/99-final.png"
+  ],
+  "result": "PARTIAL",
+  "progress": {
+    "body": "文件\n编辑\n查看\n窗口\n帮助\n视频制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n视频制作自动化验收\nNew project视频E2E青石谷-1787598044985\n视频E2E青石谷-1787598137708\n视频E2E青石谷-1787598767671\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口\n4 分钟前\n视频E2E青石谷-1787599021035\n1\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口\n1 分钟前\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口\n打开位置\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口宣传片”真实视频闭环：\n1. 生成策划、完整脚本、分镜、每镜时长、画面说明、旁白和字幕，并真实写入右侧脚本与分镜模块；\n2. 生成或导入真实视频、图片、中文配音、背景音乐和音效素材，右侧项目必须显示真实文件，不得使用模拟素材；\n3. 创建16:9、1920×1080、30fps时间线，把视频、音频和字幕写入对应轨道，完成裁剪、排序、转场、滤镜、字幕样式、淡入淡出和音画同步；\n4. 启动真实预览，检查画面、字幕和声音；然后把第二个镜头改为更慢的推进镜头，重新生成并再次预览；\n5. 最终用右侧Tools渲染导出MP4，验证文件真实存在、大小大于0且能播放，并在右侧保留素材、时间线、预览和导出记录。\n必须实际调用右侧Tools并展示每次工具执行，不能只回复方案或代码；任何能力不可用必须明确报告真实失败，不得编造文件或结果。\n思考过程\n展开\n\n好的，我来查看当前视频项目状态，然后逐步执行完整闭环。\n\n项目已有骨架但无素材。现在开始执行完整闭环。\n\n**第一步：生成策划、脚本和分镜，写入右侧脚本模块路径转义问题，尝试简化内容后重试写入。\n\n先配置时间线建立项目基础。\n\n时间线创建成功。现在查看 pipeline 文件路径并尝试直接写入。\n\n✅ 脚本与分镜已写入右侧 pipeline——完整策划、7个分镜、每镜时长与转场均保存成功。\n\n现在进入第2步，开始逐镜生成视频素材。\n\n**生成镜头1：晨雾远眺（0-6秒）视频生成端点当前不可用。尝试图片生成获取视觉素材。\n\n真实能力报告\n\n我诚实地报告当前状态：\n\n步骤\t结果\n✅ 第1步 - 策划/脚本/分镜\t✅ 已完成——写入右侧 pipeline，包含完整策划、7个分镜、每镜6-8秒 + 转场\n✅ 第3步 - 时间线\t✅ 已完成——16:9 / 1920×1080 / 30fps 时间线已创建\n❌ 第2步 - 视频素材生成\t⚠️ 不可用——video_shot_generate 返回 endpoint is inactive，当前右侧视频创作工具的 AI 视频生成端点未激活/未配置，无法生成视频素材\n❌ 第2步 - 图片素材生成\t⚠️ 不可用——当前项目无图片生成工具可用\n❌ 第2步 - 配音/BGM\t⚠️ 无音频生成工具——需外部导入\n❌ 第4步 - 预览\t⚠️ 无素材无法预览\n❌ 第5步 - 渲染导出\t⚠️ 无素材无法渲染\n📋 已真实完成的工作\n\n脚本与分镜（pipeline 文件）\n\ntext\n自动换行\n复制\n.brain-video/pipeline-editor.json\n├── 策划：青石谷清晨入口宣传片 / 45秒 / 电影级航拍+延时摄影+人文特写\n├── 镜头1：晨雾远眺 6s → fade入场\n├── 镜头2：石阶露珠 7s → dissolve\n├── 镜头3：山林苏醒 8s → dissolve\n├── 镜头4：初见惊叹 7s → dissolve\n├── 镜头5：智能入口 7s → dissolve\n├── 镜头6：温馨定格 7s → dissolve\n└── 镜头7：品牌落版 5s → fade出场\n\n\n时间线\n\n分辨率：1920×1080 / 16:9\n帧率：30fps\n标题：青石谷清晨入口宣传片\n🔧 你需要做的\n\n要让此项目真正闭环，需要：\n\n在 Admin 中配置视频生成模型（如混元文生视频 / hy-video 等），使 video_shot_generate 端点激活\n或 手动导入外部视频素材到项目，然后我可以\n当前对话正在处理中，完成前不能在其他线程同时发起对话。\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n视频E2E青石谷-1787599021035\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n脚本\n分镜\n单镜生成\n本镜音视频轨\n合成\n导出\n产品宣传片 · 自动成片\n工程 project_e101e478-193b-4ea1-9f73-e124e3c95d1c · FFmpeg / video_generate · 已从 Rust 工程加载\n▶ 生成全部未完成镜\n脚本\n分镜\n单镜生成\n本镜音视频轨\n合成\n导出\n脚本\n\n主题、旁白文案、成片结构（LLM 可改，也可手改）\n\n✦ 保存脚本到工程",
+    "buttons": [
+      {
+        "text": "",
+        "title": "收起侧边栏 (Ctrl+B)"
+      },
+      {
+        "text": "文件",
+        "title": ""
+      },
+      {
+        "text": "编辑",
+        "title": ""
+      },
+      {
+        "text": "查看",
+        "title": ""
+      },
+      {
+        "text": "窗口",
+        "title": ""
+      },
+      {
+        "text": "帮助",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "视频制作",
+        "title": ""
+      },
+      {
+        "text": "新对话",
+        "title": "",
+        "testid": "new-chat-button"
+      },
+      {
+        "text": "搜索",
+        "title": ""
+      },
+      {
+        "text": "Holon",
+        "title": ""
+      },
+      {
+        "text": "技能",
+        "title": ""
+      },
+      {
+        "text": "插件",
+        "title": ""
+      },
+      {
+        "text": "自动化",
+        "title": ""
+      },
+      {
+        "text": "codeCN 移动版",
+        "title": ""
+      },
+      {
+        "text": "MCP 集成",
+        "title": ""
+      },
+      {
+        "text": "项目",
+        "title": ""
+      },
+      {
+        "text": "+",
+        "title": "添加项目"
+      },
+      {
+        "text": "视频制作自动化验收",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "New project视频E2E青石谷-1787598044985",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "视频E2E青石谷-1787598137708",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "视频E2E青石谷-1787598767671",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口4 分钟前",
+        "title": "",
+        "testid": "sidebar-project-task-row"
+      },
+      {
+        "text": "视频E2E青石谷-1787599021035",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口1 分钟前",
+        "title": "",
+        "testid": "sidebar-project-task-row"
+      },
+      {
+        "text": "聊天",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "整理侧边栏"
+      },
+      {
+        "text": "+",
+        "title": "新建聊天"
+      },
+      {
+        "text": "⚙",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "更多操作"
+      },
+      {
+        "text": "打开位置",
+        "title": "选择打开位置"
+      },
+      {
+        "text": "",
+        "title": "工作区状态"
+      },
+      {
+        "text": "",
+        "title": "显示侧栏"
+      },
+      {
+        "text": "",
+        "title": "复制问题"
+      },
+      {
+        "text": "",
+        "title": "编辑问题"
+      },
+      {
+        "text": "思考过程展开",
+        "title": "展开思考内容",
+        "testid": "reasoning-summary-live-toggle"
+      },
+      {
+        "text": "自动换行",
+        "title": ""
+      },
+      {
+        "text": "复制",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "有帮助"
+      },
+      {
+        "text": "",
+        "title": "没有帮助"
+      },
+      {
+        "text": "",
+        "title": "分叉答案"
+      },
+      {
+        "text": "",
+        "title": "复制答案"
+      },
+      {
+        "text": "",
+        "title": "智能朗读（开朗青年音-轻快）"
+      },
+      {
+        "text": "＋",
+        "title": "添加文件等内容",
+        "testid": "composer-add-button"
+      },
+      {
+        "text": "替我审批",
+        "title": "",
+        "testid": "composer-permission-button"
+      },
+      {
+        "text": "选择技能",
+        "title": "选择技能",
+        "testid": "composer-skill-button"
+      },
+      {
+        "text": "Auto·均衡 中",
+        "title": ""
+      },
+      {
+        "text": "↑",
+        "title": "当前对话正在处理中",
+        "testid": "composer-send-button"
+      },
+      {
+        "text": "",
+        "title": "拖动调整右侧面板宽度"
+      },
+      {
+        "text": "文件 0",
+        "title": ""
+      },
+      {
+        "text": "产物 0",
+        "title": ""
+      },
+      {
+        "text": "任务 0",
+        "title": ""
+      },
+      {
+        "text": "脚本",
+        "title": ""
+      },
+      {
+        "text": "分镜",
+        "title": ""
+      },
+      {
+        "text": "单镜生成",
+        "title": ""
+      },
+      {
+        "text": "本镜音视频轨",
+        "title": ""
+      },
+      {
+        "text": "合成",
+        "title": ""
+      },
+      {
+        "text": "导出",
+        "title": ""
+      },
+      {
+        "text": "▶ 生成全部未完成镜",
+        "title": ""
+      },
+      {
+        "text": "脚本",
+        "title": ""
+      },
+      {
+        "text": "分镜",
+        "title": ""
+      },
+      {
+        "text": "单镜生成",
+        "title": ""
+      },
+      {
+        "text": "本镜音视频轨",
+        "title": ""
+      },
+      {
+        "text": "合成",
+        "title": ""
+      },
+      {
+        "text": "导出",
+        "title": ""
+      },
+      {
+        "text": "✦ 保存脚本到工程",
+        "title": ""
+      }
+    ]
+  },
+  "finalState": {
+    "body": "文件\n编辑\n查看\n窗口\n帮助\n视频制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n视频制作自动化验收\nNew project视频E2E青石谷-1787598044985\n视频E2E青石谷-1787598137708\n视频E2E青石谷-1787598767671\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口\n4 分钟前\n视频E2E青石谷-1787599021035\n1\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口\n1 分钟前\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口\n打开位置\n请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口宣传片”真实视频闭环：\n1. 生成策划、完整脚本、分镜、每镜时长、画面说明、旁白和字幕，并真实写入右侧脚本与分镜模块；\n2. 生成或导入真实视频、图片、中文配音、背景音乐和音效素材，右侧项目必须显示真实文件，不得使用模拟素材；\n3. 创建16:9、1920×1080、30fps时间线，把视频、音频和字幕写入对应轨道，完成裁剪、排序、转场、滤镜、字幕样式、淡入淡出和音画同步；\n4. 启动真实预览，检查画面、字幕和声音；然后把第二个镜头改为更慢的推进镜头，重新生成并再次预览；\n5. 最终用右侧Tools渲染导出MP4，验证文件真实存在、大小大于0且能播放，并在右侧保留素材、时间线、预览和导出记录。\n必须实际调用右侧Tools并展示每次工具执行，不能只回复方案或代码；任何能力不可用必须明确报告真实失败，不得编造文件或结果。\n思考过程\n展开\n\n好的，我来查看当前视频项目状态，然后逐步执行完整闭环。\n\n项目已有骨架但无素材。现在开始执行完整闭环。\n\n**第一步：生成策划、脚本和分镜，写入右侧脚本模块路径转义问题，尝试简化内容后重试写入。\n\n先配置时间线建立项目基础。\n\n时间线创建成功。现在查看 pipeline 文件路径并尝试直接写入。\n\n✅ 脚本与分镜已写入右侧 pipeline——完整策划、7个分镜、每镜时长与转场均保存成功。\n\n现在进入第2步，开始逐镜生成视频素材。\n\n**生成镜头1：晨雾远眺（0-6秒）视频生成端点当前不可用。尝试图片生成获取视觉素材。\n\n真实能力报告\n\n我诚实地报告当前状态：\n\n步骤\t结果\n✅ 第1步 - 策划/脚本/分镜\t✅ 已完成——写入右侧 pipeline，包含完整策划、7个分镜、每镜6-8秒 + 转场\n✅ 第3步 - 时间线\t✅ 已完成——16:9 / 1920×1080 / 30fps 时间线已创建\n❌ 第2步 - 视频素材生成\t⚠️ 不可用——video_shot_generate 返回 endpoint is inactive，当前右侧视频创作工具的 AI 视频生成端点未激活/未配置，无法生成视频素材\n❌ 第2步 - 图片素材生成\t⚠️ 不可用——当前项目无图片生成工具可用\n❌ 第2步 - 配音/BGM\t⚠️ 无音频生成工具——需外部导入\n❌ 第4步 - 预览\t⚠️ 无素材无法预览\n❌ 第5步 - 渲染导出\t⚠️ 无素材无法渲染\n📋 已真实完成的工作\n\n脚本与分镜（pipeline 文件）\n\ntext\n自动换行\n复制\n.brain-video/pipeline-editor.json\n├── 策划：青石谷清晨入口宣传片 / 45秒 / 电影级航拍+延时摄影+人文特写\n├── 镜头1：晨雾远眺 6s → fade入场\n├── 镜头2：石阶露珠 7s → dissolve\n├── 镜头3：山林苏醒 8s → dissolve\n├── 镜头4：初见惊叹 7s → dissolve\n├── 镜头5：智能入口 7s → dissolve\n├── 镜头6：温馨定格 7s → dissolve\n└── 镜头7：品牌落版 5s → fade出场\n\n\n时间线\n\n分辨率：1920×1080 / 16:9\n帧率：30fps\n标题：青石谷清晨入口宣传片\n🔧 你需要做的\n\n要让此项目真正闭环，需要：\n\n在 Admin 中配置视频生成模型（如混元文生视频 / hy-video 等），使 video_shot_generate 端点激活\n或 手动导入外部视频素材到项目，然后我可以完成裁剪、排序、\n当前对话正在处理中，完成前不能在其他线程同时发起对话。\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n视频E2E青石谷-1787599021035\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n脚本\n分镜\n单镜生成\n本镜音视频轨\n合成\n导出\n产品宣传片 · 自动成片\n工程 project_e101e478-193b-4ea1-9f73-e124e3c95d1c · FFmpeg / video_generate · 已从 Rust 工程加载\n▶ 生成全部未完成镜\n脚本\n分镜\n单镜生成\n本镜音视频轨\n合成\n导出\n脚本\n\n主题、旁白文案、成片结构（LLM 可改，也可手改）\n\n✦ 保存脚本到工程",
+    "buttons": [
+      {
+        "text": "",
+        "title": "收起侧边栏 (Ctrl+B)"
+      },
+      {
+        "text": "文件",
+        "title": ""
+      },
+      {
+        "text": "编辑",
+        "title": ""
+      },
+      {
+        "text": "查看",
+        "title": ""
+      },
+      {
+        "text": "窗口",
+        "title": ""
+      },
+      {
+        "text": "帮助",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "视频制作",
+        "title": ""
+      },
+      {
+        "text": "新对话",
+        "title": "",
+        "testid": "new-chat-button"
+      },
+      {
+        "text": "搜索",
+        "title": ""
+      },
+      {
+        "text": "Holon",
+        "title": ""
+      },
+      {
+        "text": "技能",
+        "title": ""
+      },
+      {
+        "text": "插件",
+        "title": ""
+      },
+      {
+        "text": "自动化",
+        "title": ""
+      },
+      {
+        "text": "codeCN 移动版",
+        "title": ""
+      },
+      {
+        "text": "MCP 集成",
+        "title": ""
+      },
+      {
+        "text": "项目",
+        "title": ""
+      },
+      {
+        "text": "+",
+        "title": "添加项目"
+      },
+      {
+        "text": "视频制作自动化验收",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "New project视频E2E青石谷-1787598044985",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "视频E2E青石谷-1787598137708",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "视频E2E青石谷-1787598767671",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口4 分钟前",
+        "title": "",
+        "testid": "sidebar-project-task-row"
+      },
+      {
+        "text": "视频E2E青石谷-1787599021035",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "title": "新建线程",
+        "testid": "project-new-thread-button"
+      },
+      {
+        "text": "请只使用右侧“视频创作”Tools操作当前新建项目，完成“青石谷清晨入口1 分钟前",
+        "title": "",
+        "testid": "sidebar-project-task-row"
+      },
+      {
+        "text": "聊天",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "整理侧边栏"
+      },
+      {
+        "text": "+",
+        "title": "新建聊天"
+      },
+      {
+        "text": "⚙",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "更多操作"
+      },
+      {
+        "text": "打开位置",
+        "title": "选择打开位置"
+      },
+      {
+        "text": "",
+        "title": "工作区状态"
+      },
+      {
+        "text": "",
+        "title": "显示侧栏"
+      },
+      {
+        "text": "",
+        "title": "复制问题"
+      },
+      {
+        "text": "",
+        "title": "编辑问题"
+      },
+      {
+        "text": "思考过程展开",
+        "title": "展开思考内容",
+        "testid": "reasoning-summary-live-toggle"
+      },
+      {
+        "text": "自动换行",
+        "title": ""
+      },
+      {
+        "text": "复制",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "有帮助"
+      },
+      {
+        "text": "",
+        "title": "没有帮助"
+      },
+      {
+        "text": "",
+        "title": "分叉答案"
+      },
+      {
+        "text": "",
+        "title": "复制答案"
+      },
+      {
+        "text": "",
+        "title": "智能朗读（开朗青年音-轻快）"
+      },
+      {
+        "text": "＋",
+        "title": "添加文件等内容",
+        "testid": "composer-add-button"
+      },
+      {
+        "text": "替我审批",
+        "title": "",
+        "testid": "composer-permission-button"
+      },
+      {
+        "text": "选择技能",
+        "title": "选择技能",
+        "testid": "composer-skill-button"
+      },
+      {
+        "text": "Auto·均衡 中",
+        "title": ""
+      },
+      {
+        "text": "↑",
+        "title": "当前对话正在处理中",
+        "testid": "composer-send-button"
+      },
+      {
+        "text": "",
+        "title": "拖动调整右侧面板宽度"
+      },
+      {
+        "text": "文件 0",
+        "title": ""
+      },
+      {
+        "text": "产物 0",
+        "title": ""
+      },
+      {
+        "text": "任务 0",
+        "title": ""
+      },
+      {
+        "text": "脚本",
+        "title": ""
+      },
+      {
+        "text": "分镜",
+        "title": ""
+      },
+      {
+        "text": "单镜生成",
+        "title": ""
+      },
+      {
+        "text": "本镜音视频轨",
+        "title": ""
+      },
+      {
+        "text": "合成",
+        "title": ""
+      },
+      {
+        "text": "导出",
+        "title": ""
+      },
+      {
+        "text": "▶ 生成全部未完成镜",
+        "title": ""
+      },
+      {
+        "text": "脚本",
+        "title": ""
+      },
+      {
+        "text": "分镜",
+        "title": ""
+      },
+      {
+        "text": "单镜生成",
+        "title": ""
+      },
+      {
+        "text": "本镜音视频轨",
+        "title": ""
+      },
+      {
+        "text": "合成",
+        "title": ""
+      },
+      {
+        "text": "导出",
+        "title": ""
+      },
+      {
+        "text": "✦ 保存脚本到工程",
+        "title": ""
+      }
+    ]
+  },
+  "finishedAt": "2026-08-24T19:18:13.807Z"
+}

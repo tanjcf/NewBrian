@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/x-mastery-mentor/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "bd0c21eff1015244d2a6fe923cff1c212ca50dd2c1fb42134c3680dc63f41fe8",
+  "files": {
+    ".codex-plugin/plugin.json": "d4d9fcfc5c229e6fc20226defa3e65bd4a2eb7074572f7b935e28c361301a262",
+    "agents/nuwa-x-mastery-mentor.md": "78972e4c4df316aaec61bcdafe4e399b63725526be111f2e09a50a4d9c8a70ce",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-x-mastery-mentor/FIDELITY.md": "9452755b149437ec15ae735103b26801c99c9a158c8af490689a4ee1aaea3a1f",
+    "skills/nuwa-x-mastery-mentor/references/algorithm-niche.md": "42212e85f7be54998ec96b901507f0bfe60895fb0f2b8089c6ff5ff08c1b586b",
+    "skills/nuwa-x-mastery-mentor/references/growth-monetization.md": "dd532dc5083be16ca94ae2089600cb8b02cd509612b49f03cff501bf376f5f05",
+    "skills/nuwa-x-mastery-mentor/references/mental-models-heuristics.md": "5f9b3b833eaa68021e82ddff4fd54d70dcdf18c6e9b96670760a1d6224a2abc3",
+    "skills/nuwa-x-mastery-mentor/references/quality-analytics.md": "cbab9c05e1589644f0f24dbf1fd123d3694aad0500571501af6a70067988f40a",
+    "skills/nuwa-x-mastery-mentor/references/research/01-writing-methods.md": "210a2040a380ef9c8a515398dc6221e59958c9d71e041361f3c2e08e5083a46f",
+    "skills/nuwa-x-mastery-mentor/references/research/02-growth-engines.md": "08278d03a26b55f44c2ee62c7f9851e205716480d6c70cbe5d4f6b88acd70f83",
+    "skills/nuwa-x-mastery-mentor/references/research/03-content-brand.md": "8dcd1b64d10cfcdc04802d260fb4d05d13422659038658c82e3eada910b0933b",
+    "skills/nuwa-x-mastery-mentor/references/research/04-platform-mechanics.md": "df56bf8793431b46469b1a593158448a91c42301af431dc2dd50621683e41e3e",
+    "skills/nuwa-x-mastery-mentor/references/research/05-ai-tech-niche.md": "fc41c2e0e15c2b83f8b5ca3f22415f8d5ff3347a514f72619c355ca226fdc866",
+    "skills/nuwa-x-mastery-mentor/references/research/06-cases-antipatterns.md": "35c342e323f0641cc255c0d6286fd02158c8bb89415cd805129267f0a1cb23cd",
+    "skills/nuwa-x-mastery-mentor/references/writing-workshop.md": "89130357495c55c363ab14a04f958f6b72c74f336af0ac673b344c19ecf8040b",
+    "skills/nuwa-x-mastery-mentor/SKILL.md": "eaf59b15884b7ded7a9762f06fa3243ed1f3a6bc6e384e6eacff31ca58374c0b",
+    "skills/nuwa-x-mastery-mentor/UPSTREAM-SKILL.md": "bd0c21eff1015244d2a6fe923cff1c212ca50dd2c1fb42134c3680dc63f41fe8"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

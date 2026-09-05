@@ -28,6 +28,17 @@ type HolonControlPlaneServiceInput = {
 };
 
 export class HolonControlPlaneService {
+  async expertPreferences(scope: string): Promise<import("./expert-collaboration.js").ExpertPreference[]> {
+    const connection = await this.getConnection();
+    const result = object(await this.request(connection, "GET", `/api/desktop/v1/experts/preferences?scope=${encodeURIComponent(scope)}`));
+    if (!Array.isArray(result.items)) throw new Error("EXPERT_PREFERENCES_INVALID");
+    return result.items as import("./expert-collaboration.js").ExpertPreference[];
+  }
+
+  async saveExpertPreference(input: import("./expert-collaboration.js").ExpertPreference) {
+    const connection = await this.getConnection();
+    return this.request(connection, "POST", "/api/desktop/v1/experts/preferences", input);
+  }
   private readonly getConnection: HolonControlPlaneServiceInput["getConnection"];
   private readonly fetchImpl: typeof fetch;
   private readonly refreshConnection?: HolonControlPlaneServiceInput["refreshConnection"];
@@ -105,6 +116,14 @@ export class HolonControlPlaneService {
     return boundedList(envelope.items).map(parseHolonLearningCandidate);
   }
 
+  async submitCandidate(input: { skill_key: string; source: string; upstream_commit: string; files: Record<string, string> }) {
+    return this.mutateLearning("/api/desktop/v1/learning/candidates/import", input);
+  }
+
+  async evaluateOpenSpace(input: Record<string, unknown>) {
+    return this.mutateLearning("/api/desktop/v1/learning/openspace/evaluate", input);
+  }
+
   async searchKnowledge(query: string, limit = 20): Promise<HolonKnowledgeSearchResult[]> {
     const normalized = query.trim();
     if (!normalized || normalized.length > 2_000) throw new Error("HOLON_QUERY_INVALID");
@@ -168,6 +187,7 @@ export class HolonControlPlaneService {
   ): Promise<unknown> {
     if (!path.startsWith("/api/desktop/v1/holon/")
       && !path.startsWith("/api/desktop/v1/knowledge/")
+      && !path.startsWith("/api/desktop/v1/experts/preferences")
       && !path.startsWith("/api/desktop/v1/learning/")) {
       throw new Error("HOLON_PATH_FORBIDDEN");
     }
@@ -179,6 +199,7 @@ export class HolonControlPlaneService {
       try {
         response = await this.fetchImpl(`${origin}${path}`, {
           method,
+          ...(path.startsWith("/api/desktop/v1/experts/preferences") ? { signal: AbortSignal.timeout(8000) } : {}),
           headers: {
             Accept: "application/json",
             ...activeConnection.headers,

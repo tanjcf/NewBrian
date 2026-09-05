@@ -469,6 +469,7 @@ contextBridge.exposeInMainWorld("codecn", {
     ipcRenderer.invoke(desktopIpcChannels.system.reportRendererFailure, input),
   reportRendererDiagnostic: (input: RendererDiagnosticInput): Promise<{ ok: boolean; id: string }> =>
     ipcRenderer.invoke(desktopIpcChannels.system.reportRendererDiagnostic, input),
+  analyzeVideoVoices: (input: import("@codex-forge/protocol/brain-video-runtime").VideoVoiceAnalysisInput) => ipcRenderer.invoke(desktopIpcChannels.system.analyzeVideoVoices, input),
   synthesizeNovelSpeech: (input: SynthesizeNovelSpeechInput): Promise<SynthesizeNovelSpeechResult> =>
     ipcRenderer.invoke(desktopIpcChannels.system.synthesizeNovelSpeech, input),
   cancelNovelSpeech: (): Promise<{ ok: boolean }> =>

@@ -1131,7 +1131,8 @@ export function App() {
         return;
       }
       if (command === "mcp") {
-        setActiveFeature("mcp");
+        setActiveSettingsSection("mcp");
+        setActiveFeature("settings");
       }
     };
     window.addEventListener("codecn:app-command", handleAppCommand);
@@ -1385,6 +1386,7 @@ export function App() {
   async function askModel(draftOverride?: QueuedComposerDraft & {
     forceStandaloneChat?: boolean;
     forceProjectThread?: boolean;
+    targetWorkspaceId?: string;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
   }) {
     const draftQuestion = draftOverride?.question ?? question;
@@ -1496,6 +1498,10 @@ export function App() {
         currentWorkspaceId,
         currentThreadId: currentThread?.id || currentThreadId
       });
+    }
+    if (forceProjectThread && draftOverride?.targetWorkspaceId) {
+      targetWorkspaceId = draftOverride.targetWorkspaceId;
+      if (targetWorkspaceId !== currentWorkspaceId) composingNewThread = true;
     }
     let targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ??
       (targetWorkspaceId === currentWorkspaceId ? currentWorkspace : undefined);

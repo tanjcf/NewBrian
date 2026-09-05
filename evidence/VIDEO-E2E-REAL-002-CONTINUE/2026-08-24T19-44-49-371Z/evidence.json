@@ -1,0 +1,11 @@
+{
+  "caseId": "VIDEO-E2E-REAL-002-CONTINUE",
+  "projectName": "视频E2E青石谷-1787599877761",
+  "result": "FAIL",
+  "actions": [],
+  "checkpoints": [
+    "evidence/VIDEO-E2E-REAL-002-CONTINUE/2026-08-24T19-44-49-371Z/00-start.png",
+    "evidence/VIDEO-E2E-REAL-002-CONTINUE/2026-08-24T19-44-49-371Z/98-failure.png"
+  ],
+  "error": "AssertionError [ERR_ASSERTION]: body 视频E2E青石谷-1787599877761\n    at point (file:///I:/G%E7%9B%98%E8%BF%81%E7%A7%BB%E5%A4%87%E4%BB%BD/workrpase/BRAIN/tmp-video-e2e-continue.mjs:12:506)\n    at async click (file:///I:/G%E7%9B%98%E8%BF%81%E7%A7%BB%E5%A4%87%E4%BB%BD/workrpase/BRAIN/tmp-video-e2e-continue.mjs:13:40)\n    at async file:///I:/G%E7%9B%98%E8%BF%81%E7%A7%BB%E5%A4%87%E4%BB%BD/workrpase/BRAIN/tmp-video-e2e-continue.mjs:21:2"
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "agency-agents",
+  "commit": "af128a92888fd7d7c389b6cb37f1820be1b3cd9d",
+  "source": "engineering/engineering-code-reviewer.md",
+  "license": "MIT",
+  "upstreamSha256": "7509fcc3ea1dda46511b2801996305bf3d4a125576f9655ff0b63df25602f446",
+  "files": {
+    ".codex-plugin/plugin.json": "9316bd20c28bc6969f31a5ceefdd38078866f9373d36c55d38eb71f9be421a24",
+    "agents/agency-engineering-code-reviewer.md": "37c1fccb909b2ff42f0969ddbec3019adf43cfc7fef0789cd94efdb680d2989f",
+    "LICENSE": "45c861c1178a99178033b61302af7610e870082e874981b57519c2a1369299c0",
+    "skills/agency-engineering-code-reviewer/SKILL.md": "e0d9b9fe6b933bc797701cd2363d5558c77f24c10bd0d3b3c96f1aab45164a9d",
+    "skills/agency-engineering-code-reviewer/UPSTREAM-SKILL.md": "7509fcc3ea1dda46511b2801996305bf3d4a125576f9655ff0b63df25602f446"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

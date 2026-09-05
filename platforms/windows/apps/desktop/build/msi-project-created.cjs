@@ -1,6 +1,9 @@
 const { readFileSync, writeFileSync } = require("node:fs");
+const { dirname, join } = require("node:path");
 
 exports.default = async function msiProjectCreated(projectFile) {
+  // light.exe runs from the generated project's directory, not the desktop root.
+  writeFileSync(join(dirname(projectFile), "codecn-localization.wxl"), readFileSync(join(__dirname, "msi-localization.wxl")));
   let xml = readFileSync(projectFile, "utf8");
   const explicitInstallDir = process.env.CODECN_MSI_INSTALL_DIR;
   if (explicitInstallDir) {
@@ -27,6 +30,13 @@ exports.default = async function msiProjectCreated(projectFile) {
       /<Directory Id="ProgramFiles64Folder">\s*<Directory Id="APPLICATIONFOLDER" Name="[^"]*"\/>\s*<\/Directory>/,
       '<Directory Id="LocalAppDataFolder">\n                      <Directory Id="APPLICATIONFOLDER" Name=".codecn"/>\n              </Directory>'
     );
+    // Older installers record the selected directory here. Standalone chat files
+    // live below that directory, so changing it during an upgrade loses continuity.
+    xml = xml.replace(/(<\/Product>)/, `
+    <Property Id="APPLICATIONFOLDER" Secure="yes">
+      <RegistrySearch Id="PreviousCodecnInstallDirectory" Root="HKCU" Key="Environment" Name="CODECN_HOME" Type="raw"/>
+    </Property>
+$1`);
   }
 
   xml = xml
@@ -45,16 +55,13 @@ exports.default = async function msiProjectCreated(projectFile) {
       `$1\n    <Property Id="ROOTDRIVE" Value="C:\\\\"/>`
     );
   }
-  if (!xml.includes('<Property Id="DISABLEROLLBACK"')) {
-    xml = xml.replace(
-      /(<Property Id="ApplicationFolderName" Value="[^"]*"\/>)/,
-      `$1\n    <Property Id="DISABLEROLLBACK" Value="1"/>`
-    );
+  // Remove old products inside the MSI transaction, before writing replacement files.
+  // Keep the existing UpgradeCode so already-installed versions are discovered.
+  if (!/<MajorUpgrade\b[^>]*\/>/.test(xml)) {
+    throw new Error("MSI template is missing MajorUpgrade; refusing a side-by-side install.");
   }
-
-  xml = disableBlockingMajorUpgrade(xml);
+  xml = xml.replace(/<MajorUpgrade\b[^>]*\/>/, '<MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>');
   xml = addStopRunningApplicationAction(xml);
-  xml = addCleanInstallActions(xml);
   xml = addCodecnHomeEnvironmentActions(xml);
   xml = addUninstallCleanupAction(xml);
   xml = addLaunchAfterInstallAction(xml);
@@ -84,31 +91,13 @@ function stabilizeApplicationShortcuts(xml) {
   );
 }
 
-function addCleanInstallActions(xml) {
-  if (xml.includes('Id="CleanCodecnInstallDir"')) return xml;
-  const command = "cmd.exe /C rmdir /S /Q \"[APPLICATIONFOLDER]resources\" >NUL 2>NUL & del /F /Q \"[APPLICATIONFOLDER]codeCN.exe\" >NUL 2>NUL & exit /B 0";
-  const action = `\n    <CustomAction Id="CleanCodecnInstallDir" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
-  xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="CleanCodecnInstallDir" Before="InstallFiles">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
-  return xml;
-}
-
 function addStopRunningApplicationAction(xml) {
   if (xml.includes('Id="StopRunningCodecn"')) return xml;
   const command = "cmd.exe /C taskkill /IM codeCN.exe /T /F >NUL 2>NUL & exit /B 0";
   const action = `\n    <CustomAction Id="StopRunningCodecn" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
   xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="StopRunningCodecn" Before="CleanCodecnInstallDir">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
+  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="StopRunningCodecn" Before="InstallInitialize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
   return xml;
-}
-
-function disableBlockingMajorUpgrade(xml) {
-  return xml
-    .replace(/\n\s*<MajorUpgrade\b[^>]*\/>/g, "")
-    .replace(/\n\s*<MajorUpgrade\b[\s\S]*?<\/MajorUpgrade>/g, "")
-    .replace(/\n\s*<RemoveExistingProducts\b[^>]*\/>/g, "")
-    .replace(/\n\s*<Custom[^>]*WIX_UPGRADE_DETECTED[\s\S]*?<\/Custom>/g, "")
-    .replace(/\n\s*<Upgrade\b[\s\S]*?<\/Upgrade>/g, "");
 }
 
 /**
@@ -163,7 +152,7 @@ function addLaunchAfterInstallAction(xml) {
   const command = 'cmd.exe /C if exist "[APPLICATIONFOLDER]codeCN.exe" start "" /D "[APPLICATIONFOLDER]" "[APPLICATIONFOLDER]codeCN.exe" & exit /B 0';
   const action = `\n    <CustomAction Id="LaunchCodecnAfterInstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="asyncNoWait"/>`;
   xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="LaunchCodecnAfterInstall" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
+  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="LaunchCodecnAfterInstall" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL) AND NOT CODECN_UPDATE_RUNNER</Custom>');
   return xml;
 }
 

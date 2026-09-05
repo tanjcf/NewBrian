@@ -1,0 +1,202 @@
+{
+  "caseId": "EXPLORE-E2E",
+  "timestamp": "2026-08-25T07:12:39.479Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "port": 9560,
+    "mode": "explore-e2e-prompt-rerun",
+    "runtime": ".materialized/windows/apps/desktop",
+    "projectName": "ExploreE2E-1787641772263",
+    "noteName": "explore-e2e-note-1787641772263.txt"
+  },
+  "actions": [
+    {
+      "type": "before",
+      "state": {
+        "selected": "explore",
+        "hasFakeTabs": false,
+        "globalNav": [
+          "文件 1",
+          "产物 1",
+          "任务 1"
+        ],
+        "sceneNav": [],
+        "panelHeader": "新建文件夹\n仅保存在本机",
+        "fileRows": [
+          "explore-e2e-note-1787639474072.txt"
+        ],
+        "empty": null,
+        "fileCount": 1,
+        "artifactCount": 1,
+        "taskCount": 1,
+        "projectNames": [
+          "场景学习探索",
+          "新对话",
+          "搜索",
+          "Holon",
+          "技能",
+          "插件",
+          "自动化",
+          "codeCN 移动版",
+          "MCP 集成",
+          "项目",
+          "+",
+          "新建文件夹",
+          "在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.\n38 分钟前",
+          "只做一件事：调用真实工具，在当前已绑定的本地项目中写入 explore-\n2 小时前",
+          "在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n2 小时前",
+          "推理输入 0.004 元/千tokens 推理输出 0.018 元/千t\n13 小时前",
+          "聊天",
+          "+",
+          "⚙"
+        ],
+        "busy": false,
+        "textTail": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n新建文件夹\n在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.\n38 分钟前\n只做一件事：调用真实工具，在当前已绑定的本地项目中写入 explore-\n2 小时前\n在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n2 小时前\n推理输入 0.004 元/千tokens 推理输出 0.018 元/千t\n13 小时前\n聊天\n+\n暂无聊天\n9\n931124915@qq.com\n已登录\n⚙\n在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.\n打开位置\n在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.write_file 创建文件 explore-e2e-note-1787639474072.txt，内容必须是：场景学习探索E2E验收。不要只回复文字；必须真实落盘，并让右侧「文件」「产物」「任务」出现记录。\n›\n已处理 38 分钟前\n编辑了 1 个文件\n查看源码\n文件变更\n\n新建 1 个，编辑 0 个。\n\n新建：explore-e2e-note-1787639474072.txt（27 字节）\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n新建文件夹\n仅保存在本机\n文件\n1\n产物\n1\n任务\n1\nexplore-e2e-note-1787639474072.txt\n版本 1 · 0 KB\nPENDING"
+      }
+    },
+    {
+      "type": "switch-explore",
+      "afterSwitch": {
+        "selected": "explore",
+        "hasFakeTabs": false,
+        "globalNav": [
+          "文件 0",
+          "产物 0",
+          "任务 0"
+        ],
+        "sceneNav": [],
+        "panelHeader": "项目资源\n仅保存在本机",
+        "fileRows": [],
+        "empty": "项目还没有文件",
+        "fileCount": 0,
+        "artifactCount": 0,
+        "taskCount": 0,
+        "projectNames": [
+          "场景学习探索",
+          "新对话",
+          "搜索",
+          "Holon",
+          "技能",
+          "插件",
+          "自动化",
+          "codeCN 移动版",
+          "MCP 集成",
+          "项目",
+          "+",
+          "新建文件夹",
+          "在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.\n38 分钟前",
+          "只做一件事：调用真实工具，在当前已绑定的本地项目中写入 explore-\n2 小时前",
+          "在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n2 小时前",
+          "推理输入 0.004 元/千tokens 推理输出 0.018 元/千t\n13 小时前",
+          "聊天",
+          "+",
+          "⚙"
+        ],
+        "busy": false,
+        "textTail": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n新建文件夹\n在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.\n38 分钟前\n只做一件事：调用真实工具，在当前已绑定的本地项目中写入 explore-\n2 小时前\n在当前「场景学习探索」项目中，请用真实工具在项目里创建一个文本文件 ex\n2 小时前\n推理输入 0.004 元/千tokens 推理输出 0.018 元/千t\n13 小时前\n聊天\n+\n暂无聊天\n9\n931124915@qq.com\n已登录\n⚙\n在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.\n打开位置\n在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.write_file 创建文件 explore-e2e-note-1787639474072.txt，内容必须是：场景学习探索E2E验收。不要只回复文字；必须真实落盘，并让右侧「文件」「产物」「任务」出现记录。\n›\n已处理 38 分钟前\n编辑了 1 个文件\n查看源码\n文件变更\n\n新建 1 个，编辑 0 个。\n\n新建：explore-e2e-note-1787639474072.txt（27 字节）\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n项目资源\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n项目还没有文件"
+      }
+    },
+    {
+      "type": "click-plus"
+    },
+    {
+      "type": "no-name-input",
+      "note": "reuse current explore workspace if already blank-bound"
+    },
+    {
+      "type": "new-chat"
+    },
+    {
+      "type": "select-project"
+    },
+    {
+      "type": "composer-filled",
+      "composerText": "在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.write_file 创建文件 explore-e2e-note-1787641772263.txt，内容必须是：场景学习探索E2E验收。不要只回复文字；必须真实落盘，并让右侧「文件」「产物」「任务」出现记录。"
+    },
+    {
+      "type": "submit",
+      "prompt": "在当前「场景学习探索」已绑定项目中，请调用真实工具 workspace.write_file 创建文件 explore-e2e-note-1787641772263.txt，内容必须是：场景学习探索E2E验收。不要只回复文字；必须真实落盘，并让右侧「文件」「产物」「任务」出现记录。"
+    },
+    {
+      "type": "warn-no-busy",
+      "detail": "Model turn may not have started"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "selected-explore",
+      "passed": true,
+      "actual": "explore"
+    },
+    {
+      "name": "no-fake-scene-tools",
+      "passed": true
+    },
+    {
+      "name": "native-global-nav",
+      "passed": true,
+      "actual": [
+        "文件 0",
+        "产物 0",
+        "任务 0"
+      ]
+    },
+    {
+      "name": "no-scene-capability-nav",
+      "passed": true,
+      "actual": []
+    },
+    {
+      "name": "execution",
+      "passed": false,
+      "detail": "Chat turn did not start (never busy) and new note name not visible"
+    }
+  ],
+  "result": "FAIL",
+  "firstFailure": "Chat turn did not start (never busy) and new note name not visible",
+  "screenshots": [
+    "01-before.png",
+    "02-explore.png",
+    "03-new-project-ui.png",
+    "04-project-ready.png",
+    "05-new-chat.png",
+    "06-submitted.png",
+    "failure.png"
+  ],
+  "finalState": {
+    "selected": "explore",
+    "hasFakeTabs": false,
+    "globalNav": [
+      "文件 0",
+      "产物 0",
+      "任务 0"
+    ],
+    "sceneNav": [],
+    "panelHeader": "项目资源\n仅保存在本机",
+    "fileRows": [],
+    "empty": "项目还没有文件",
+    "fileCount": 0,
+    "artifactCount": 0,
+    "taskCount": 0,
+    "projectNames": [
+      "场景学习探索",
+      "新对话",
+      "搜索",
+      "Holon",
+      "技能",
+      "插件",
+      "自动化",
+      "codeCN 移动版",
+      "MCP 集成",
+      "项目",
+      "+",
+      "新建文件夹",
+      "聊天",
+      "+",
+      "⚙"
+    ],
+    "busy": false,
+    "textTail": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n新建文件夹\n聊天\n+\n暂无聊天\n9\n931124915@qq.com\n已登录\n⚙\n我们该在 新建文件夹 中做什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n新建文件夹\n本地模式\nmain\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n项目资源\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n项目还没有文件"
+  }
+}

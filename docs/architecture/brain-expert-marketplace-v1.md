@@ -73,7 +73,9 @@ IPC（三端 protocol）：`experts:list|install|set-enabled|summon|clear-summon
 
 专家仍不替代 native/场景 Tools；只增强人设与具名 `agent.delegate`。
 
-## 4. v1 种子（计划 C 表 · 10 个）
+## 4. v1 种子
+
+### 4.1 计划 C 表（10 个）
 
 1. software-delivery-team（团）
 2. senior-developer
@@ -86,7 +88,16 @@ IPC（三端 protocol）：`experts:list|install|set-enabled|summon|clear-summon
 9. ppt-creation-expert
 10. long-document-writer
 
-不含：政务写作、生活向（美团等）、原样上架 444 个 WB 云端专家。
+### 4.2 场景补强（GitHub 方法论改编 · 4 个）
+
+| id | 场景 | 说明 |
+|---|---|---|
+| `game-studios-delivery` | game | 已有包上架打磨；灵感 Claude-Code-Game-Studios（MIT） |
+| `ai-film-production` | video | 导演/分镜/短剧生产；灵感 ai-film-skills 等（自写改编） |
+| `music-composer` | music | 多轨编曲与符号音乐；灵感 BeatFlow 等（自写改编，不 vendor GPL 引擎） |
+| `quant-backtest` | quant / data | 截面回测协议与健康度；灵感 quantskills/skill-backtest（自写改编） |
+
+不含：政务写作、生活向（美团等）、原样上架 444 个 WB 云端专家、整仓复制 GPL Skill 正文。
 
 ## 5. 红线
 
@@ -102,8 +113,9 @@ IPC（三端 protocol）：`experts:list|install|set-enabled|summon|clear-summon
 
 ## 7. 验收要点
 
-1. 专家市场能列出 10 个内置种子
-2. 打开对话后可「召唤」；Composer 显示专家芯片
+1. 专家市场能列出计划 C 10 席 + 场景补强席（game/video/music/quant-backtest）
+2. Skill 可通过 `expert.summon` 召唤；Composer 显示专家芯片（市场页无召唤按钮）
 3. 专家团成员 role 可通过 `agent.delegate` 下达，不会静默掉成 `researcher`
 4. 召唤期间不再强制 Auto「必须先 delegate 给 planner…」
 5. 取消召唤后行为回到通用 Auto
+6. 各专家 `preferredWorkspaceKey` / `workspaceKeys` 与场景过滤一致

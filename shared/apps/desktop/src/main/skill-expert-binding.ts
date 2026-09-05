@@ -98,7 +98,7 @@ export function buildExpertSkillIndex(
   return index;
 }
 
-/** Prompt fragment: the only summon path is Skill-driven expert.summon. */
+/** Task-driven recommendations include Skill hints without treating them as consent. */
 export function buildSkillExpertSummonInstruction(input: {
   experts: Array<{ id: string; profession: string; expertType?: string; skillNames?: string[] }>;
   selectedSkillNames?: string[];
@@ -106,18 +106,12 @@ export function buildSkillExpertSummonInstruction(input: {
   suggestedExpertIds?: string[];
 }): string {
   const selected = (input.selectedSkillNames ?? []).filter(Boolean);
-  // No active Skill → do not advertise summoning; marketplace UI is install-only.
-  if (!selected.length) return "";
 
   const experts = input.experts.slice(0, 40);
   const suggested = [...new Set((input.suggestedExpertIds ?? []).filter(Boolean))];
   if (!experts.length) {
     return [
-      "Expert Marketplace (Skill-only summon):",
-      "A global/project Skill is active, but no expert packs are installed. Ask the user to install packs from 专家市场, or continue with the Skill alone.",
-      "There is NO UI summon button. Only this Skill path may call expert.summon when packs exist.",
-      "",
-      "专家召唤唯一路径：当前已启用 Skill，但本地无专家包。可去专家市场安装；禁止幻想 UI 召唤，只能 expert.summon。"
+      "No experts are available in this scene. Continue with native tools and Skills; do not fabricate experts."
     ].join("\n");
   }
   const lines = experts.map((expert) => {
@@ -126,17 +120,18 @@ export function buildSkillExpertSummonInstruction(input: {
     return `- ${expert.id} · ${expert.profession} (${expert.expertType || "agent"}); skills: ${skills}${mark}`;
   });
   return [
-    "Expert Marketplace (ONLY summon path = active Skill → expert.summon):",
-    "1. UI marketplace is install/enable only. Do not tell the user to click「召唤」— that control does not exist.",
-    "2. YOU decide: if this turn needs a specialist persona / named team roles, call expert.summon({ expertId }); else answer with the Skill alone.",
-    "3. Do NOT summon for greetings, thanks, capability questions, or trivial one-step asks. Use expert.clear when done.",
-    "4. Tools: expert.list, expert.summon({ expertId }), expert.clear. After summon, follow expert SOP with agent.delegate/agent.wait.",
+    "Task-driven expert collaboration (mandatory):",
+    "1. First-time users do not need to know expert names or select a Skill. Analyze the current request, attachments and project context; call expert.list to inspect actual capabilities. Recommend the minimum useful experts (1-3), never based on names or popularity alone.",
+    "2. Resolve missing decisions that materially change the result first. For complex tasks call expert.propose({objective, choices:[{expertId,reason,responsibility}]}) with concrete task-specific reasons and deliverables. For greetings or simple tasks proceed without experts.",
+    "3. When waiting_user, stop substantive execution and let the user choose 采用推荐, 调整分工, or 直接继续，不使用专家 in the decision card. Never answer for the user. No expert may run until accepted. If declined continue with native tools without repeating the recommendation. If adjusted revise the proposal and ask again.",
+    "4. After accepted, expert.summon activates only approved experts; apply returned instructions and use real tools/delegation to produce results. Show responsibilities and actual outputs. Use expert.clear when done. Experts are not substitutes for media generation tools.",
+    "5. Preference precedence: current explicit task decision > project preference/Skill > global preference/Skill > recommendation. Saved auto applies only to relevant tasks in the same scene. off excludes automatic recommendations; ask requires confirmation. A Skill expert: hint is not consent.",
+    "6. One accepted task never creates a lasting preference. Only when the user wants to save/change one, call expert.preference({expertId,mode:'auto'|'ask'|'off'}), wait for scope confirmation, then call again to save. Observed habits are suggestions only; do not silently edit user Skills. Server failure means preference is not saved.",
     `5. Skills active this turn: ${selected.join(", ")}.`,
     suggested.length ? `6. Suggested expert ids from active Skills (optional): ${suggested.join(", ")}.` : "",
     "Available experts:",
     ...lines,
     "",
-    "专家召唤唯一路径：已启用的全局/项目 Skill → expert.summon。",
-    "专家市场页只负责安装/启用；无 UI 召唤按钮。寒暄与简单一步题不要召唤。"
+    "专家市场只负责能力管理。首次发现发生在任务对话中：分析任务 → 推荐并解释 → 用户确认或调整 → 真实执行 → 按用户意愿保存偏好。"
   ].filter(Boolean).join("\n");
 }

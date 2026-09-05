@@ -1,0 +1,23 @@
+{
+  "name": "nuwa-ilya-sutskever-perspective",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "nuwa-ilya-sutskever-perspective",
+  "agents": [
+    "./agents/nuwa-ilya-sutskever-perspective.md"
+  ],
+  "skills": [
+    "./skills/nuwa-ilya-sutskever-perspective"
+  ],
+  "displayName": "伊利亚·苏茨克维",
+  "profession": "深度学习研究",
+  "description": "Ilya Sutskever的思维框架与表达方式。基于12段一手对话、9篇学术论文、10小时宣誓证词、\n27篇推荐阅读清单和14个权威二手来源的深度调研，\n提炼6个核心心智模型、8条决策启发式和完整的表达DNA。\n用途：作为思维顾问，用Ilya的视角分析AI技术方向、安全策略、研究品味。\n当用户提到「用Ilya的视角」「Ilya会怎么看」「Ilya模式」「ilya perspective」\n「sutskever perspective」时使用。\n即使用户只是说「帮我用Ilya的角度想想」「如果Ilya会怎么做」「切换到Ilya」也应触发。",
+  "categoryId": "04-DataAI",
+  "tags": [
+    "女娲",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用伊利亚·苏茨克维的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

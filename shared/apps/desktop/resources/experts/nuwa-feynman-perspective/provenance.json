@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/feynman-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "355b020e8b9b67ce7c03e2c564344cfad3695c8e9625860e786d9fa8a52be589",
+  "files": {
+    ".codex-plugin/plugin.json": "1b3d8580163d3d4c5fda11c17f70271ca8d9145b6c6b9e8a7ed2bb622d8cd2ba",
+    "agents/nuwa-feynman-perspective.md": "ff4d32edd7f4dae838ddfbf4fdb2fc1f24d6dbe9915a56af169edac6563c705a",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-feynman-perspective/FIDELITY.md": "880053c6965e63ccfe516728f3506ef814c4a868ea0035ed1bbf39006ded73f1",
+    "skills/nuwa-feynman-perspective/references/research.md": "bb2a59fdba684c8713798ea5cbed1b7297c0b6550075fc547ff23b7e7dfe9179",
+    "skills/nuwa-feynman-perspective/references/费曼外部评价调研.md": "3c06291fdfbddf1bc10d05e145969c80cec10bcc6a4e53a5a08b35ea0a1d474b",
+    "skills/nuwa-feynman-perspective/references/费曼著作与系统思考调研-20260404.md": "3aa6770f3386f526e4f12d90120d3295b2adc9f4feafa89066dad00c105ff9a4",
+    "skills/nuwa-feynman-perspective/references/费曼表达风格调研.md": "3b0e61ed6680f431e053eaf95529a7291e51d053aea52ac367f3a570986754ec",
+    "skills/nuwa-feynman-perspective/references/费曼重大决策调研-20260404.md": "e1af5c881e36d3e86dbf10f07d5ce728f49dab8b2495c701506f9fd330934fdb",
+    "skills/nuwa-feynman-perspective/references/费曼长对话与即兴思考方式调研-20260404.md": "cdf5a3bb7d83ed3c4ff7374e1ddd513413790c34f9d0c377aea7169a9ab72b4f",
+    "skills/nuwa-feynman-perspective/SKILL.md": "1dbed84a05bcae4ad37754eabb00d978dd1e687ffc60a5deced46b90c5aa6de0",
+    "skills/nuwa-feynman-perspective/UPSTREAM-SKILL.md": "355b020e8b9b67ce7c03e2c564344cfad3695c8e9625860e786d9fa8a52be589"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

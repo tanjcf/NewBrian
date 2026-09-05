@@ -1,0 +1,23 @@
+{
+  "name": "nuwa-x-mastery-mentor",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "nuwa-x-mastery-mentor",
+  "agents": [
+    "./agents/nuwa-x-mastery-mentor.md"
+  ],
+  "skills": [
+    "./skills/nuwa-x-mastery-mentor"
+  ],
+  "displayName": "X 内容导师",
+  "profession": "社交内容与传播",
+  "description": "$10K/hr级X/Twitter运营导师。基于Nicolas Cole、Dickie Bush、Sahil Bloom、Justin Welsh、\nDan Koe、Alex Hormozi六位顶级创作者的方法论 + X开源算法深度分析 + AI/科技赛道专精策略，\n提炼6个核心心智模型、10条决策启发式、完整的选题-写作-增长操作手册。\n通用方法论为底座，AI/科技赛道为专精。\n当用户提到「X运营」「推特」「Twitter」「怎么写推文」「怎么涨粉」「X策略」「推特选题」「tweet」「thread」「X算法」时使用。\n即使用户只是说「这条推文怎么写」「帮我想个X内容」「推特增长」「发推」「write a tweet」「X account」「grow on X」也应触发。",
+  "categoryId": "06-ContentCreative",
+  "tags": [
+    "女娲",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用X 内容导师的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

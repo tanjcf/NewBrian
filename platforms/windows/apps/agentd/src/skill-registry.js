@@ -1,27 +1,16 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { parse } from "yaml";
 
 function normalizeNameSet(names) {
   return new Set(Array.from(names ?? []).map((name) => String(name).toLowerCase()));
 }
 
-function unquote(value) {
-  const trimmed = value.trim();
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
 export function parseSkillFrontmatter(source, fallbackName) {
   const match = /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
-  const fields = {};
-  if (match) {
-    for (const line of match[1].split(/\r?\n/)) {
-      const field = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-      if (field) fields[field[1]] = unquote(field[2]);
-    }
-  }
+  const parsed = match ? parse(match[1], { maxAliasCount: 20 }) : {};
+  const fields = Object.fromEntries(Object.entries(parsed && typeof parsed === "object" ? parsed : {})
+    .filter(([, value]) => typeof value === "string"));
   return {
     name: fields.name || fallbackName,
     description: fields.description || "",

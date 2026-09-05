@@ -16,11 +16,11 @@ test("progress titles follow 正在下载 / 正在安装 / 安装完成即将重
   );
   assert.equal(
     resolveAppUpdateProgressTitle({ phase: "done", installMode: "silent" }),
-    "安装完成即将重启"
+    "即将退出并更新"
   );
   assert.equal(
     resolveAppUpdateProgressTitle({ phase: "done", installMode: "patch" }),
-    "安装完成即将重启"
+    "即将退出并更新"
   );
   assert.equal(
     resolveAppUpdateProgressTitle({ phase: "done", installMode: "wizard" }),
@@ -30,7 +30,7 @@ test("progress titles follow 正在下载 / 正在安装 / 安装完成即将重
   assert.equal(resolveAppUpdateProgressLabel({ phase: "installing" }), "正在安装…");
   assert.equal(
     resolveAppUpdateProgressLabel({ phase: "done", detail: "安装完成即将重启。" }),
-    "安装完成即将重启…"
+    "准备退出应用…"
   );
 });
 

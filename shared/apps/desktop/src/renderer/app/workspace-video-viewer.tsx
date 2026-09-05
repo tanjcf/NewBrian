@@ -621,8 +621,16 @@ export function WorkspaceVideoViewer(props: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useMix, mixTracks.map((t) => [t.id, t.url, t.muted ? 1 : 0, t.gain ?? 1, t.offsetSec, t.endSec ?? ""].join("|")).join(";"), audioIsMaster, props.autoPlay, props.playToken]);
 
+  const consumedPlayTokenRef = useRef(props.playToken);
   useEffect(() => {
-    if (!props.autoPlay && !(props.playToken && props.playToken > 0)) return;
+    const requestedPlay = props.playToken !== consumedPlayTokenRef.current;
+    consumedPlayTokenRef.current = props.playToken;
+    if (!props.autoPlay && !requestedPlay) {
+      videoRef.current?.pause();
+      narrationRef.current?.pause();
+      pauseAllMix();
+      return;
+    }
     endedNotifiedRef.current = false;
     if (audioIsMaster) {
       if (useMix) {

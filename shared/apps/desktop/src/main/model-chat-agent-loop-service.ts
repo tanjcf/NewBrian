@@ -868,6 +868,10 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       });
     };
     const modelCallback: AgentModelCallback = async (stepInput) => {
+      const expertDecision = (input.getGoalSnapshot() as PersistedGoalSnapshot | null)?.pendingQuestion;
+      if (expertDecision?.questionId.startsWith("expert-")) {
+        return { content: "专家协作方案已准备好，请在下方选择采用、调整或直接继续。", toolCalls: [] };
+      }
       try {
         const goalSnapshot = input.getGoalSnapshot() as PersistedGoalSnapshot | null;
         if (governmentWorkflowEnabled && shouldHandoffGovernmentOutline(goalSnapshot)) {

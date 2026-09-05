@@ -1,0 +1,616 @@
+{
+  "caseId": "VIDEO-E2E-REAL-001",
+  "startedAt": "2026-08-24T18:58:25.505Z",
+  "evidenceDir": "evidence/VIDEO-E2E-REAL-001/2026-08-24T18-58-23-527Z",
+  "actions": [
+    {
+      "method": "osMouseClick",
+      "target": ".brain-workspace-trigger",
+      "x": 382,
+      "y": 115,
+      "rect": {
+        "left": 6,
+        "top": 48,
+        "width": 351.796875,
+        "height": 38
+      },
+      "window": {
+        "screenX": 200,
+        "screenY": 48,
+        "outerWidth": 1520,
+        "outerHeight": 936,
+        "innerWidth": 1520,
+        "innerHeight": 936
+      }
+    },
+    {
+      "method": "osMouseClick",
+      "target": "视频制作",
+      "x": 382,
+      "y": 268,
+      "rect": {
+        "left": 13,
+        "top": 201,
+        "width": 337.796875,
+        "height": 38
+      },
+      "window": {
+        "screenX": 200,
+        "screenY": 48,
+        "outerWidth": 1520,
+        "outerHeight": 936,
+        "innerWidth": 1520,
+        "innerHeight": 936
+      }
+    }
+  ],
+  "assertions": [],
+  "result": "FAIL",
+  "before": "evidence/VIDEO-E2E-REAL-001/2026-08-24T18-58-23-527Z/00-startup.png",
+  "initialState": {
+    "title": "codeCN",
+    "body": "文件\n编辑\n查看\n窗口\n帮助\n游戏制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n页面游戏验收-1787568018242\n页面游戏验收-1787568063807\nNew project游戏制作验收-1787571167856\nNew project游戏制作验收-1787577062930\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该聊什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\nChoose project\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\nNew project游戏制作验收-1787577062930\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n关卡\n项目与文件\n游戏策划\n角色与世界观\n战斗设计\n资产与测试\n▶ Play\n✦ AI 补全本关\n✦ 敌人\n✦ Boss\n✦ NPC\n已绑定 · 未保存 · Rust\n关卡列表\n一关一草稿 · 共 0 关 · 非演示数据\n＋ 新建\n尚无关卡\n点击「＋ 新建」创建关卡草稿，再保存到工程。不会预置山门/试炼等演示关卡。\n无关卡\n非 UE 视口 · 仅展示已保存草稿坐标，不假装渲染场景\nContent\nOutliner\n全部\nLevels\nAI/\n★\n工程尚无 Content/ 目录（不会伪造空 .umap）\n详情 · —\n类型\n—\n位置\n—\nAI 资产\n—\n行为\n—\n✦ 材质\n贴图 / 发光\n✦ 动作\n待机 / 技能\n✦ 叙事\n对白 / 目标\n✦ 逻辑\n蓝图级脚本\n✦ 行为\n巡逻 / 仇恨 / 对话\n✦ 战斗\n技能表 / 血条\nCook / 保存\n请先绑定本地游戏工程；未绑定工程时不提供演示关卡或假 Content\n处理中…\n处理中…",
+    "buttons": [
+      {
+        "text": "",
+        "title": "收起侧边栏 (Ctrl+B)"
+      },
+      {
+        "text": "文件",
+        "title": ""
+      },
+      {
+        "text": "编辑",
+        "title": ""
+      },
+      {
+        "text": "查看",
+        "title": ""
+      },
+      {
+        "text": "窗口",
+        "title": ""
+      },
+      {
+        "text": "帮助",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "游戏制作",
+        "title": ""
+      },
+      {
+        "text": "新对话",
+        "testid": "new-chat-button",
+        "title": ""
+      },
+      {
+        "text": "搜索",
+        "title": ""
+      },
+      {
+        "text": "Holon",
+        "title": ""
+      },
+      {
+        "text": "技能",
+        "title": ""
+      },
+      {
+        "text": "插件",
+        "title": ""
+      },
+      {
+        "text": "自动化",
+        "title": ""
+      },
+      {
+        "text": "codeCN 移动版",
+        "title": ""
+      },
+      {
+        "text": "MCP 集成",
+        "title": ""
+      },
+      {
+        "text": "项目",
+        "title": ""
+      },
+      {
+        "text": "+",
+        "title": "添加项目"
+      },
+      {
+        "text": "页面游戏验收-1787568018242",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "testid": "project-new-thread-button",
+        "title": "新建线程"
+      },
+      {
+        "text": "页面游戏验收-1787568063807",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "testid": "project-new-thread-button",
+        "title": "新建线程"
+      },
+      {
+        "text": "New project游戏制作验收-1787571167856",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "testid": "project-new-thread-button",
+        "title": "新建线程"
+      },
+      {
+        "text": "New project游戏制作验收-1787577062930",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "testid": "project-new-thread-button",
+        "title": "新建线程"
+      },
+      {
+        "text": "聊天",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "整理侧边栏"
+      },
+      {
+        "text": "+",
+        "title": "新建聊天"
+      },
+      {
+        "text": "⚙",
+        "title": ""
+      },
+      {
+        "text": "＋",
+        "testid": "composer-add-button",
+        "title": "添加文件等内容"
+      },
+      {
+        "text": "替我审批",
+        "testid": "composer-permission-button",
+        "title": ""
+      },
+      {
+        "text": "选择技能",
+        "testid": "composer-skill-button",
+        "title": "选择技能"
+      },
+      {
+        "text": "Auto·均衡 中",
+        "title": ""
+      },
+      {
+        "text": "↑",
+        "testid": "composer-send-button",
+        "title": "发送"
+      },
+      {
+        "text": "Choose project",
+        "title": ""
+      },
+      {
+        "text": "✣连接消息传送了解工程对话线程动态",
+        "title": ""
+      },
+      {
+        "text": "●连接 GitHub审查 PR、代码和 CI 检查项",
+        "title": ""
+      },
+      {
+        "text": "◒连接 Linear跟踪缺陷和实施工作",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "拖动调整右侧面板宽度"
+      },
+      {
+        "text": "文件 0",
+        "title": ""
+      },
+      {
+        "text": "产物 0",
+        "title": ""
+      },
+      {
+        "text": "任务 0",
+        "title": ""
+      },
+      {
+        "text": "关卡",
+        "title": ""
+      },
+      {
+        "text": "项目与文件",
+        "title": ""
+      },
+      {
+        "text": "游戏策划",
+        "title": ""
+      },
+      {
+        "text": "角色与世界观",
+        "title": ""
+      },
+      {
+        "text": "战斗设计",
+        "title": ""
+      },
+      {
+        "text": "资产与测试",
+        "title": ""
+      },
+      {
+        "text": "▶ Play",
+        "title": ""
+      },
+      {
+        "text": "✦ AI 补全本关",
+        "title": ""
+      },
+      {
+        "text": "✦ 敌人",
+        "title": ""
+      },
+      {
+        "text": "✦ Boss",
+        "title": ""
+      },
+      {
+        "text": "✦ NPC",
+        "title": ""
+      },
+      {
+        "text": "＋ 新建",
+        "title": ""
+      },
+      {
+        "text": "Content",
+        "title": ""
+      },
+      {
+        "text": "Outliner",
+        "title": ""
+      },
+      {
+        "text": "全部",
+        "title": ""
+      },
+      {
+        "text": "Levels",
+        "title": ""
+      },
+      {
+        "text": "AI/",
+        "title": ""
+      },
+      {
+        "text": "★",
+        "title": ""
+      },
+      {
+        "text": "✦ 材质贴图 / 发光",
+        "title": ""
+      },
+      {
+        "text": "✦ 动作待机 / 技能",
+        "title": ""
+      },
+      {
+        "text": "✦ 叙事对白 / 目标",
+        "title": ""
+      },
+      {
+        "text": "✦ 逻辑蓝图级脚本",
+        "title": ""
+      },
+      {
+        "text": "✦ 行为巡逻 / 仇恨 / 对话",
+        "title": ""
+      },
+      {
+        "text": "✦ 战斗技能表 / 血条",
+        "title": ""
+      },
+      {
+        "text": "处理中…",
+        "title": ""
+      },
+      {
+        "text": "处理中…",
+        "title": ""
+      }
+    ],
+    "inputs": [
+      {
+        "tag": "TEXTAREA",
+        "placeholder": "给 游戏制作 发消息。输入 @ 使用插件或提及文件",
+        "testid": "composer-input",
+        "aria": null
+      }
+    ]
+  },
+  "workspaceMenu": "evidence/VIDEO-E2E-REAL-001/2026-08-24T18-58-23-527Z/01-workspace-menu.png",
+  "videoScene": "evidence/VIDEO-E2E-REAL-001/2026-08-24T18-58-23-527Z/02-video-scene.png",
+  "videoState": {
+    "title": "codeCN",
+    "body": "文件\n编辑\n查看\n窗口\n帮助\n视频制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n视频制作自动化验收\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该聊什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\nChoose project\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n视频制作自动化验收\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n脚本\n分镜\n单镜生成\n本镜音视频轨\n合成\n导出\n产品宣传片 · 自动成片\n工程 project_fc700ba2-73b9-4425-9188-b0bb164279d8 · FFmpeg / video_generate · 已从 Rust 工程加载\n▶ 生成全部未完成镜\n脚本\n分镜\n单镜生成\n本镜音视频轨\n合成\n导出\n脚本\n\n主题、旁白文案、成片结构（LLM 可改，也可手改）\n\n✦ 保存脚本到工程",
+    "buttons": [
+      {
+        "text": "",
+        "title": "收起侧边栏 (Ctrl+B)"
+      },
+      {
+        "text": "文件",
+        "title": ""
+      },
+      {
+        "text": "编辑",
+        "title": ""
+      },
+      {
+        "text": "查看",
+        "title": ""
+      },
+      {
+        "text": "窗口",
+        "title": ""
+      },
+      {
+        "text": "帮助",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "视频制作",
+        "title": ""
+      },
+      {
+        "text": "新对话",
+        "testid": "new-chat-button",
+        "title": ""
+      },
+      {
+        "text": "搜索",
+        "title": ""
+      },
+      {
+        "text": "Holon",
+        "title": ""
+      },
+      {
+        "text": "技能",
+        "title": ""
+      },
+      {
+        "text": "插件",
+        "title": ""
+      },
+      {
+        "text": "自动化",
+        "title": ""
+      },
+      {
+        "text": "codeCN 移动版",
+        "title": ""
+      },
+      {
+        "text": "MCP 集成",
+        "title": ""
+      },
+      {
+        "text": "项目",
+        "title": ""
+      },
+      {
+        "text": "+",
+        "title": "添加项目"
+      },
+      {
+        "text": "视频制作自动化验收",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "项目操作"
+      },
+      {
+        "text": "",
+        "testid": "project-new-thread-button",
+        "title": "新建线程"
+      },
+      {
+        "text": "聊天",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "整理侧边栏"
+      },
+      {
+        "text": "+",
+        "title": "新建聊天"
+      },
+      {
+        "text": "⚙",
+        "title": ""
+      },
+      {
+        "text": "＋",
+        "testid": "composer-add-button",
+        "title": "添加文件等内容"
+      },
+      {
+        "text": "替我审批",
+        "testid": "composer-permission-button",
+        "title": ""
+      },
+      {
+        "text": "选择技能",
+        "testid": "composer-skill-button",
+        "title": "选择技能"
+      },
+      {
+        "text": "Auto·均衡 中",
+        "title": ""
+      },
+      {
+        "text": "↑",
+        "testid": "composer-send-button",
+        "title": "发送"
+      },
+      {
+        "text": "Choose project",
+        "title": ""
+      },
+      {
+        "text": "✣连接消息传送了解工程对话线程动态",
+        "title": ""
+      },
+      {
+        "text": "●连接 GitHub审查 PR、代码和 CI 检查项",
+        "title": ""
+      },
+      {
+        "text": "◒连接 Linear跟踪缺陷和实施工作",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "拖动调整右侧面板宽度"
+      },
+      {
+        "text": "文件 0",
+        "title": ""
+      },
+      {
+        "text": "产物 0",
+        "title": ""
+      },
+      {
+        "text": "任务 0",
+        "title": ""
+      },
+      {
+        "text": "脚本",
+        "title": ""
+      },
+      {
+        "text": "分镜",
+        "title": ""
+      },
+      {
+        "text": "单镜生成",
+        "title": ""
+      },
+      {
+        "text": "本镜音视频轨",
+        "title": ""
+      },
+      {
+        "text": "合成",
+        "title": ""
+      },
+      {
+        "text": "导出",
+        "title": ""
+      },
+      {
+        "text": "▶ 生成全部未完成镜",
+        "title": ""
+      },
+      {
+        "text": "脚本",
+        "title": ""
+      },
+      {
+        "text": "分镜",
+        "title": ""
+      },
+      {
+        "text": "单镜生成",
+        "title": ""
+      },
+      {
+        "text": "本镜音视频轨",
+        "title": ""
+      },
+      {
+        "text": "合成",
+        "title": ""
+      },
+      {
+        "text": "导出",
+        "title": ""
+      },
+      {
+        "text": "✦ 保存脚本到工程",
+        "title": ""
+      }
+    ],
+    "inputs": [
+      {
+        "tag": "TEXTAREA",
+        "placeholder": "给 视频制作 发消息。输入 @ 使用插件或提及文件",
+        "testid": "composer-input",
+        "aria": null
+      },
+      {
+        "tag": "TEXTAREA",
+        "placeholder": null,
+        "aria": null
+      }
+    ]
+  }
+}

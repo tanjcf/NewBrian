@@ -30,7 +30,7 @@ function isSilentSuccess(input: AppUpdateProgressCopyInput): boolean {
 export function resolveAppUpdateProgressTitle(input: AppUpdateProgressCopyInput): string {
   if (input.phase === "error") return "更新失败";
   if (input.phase === "done") {
-    return isSilentSuccess(input) ? "安装完成即将重启" : "更新包已就绪";
+    return isSilentSuccess(input) ? "即将退出并更新" : "更新包已就绪";
   }
   if (input.phase === "downloading") return "正在下载";
   if (input.phase === "verifying") return "正在校验";
@@ -52,7 +52,7 @@ export function resolveAppUpdateProgressLabel(input: AppUpdateProgressCopyInput)
   }
   if (input.phase === "opening") return "正在打开安装程序…";
   if (input.phase === "done") {
-    return isSilentSuccess(input) ? "安装完成即将重启…" : "已完成";
+    return isSilentSuccess(input) ? "准备退出应用…" : "更新包已就绪";
   }
   return "处理中…";
 }

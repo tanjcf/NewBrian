@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "agency-agents",
+  "commit": "af128a92888fd7d7c389b6cb37f1820be1b3cd9d",
+  "source": "testing/testing-api-tester.md",
+  "license": "MIT",
+  "upstreamSha256": "c89d7ae592523f4799426a8b09700ec4b9d99bf2fcae2d1b0dd2900d5f770127",
+  "files": {
+    ".codex-plugin/plugin.json": "4cd497338177bf41f0ef56c07ac0644755629f04e73c41feb975f202a7d7858f",
+    "agents/agency-testing-api-tester.md": "29f1ca20b1c304a0dd71dc4d2443af1db03e3d14047f21d98dac83ef6e24c827",
+    "LICENSE": "45c861c1178a99178033b61302af7610e870082e874981b57519c2a1369299c0",
+    "skills/agency-testing-api-tester/SKILL.md": "a5be93efc9d977de793d99e51c5a1f03b6f9ed51253792e74bbebfa15f252bcd",
+    "skills/agency-testing-api-tester/UPSTREAM-SKILL.md": "c89d7ae592523f4799426a8b09700ec4b9d99bf2fcae2d1b0dd2900d5f770127"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}
