@@ -34,9 +34,8 @@ export function VideoScriptWorkbench(props: Props) {
     finally { setBusy(false); }
   };
   return <section className="video-script-workbench" data-testid="brain-video-script-pane">
-    <div className="video-script-workbench__scroll">
-      <header><h3>先把故事讲清楚</h3><p>画面与旁白分开编辑，确认后进入分镜。</p></header>
-      <div className="video-script-workbench__summary"><span>{props.segments.length} 段叙事</span><span>{props.segments.reduce((sum, s) => sum + s.duration, 0).toFixed(1)} 秒预计时长</span></div>
+    <fieldset className="video-script-workbench__scroll" disabled={props.disabled || busy} style={{ border: 0, margin: 0, minWidth: 0 }}>
+      <header><h3>叙事脚本</h3><div className="video-script-workbench__summary"><span>{props.segments.length} 段</span><span>{props.segments.reduce((sum, s) => sum + s.duration, 0).toFixed(1)} 秒</span></div></header>
       <details><summary>画幅与帧率</summary>{props.canvasControls}</details>
       <nav aria-label="脚本编辑方式"><button type="button" aria-pressed={view === "segments"} onClick={() => setView("segments")}>分段编辑</button><button type="button" aria-pressed={view === "full"} onClick={() => setView("full")}>整体创作说明</button></nav>
       {view === "full" ? <label>主题、受众、叙事风格<textarea className="video-script-workbench__full" value={props.script} onChange={e => props.onScriptChange(e.target.value)} placeholder="写下创作目标、受众与故事背景…" disabled={props.disabled} /></label> : props.segments.map((segment, index) => <article key={index}>
@@ -46,8 +45,8 @@ export function VideoScriptWorkbench(props: Props) {
       </article>)}
       <button type="button" className="video-script-workbench__add" onClick={props.onAdd} disabled={props.disabled || busy}>＋ 添加一段</button>
       {review && reviewed === fingerprint ? <section className="video-script-workbench__review"><strong>分镜确认 · {props.segments.length} 镜</strong><pre>{formatScriptSegments(props.segments)}</pre><p>已有镜头素材会保留；修改脚本后，可在单镜生成中重新生成对应画面。</p></section> : null}
-    </div>
-    <footer><p role="status">{message || "保存后可关闭工程，重新打开继续编辑。"}</p><div><button type="button" onClick={() => void save()} disabled={props.disabled || busy}>{busy ? "保存中…" : "保存草稿"}</button><button type="button" disabled={props.disabled || busy} onClick={() => {
+    </fieldset>
+    <footer><p role="status">{message}</p><div><button type="button" onClick={() => void save()} disabled={props.disabled || busy}>{busy ? "保存中…" : "保存草稿"}</button><button type="button" disabled={props.disabled || busy} onClick={() => {
       const error = validateScriptSegments(props.segments);
       if (error) { setMessage(error); return; }
       if (review && reviewed === fingerprint) { void save(true); return; }

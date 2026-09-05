@@ -302,7 +302,7 @@ function narrationFileNameForSpeech(shotId: string, mimeType?: string) {
         ? "m4a"
         : "mp3";
   const safeId = String(shotId || "shot").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
-  return `narration-${safeId}.${ext}`;
+  return `narration-${safeId}-${crypto.randomUUID()}.${ext}`;
 }
 
 function formatTimecode(sec: number) {
@@ -705,11 +705,12 @@ export function VideoPipelineShell({
     }
   }, [projectId, onFilesChanged, trackEdits, shots, clipInstances]);
 
-  const ingestSpeechResult = useCallback((shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string }) => {
+  const ingestSpeechResult = useCallback(async (shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string }) => {
     if (!result?.ok || !result.audioBase64) return false;
+    const stored = await persistSpeechToProject(shotId, result);
+    if (!stored) throw new Error("旁白已生成，但写入项目失败，请重试");
     const url = base64ToObjectUrl(result.audioBase64, result.mimeType || "audio/wav");
     rememberShotAudio(shotId, url);
-    void persistSpeechToProject(shotId, result);
     return true;
   }, [rememberShotAudio, persistSpeechToProject]);
 
@@ -1914,7 +1915,7 @@ export function VideoPipelineShell({
             preferGateway: true
           } as { text: string; voiceId: string; voiceLabel: string; playback?: boolean; preferGateway?: boolean });
           if (speech?.ok) {
-            ingestSpeechResult(target.id, speech);
+            await ingestSpeechResult(target.id, speech);
             setStatus(`镜 ${index + 1} 视频+TTS 完成 · ${clipPath || "clip"}`);
           } else setStatus(`镜 ${index + 1} 视频已就绪；TTS 失败：${speech?.detail || "未知错误"}`);
         } catch (ttsError) {

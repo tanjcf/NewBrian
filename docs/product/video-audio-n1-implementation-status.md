@@ -12,20 +12,23 @@ Status: IN PROGRESS. Not release-ready.
 ## Implemented
 
 - Resource header contains Tools, files, artifacts and tasks using existing handlers.
-- Video scene allocates more desktop width to Tools.
+- Video scene uses the original BRAIN column proportions after user review; Tools retains the existing resize and expand controls.
 - Script segments edit existing shot title, prompt, narration and trim duration.
 - Script confirmation awaits actual project persistence before switching to storyboard.
 - Script validation rejects invalid duration and empty visual descriptions.
 - Manual TTS now waits for project audio import before reporting success.
+- Automatic TTS also waits for project import; each narration import uses a unique file name.
+- Script fields are disabled while a save is in flight.
 
 ## Verification
 
 - Four focused script/header checks passed.
 - Repository layout verification passed.
-- Production Electron build passed before the final small persistence/CSS adjustments; repeat against final source is still required.
+- Production Electron build passed against the current layout and speech persistence changes.
 - Full TypeScript check failed with numerous errors, including missing preload method declarations and validateFlowDefinition. Baseline comparison remains required before attributing them.
 - Existing workspace-selection suite: 30 passed, 8 failed (plus 2 script-format tests passed in the same invocation). Failures require baseline comparison and review.
-- Electron media E2E failed before page attachment: debug endpoint 9335 did not become ready within 30 seconds. No UI or media acceptance was achieved.
+- Electron now starts successfully. The existing media E2E fails while looking for a conversation in the sidebar; media export acceptance remains incomplete.
+- Dedicated Electron layout verification passes at 1520 and 1920 pixels: original horizontal integration cards, no chat overflow, Tools dragging and width restoration after reload. Screenshots and dimensions are under evidence/video-layout-n1 (not committed).
 
 ## Remaining Work
 
