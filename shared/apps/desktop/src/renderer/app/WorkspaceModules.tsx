@@ -5401,6 +5401,7 @@ function renderSidebarModule() {
               files={brainFiles}
               activeStep={step as "script" | "storyboard" | "generate" | "tracks"}
               onFilesChanged={() => setDataWorkspaceRefreshToken((value) => value + 1)}
+              onStepChange={(next) => setBrainSceneTab(next)}
               onAskBrain={handoffVideoPipelineAi}
               availableModels={Array.isArray(modelConfig.availableModels) ? modelConfig.availableModels : []}
               preferredVideoModel={String(modelConfig.model || "").trim()}
@@ -5481,7 +5482,7 @@ function renderSidebarModule() {
       return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "工作台");
     };
     return (
-      <aside className={`brain-resource-panel${isCenter ? " center" : ""}`} ref={isCenter ? undefined : attachBrainResourcePanel} data-placement={placement}>
+      <aside className={`brain-resource-panel${isCenter ? " center" : ""}`} ref={isCenter ? undefined : attachBrainResourcePanel} data-placement={placement} data-workspace={selectedBrainWorkspaceKey}>
         {isCenter ? null : (
           <button
             type="button"
@@ -5501,6 +5502,12 @@ function renderSidebarModule() {
             <strong>{selectedBrainProject?.name || "项目资源"}</strong>
             <small>仅保存在本机</small>
           </div>
+          <nav className="brain-resource-global-nav" aria-label="通用功能">
+          {capabilityTabs.length ? <button type="button" className={brainResourceTab === "scene" ? "active" : ""} onClick={() => showCapability(brainSceneTab)}>Tools</button> : null}
+          <button type="button" className={brainResourceTab === "files" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("files"); }}>文件 <em>{brainFiles.length}</em></button>
+          <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("artifacts"); }}>产物 <em>{brainArtifacts.length}</em></button>
+          <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("tasks"); }}>任务 <em>{brainTasks.length}</em></button>
+        </nav>
           <div className={`preview-header-actions ${isCenter ? "expanded" : "sidebar"}`} aria-label="工作区操作">
             <button
               className={`preview-icon-button brain-resource-expand-toggle${isCenter ? " is-expanded" : ""}`}
@@ -5524,11 +5531,6 @@ function renderSidebarModule() {
             </button>
           </div>
         </header>
-        <nav className="brain-resource-global-nav" aria-label="通用功能">
-          <button type="button" className={brainResourceTab === "files" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("files"); }}>文件 <em>{brainFiles.length}</em></button>
-          <button type="button" className={brainResourceTab === "artifacts" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("artifacts"); }}>产物 <em>{brainArtifacts.length}</em></button>
-          <button type="button" className={brainResourceTab === "tasks" ? "active" : ""} onClick={() => { setBrainResourcePlacement((current) => current === "hidden" ? "side" : current); setBrainResourceTab("tasks"); }}>任务 <em>{brainTasks.length}</em></button>
-        </nav>
         {capabilityTabs.length ? (
           brainResourceTab === "scene" ? (
             <nav className="brain-resource-scene-nav" aria-label="当前工作台功能">

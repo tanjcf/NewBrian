@@ -1,3 +1,4 @@
+import { VideoScriptWorkbench } from "./VideoScriptWorkbench";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type {
   BrainVideoCanvas,
@@ -113,6 +114,7 @@ export type VideoPipelineModelOption = {
 export type VideoPipelineShellProps = {
   projectId?: string;
   activeStep?: VideoPipelineStep;
+  onStepChange?: (step: VideoPipelineStep) => void;
   files?: ProjectFileOption[];
   /** Parent refreshes project file list after media import / TTS persist. */
   onFilesChanged?: () => void;
@@ -484,6 +486,7 @@ function writeStoredVideoModel(model: string) {
 export function VideoPipelineShell({
   projectId,
   activeStep,
+  onStepChange,
   files = [],
   onFilesChanged,
   onAskBrain,
@@ -565,7 +568,6 @@ export function VideoPipelineShell({
   const [shotAudioUrls, setShotAudioUrls] = useState<Record<string, string>>({});
   /** Preview URLs keyed by normalized relativePath (A2 peel + multi-track mix). */
   const [pathAudioUrls, setPathAudioUrls] = useState<Record<string, string>>({});
-  const [scriptPreviewOpen, setScriptPreviewOpen] = useState(false);
   const [textClips, setTextClips] = useState<TimelineTextClip[]>([]);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [textEditorFocusToken, setTextEditorFocusToken] = useState(0);
@@ -654,7 +656,6 @@ export function VideoPipelineShell({
   const readyCount = shots.filter((item) => item.ready && String(item.clip || "").trim()).length;
   const muxUnlocked = shots.length > 0 && readyCount === shots.length;
   const aspectRatio = canvas.width / Math.max(1, canvas.height);
-  const showAdapter = pane === "script";
   // Compute early: later useCallbacks must not hit TDZ on dependency-array evaluation
   // (historical crash: "Cannot access 'usingExportPreview' before initialization").
   const sequenceHasClipUrl = Boolean(String(sequenceUrls[sequenceIndex] || "").trim());
@@ -2077,10 +2078,14 @@ export function VideoPipelineShell({
         setStatus(`TTS 失败：${result?.detail || "未知错误"}`);
         return;
       }
-      const stored = ingestSpeechResult(shotId, result);
+      const stored = await persistSpeechToProject(shotId, result);
+      if (stored && result.audioBase64) {
+        rememberShotAudio(shotId, base64ToObjectUrl(result.audioBase64, result.mimeType || "audio/wav"));
+        schedulePipelineSave("旁白绑定已保存");
+      }
       setStatus(stored
-        ? `TTS 已生成并可预览 · ${shotId}${result.durationMs ? ` · ${Math.round(result.durationMs)}ms` : ""}`
-        : `TTS 已生成但未返回音频数据 · ${shotId}`);
+        ? `TTS 已生成并写入项目 · ${shotId}${result.durationMs ? ` · ${Math.round(result.durationMs)}ms` : ""}`
+        : `TTS 已返回，但音频未能写入项目，请重试 · ${shotId}`);
     } catch (error) {
       setStatus(`TTS 失败：${formatMediaError(error)}`);
     } finally {
@@ -5173,43 +5178,25 @@ export function VideoPipelineShell({
       <div className="brain-video-pipe__pane" role="tabpanel">
         <div className="brain-video-pipe__main">
           {pane === "script" && (
-            <div className="brain-video-pipe__section brain-video-pipe__section--script" data-testid="brain-video-script-pane">
-              <div className="brain-video-pipe__script-head">
-                <div>
-                  <h3>脚本</h3>
-                  <p>主题、旁白与成片结构；画幅会随分镜一并持久化到 pipeline-editor.json。</p>
-                </div>
-                <button type="button" className="brain-video-pipe__action" onClick={() => void savePipeline("脚本与画幅已保存到工程")}>
-                  保存脚本与画幅
-                </button>
-              </div>
-              {showAdapter ? adapterPanel : null}
-              <label className="brain-video-pipe__script-editor-label">
-                <span>剧本正文</span>
-                <textarea
-                  className="brain-video-pipe__editor brain-video-pipe__editor--script"
-                  value={script}
-                  onChange={(event) => setScript(event.target.value)}
-                  placeholder="写入主题、旁白、分场结构…"
-                />
-              </label>
-              <div className="brain-video-pipe__script-preview">
-                <button
-                  type="button"
-                  className="brain-video-pipe__script-preview-toggle"
-                  aria-expanded={scriptPreviewOpen}
-                  onClick={() => setScriptPreviewOpen((open) => !open)}
-                >
-                  <span>{scriptPreviewOpen ? "收起预览" : "展开预览"}</span>
-                  <small>{brainVideoCanvasSize(canvas)} · {previewMode === "shot" ? "本镜" : "全片"}</small>
-                </button>
-                {scriptPreviewOpen ? (
-                  <div className="brain-video-pipe__script-preview-body">
-                    {previewPanel}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            <VideoScriptWorkbench
+              key={projectId || "unbound"}
+              script={script}
+              segments={shots.map(item => ({ title: item.title, prompt: item.prompt, line: item.line, duration: Math.max(0, (trackEdits[item.id]?.outSec ?? 4) - (trackEdits[item.id]?.inSec ?? 0)) }))}
+              disabled={!projectId}
+              canvasControls={adapterPanel}
+              onScriptChange={(value) => { setScript(value); pipelineDirtyRef.current = true; }}
+              onSegmentChange={(index, patch) => {
+                const target = shots[index];
+                if (!target) return;
+                const { duration, ...fields } = patch;
+                updateShot(target.id, fields);
+                if (duration !== undefined) patchTrack(target.id, { outSec: (trackEdits[target.id]?.inSec ?? 0) + duration });
+                pipelineDirtyRef.current = true;
+              }}
+              onAdd={addShot}
+              onSave={() => savePipeline("脚本分段与画幅已保存到工程")}
+              onConfirm={() => { if (onStepChange) onStepChange("storyboard"); else setLocalStep("storyboard"); }}
+            />
           )}
 
           {pane === "storyboard" && (
