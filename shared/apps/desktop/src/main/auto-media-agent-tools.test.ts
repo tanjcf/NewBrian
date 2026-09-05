@@ -156,6 +156,48 @@ test("resolveAutoMediaReferenceImage converts workspace-local paths to data URLs
   }
 });
 
+test("resolveAutoMediaReferenceImage accepts managed chat attachment paths outside the workspace", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "auto-media-ws-"));
+  const attachmentRoot = await mkdtemp(join(tmpdir(), "auto-media-att-"));
+  try {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x07]);
+    const attachmentPath = join(attachmentRoot, "1788354236922-e099a846-fee7-4718-a830-0d93f06a75a8.jpg");
+    await writeFile(attachmentPath, png);
+    const resolved = await resolveAutoMediaReferenceImage({
+      workspaceRoot,
+      attachmentRoots: [attachmentRoot],
+      imageUrl: attachmentPath
+    });
+    assert.match(resolved, /^data:image\/jpeg;base64,/);
+    const staged = await readFile(join(workspaceRoot, ".codecn", "attachments", "1788354236922-e099a846-fee7-4718-a830-0d93f06a75a8.jpg"));
+    assert.equal(staged.length, png.length);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+    await rm(attachmentRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveAutoMediaReferenceImage rejects arbitrary paths outside workspace and attachment roots", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "auto-media-deny-ws-"));
+  const outsider = await mkdtemp(join(tmpdir(), "auto-media-deny-out-"));
+  try {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x08]);
+    const outsiderPath = join(outsider, "secret.png");
+    await writeFile(outsiderPath, png);
+    await assert.rejects(
+      () => resolveAutoMediaReferenceImage({
+        workspaceRoot,
+        attachmentRoots: [],
+        imageUrl: outsiderPath
+      }),
+      /工作区或聊天附件目录/
+    );
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+    await rm(outsider, { recursive: true, force: true });
+  }
+});
+
 test("persistGeneratedMediaToProject registers file artifact and task", async () => {
   const root = await mkdtemp(join(tmpdir(), "auto-media-persist-"));
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x04]);

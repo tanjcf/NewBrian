@@ -3,6 +3,7 @@ import test from "node:test";
 const {
   assertCanDelegateChild,
   buildAgentCollaborationInstruction,
+  buildDelegateFailureRecoveryMessage,
   countActiveChildren,
   DELEGATE_CHILDREN_LIMIT,
   DELEGATE_DEPTH_EXCEEDED,
@@ -20,6 +21,13 @@ test("normalizes bounded child delegation requests", () => {
     title: "Research", instruction: "Inspect the runtime", role: "researcher", dependsOn: []
   });
   assert.equal(normalizeDelegationRequest({ title: "x", instruction: "y", role: "unknown" }).role, "researcher");
+  assert.equal(
+    normalizeDelegationRequest(
+      { title: "x", instruction: "y", role: "tech-lead" },
+      { allowedExtraRoles: ["tech-lead", "qa-engineer"] }
+    ).role,
+    "tech-lead"
+  );
   assert.throws(() => normalizeDelegationRequest({ title: "", instruction: "work" }), /required/);
 });
 
@@ -38,6 +46,7 @@ test("collaboration instruction requires parallel start and final collection", (
   assert.match(instruction, /MUST try the relevant retrieval\/tool capability/i);
   assert.match(instruction, /stronger model is required/i);
   assert.match(instruction, /Do not empty-loop re-delegate/i);
+  assert.match(instruction, /workspace\.write_file/);
 });
 
 test("enforces OC spawn depth and active child limits", () => {
@@ -55,7 +64,13 @@ test("enforces OC spawn depth and active child limits", () => {
   );
   assert.throws(
     () => assertCanDelegateChild({ activeChildCount: 0, recentFailedCount: 2 }),
-    (error: Error & { code?: string }) => error.code === DELEGATE_REFUSED_AFTER_FAILURE
+    (error: Error & { code?: string; nextAction?: string }) => {
+      assert.equal(error.code, DELEGATE_REFUSED_AFTER_FAILURE);
+      assert.match(error.message, /next_action:/i);
+      assert.match(String(error.nextAction || ""), /Do not call agent\.delegate/);
+      assert.match(buildDelegateFailureRecoveryMessage(2), /workspace\.write_file/);
+      return true;
+    }
   );
   assert.doesNotThrow(() => assertCanDelegateChild({ activeChildCount: 0, recentFailedCount: 1 }));
   assert.equal(countActiveChildren([{ status: "running" }, { status: "failed" }, { status: "queued" }]).active, 2);

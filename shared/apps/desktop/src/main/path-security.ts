@@ -58,6 +58,11 @@ export function previewPathFallbacks(requestedPath: string) {
   if (!trimmed || trimmed === "." || trimmed === "..") return [];
   const name = basename(trimmed);
   if (!name || name === "." || name === "..") return [];
+  const generatedMediaFallbacks = [
+    `.codecn/generated-media/image/${name}`,
+    `.codecn/generated-media/video/${name}`,
+    `.codecn/generated-media/music/${name}`
+  ];
   if (trimmed.includes("/")) {
     // Also try the bare basename under common roots when a nested relative path misses.
     return [
@@ -66,7 +71,8 @@ export function previewPathFallbacks(requestedPath: string) {
       `files/${name}`,
       `artifacts/${name}`,
       `docs/${name}`,
-      `notes/${name}`
+      `notes/${name}`,
+      ...generatedMediaFallbacks
     ].filter((candidate, index, all) => candidate !== trimmed && all.indexOf(candidate) === index);
   }
   return [
@@ -74,7 +80,8 @@ export function previewPathFallbacks(requestedPath: string) {
     `files/${name}`,
     `artifacts/${name}`,
     `docs/${name}`,
-    `notes/${name}`
+    `notes/${name}`,
+    ...generatedMediaFallbacks
   ];
 }
 
@@ -148,7 +155,13 @@ export async function findBasenameUnderRoot(rootPath: string, fileName: string, 
         };
       }
       if (!entry.isDirectory() || current.depth >= maxDepth) continue;
-      if (SKIPPED_BASENAME_SEARCH_DIRS.has(entry.name)) continue;
+      if (SKIPPED_BASENAME_SEARCH_DIRS.has(entry.name)) {
+        // Auto media lands under .codecn/generated-media/; still search there by basename.
+        if (entry.name === ".codecn" && current.depth === 0) {
+          queue.push({ dir: join(current.dir, ".codecn", "generated-media"), depth: current.depth + 1 });
+        }
+        continue;
+      }
       const nextDir = join(current.dir, entry.name);
       if (!isPathWithin(realRoot, nextDir)) continue;
       queue.push({ dir: nextDir, depth: current.depth + 1 });

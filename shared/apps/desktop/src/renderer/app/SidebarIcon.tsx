@@ -19,6 +19,9 @@ export function SidebarIcon({ name }: { name: string }) {
   if (name === "skills") {
     return <svg {...common}><path d="m12 3.7 1.15 4.15L17.3 9l-4.15 1.15L12 14.3l-1.15-4.15L6.7 9l4.15-1.15L12 3.7Z" /><path d="M5 4.5v3M3.5 6h3" /><path d="M18.5 15.5v2.6M17.2 16.8h2.6" /></svg>;
   }
+  if (name === "experts" || name === "holon") {
+    return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 19c1.8-3.2 4-4.8 6.5-4.8S16.7 15.8 18.5 19" /><path d="M16.5 6.2 19 4.8M19.4 8.8l2.2.7M16.8 11.2l1.8 1.6" /></svg>;
+  }
   if (name === "plugins") {
     return <svg {...common}><path d="m8.2 8.2 3.8-3.8 3.8 3.8-3.8 3.8-3.8-3.8Z" /><path d="m4.4 15.8 3.8-3.8 3.8 3.8-3.8 3.8-3.8-3.8Z" /><path d="m12 15.8 3.8-3.8 3.8 3.8-3.8 3.8-3.8-3.8Z" /></svg>;
   }

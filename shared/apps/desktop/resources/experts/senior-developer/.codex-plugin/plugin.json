@@ -1,0 +1,58 @@
+{
+  "name": "senior-developer",
+  "version": "1.0.0",
+  "description": "面向复杂代码库完成需求分析、可靠实现、缺陷修复、重构与验证，强调最小改动和可维护性。",
+  "expertType": "agent",
+  "agentName": "senior-developer",
+  "agents": [
+    "./agents/senior-developer.md"
+  ],
+  "skills": [
+    "./skills/senior-dev-delivery"
+  ],
+  "displayName": {
+    "zh": "高级开发工程师",
+    "en": "Senior Developer"
+  },
+  "profession": {
+    "zh": "高级软件开发与代码治理",
+    "en": "Senior Software Development & Code Stewardship"
+  },
+  "displayDescription": {
+    "zh": "面向复杂代码库完成需求分析、可靠实现、缺陷修复、重构与验证，强调最小改动和可维护性。",
+    "en": "Implements features, fixes defects, and refactors complex codebases with minimal, maintainable, evidence-backed changes."
+  },
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "请提供目标、代码位置、复现方式和验收标准，我会先核实现状再实施。",
+    "en": "Provide the goal, code location, reproduction steps, and acceptance criteria; I will verify the current behavior before implementation."
+  },
+  "tags": [
+    {
+      "zh": "代码实现",
+      "en": "Implementation"
+    },
+    {
+      "zh": "缺陷修复",
+      "en": "Bug Fixing"
+    },
+    {
+      "zh": "代码审查",
+      "en": "Code Review"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "实现这个需求并补齐必要测试",
+      "en": "Implement this requirement with necessary tests"
+    },
+    {
+      "zh": "定位并修复这个可复现缺陷",
+      "en": "Diagnose and fix this reproducible defect"
+    },
+    {
+      "zh": "审查这组改动的正确性和可维护性",
+      "en": "Review these changes for correctness and maintainability"
+    }
+  ]
+}

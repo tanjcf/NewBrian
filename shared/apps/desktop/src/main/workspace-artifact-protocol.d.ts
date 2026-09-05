@@ -14,6 +14,9 @@ export function resolveArtifactMimeType(
   filePath: string,
   headBytes?: ArrayBufferView | ArrayLike<number> | null
 ): string;
+export function isAudioArtifactExtension(extension: string): boolean;
+export function firstAudioArtifactExtension(...paths: string[]): string;
+export function isAudioArtifactCandidate(...paths: string[]): boolean;
 export function isAudioArtifactPath(filePath: string): boolean;
 export function isImageArtifactPath(filePath: string): boolean;
 export function isImageArtifactExtension(extension: string): boolean;

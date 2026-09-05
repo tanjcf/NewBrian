@@ -36,6 +36,25 @@ test("parses WAV with LIST chunk before data", async () => {
   }
 });
 
+test("recognizes compressed audio by storage key when logical name lacks extension", async () => {
+  const root = await mkdtemp(join(process.env.TEMP || ".", "brain-music-media-ext-"));
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(root, "media", "imports"), { recursive: true });
+    await writeFile(join(root, "media", "imports", "song.mp3"), Buffer.from([0xff, 0xfb, 0x90, 0x00]));
+    const service = new MusicMediaService(
+      { getProject: () => ({ primaryWorkspaceKey: "music", localWorkspaceId: "w1" }), getFile: () => ({ logicalName: "用户上传歌曲", storageKey: "media/imports/song.mp3" }) } as any,
+      async () => root,
+      async () => ""
+    );
+    const info = await service.inspect("owner", "project", "file");
+    assert.equal(info.kind, "audio");
+    assert.ok(Array.isArray(info.warnings));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("parses bounded PCM waveform samples", async () => {
   const root = await mkdtemp(join(process.env.TEMP || ".", "brain-music-media-"));
   try {

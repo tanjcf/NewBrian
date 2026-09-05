@@ -11,7 +11,10 @@ import { isGreetingText } from "./agent-orchestrator-policy.ts";
 export function shouldAutoDelegateHeavyWork(input: {
   taskClass?: AutoTaskClass | string;
   latestUserText?: string;
+  /** When an Expert Marketplace expert is summoned, suppress generic Auto strong-delegate. */
+  expertSummonActive?: boolean;
 }): boolean {
+  if (input.expertSummonActive) return false;
   const taskClass = String(input.taskClass || "general") as AutoTaskClass;
   const text = String(input.latestUserText || "").trim();
   if (!text) return false;
@@ -51,7 +54,15 @@ export function buildAutoModeOrchestratorInstruction(): string {
 export function buildAutoModeRoleInstruction(input: {
   taskClass?: AutoTaskClass | string;
   latestUserText?: string;
+  expertSummonActive?: boolean;
 }): string {
+  if (input.expertSummonActive) {
+    return [
+      "Auto mode (expert summoned): you are the summoned expert lead, not the generic Auto orchestrator.",
+      "Follow the expert SOP for whether and when to agent.delegate to named member roles.",
+      "Do not force planner/researcher/editor/verifier strong-delegate unless the expert SOP requires it."
+    ].join(" ");
+  }
   return shouldAutoDelegateHeavyWork(input)
     ? buildAutoModeOrchestratorInstruction()
     : buildAutoModeLightCompanionInstruction();
@@ -61,6 +72,7 @@ export function buildAutoModeRoleInstruction(input: {
 export function buildAutoDelegateTurnConstraint(input: {
   taskClass?: AutoTaskClass | string;
   latestUserText?: string;
+  expertSummonActive?: boolean;
 }): string {
   if (!shouldAutoDelegateHeavyWork(input)) return "";
   const request = String(input.latestUserText || "").trim();
@@ -73,7 +85,7 @@ export function buildAutoDelegateTurnConstraint(input: {
 
 export function appendAutoDelegateTurnConstraint<T extends { role: string; content?: string }>(
   messages: T[],
-  input: { taskClass?: AutoTaskClass | string; latestUserText?: string }
+  input: { taskClass?: AutoTaskClass | string; latestUserText?: string; expertSummonActive?: boolean }
 ): T[] {
   const constraint = buildAutoDelegateTurnConstraint(input);
   if (!constraint) return messages;

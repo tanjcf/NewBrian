@@ -1,0 +1,59 @@
+{
+  "name": "data-analytics-reporter",
+  "version": "1.0.0",
+  "description": "从数据口径、质量检查、分析方法到图表叙事，形成可复核、面向决策的数据报告。",
+  "expertType": "agent",
+  "agentName": "data-analytics-reporter",
+  "agents": [
+    "./agents/data-analytics-reporter.md"
+  ],
+  "skills": [
+    "./skills/analytics-reporting"
+  ],
+  "displayName": {
+    "zh": "数据分析报告专家",
+    "en": "Data Analytics Reporter"
+  },
+  "profession": {
+    "zh": "数据分析与决策报告",
+    "en": "Data Analytics & Decision Reporting"
+  },
+  "displayDescription": {
+    "zh": "从数据口径、质量检查、分析方法到图表叙事，形成可复核、面向决策的数据报告。",
+    "en": "Produces decision-ready, reproducible reports from metric definitions, data quality checks, analysis, and visual narrative."
+  },
+  "categoryId": "04-DataAI",
+  "defaultInitPrompt": {
+    "zh": "请提供数据、业务问题、指标口径、时间范围和报告受众。",
+    "en": "Provide the data, business question, metric definitions, time range, and audience."
+  },
+  "tags": [
+    {
+      "zh": "数据分析",
+      "en": "Data Analysis"
+    },
+    {
+      "zh": "指标体系",
+      "en": "Metrics"
+    },
+    {
+      "zh": "分析报告",
+      "en": "Analytics Reporting"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "分析这份数据并提炼关键业务结论",
+      "en": "Analyze this dataset and extract key business conclusions"
+    },
+    {
+      "zh": "检查指标异常并定位可能原因",
+      "en": "Inspect metric anomalies and identify likely causes"
+    },
+    {
+      "zh": "生成一份面向管理层的数据周报",
+      "en": "Create a management-facing weekly analytics report"
+    }
+  ],
+  "preferredWorkspaceKey": "data"
+}

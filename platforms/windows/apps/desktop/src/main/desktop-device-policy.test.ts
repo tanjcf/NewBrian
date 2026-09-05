@@ -39,12 +39,48 @@ test("omits authorization when no usable credential exists", () => {
   assert.equal("Authorization" in headers, false);
 });
 
-test("selects the first external non-zero MAC address", () => {
+test("selects a stable primary MAC across interface order and WiFi handoff", () => {
   assert.equal(policy.resolvePrimaryMacAddress({
     loopback: [{ internal: true, mac: "00:00:00:00:00:00" }],
     ethernet: [{ internal: false, mac: "AA:BB:CC:DD:EE:FF" }]
   }), "aa-bb-cc-dd-ee-ff");
   assert.equal(policy.resolvePrimaryMacAddress({ empty: [] }), "");
+  const wifiFirst = policy.resolvePrimaryMacAddress({
+    "Wi-Fi": [{ internal: false, mac: "11:22:33:44:55:66" }],
+    Ethernet: [{ internal: false, mac: "AA:BB:CC:DD:EE:FF" }]
+  });
+  const ethernetFirst = policy.resolvePrimaryMacAddress({
+    Ethernet: [{ internal: false, mac: "AA:BB:CC:DD:EE:FF" }],
+    "Wi-Fi": [{ internal: false, mac: "11:22:33:44:55:66" }]
+  });
+  assert.equal(wifiFirst, "aa-bb-cc-dd-ee-ff");
+  assert.equal(ethernetFirst, "aa-bb-cc-dd-ee-ff");
+  assert.equal(policy.resolvePrimaryMacAddress({
+    "Wi-Fi 2": [{ internal: false, mac: "22:22:22:22:22:22" }],
+    "Wi-Fi": [{ internal: false, mac: "11:11:11:11:11:11" }]
+  }), "11-11-11-11-11-11");
+});
+
+test("reuses persisted device identity when live MAC changes after WiFi switch", () => {
+  const persisted = {
+    device_id: "stable-device", device_name: "old-host", device_type: "desktop",
+    os_name: "win32", os_version: "10", app_version: "1.0.0",
+    mac_id: "mac-hash-old", motherboard_id: "board-hash", disk_id: "disk-hash"
+  };
+  const live = {
+    ...persisted,
+    device_name: "new-host",
+    os_version: "11",
+    app_version: "1.2.0",
+    mac_id: "mac-hash-wifi-changed"
+  };
+  const reused = policy.reusePersistedDesktopDeviceFingerprint(persisted, live);
+  assert.equal(reused.device_id, "stable-device");
+  assert.equal(reused.mac_id, "mac-hash-old");
+  assert.equal(reused.device_name, "new-host");
+  assert.equal(reused.app_version, "1.2.0");
+  assert.equal(policy.isUsableDesktopDeviceFingerprint(reused), true);
+  assert.equal(policy.isUsableDesktopDeviceFingerprint({ device_id: "" }), false);
 });
 
 test("sanitizes non-ASCII device names so Electron fetch headers stay ByteString-safe", () => {

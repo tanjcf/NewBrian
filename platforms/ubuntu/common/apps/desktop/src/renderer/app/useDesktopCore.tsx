@@ -156,7 +156,7 @@ async function renameThreadFromMenu(workspace: WorkspaceCatalogItem, thread: Wor
   setSelectedThreadId(thread.id);
   setEditingThreadTitle(thread.title);
   setEditingThreadSummary(thread.summary ?? "");
-  setActiveFeature("thread");
+  ctx.setShowRenameThreadDialog?.(true);
   setErrorMessage("");
 }
 async function forkThreadFromMenu(workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord, openInNewWorkspace: boolean) {
@@ -1067,6 +1067,7 @@ async function renameThread() {
       summary: editingThreadSummary.trim()
     });
     setWorkspaceCatalog(normalizeWorkspaceCatalog(nextCatalog));
+    ctx.setShowRenameThreadDialog?.(false);
     setErrorMessage("");
   } catch (error) {
     setErrorMessage(error instanceof Error ? error.message : String(error));

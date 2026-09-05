@@ -4,7 +4,7 @@ type SceneSection = { title: string; keywords: string[]; content: string };
 
 const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[] }> = {
   explore: { title: "场景学习探索", sections: [
-    { title: "通用 Brain", keywords: ["探索", "学习", "场景", "文件", "产物", "任务", "项目"], content: "这是 codeCN 原生工作台模式。右侧不挂业务场景专属 Tools，只保留项目资源：文件、产物、任务。对话、项目、线程、Skill、知识检索和通用工具调用按原生能力工作；进入量化、游戏、视频等业务场景时，再切换到对应场景并使用其右侧专属 Tools。" }
+    { title: "通用 Brain", keywords: ["探索", "学习", "场景", "文件", "产物", "任务", "项目", "glob", "grep", "read"], content: "这是 codeCN 原生工作台模式。右侧不挂业务场景专属 Tools，只保留项目资源：文件、产物、任务。对话、项目、线程、Skill、知识检索和通用工具调用按原生能力工作；工作区检索用 workspace.glob / workspace.grep / workspace.read（别名 glob / grep / read），不要用 shell 无边界递归检索。进入量化、游戏、视频等业务场景时，再切换到对应场景并使用其右侧专属 Tools。" }
   ] },
   quant: { title: "量化交易", sections: [
     { title: "能力", keywords: ["行情", "股票", "K线", "量柱", "组合", "策略"], content: "查询真实行情、查看K线与成交量、组合持仓、策略回测和风险分析。默认不连接真实券商，不执行真实下单。" },
@@ -28,7 +28,7 @@ const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[
   ] },
   software: { title: "软件与自动化", sections: [
     { title: "能力", keywords: ["终端", "代码", "测试", "部署", "Flow", "文件"], content: "查看项目文件、运行受控终端、编辑代码、执行测试、部署和自动化 Flow。涉及外部副作用时遵循审批和工作区边界。" },
-    { title: "工具接口", keywords: ["terminal", "shell", "test", "deploy", "flow"], content: "使用右侧终端、脚本、测试、部署和 Flow 工具；命令必须限制在当前工作区，先展示风险，执行后返回退出码和摘要。" }
+    { title: "工具接口", keywords: ["terminal", "shell", "test", "deploy", "flow", "workspace.glob", "workspace.grep", "workspace.read"], content: "使用右侧终端、脚本、测试、部署和 Flow 工具；命令必须限制在当前工作区，先展示风险，执行后返回退出码和摘要。代码定位与阅读优先 workspace.glob / workspace.grep / workspace.read，不要用无边界 shell 递归检索。" }
   ] },
   document: { title: "文档创作", sections: [
     { title: "能力", keywords: ["文稿", "审校", "项目", "文件", "政务", "写作"], content: "创建和编辑文稿、审校批注、管理项目文件、生成政务写作规格和导出文档。保持当前线程上下文，避免混入其他项目对话。" },

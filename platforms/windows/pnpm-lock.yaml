@@ -34,12 +34,6 @@ importers:
       '@aiden0z/pptx-renderer':
         specifier: 1.2.4
         version: 1.2.4(pdfjs-dist@5.4.296)
-      '@codex-forge/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@codex-forge/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@napi-rs/canvas':
         specifier: 0.1.80
         version: 0.1.80
@@ -98,6 +92,12 @@ importers:
         specifier: 5.0.1
         version: 5.0.1
     devDependencies:
+      '@codex-forge/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@codex-forge/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2

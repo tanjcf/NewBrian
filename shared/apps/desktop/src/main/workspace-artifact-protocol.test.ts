@@ -32,6 +32,20 @@ test("recognizes image and video artifact paths", () => {
   assert.equal(isVideoArtifactPath("outputs/demo.txt"), false);
 });
 
+test("recognizes audio artifact paths, extensions, and name hints", async () => {
+  const {
+    firstAudioArtifactExtension,
+    isAudioArtifactCandidate,
+    isAudioArtifactExtension,
+    isAudioArtifactPath
+  } = await import(new URL("./workspace-artifact-protocol.js", import.meta.url).href);
+  assert.equal(isAudioArtifactPath("outputs/track.mp3"), true);
+  assert.equal(isAudioArtifactPath("outputs/score.mid"), true);
+  assert.equal(isAudioArtifactExtension(".midi"), true);
+  assert.equal(isAudioArtifactCandidate("files/import-1", "song.flac"), true);
+  assert.equal(firstAudioArtifactExtension("files/import-1", "media/demo.wav"), ".wav");
+});
+
 test("builds and parses workspace-scoped artifact preview URLs", () => {
   const url = buildWorkspaceArtifactPreviewUrl("ws-1", "outputs\\吉祥物-旺财动画狗.html");
   assert.equal(

@@ -13,6 +13,10 @@ import {
   compactThreadMessages,
   shouldCompactThreadMessages
 } from "./thread-context-policy.js";
+import {
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+  pruneThreadToolEvents
+} from "./context-budget-policy.ts";
 import { createThreadEvent, toRolloutThreadEvent } from "./thread-event-policy.js";
 import { reconcileThreadMessages } from "./thread-message-reconciliation.js";
 import { createTimelineEvent, type ThreadStateFile } from "./thread-state-factory.js";
@@ -61,6 +65,8 @@ export class ModelChatContextService {
     modelInput: ModelChatInput;
     abortSignal: AbortSignal;
     setRuntimeState: (state: ThreadStateFile) => void;
+    /** Force summarization even when under the soft threshold (overflow recovery). */
+    forceCompact?: boolean;
   }) {
     const context = { makeId: this.dependencies.makeId, nowIso: this.dependencies.nowIso };
     input.state.messages = reconcileThreadMessages(
@@ -70,8 +76,24 @@ export class ModelChatContextService {
       input.persistedAt
     ) as ChatMessage[];
     let compactionSummary: string | undefined;
-    const modelContextWindow = input.state.context?.modelContextWindow ?? 128_000;
-    if (shouldCompactThreadMessages(input.state.messages, input.state.context, modelContextWindow)) {
+    const modelContextWindow = (() => {
+      const parsed = Math.floor(Number(input.state.context?.modelContextWindow)
+        || Number((input.modelInput as { maxContext?: number }).maxContext)
+        || 0);
+      return Number.isFinite(parsed) && parsed >= 8_000 ? parsed : DEFAULT_CONTEXT_WINDOW_TOKENS;
+    })();
+    const prunedEvents = pruneThreadToolEvents(input.state.events ?? []);
+    if (prunedEvents.pruned > 0) {
+      input.state.events = prunedEvents.events;
+    }
+    const needsCompact = input.forceCompact
+      || shouldCompactThreadMessages(
+        input.state.messages,
+        input.state.context,
+        modelContextWindow,
+        input.state.events
+      );
+    if (needsCompact) {
       const compactionInput = activeThreadMessages(input.state.messages, input.state.context)
         .filter((message) => message.role !== "tool" && !message.excludeFromModelContext)
         .map((message) => ({ role: message.role, content: message.content }));
@@ -87,10 +109,17 @@ export class ModelChatContextService {
       compactionSummary = response.content?.trim();
       if (!compactionSummary) throw new Error("Context compaction model returned an empty summary.");
     }
-    const compacted = compactThreadMessages(input.state.messages, input.state.context, modelContextWindow, {
-      ...context,
-      summary: compactionSummary
-    });
+    const compacted = compactThreadMessages(
+      input.state.messages,
+      input.state.context,
+      modelContextWindow,
+      {
+        ...context,
+        summary: compactionSummary,
+        force: Boolean(input.forceCompact)
+      },
+      input.state.events
+    );
     input.state.context = compacted.context;
     const requestMessages = compacted.messages
       .filter((message): message is ChatMessage & { role: "user" | "assistant" | "system" } =>

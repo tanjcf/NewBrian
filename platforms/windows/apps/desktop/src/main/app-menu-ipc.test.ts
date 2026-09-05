@@ -26,21 +26,32 @@ test("resolves saved menu accelerators and dispatches finite commands", () => {
   assert.deepEqual(commands, ["new-chat"]);
 });
 
-test("builds menu structure with injected side effects", () => {
+test("builds Chinese menu structure with injected side effects", () => {
   const commands: string[] = [];
   const urls: string[] = [];
+  const windowActions: string[] = [];
   const actions = {
     sendCommand: (id: string) => commands.push(id),
     createWindow: () => commands.push("new-window"),
     openExternal: (url: string) => urls.push(url),
-    showAbout: () => commands.push("about")
+    showAbout: () => commands.push("about"),
+    controlWindow: (action: "minimize" | "maximize" | "close") => windowActions.push(action)
   };
   const file = menuPolicy.createAppMenuTemplate("file", { "new-chat": "Alt+N" }, actions);
+  assert.equal(file[0].label, "新建窗口");
+  assert.equal(file[1].label, "新建对话");
   assert.equal(file[1].accelerator, "Alt+N");
   (file[0].click as Function)();
   (file[1].click as Function)();
   assert.deepEqual(commands, ["new-window", "new-chat"]);
+  const windowMenu = menuPolicy.createAppMenuTemplate("window", {}, actions);
+  assert.equal(windowMenu[0].label, "最小化");
+  assert.equal(windowMenu[1].label, "最大化或还原");
+  (windowMenu[0].click as Function)();
+  (windowMenu[1].click as Function)();
+  assert.deepEqual(windowActions, ["minimize", "maximize"]);
   const help = menuPolicy.createAppMenuTemplate("help", {}, actions);
+  assert.equal(help[0].label, "codeCN 文档");
   (help[0].click as Function)();
   (help.at(-1)?.click as Function)();
   assert.match(urls[0], /codex/);

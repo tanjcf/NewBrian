@@ -27,6 +27,16 @@ Adapted from the codeCN programming-skill pack for always-on project context.
 6. When behavior must match an existing local runtime or tool, inspect that installation and reuse verified contracts; do not invent compatible-looking behavior from UI appearance or memory alone. If evidence is missing, report the gap.
 7. After every code modification, perform an explicit evaluation before final response: what was implemented, what evidence was checked, what commands/tests/builds ran, and what remains unverified.
 
+## Workspace Retrieval (platform tools)
+
+Global and project Skills do **not** replace these built-in tools. Use them on Windows, macOS, and Ubuntu alike:
+
+1. Find files: \`workspace.glob\` (alias \`glob\`) with \`pattern\` / optional \`path\` / \`namePattern\`.
+2. Search contents: \`workspace.grep\` (alias \`grep\`) with \`pattern\` / optional \`path\` / \`glob\` / \`context\`.
+3. Read files: \`workspace.read\` (alias \`read\`) with optional \`offset\` / \`limit\`. Prefer this over shell \`Get-Content\` / \`cat\` / \`type\`.
+4. Shallow listing only: \`workspace.scan\` when you need a directory overview.
+5. Do **not** use \`shell.exec\` for ordinary recursive code search (\`Get-ChildItem -Recurse\`, \`Select-String -Recurse\`, \`grep -r\`, \`find\` without \`-maxdepth\`, \`ls -R\`). Those can OOM the tool host; the built-in tools already ignore \`node_modules\`/\`.git\`/\`venv\` and cap depth/hits.
+
 ## Encoding Rules
 
 1. On Windows, preserve UTF-8 without BOM unless the file already clearly requires BOM.

@@ -63,8 +63,8 @@ export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledB
 
 /**
  * Resolve the gateway URL used for model/auth traffic.
- * Packaged installs never keep loopback unless CODECN_MODEL_BASE_URL explicitly
- * forces a local gateway for developers.
+ * Packaged installs never keep loopback or retired endpoints, including values
+ * inherited from a developer environment. Development builds may still use them.
  */
 export function resolveEffectiveGatewayBaseUrl(input: {
   configuredBaseUrl?: unknown;
@@ -74,7 +74,9 @@ export function resolveEffectiveGatewayBaseUrl(input: {
   productionBaseUrl: string;
 }): string {
   const env = String(input.envBaseUrl ?? "").trim();
-  if (env) return env;
+  if (env && (!input.isPackaged || (!isLoopbackGatewayBaseUrl(env) && !isRetiredGatewayBaseUrl(env)))) {
+    return env;
+  }
   const configured = String(input.configuredBaseUrl ?? "").trim();
   if (!input.isPackaged && configured) return configured;
   const bundled = String(input.bundledBaseUrl ?? "").trim();

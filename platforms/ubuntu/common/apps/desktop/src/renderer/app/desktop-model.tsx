@@ -165,6 +165,9 @@ export interface DesktopPreferencesState {
     highResScreenshots: boolean;
     previewUrl: string;
   };
+  market: {
+    directClawhubAllowed: boolean;
+  };
 }
 
 export type ChatMessageRole = "user" | "assistant";
@@ -326,7 +329,7 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-export type FeatureTab = "new-chat" | "search" | "extensions" | "skills" | "plugins" | "automation" | "mobile" | "mcp" | "settings";
+export type FeatureTab = "new-chat" | "search" | "extensions" | "skills" | "plugins" | "experts" | "automation" | "mobile" | "mcp" | "settings";
 export type ManagedFeatureKind = "skills" | "plugins" | "automations";
 export type PreviewMode = "empty" | "workspace" | "review" | "terminal" | "browser" | "files" | "chat";
 export type PreviewPlacement = "hidden" | "side" | "center";
@@ -744,6 +747,7 @@ declare global {
 
 export const featureItems: FeatureItem[] = [
   { id: "new-chat", label: "新建对话", icon: "+", description: "创建新线程或从当前线程分叉上下文。" },
+  { id: "experts", label: "专家市场", icon: "◎", description: "浏览并安装专家包；召唤仅由全局/项目 Skill 自行 expert.summon。" },
   { id: "extensions", label: "扩展", icon: "◇", description: "管理 GitHub、Jira、Slack 等外部服务集成。" },
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
@@ -883,6 +887,9 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
     preserveTabs: true,
     highResScreenshots: false,
     previewUrl: "http://127.0.0.1:3000"
+  },
+  market: {
+    directClawhubAllowed: true
   }
 };
 

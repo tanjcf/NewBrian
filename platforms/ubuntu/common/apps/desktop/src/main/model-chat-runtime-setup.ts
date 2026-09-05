@@ -38,10 +38,12 @@ export interface ModelChatRuntimeSetupDependencies {
 export async function openWorkspaceMediaForAgent(
   deps: ModelChatRuntimeSetupDependencies,
   kind: WorkspaceMediaKind,
-  targetPath: string
+  targetPath: string,
+  options?: { workspaceId?: string }
 ) {
   const catalog = await deps.readWorkspaceCatalog();
-  const workspace = catalog.workspaces.find((item) => item.id === deps.getActiveWorkspaceId());
+  const workspaceId = String(options?.workspaceId || deps.getActiveWorkspaceId() || "").trim();
+  const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
   if (!workspace) throw new Error("No active workspace is available for media preview.");
   const requestedPath = assertWorkspaceMediaKind(targetPath, kind);
   const { targetPath: resolvedPath, relativePath } = await resolveExistingFileInsideRoot(
@@ -107,9 +109,11 @@ export function registerDesktopArtifactRenderer(
 
 export function registerWorkspaceMediaAgentTools(
   deps: ModelChatRuntimeSetupDependencies,
-  targetRuntime: ModelChatRuntime
+  targetRuntime: ModelChatRuntime,
+  options?: { workspaceId?: string }
 ) {
   targetRuntime.unregisterExternalTools("workspace-media");
+  const workspaceId = String(options?.workspaceId || "").trim() || undefined;
   const imageSchema = {
     type: "object",
     properties: {
@@ -135,9 +139,9 @@ export function registerWorkspaceMediaAgentTools(
     additionalProperties: false
   };
   const openImage = async (input: { targetPath?: string }) =>
-    openWorkspaceMediaForAgent(deps, "image", String(input.targetPath ?? ""));
+    openWorkspaceMediaForAgent(deps, "image", String(input.targetPath ?? ""), { workspaceId });
   const openVideo = async (input: { targetPath?: string }) =>
-    openWorkspaceMediaForAgent(deps, "video", String(input.targetPath ?? ""));
+    openWorkspaceMediaForAgent(deps, "video", String(input.targetPath ?? ""), { workspaceId });
   targetRuntime.registerExternalTool({
     name: "workspace.open_image",
     title: "打开图片预览",
@@ -187,7 +191,7 @@ export async function configureModelChatRuntime(
   _thread: WorkspaceThreadRecord
 ) {
   registerDesktopArtifactRenderer(targetRuntime, workspace.path);
-  registerWorkspaceMediaAgentTools(deps, targetRuntime);
+  registerWorkspaceMediaAgentTools(deps, targetRuntime, { workspaceId: workspace.id });
   registerOfficialGovernmentWebTools(targetRuntime, deps.officialGovernmentWebService);
   await applyApplicationSkillPolicy(targetRuntime, deps.userSkillRoot, deps.readFeatureSkills);
 }

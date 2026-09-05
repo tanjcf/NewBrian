@@ -370,6 +370,14 @@ const asar = require(process.argv[1]);
 const archive = process.argv[2];
 const file = path.join(...String(process.argv[3]).split(/[\\/]+/).filter(Boolean));
 const text = asar.extractFile(archive, file).toString('utf8');
+if (text.includes('http://127.0.0.1:8790') || text.includes('http://localhost:8790')) {
+  console.error('Packaged app.asar still contains a local business gateway endpoint.');
+  process.exit(4);
+}
+if (!text.includes(process.argv[4])) {
+  console.error('Packaged app.asar is missing the selected remote gateway endpoint.');
+  process.exit(5);
+}
 if (/tasklist\s+\/FI[\s\S]{0,240}find\s+\/I/.test(text)) {
   console.error('Packaged app.asar still contains the obsolete tasklist | find /I update wait loop.');
   process.exit(2);
@@ -378,7 +386,7 @@ if (!text.includes('Get-Process -Name')) {
   console.error('Packaged app.asar is missing the hidden Get-Process update wait loop.');
   process.exit(3);
 }
-"@ $asarPackageRoot $packagedAsar "out/main/index.js"
+"@ $asarPackageRoot $packagedAsar "out/main/index.js" $gatewayBaseUrl
         if ($LASTEXITCODE -ne 0) {
           throw "Unable to inspect the packaged desktop main bundle."
         }

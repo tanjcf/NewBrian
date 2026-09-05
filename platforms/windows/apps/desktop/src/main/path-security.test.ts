@@ -91,12 +91,42 @@ test("falls back to outputs/ when a generated artifact is opened by basename", a
       "files/龟途-第1章.md",
       "artifacts/龟途-第1章.md",
       "docs/龟途-第1章.md",
-      "notes/龟途-第1章.md"
+      "notes/龟途-第1章.md",
+      ".codecn/generated-media/image/龟途-第1章.md",
+      ".codecn/generated-media/video/龟途-第1章.md",
+      ".codecn/generated-media/music/龟途-第1章.md"
     ]);
     assert.ok(previewPathFallbacks("outputs/龟途-第1章.md").includes("龟途-第1章.md"));
 
     const result = await resolveExistingFileInsideRoot(projectRoot, "龟途-第1章.md");
     assert.equal(result.relativePath.replace(/\\/g, "/"), "outputs/龟途-第1章.md");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolves Auto generated media under .codecn/generated-media by basename", async () => {
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-media-"));
+  try {
+    const projectRoot = join(tempRoot, "project");
+    const mediaDir = join(projectRoot, ".codecn", "generated-media", "image");
+    await fs.mkdir(mediaDir, { recursive: true });
+    await fs.writeFile(join(mediaDir, "1788353897888-1-3f78b4f83c.png"), "png", "utf8");
+
+    const byRelative = await resolveExistingFileInsideRoot(
+      projectRoot,
+      ".codecn/generated-media/image/1788353897888-1-3f78b4f83c.png"
+    );
+    assert.equal(
+      byRelative.relativePath.replace(/\\/g, "/"),
+      ".codecn/generated-media/image/1788353897888-1-3f78b4f83c.png"
+    );
+
+    const byBasename = await resolveExistingFileInsideRoot(projectRoot, "1788353897888-1-3f78b4f83c.png");
+    assert.equal(
+      byBasename.relativePath.replace(/\\/g, "/"),
+      ".codecn/generated-media/image/1788353897888-1-3f78b4f83c.png"
+    );
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

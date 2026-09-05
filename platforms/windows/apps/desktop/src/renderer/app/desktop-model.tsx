@@ -180,7 +180,7 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-export type FeatureTab = "new-chat" | "search" | "extensions" | "skills" | "plugins" | "automation" | "mobile" | "mcp" | "holon" | "settings";
+export type FeatureTab = "new-chat" | "search" | "extensions" | "skills" | "plugins" | "experts" | "automation" | "mobile" | "mcp" | "holon" | "settings";
 export type ManagedFeatureKind = AddFeatureItemInput["kind"];
 export type PreviewMode = "empty" | "workspace" | "review" | "terminal" | "browser" | "files" | "chat";
 export type PreviewPlacement = "hidden" | "side" | "center";
@@ -566,6 +566,14 @@ declare global {
         skipped: string[];
         detail: string;
       }>;
+      listExperts?: () => Promise<Array<Record<string, unknown>>>;
+      installExpert?: (input: { expertId: string }) => Promise<Record<string, unknown>>;
+      setExpertEnabled?: (input: { expertId: string; enabled: boolean }) => Promise<Array<Record<string, unknown>>>;
+      summonExpert?: (input: { threadId: string; expertId: string }) => Promise<Record<string, unknown>>;
+      clearExpertSummon?: (input: { threadId: string }) => Promise<{ ok: boolean }>;
+      getExpertSummon?: (input: { threadId: string }) => Promise<Record<string, unknown> | null>;
+      resolveExpertFromSkill?: (input: { skillName: string; skillNames?: string[] }) => Promise<{ expertId: string; skillName: string } | null>;
+      summonExpertFromSkill?: (input: { threadId: string; skillName: string }) => Promise<Record<string, unknown> | null>;
       onOpenWorkspaceFilePreview?: (listener: (event: {
         workspaceId: string;
         filePath: string;
@@ -774,8 +782,9 @@ declare global {
 }
 
 export const featureItems: FeatureItem[] = [
-  { id: "holon", label: "Holon", icon: "H", description: "远程任务、本地执行与私有学习控制面。" },
   { id: "new-chat", label: "新建对话", icon: "+", description: "创建新线程或从当前线程分叉上下文。" },
+  { id: "experts", label: "专家市场", icon: "◎", description: "浏览并安装专家包；召唤仅由全局/项目 Skill 自行 expert.summon。" },
+  { id: "holon", label: "Holon", icon: "H", description: "远程任务、本地执行与私有学习控制面。" },
   { id: "extensions", label: "扩展", icon: "◇", description: "管理 GitHub、Jira、Slack 等外部服务集成。" },
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
@@ -920,7 +929,7 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
     previewUrl: "http://127.0.0.1:3000"
   },
   market: {
-    directClawhubAllowed: false
+    directClawhubAllowed: true
   }
 };
 
@@ -945,7 +954,7 @@ export const initialDesktopAuthStatus: DesktopAuthStatusState = {
   authenticated: false,
   loading: true,
   mode: "none",
-  base_url: "http://127.0.0.1:8790"
+  base_url: "http://120.48.151.202:8790"
 };
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {

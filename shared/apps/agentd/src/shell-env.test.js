@@ -7,6 +7,8 @@ import {
   discoverManagedEnginePathEntries,
   enrichShellEnvForTools,
   formatMissingHostToolGuidance,
+  formatUnboundedRecursiveSearchGuidance,
+  guardShellWholeFileWrite,
   guardUnboundedRecursiveSearch,
   mergePathEntries,
   readPathFromEnv,
@@ -86,6 +88,23 @@ test("guards unbounded recursive shell searches", () => {
   assert.equal(guardUnboundedRecursiveSearch(filterOnlyBroad)?.ok, false);
 
   assert.equal(guardUnboundedRecursiveSearch("python -m uvicorn app:app"), null);
+
+  assert.equal(guardUnboundedRecursiveSearch("grep -r foo .")?.ok, false);
+  assert.equal(guardUnboundedRecursiveSearch("grep -R pattern")?.ok, false);
+  assert.equal(guardUnboundedRecursiveSearch("grep -r pattern src"), null);
+  assert.equal(guardUnboundedRecursiveSearch("Select-String -Pattern foo -Recurse")?.ok, false);
+  assert.equal(guardUnboundedRecursiveSearch('Select-String -Path src -Pattern foo -Recurse'), null);
+  assert.equal(guardUnboundedRecursiveSearch("find . -maxdepth 3 -type f"), null);
+});
+
+test("recursive search guidance mentions built-in workspace tools on every platform", () => {
+  const win = formatUnboundedRecursiveSearchGuidance("win32");
+  const mac = formatUnboundedRecursiveSearchGuidance("darwin");
+  assert.match(win, /workspace\.glob|workspace\.grep/);
+  assert.match(mac, /workspace\.glob|workspace\.grep/);
+  assert.match(win, /glob \/ grep/);
+  assert.match(win, /Get-ChildItem/);
+  assert.match(mac, /grep -r/);
 });
 
 test("shell.exec recovers python when Path was wiped by PATH overwrite", async (t) => {
@@ -146,6 +165,15 @@ test("shell.exec rejects unbounded recursive PowerShell searches", async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("guardShellWholeFileWrite blocks PowerShell and Bash write patterns", () => {
+  assert.equal(guardShellWholeFileWrite("Get-ChildItem .") , null);
+  assert.equal(guardShellWholeFileWrite("python app.py") , null);
+  assert.equal(guardShellWholeFileWrite("Set-Content a.txt hi")?.guarded, "shell_whole_file_write");
+  assert.equal(guardShellWholeFileWrite("Out-File -FilePath a.txt")?.guarded, "shell_whole_file_write");
+  assert.equal(guardShellWholeFileWrite("cat <<EOF > a.txt\nx\nEOF")?.guarded, "shell_whole_file_write");
+  assert.match(String(guardShellWholeFileWrite("Add-Content a.txt x")?.next_action), /workspace\.write_file/);
 });
 
 test("shell.exec appends Chinese missing-tool guidance on command-not-found", async () => {

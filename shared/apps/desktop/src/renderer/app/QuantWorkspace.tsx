@@ -115,6 +115,8 @@ export function QuantWorkspace({
   const [drillHint, setDrillHint] = useState("");
   const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
   const [watchlistStatus, setWatchlistStatus] = useState("");
+  const [creatingWatchlistGroup, setCreatingWatchlistGroup] = useState(false);
+  const [newWatchlistGroupName, setNewWatchlistGroupName] = useState("新分组");
   const [marketOverview, setMarketOverview] = useState<Record<string, any> | null>(null);
   const [marketOverviewView, setMarketOverviewView] = useState<MarketOverviewView>("indices");
   const [marketOverviewStatus, setMarketOverviewStatus] = useState("点击刷新后读取真实大盘数据");
@@ -239,11 +241,31 @@ export function QuantWorkspace({
   };
 
   const createWatchlistGroup = () => {
-    const name = window.prompt("自选股分组名称", "新分组")?.trim();
-    if (!name) return;
+    // Electron renderer does not support window.prompt; an inline form is required.
+    setNewWatchlistGroupName("新分组");
+    setCreatingWatchlistGroup(true);
+  };
+
+  const confirmCreateWatchlistGroup = () => {
+    const name = newWatchlistGroupName.trim() || "新分组";
     const id = `watchlist-${Date.now()}`;
-    updateWatchlistGroups((groups) => [...groups, { id, name, symbols: [] }]);
-    setUi((current) => ({ ...current, activeWatchlistGroupId: id }));
+    setUi((current) => {
+      const currentGroups = Array.isArray(current.watchlistGroups) && current.watchlistGroups.length
+        ? current.watchlistGroups
+        : defaultQuantUi.watchlistGroups;
+      return {
+        ...current,
+        watchlistGroups: [...currentGroups, { id, name, symbols: [] }],
+        activeWatchlistGroupId: id
+      };
+    });
+    setCreatingWatchlistGroup(false);
+    setNewWatchlistGroupName("新分组");
+  };
+
+  const cancelCreateWatchlistGroup = () => {
+    setCreatingWatchlistGroup(false);
+    setNewWatchlistGroupName("新分组");
   };
 
   useEffect(() => {
@@ -559,27 +581,82 @@ export function QuantWorkspace({
       <button type="button" onClick={() => setQueryVersion((value) => value + 1)}>查询行情</button>
     </section>
     <section className="brain-quant-watchlist" data-testid="brain-quant-watchlist">
-      <div className="brain-quant-section-title"><h3>自选股</h3><button type="button" onClick={createWatchlistGroup}>新建分组</button></div>
-      <div className="brain-quant-watchlist-groups">
-        {watchlistGroups.map((group) => <button key={group.id} type="button" className={group.id === activeWatchlistGroup?.id ? "active" : ""} onClick={() => setUi((current) => ({ ...current, activeWatchlistGroupId: group.id, symbol: group.symbols[0] || current.symbol }))}>{group.name} <em>{group.symbols.length}</em></button>)}
+      <div className="brain-quant-section-title">
+        <h3>自选股</h3>
+        <button type="button" className="brain-quant-section-action" onClick={createWatchlistGroup} disabled={creatingWatchlistGroup}>新建分组</button>
+      </div>
+      {creatingWatchlistGroup ? (
+        <div className="brain-quant-watchlist-create" data-testid="brain-quant-watchlist-create">
+          <input
+            autoFocus
+            aria-label="自选股分组名称"
+            value={newWatchlistGroupName}
+            onChange={(event) => setNewWatchlistGroupName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                confirmCreateWatchlistGroup();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelCreateWatchlistGroup();
+              }
+            }}
+            placeholder="输入分组名称"
+          />
+          <button type="button" className="brain-quant-watchlist-action primary" onClick={confirmCreateWatchlistGroup}>创建</button>
+          <button type="button" className="brain-quant-watchlist-action" onClick={cancelCreateWatchlistGroup}>取消</button>
+        </div>
+      ) : null}
+      <div className="brain-quant-watchlist-groups" role="tablist" aria-label="自选分组">
+        {watchlistGroups.map((group) => (
+          <button
+            key={group.id}
+            type="button"
+            role="tab"
+            aria-selected={group.id === activeWatchlistGroup?.id}
+            className={group.id === activeWatchlistGroup?.id ? "active" : ""}
+            onClick={() => setUi((current) => ({ ...current, activeWatchlistGroupId: group.id, symbol: group.symbols[0] || current.symbol }))}
+          >
+            <span>{group.name}</span>
+            <em>{group.symbols.length}</em>
+          </button>
+        ))}
       </div>
       <div className="brain-quant-watchlist-symbols">
-        {activeWatchlistGroup?.symbols.length ? activeWatchlistGroup.symbols.map((item) => <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>{item}</button>) : <small>当前分组暂无股票</small>}
-        {isSymbolWatched ? <button type="button" onClick={removeCurrentFromWatchlist}>移出当前分组</button> : <button type="button" onClick={addCurrentToWatchlist}>加入当前分组</button>}
+        {activeWatchlistGroup?.symbols.length ? activeWatchlistGroup.symbols.map((item) => (
+          <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>{item}</button>
+        )) : <small className="brain-quant-watchlist-empty">当前分组暂无股票</small>}
+        {isSymbolWatched
+          ? <button type="button" className="brain-quant-watchlist-action" onClick={removeCurrentFromWatchlist}>移出当前分组</button>
+          : <button type="button" className="brain-quant-watchlist-action primary" onClick={addCurrentToWatchlist}>加入当前分组</button>}
       </div>
-      <div className="brain-quant-watchlist-monitor-head"><strong>分组监控</strong><span>{watchlistStatus}</span><button type="button" onClick={() => void refreshWatchlistQuotes()}>刷新监控</button></div>
+      <div className="brain-quant-watchlist-monitor-head">
+        <div>
+          <strong>分组监控</strong>
+          {watchlistStatus ? <span>{watchlistStatus}</span> : null}
+        </div>
+        <button type="button" className="brain-quant-section-action" onClick={() => void refreshWatchlistQuotes()}>刷新监控</button>
+      </div>
       <div className="brain-quant-watchlist-monitor">
-        {activeWatchlistGroup?.symbols.map((item) => {
+        {activeWatchlistGroup?.symbols.length ? activeWatchlistGroup.symbols.map((item) => {
           const quote = watchlistQuotes[item];
-          return <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>
-            <strong>{item}</strong>
-            {quote ? <><span>¥{Number(quote.price).toFixed(2)}</span><em className={quote.changePercent >= 0 ? "positive" : "negative"}>{quote.changePercent >= 0 ? "+" : ""}{Number(quote.changePercent).toFixed(2)}%</em><small>量 {Number(quote.volume).toLocaleString()}</small></> : <small>暂无真实数据</small>}
-          </button>;
-        })}
+          return (
+            <button key={item} type="button" className={item === symbol ? "active" : ""} onClick={() => setUi((current) => ({ ...current, symbol: item }))}>
+              <span className="brain-quant-watchlist-quote-main">
+                <strong>{item}</strong>
+                {quote ? <em className={quote.changePercent >= 0 ? "positive" : "negative"}>{quote.changePercent >= 0 ? "+" : ""}{Number(quote.changePercent).toFixed(2)}%</em> : null}
+              </span>
+              {quote
+                ? <span className="brain-quant-watchlist-quote-meta"><b>¥{Number(quote.price).toFixed(2)}</b><small>量 {Number(quote.volume).toLocaleString()}</small></span>
+                : <small className="brain-quant-watchlist-quote-empty">暂无真实数据</small>}
+            </button>
+          );
+        }) : <div className="brain-quant-watchlist-empty">添加股票后，这里会显示分组内行情</div>}
       </div>
     </section>
     <section className="brain-quant-market-overview" data-testid="brain-quant-market-overview">
-      <div className="brain-quant-section-title"><h3>大盘与板块</h3><button type="button" disabled={marketOverviewBusy} onClick={() => void refreshMarketOverview()}>{marketOverviewBusy ? "刷新中…" : "刷新大盘"}</button></div>
+      <div className="brain-quant-section-title"><h3>大盘与板块</h3><button type="button" className="brain-quant-section-action" disabled={marketOverviewBusy} onClick={() => void refreshMarketOverview()}>{marketOverviewBusy ? "刷新中…" : "刷新大盘"}</button></div>
       <div className="brain-quant-watchlist-groups">
         {MARKET_OVERVIEW_VIEWS.map((view) => <button key={view.id} type="button" className={marketOverviewView === view.id ? "active" : ""} onClick={() => setMarketOverviewView(view.id)}>{view.label}</button>)}
       </div>

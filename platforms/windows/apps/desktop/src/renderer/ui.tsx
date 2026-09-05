@@ -21,6 +21,10 @@ import {
   APP_UPDATE_STATUS_POLL_MS,
   shouldRefreshAppUpdateOnWindowSignal
 } from "./app/app-update-status-poll";
+import {
+  isSubscriptionInactiveError,
+  mapSubscriptionInactiveUserMessage
+} from "../shared/model-user-facing-error.ts";
 import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, userVisibleThreads } from "./app/workspace-visibility";
 import {
   cloneNewChatComposerDraft,
@@ -110,6 +114,8 @@ function normalizeModelErrorMessage(error: unknown) {
     .replace(/^Error invoking remote method \"phase1:chat-with-model\":\s*(?:Error:\s*)?/i, "")
     .replace(/^AgentHostClientError:\s*/i, "")
     .trim();
+  const subscriptionMessage = mapSubscriptionInactiveUserMessage(message);
+  if (subscriptionMessage) return subscriptionMessage;
   if (/fetch failed|failed to fetch|econnrefused|econnreset|enotfound|eai_again/i.test(message)) {
     return "无法连接模型服务，请检查网络或模型网关地址后重试。";
   }
@@ -363,6 +369,7 @@ export function App() {
   const [forkThreadTitle, setForkThreadTitle] = useState("");
   const [editingThreadTitle, setEditingThreadTitle] = useState("");
   const [editingThreadSummary, setEditingThreadSummary] = useState("");
+  const [showRenameThreadDialog, setShowRenameThreadDialog] = useState(false);
   const [activeFeature, setActiveFeature] = useState<FeatureTab>("new-chat");
   const [featureConfig, setFeatureConfig] = useState<FeatureConfigPayload>(initialFeatureConfig);
   const [searchQuery, setSearchQuery] = useState("");
@@ -983,13 +990,14 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "automation", "mobile", "mcp", "holon"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp", "holon"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
     activeFeature !== "extensions" &&
     activeFeature !== "skills" &&
     activeFeature !== "plugins" &&
+    activeFeature !== "experts" &&
     activeFeature !== "automation" &&
     activeFeature !== "mobile" &&
     activeFeature !== "mcp" &&
@@ -1037,6 +1045,7 @@ export function App() {
 	    addExistingProject,
 	    createThread,
     forkThread,
+    renameThread,
     deleteThread,
     saveFeature,
     removeFeature,
@@ -1059,6 +1068,7 @@ export function App() {
     setShellCommand, setEnvironmentEnvText, setFeatureConfig, setMcpServers, setMcpDiscoveredTools,
     setSystemTools, setAuthStatus, setDesktopBootstrapStatus, setLoginForm, setIsRetryingCondaBootstrap,
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
+    setShowRenameThreadDialog,
     setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary, setIsComposingNewThread,
     setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
@@ -1114,6 +1124,10 @@ export function App() {
       }
       if (command === "skills") {
         setActiveFeature("skills");
+        return;
+      }
+      if (command === "experts") {
+        setActiveFeature("experts");
         return;
       }
       if (command === "mcp") {
@@ -1741,7 +1755,7 @@ export function App() {
     } catch (error) {
       requestFailed = true;
       const message = normalizeModelErrorMessage(error);
-      setChatStatus("模型请求失败。");
+      setChatStatus(isSubscriptionInactiveError(message) ? "订阅未激活或已过期。" : "模型请求失败。");
       setErrorMessage(message);
       setGenerationFailure({ threadId: targetThreadId, message });
       // Codex keeps the already streamed progress visible when a provider or
@@ -2797,6 +2811,11 @@ export function App() {
         unreadThreadIds={unreadThreadIds}
         setThreadContextMenu={setThreadContextMenu}
         handleThreadMenuAction={handleThreadMenuAction}
+        showRenameThreadDialog={showRenameThreadDialog}
+        setShowRenameThreadDialog={setShowRenameThreadDialog}
+        editingThreadTitle={editingThreadTitle}
+        setEditingThreadTitle={setEditingThreadTitle}
+        renameThread={renameThread}
         formatRelativeTimeLabel={formatRelativeTimeLabel}
         formatSearchKind={formatSearchKind}
         reviewDrawerOpen={reviewDrawerOpen}

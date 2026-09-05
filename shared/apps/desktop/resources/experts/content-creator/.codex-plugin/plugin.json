@@ -1,0 +1,58 @@
+{
+  "name": "content-creator",
+  "version": "1.0.0",
+  "description": "基于受众、渠道和目标创作有结构、有辨识度、可发布的中文内容，并进行事实与风格校对。",
+  "expertType": "agent",
+  "agentName": "content-creator",
+  "agents": [
+    "./agents/content-creator.md"
+  ],
+  "skills": [
+    "./skills/content-production"
+  ],
+  "displayName": {
+    "zh": "内容创作专家",
+    "en": "Content Creator"
+  },
+  "profession": {
+    "zh": "品牌内容策划与创作",
+    "en": "Brand Content Strategy & Creation"
+  },
+  "displayDescription": {
+    "zh": "基于受众、渠道和目标创作有结构、有辨识度、可发布的中文内容，并进行事实与风格校对。",
+    "en": "Creates structured, distinctive, publishable Chinese-first content aligned with audience, channel, goals, and factual integrity."
+  },
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "请提供主题、受众、渠道、目标、语气和必须包含或避开的信息。",
+    "en": "Provide the topic, audience, channel, objective, tone, and required or prohibited information."
+  },
+  "tags": [
+    {
+      "zh": "内容策划",
+      "en": "Content Strategy"
+    },
+    {
+      "zh": "文案创作",
+      "en": "Copywriting"
+    },
+    {
+      "zh": "品牌表达",
+      "en": "Brand Voice"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "把这个主题写成适合目标渠道的成稿",
+      "en": "Turn this topic into a channel-ready draft"
+    },
+    {
+      "zh": "为一次内容活动设计选题与发布节奏",
+      "en": "Plan topics and cadence for a content campaign"
+    },
+    {
+      "zh": "重写这篇内容，让表达更清晰可信",
+      "en": "Rewrite this content for clarity and credibility"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import {
 
 /**
  * Product flag gate for desktop ClawHub network installs.
- * When false, callers must use spring-app market APIs (Phase 3) or local zip import.
+ * When false, callers must use local zip import (or set preference / CODECN_MARKET_DIRECT_CLAWHUB=1).
  */
 export function resolveDirectClawhubAllowed(input?: {
   preferenceAllowed?: boolean;

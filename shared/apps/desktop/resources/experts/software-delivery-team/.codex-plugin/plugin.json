@@ -1,0 +1,148 @@
+{
+  "name": "software-delivery-team",
+  "version": "1.0.0",
+  "description": "从需求澄清、架构拆分、前后端实现、质量验证到发布管理，提供职责清晰、证据驱动的软件交付。",
+  "expertType": "team",
+  "agentName": "software-delivery-lead",
+  "teamInfo": {
+    "leadAgent": "software-delivery-lead",
+    "memberAgents": [
+      "tech-lead",
+      "frontend-engineer",
+      "backend-engineer",
+      "qa-engineer",
+      "release-manager"
+    ]
+  },
+  "agents": [
+    "./agents/software-delivery-lead.md",
+    "./agents/tech-lead.md",
+    "./agents/frontend-engineer.md",
+    "./agents/backend-engineer.md",
+    "./agents/qa-engineer.md",
+    "./agents/release-manager.md"
+  ],
+  "skills": [
+    "./skills/software-delivery-orchestration"
+  ],
+  "displayName": {
+    "zh": "软件交付专家团",
+    "en": "Software Delivery Team"
+  },
+  "profession": {
+    "zh": "端到端软件交付团队",
+    "en": "End-to-End Software Delivery Team"
+  },
+  "displayDescription": {
+    "zh": "从需求澄清、架构拆分、前后端实现、质量验证到发布管理，提供职责清晰、证据驱动的软件交付。",
+    "en": "Deliver software from requirement clarification and architecture through implementation, quality verification, and release management."
+  },
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "请说明目标、现有代码库、约束与验收标准，我会组织成员分工并汇总交付。",
+    "en": "Describe the goal, repository, constraints, and acceptance criteria; I will coordinate the team and consolidate delivery."
+  },
+  "tags": [
+    {
+      "zh": "软件交付",
+      "en": "Software Delivery"
+    },
+    {
+      "zh": "工程协作",
+      "en": "Engineering Collaboration"
+    },
+    {
+      "zh": "质量发布",
+      "en": "Quality & Release"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "把这个需求拆成可交付的技术方案并组织实施",
+      "en": "Turn this requirement into a deliverable technical plan and coordinate implementation"
+    },
+    {
+      "zh": "审查当前改动并给出修复、测试和发布结论",
+      "en": "Review the current changes and provide fix, test, and release conclusions"
+    },
+    {
+      "zh": "规划一次低风险版本发布与回滚方案",
+      "en": "Plan a low-risk release with rollback strategy"
+    }
+  ],
+  "members": [
+    {
+      "id": "software-delivery-lead",
+      "name": {
+        "zh": "软件交付主理人",
+        "en": "Software Delivery Lead"
+      },
+      "profession": {
+        "zh": "交付统筹与集成决策",
+        "en": "Delivery orchestration and integration decisions"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "tech-lead",
+      "name": {
+        "zh": "技术负责人",
+        "en": "Tech Lead"
+      },
+      "profession": {
+        "zh": "架构、边界与技术风险",
+        "en": "Architecture, boundaries, and technical risk"
+      },
+      "role": "member"
+    },
+    {
+      "id": "frontend-engineer",
+      "name": {
+        "zh": "前端工程师",
+        "en": "Frontend Engineer"
+      },
+      "profession": {
+        "zh": "界面、交互与前端实现",
+        "en": "UI, interaction, and frontend implementation"
+      },
+      "role": "member"
+    },
+    {
+      "id": "backend-engineer",
+      "name": {
+        "zh": "后端工程师",
+        "en": "Backend Engineer"
+      },
+      "profession": {
+        "zh": "服务、数据与接口实现",
+        "en": "Services, data, and API implementation"
+      },
+      "role": "member"
+    },
+    {
+      "id": "qa-engineer",
+      "name": {
+        "zh": "质量工程师",
+        "en": "QA Engineer"
+      },
+      "profession": {
+        "zh": "测试设计、验证与缺陷判断",
+        "en": "Test design, verification, and defect assessment"
+      },
+      "role": "member"
+    },
+    {
+      "id": "release-manager",
+      "name": {
+        "zh": "发布经理",
+        "en": "Release Manager"
+      },
+      "profession": {
+        "zh": "构建、发布、回滚与门禁",
+        "en": "Build, release, rollback, and gates"
+      },
+      "role": "member"
+    }
+  ],
+  "preferredWorkspaceKey": "software"
+}

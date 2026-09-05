@@ -31,7 +31,7 @@ export const SCENE_KNOWLEDGE_MARKDOWN = {
 
 这是 codeCN 原生工作台模式。右侧不挂业务场景专属 Tools，只保留项目资源：文件、产物、任务。
 
-对话、项目、线程、Skill、知识检索和通用工具按原生能力工作。进入量化、游戏、视频、音乐等业务场景时，必须切换到对应场景并使用其右侧专属 Tools 子架构。
+对话、项目、线程、Skill、知识检索和通用工具按原生能力工作。工作区检索请用 \`workspace.glob\` / \`workspace.grep\` / \`workspace.read\`（别名 \`glob\` / \`grep\` / \`read\`），不要用 shell 无边界递归检索。进入量化、游戏、视频、音乐等业务场景时，必须切换到对应场景并使用其右侧专属 Tools 子架构。
 `,
   quant: `# 量化交易场景
 
@@ -81,7 +81,7 @@ export const SCENE_KNOWLEDGE_MARKDOWN = {
 
 **右侧 Tools 子架构（必走）：** 终端 / 代码 / 测试 / 部署 / Flow / 项目文件。
 
-命令限制在当前工作区，涉及外部副作用遵循审批；返回退出码和变更摘要。不要用未审批的裸 shell 替代右侧终端与 Flow 工具。
+命令限制在当前工作区，涉及外部副作用遵循审批；返回退出码和变更摘要。代码定位与阅读优先 \`workspace.glob\` / \`workspace.grep\` / \`workspace.read\`；不要用未审批的裸 shell 递归检索替代右侧终端与 Flow 工具。
 `,
   document: `# 文档创作场景
 
@@ -107,6 +107,7 @@ export function buildSceneToolsRoutingMarkdown(workspaceKey) {
 当前场景：${title}（例外）。
 
 本场景**没有**业务右侧 Tools 子架构。可用通用对话、文件/产物/任务与平台 Auto 工具（含 image_generate / video_generate / music_generate 兜底）。
+工作区检索统一使用平台原生工具：\`workspace.glob\` / \`workspace.grep\` / \`workspace.read\`（别名 \`glob\` / \`grep\` / \`read\`）；全局/项目 Skill 只补充规则，不能改用 shell 递归检索。
 进入业务场景后，必须改用该场景的 Tools 子架构，不得继续用探索态裸网关调用代替。
 `;
   }
@@ -129,8 +130,8 @@ export function buildSceneToolsRoutingMarkdown(workspaceKey) {
 1. 除「场景学习探索」外，所有业务场景的 AI 交付必须走**右侧 Tools 子架构**（与视频流水线同级），不得只用聊天散文或裸网关工具绕过面板。
 2. 本场景优先工具：${toolHint}
 3. 先 inspect / 读取右侧状态，再写入；写入后提醒用户查看右侧对应页签。
-4. 用户 Skill 与 project-manager 只补充领域规则，不能替代场景 Tools、审批与 Project OS。
-5. public-skill-creator 创建的领域 Skill 同样必须遵守本场景 Tools 路由。
+4. 用户 Skill（全局与项目）与 project-manager 只补充领域规则，不能替代场景 Tools、审批、Project OS，也不能改用 shell 递归检索代替 \`workspace.glob\` / \`workspace.grep\` / \`workspace.read\`。
+5. public-skill-creator 创建的领域 Skill 同样必须遵守本场景 Tools 路由与平台原生检索工具。
 `;
 }
 

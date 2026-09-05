@@ -21,6 +21,21 @@ export type FilePreviewOk = { ok: true };
 export const FILE_PREVIEW_MAX_ATTEMPTS = 4;
 export const FILE_PREVIEW_TIMEOUT_MS = 45_000;
 
+const ARTIFACT_PREVIEW_EXTENSION_PATTERN =
+  /\.(pdf|docx|pptx|xlsx|csv|tsv|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi|mp3|wav|m4a|aac|flac|ogg|opus|mid|midi)$/i;
+
+/** True when a workspace path or display name should use artifact preview IPC. */
+export function isWorkspaceArtifactPreviewPath(filePath: string, displayName?: string) {
+  return [filePath, displayName]
+    .filter(Boolean)
+    .some((candidate) => ARTIFACT_PREVIEW_EXTENSION_PATTERN.test(String(candidate).trim()));
+}
+
+/** True when a BRAIN file record or path hint refers to audio media. */
+export function isAudioPreviewFileName(...names: Array<string | undefined>) {
+  return names.some((name) => /\.(mp3|wav|m4a|aac|flac|ogg|opus|mid|midi)$/i.test(String(name || "")));
+}
+
 /** Bound workspace file reads so a hung IPC call cannot leave preview tabs loading forever. */
 export function withFilePreviewTimeout<T>(promise: Promise<T>, timeoutMs = FILE_PREVIEW_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -113,7 +128,7 @@ export function classifyArtifactPreviewPayload(file: {
       message: "HTML 预览内容为空。"
     };
   }
-  if ((kind === "image" || kind === "video") && !String(file.previewUrl ?? "").trim()) {
+  if ((kind === "image" || kind === "video" || kind === "audio") && !String(file.previewUrl ?? "").trim()) {
     return {
       ok: false,
       reason: "empty_artifact",

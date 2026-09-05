@@ -6,7 +6,7 @@ import test from "node:test";
 import type { ModelChatInput } from "@codex-forge/protocol";
 import { PDFParse } from "pdf-parse";
 
-const { ModelChatAgentLoopService, agentLoopStepLimit, prepareGovernmentPdfContent, shouldHandoffGovernmentOutline, shouldHandoffGovernmentSpecification, shouldRunGovernmentDraftDirectly, isGovernmentSpecificationConfirmRequest, isGovernmentSpecificationProceedRequest, isGovernmentMissingBodyRequest, hasIncompleteGovernmentOutlineConfirmation, canGenerateDirectGovernmentResearchSpecification, canFinalizeGovernmentResearchSpecification, buildEvidenceBackedGovernmentSpecification, isInvalidCapabilityRefusal, isOrdinaryChatRequest, buildInvalidRefusalRecoveryInstruction} = await import(
+const { ModelChatAgentLoopService, agentLoopStepLimit, prepareGovernmentPdfContent, shouldHandoffGovernmentOutline, shouldHandoffGovernmentSpecification, shouldRunGovernmentDraftDirectly, isGovernmentSpecificationConfirmRequest, isGovernmentSpecificationProceedRequest, isGovernmentMissingBodyRequest, hasIncompleteGovernmentOutlineConfirmation, canGenerateDirectGovernmentResearchSpecification, canFinalizeGovernmentResearchSpecification, buildEvidenceBackedGovernmentSpecification, isInvalidCapabilityRefusal, isOrdinaryChatRequest, buildInvalidRefusalRecoveryInstruction, isPoisonedCapabilityHistoryContent, sanitizeInvalidCapabilityHistory, INVALID_CAPABILITY_UPGRADE_BLOCKED_REPLY} = await import(
   new URL("./model-chat-agent-loop-service.ts", import.meta.url).href
 );
 
@@ -30,6 +30,24 @@ test("detects and blocks provider template refusals without escalating ordinary 
   assert.match(complexRecovery, /必须先调用 agent\.delegate/);
   assert.match(complexRecovery, /spring-app Auto 路由选择更强模型/);
   assert.match(complexRecovery, /最后由主 Agent 审核并统一回答/);
+});
+
+test("scrubs prior template refusals so old threads do not keep failing the same prompt", () => {
+  const poisoned = "作为一个人工智能语言模型，我还没学习如何回答这个问题，您可以向我问一些其它的问题。";
+  assert.equal(isPoisonedCapabilityHistoryContent(poisoned), true);
+  assert.equal(isPoisonedCapabilityHistoryContent(INVALID_CAPABILITY_UPGRADE_BLOCKED_REPLY), true);
+  assert.equal(isPoisonedCapabilityHistoryContent("正常结论"), false);
+  const sanitized = sanitizeInvalidCapabilityHistory([
+    { role: "user", content: "同一句话" },
+    { role: "assistant", content: poisoned },
+    { role: "assistant", content: INVALID_CAPABILITY_UPGRADE_BLOCKED_REPLY },
+    { role: "user", content: "同一句话" }
+  ]);
+  assert.equal(sanitized[0]?.content, "同一句话");
+  assert.match(sanitized[1]?.content ?? "", /无效模板拒答已被系统拦截/);
+  assert.match(sanitized[2]?.content ?? "", /无效模板拒答已被系统拦截/);
+  assert.equal(sanitized[3]?.content, "同一句话");
+  assert.equal(isInvalidCapabilityRefusal(sanitized[1]?.content), false);
 });
 
 test("allows artifact creation and verification the same bounded step budget as government delivery", () => {

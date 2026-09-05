@@ -265,7 +265,7 @@ function renderFeaturePanel() {
                     <input
                       value={modelConfig.baseUrl}
                       onChange={(event) => setModelConfig((current) => ({ ...current, baseUrl: event.target.value }))}
-                      placeholder="http://127.0.0.1:8790/v1"
+                      placeholder="http://120.48.151.202:8790/v1"
                     />
                   </label>
                 </section>

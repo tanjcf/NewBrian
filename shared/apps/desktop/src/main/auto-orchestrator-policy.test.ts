@@ -44,6 +44,14 @@ test("buildAutoModeRoleInstruction switches orchestrator vs companion", () => {
   assert.match(buildAutoModeRoleInstruction({ taskClass: "code", latestUserText: "实现登录" }), /orchestrator/i);
   assert.match(buildAutoModeRoleInstruction({ taskClass: "chat", latestUserText: "你好" }), /companion/i);
   assert.match(buildAutoModeOrchestratorInstruction(), /agent\.delegate/);
+  assert.match(
+    buildAutoModeRoleInstruction({ taskClass: "code", latestUserText: "实现登录", expertSummonActive: true }),
+    /expert summoned/i
+  );
+  assert.equal(
+    shouldAutoDelegateHeavyWork({ taskClass: "code", latestUserText: "实现登录", expertSummonActive: true }),
+    false
+  );
 });
 
 test("buildAutoDelegateTurnConstraint appends only for heavy Auto tasks", () => {

@@ -19,10 +19,15 @@ export function inferArtifactKind(targetPath) {
 }
 
 function ensureRelativeTarget(workspacePath, targetPath) {
-  if (!targetPath || path.isAbsolute(targetPath)) throw new Error("Artifact targetPath must be workspace-relative.");
+  const requested = String(targetPath ?? "").trim();
+  if (!requested) throw new Error("Artifact targetPath is required.");
   const workspace = path.resolve(workspacePath);
-  const target = path.resolve(workspace, targetPath);
-  if (target !== workspace && !target.startsWith(`${workspace}${path.sep}`)) throw new Error("Artifact must stay inside the workspace.");
+  const target = path.isAbsolute(requested)
+    ? path.resolve(requested)
+    : path.resolve(workspace, requested);
+  if (target !== workspace && !target.startsWith(`${workspace}${path.sep}`)) {
+    throw new Error("Artifact must stay inside the workspace.");
+  }
   return target;
 }
 

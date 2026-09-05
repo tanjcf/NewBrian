@@ -52,10 +52,23 @@ export class AppMenuService {
       showAbout: () => {
         void dialog.showMessageBox(window, {
           type: "info",
-          title: "About codeCN",
+          title: "关于 codeCN",
           message: "codeCN",
-          detail: `Version ${app.getVersion()}\nDesktop coding collaboration app for Windows.`
+          detail: `版本 ${app.getVersion()}\n面向 Windows 的智能编程协作桌面应用。`
         });
+      },
+      controlWindow: (action) => {
+        if (window.isDestroyed()) return;
+        if (action === "minimize") {
+          window.minimize();
+          return;
+        }
+        if (action === "maximize") {
+          if (window.isMaximized()) window.unmaximize();
+          else window.maximize();
+          return;
+        }
+        window.close();
       }
     });
     const popup = Menu.buildFromTemplate(template);

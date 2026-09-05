@@ -28,14 +28,22 @@ test("defaults autoSkillEnabled to false when the preference is omitted", () => 
   assert.equal(normalized.personalization.autoSkillEnabled, false);
 });
 
-test("defaults market.directClawhubAllowed to false (spring-app market path)", () => {
+test("defaults market.directClawhubAllowed to true (desktop ClawHub direct)", () => {
   const workspaceStateRoot = resolve("test-state");
   const defaults = createDefaultDesktopPreferences(workspaceStateRoot, {});
-  assert.equal(defaults.market.directClawhubAllowed, false);
+  assert.equal(defaults.market.directClawhubAllowed, true);
   const normalized = normalizeDesktopPreferencesValue({} as never, {
     defaults,
     workspaceStateRoot,
     isPackaged: false
   });
-  assert.equal(normalized.market.directClawhubAllowed, false);
+  assert.equal(normalized.market.directClawhubAllowed, true);
+  const closed = normalizeDesktopPreferencesValue({
+    market: { directClawhubAllowed: false }
+  } as never, {
+    defaults,
+    workspaceStateRoot,
+    isPackaged: false
+  });
+  assert.equal(closed.market.directClawhubAllowed, false);
 });

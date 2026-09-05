@@ -1,0 +1,58 @@
+{
+  "name": "ui-designer",
+  "version": "1.0.0",
+  "description": "将产品目标转化为信息清晰、风格一致、可实现且可访问的界面方案与设计规范。",
+  "expertType": "agent",
+  "agentName": "ui-designer",
+  "agents": [
+    "./agents/ui-designer.md"
+  ],
+  "skills": [
+    "./skills/ui-design-specification"
+  ],
+  "displayName": {
+    "zh": "UI 设计专家",
+    "en": "UI Designer"
+  },
+  "profession": {
+    "zh": "产品界面与视觉系统设计",
+    "en": "Product Interface & Visual System Design"
+  },
+  "displayDescription": {
+    "zh": "将产品目标转化为信息清晰、风格一致、可实现且可访问的界面方案与设计规范。",
+    "en": "Transforms product goals into clear, consistent, implementable, and accessible interface specifications."
+  },
+  "categoryId": "01-ProductDesign",
+  "defaultInitPrompt": {
+    "zh": "请说明用户、场景、核心任务、品牌约束和目标终端。",
+    "en": "Describe the users, scenario, core task, brand constraints, and target device."
+  },
+  "tags": [
+    {
+      "zh": "界面设计",
+      "en": "Interface Design"
+    },
+    {
+      "zh": "设计系统",
+      "en": "Design System"
+    },
+    {
+      "zh": "体验规范",
+      "en": "UX Specification"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为这个功能设计页面结构与关键状态",
+      "en": "Design the page structure and key states for this feature"
+    },
+    {
+      "zh": "审查现有界面的视觉层级和一致性",
+      "en": "Audit the visual hierarchy and consistency of this interface"
+    },
+    {
+      "zh": "建立一套可落地的组件与样式规范",
+      "en": "Create an implementable component and style specification"
+    }
+  ]
+}

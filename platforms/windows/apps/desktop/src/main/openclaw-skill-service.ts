@@ -38,7 +38,7 @@ export interface OpenClawSkillServiceDeps {
   fetchImpl?: typeof fetch;
   baseUrl?: string;
   /**
-   * Product flag `market.direct_clawhub_allowed`. Default false.
+   * Local preference / env gate for ClawHub network installs. Default true on desktop.
    * When false, ClawHub network search/install is blocked; local zip/folder still works.
    */
   isDirectClawhubAllowed?: () => boolean | Promise<boolean>;

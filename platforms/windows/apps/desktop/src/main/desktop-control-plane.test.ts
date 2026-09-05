@@ -59,7 +59,7 @@ test("replaces loopback gateway with the bundled production endpoint", async () 
     }),
     "http://120.48.151.202:8790/v1"
   );
-  // Explicit env override still allows a local gateway for developers.
+  // Packaged installs must ignore a stale developer loopback override.
   assert.equal(
     resolveEffectiveGatewayBaseUrl({
       configuredBaseUrl: "http://120.48.151.202:8790/v1",
@@ -68,7 +68,18 @@ test("replaces loopback gateway with the bundled production endpoint", async () 
       isPackaged: true,
       productionBaseUrl: "http://120.48.151.202:8790/v1"
     }),
-    "http://127.0.0.1:8790/v1"
+    "http://120.48.151.202:8790/v1"
+  );
+  // A packaged deployment may still explicitly select another non-local gateway.
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: "http://120.48.151.202:8790/v1",
+      bundledBaseUrl: "http://120.48.151.202:8790/v1",
+      envBaseUrl: "https://gateway.example/v1",
+      isPackaged: true,
+      productionBaseUrl: "http://120.48.151.202:8790/v1"
+    }),
+    "https://gateway.example/v1"
   );
 });
 
@@ -78,6 +89,16 @@ test("development builds preserve an explicit loopback gateway", async () => {
     resolveEffectiveGatewayBaseUrl({
       configuredBaseUrl: "http://127.0.0.1:8790/v1",
       bundledBaseUrl: "http://120.48.151.202:8790/v1",
+      isPackaged: false,
+      productionBaseUrl: "https://api.example.com/v1"
+    }),
+    "http://127.0.0.1:8790/v1"
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: "https://gateway.example/v1",
+      bundledBaseUrl: "http://120.48.151.202:8790/v1",
+      envBaseUrl: "http://127.0.0.1:8790/v1",
       isPackaged: false,
       productionBaseUrl: "https://api.example.com/v1"
     }),

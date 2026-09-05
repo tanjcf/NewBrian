@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, resolve, sep } from "node:path";
 import type { BrainWorkspaceKey } from "@codex-forge/protocol";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
@@ -31,6 +31,11 @@ export type AutoMediaAgentToolDependencies = {
   threadId: string;
   /** Absolute workspace root used to persist downloaded media. */
   workspaceRoot: string;
+  /**
+   * Managed composer attachment directories (app state, outside the project tree).
+   * Chat uploads live here; image_generate/video_generate may use them as reference images.
+   */
+  attachmentRoots?: string[];
   resolveGateway: () => Promise<{ baseUrl: string; bearerToken: string }>;
   /** Open a workspace-relative image/video in the side panel after download. */
   openLocalMedia?: (input: { kind: "image" | "video"; relativePath: string }) => Promise<void> | void;
@@ -173,29 +178,102 @@ function artifactTypeForGeneratedMedia(kind: GeneratedMediaKind, fileName: strin
 }
 
 /**
- * Resolve workspace-local reference images for Auto media tools.
- * Cloud providers cannot fetch `.codecn/...` paths; convert local files to data URLs.
+ * Resolve workspace-local or managed-attachment reference images for Auto media tools.
+ * Cloud providers cannot fetch local paths; convert trusted local files to data URLs.
+ * Chat attachments live under app state (`…/.codecn/attachments`), not the project tree.
  */
 export async function resolveAutoMediaReferenceImage(input: {
   workspaceRoot: string;
   imageUrl: string;
+  attachmentRoots?: string[];
+  /** Copy attachment-root files into `{workspace}/.codecn/attachments/` for reuse. Default true. */
+  stageIntoWorkspace?: boolean;
 }): Promise<string> {
   const raw = text(input.imageUrl);
   if (!raw) return "";
   if (/^https?:\/\//i.test(raw) || /^data:image\//i.test(raw)) return raw;
-  const root = await realpath(input.workspaceRoot);
-  const absolute = isAbsolute(raw) ? resolve(raw) : resolve(root, raw.replace(/^\.\//, ""));
-  const boundary = root.endsWith(sep) ? root : `${root}${sep}`;
-  if (!absolute.startsWith(boundary) && absolute !== root) {
-    throw new Error(`参考图路径无效（必须位于当前工作区内）：${raw}`);
+
+  const workspaceRoot = await realpath(input.workspaceRoot);
+  const attachmentRoots: string[] = [];
+  for (const candidate of input.attachmentRoots ?? []) {
+    const trimmed = text(candidate);
+    if (!trimmed) continue;
+    try {
+      attachmentRoots.push(await realpath(trimmed));
+    } catch {
+      attachmentRoots.push(resolve(trimmed));
+    }
   }
+
+  const isInside = (absolutePath: string, root: string) => {
+    const boundary = root.endsWith(sep) ? root : `${root}${sep}`;
+    return absolutePath === root || absolutePath.startsWith(boundary);
+  };
+
+  const candidates: string[] = [];
+  if (isAbsolute(raw)) {
+    candidates.push(resolve(raw));
+  } else {
+    const relative = raw.replace(/^\.\//, "");
+    candidates.push(resolve(workspaceRoot, relative));
+    const leaf = basename(relative);
+    if (leaf) {
+      for (const root of attachmentRoots) {
+        candidates.push(resolve(root, leaf));
+      }
+    }
+  }
+
+  let absolute = "";
+  for (const candidate of candidates) {
+    let resolved = candidate;
+    try {
+      resolved = await realpath(candidate);
+    } catch {
+      // Keep candidate for the existence check below.
+    }
+    const allowed = isInside(resolved, workspaceRoot)
+      || attachmentRoots.some((root) => isInside(resolved, root));
+    if (!allowed) continue;
+    try {
+      const fileStat = await stat(resolved);
+      if (fileStat.isFile() && fileStat.size > 0) {
+        absolute = resolved;
+        break;
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  if (!absolute) {
+    throw new Error(`参考图路径无效（必须位于当前工作区或聊天附件目录内）：${raw}`);
+  }
+
   const fileStat = await stat(absolute);
-  if (!fileStat.isFile() || fileStat.size <= 0) {
-    throw new Error(`参考图文件不存在或为空：${raw}`);
-  }
   if (fileStat.size > MAX_IMAGE_BYTES) {
     throw new Error("参考图文件过大，无法用于图生图/图生视频。");
   }
+
+  if (input.stageIntoWorkspace !== false && !isInside(absolute, workspaceRoot)) {
+    const stageDir = resolve(workspaceRoot, ".codecn", "attachments");
+    await mkdir(stageDir, { recursive: true });
+    const leaf = basename(absolute);
+    let stagedPath = resolve(stageDir, leaf);
+    try {
+      const existing = await stat(stagedPath);
+      if (!existing.isFile() || existing.size !== fileStat.size) {
+        const digest = createHash("sha256").update(absolute).digest("hex").slice(0, 8);
+        stagedPath = resolve(stageDir, `${digest}-${leaf}`);
+      }
+    } catch {
+      // Destination does not exist yet.
+    }
+    if (!isInside(stagedPath, workspaceRoot)) {
+      throw new Error("参考图暂存路径非法。");
+    }
+    await copyFile(absolute, stagedPath);
+  }
+
   const bytes = await readFile(absolute);
   const mime = mimeForGeneratedMedia("image", basename(absolute));
   return `data:${mime};base64,${bytes.toString("base64")}`;
@@ -340,7 +418,11 @@ async function executeAutoMediaTool(
   let lastFrameImageUrl = rawLastFrame;
   if (rawImageUrl) {
     try {
-      imageUrl = await resolveAutoMediaReferenceImage({ workspaceRoot, imageUrl: rawImageUrl });
+      imageUrl = await resolveAutoMediaReferenceImage({
+        workspaceRoot,
+        imageUrl: rawImageUrl,
+        attachmentRoots: deps.attachmentRoots
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, output: message };
@@ -348,7 +430,11 @@ async function executeAutoMediaTool(
   }
   if (rawLastFrame) {
     try {
-      lastFrameImageUrl = await resolveAutoMediaReferenceImage({ workspaceRoot, imageUrl: rawLastFrame });
+      lastFrameImageUrl = await resolveAutoMediaReferenceImage({
+        workspaceRoot,
+        imageUrl: rawLastFrame,
+        attachmentRoots: deps.attachmentRoots
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, output: message };
@@ -412,8 +498,9 @@ async function executeAutoMediaTool(
         if (kind === "image" || kind === "video") {
           try {
             await deps.openLocalMedia?.({ kind, relativePath: saved.relativePath });
-          } catch {
-            // Preview is best-effort; download success still counts.
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            deps.onProgress?.(`本地预览打开失败：${saved.relativePath} · ${detail}`);
           }
         }
       } catch (error) {
@@ -463,7 +550,8 @@ export function registerAutoMediaAgentTools(
       },
       image_url: {
         type: "string",
-        description: "可选参考图 URL（图生图）"
+        description:
+          "可选参考图：https/data URL、工作区相对路径，或聊天附件本地绝对路径（composer 附件目录亦可）"
       }
     },
     required: ["prompt"],
@@ -484,7 +572,8 @@ export function registerAutoMediaAgentTools(
       },
       image_url: {
         type: "string",
-        description: "可选首帧/参考图 URL（图生视频；MiniMax H3 role=first_frame）"
+        description:
+          "可选首帧/参考图：https/data URL、工作区相对路径，或聊天附件本地绝对路径（图生视频；MiniMax H3 role=first_frame）"
       },
       first_frame: {
         type: "string",
@@ -524,6 +613,7 @@ export function registerAutoMediaAgentTools(
       "当用户明确要求创作/生成图片、壁纸、海报、插画时必须调用本工具，并等待工具返回后再回复。"
       + " 能力询问（能不能/会不会生成图片）不要调用。"
       + " 工具会在 spring-app 出图、下载到工作区 `.codecn/generated-media/image/`，并尝试打开侧栏预览。"
+      + " 图生图时 image_url 可直接传聊天附件本地路径（无需先复制进工作区）。"
       + " 禁止只写「正在生成中」或 `![正在生成中...]` 后结束；禁止伪造本地图片。",
     namespace: "auto-media",
     kind: "write",

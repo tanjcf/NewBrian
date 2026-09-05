@@ -1,13 +1,14 @@
+import { extname } from "node:path";
 import type {
   OpenComposerAttachmentInput,
   SaveComposerClipboardFileInput
 } from "@codex-forge/protocol";
+import { getAttachmentByteLimit } from "./attachment-security.ts";
 
-const MAX_CLIPBOARD_BYTES = 10 * 1024 * 1024;
-
-function assertClipboardPayloadSize(data: ArrayBuffer) {
-  if (data.byteLength > MAX_CLIPBOARD_BYTES) {
-    throw new Error(`Clipboard attachment exceeds the ${MAX_CLIPBOARD_BYTES} byte limit.`);
+function assertClipboardPayloadSize(data: ArrayBuffer, fileName: string) {
+  const limit = getAttachmentByteLimit(extname(String(fileName || "")));
+  if (data.byteLength > limit) {
+    throw new Error(`Clipboard attachment exceeds the ${limit} byte limit.`);
   }
 }
 
@@ -36,6 +37,6 @@ export function parseSaveComposerClipboardFileInput(value: unknown): SaveCompose
   const name = text(input.name, "Clipboard file name", 512);
   const mimeType = text(input.mimeType, "Clipboard MIME type", 255);
   if (!(input.data instanceof ArrayBuffer)) throw new TypeError("Clipboard data must be an ArrayBuffer.");
-  assertClipboardPayloadSize(input.data);
+  assertClipboardPayloadSize(input.data, name);
   return { name, mimeType, data: input.data };
 }

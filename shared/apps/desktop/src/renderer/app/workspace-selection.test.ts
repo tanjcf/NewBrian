@@ -215,7 +215,7 @@ test("keeps quant conversation in the center and renders market tools in the rig
   assert.match(resourcePanel, /隐藏侧栏/);
   assert.match(resourcePanel, /SidebarIcon name=\{isCenter \? "minimize" : "maximize"\}/);
   assert.match(resourcePanel, /panel-right/);
-  assert.match(source, /brain-tools-restore-toggle|显示侧栏/);
+  assert.match(source, /brain-tools-restore-toggle|显示工具侧栏/);
   assert.match(source, /data-testid="brain-tools-restore-toggle"/);
   assert.match(workspaceRenderer, /brainResourcePlacement === "hidden"[\s\S]*?brain-tools-restore-toggle/);
   assert.doesNotMatch(source, /brain-resource-restore-rail/);
@@ -250,6 +250,27 @@ test("expanding the right Tools panel hides the left sidebar like open-file arti
   assert.match(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)[\s\S]*?grid-template-columns:\s*clamp\(340px,\s*31vw,\s*460px\)\s*minmax\(560px,\s*1fr\)\s*!important/);
   assert.match(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)\s*>\s*\.task-column/);
   assert.doesNotMatch(styles, /\.workspace-frame:has\(\s*>\s*\.brain-resource-panel\.center\s*\)\s*>\s*\.brain-resource-panel\.center\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
+});
+
+test("center file preview keeps the chat column instead of replacing it", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const workspaceRenderer = source.slice(source.indexOf("function renderWorkspaceModules"));
+
+  assert.doesNotMatch(workspaceRenderer, /const mainModule = previewPlacement === "center"/);
+  assert.match(workspaceRenderer, /showCenterPreview \? renderPreviewModule\("center"\)/);
+  assert.match(workspaceRenderer, /renderChatModule\(\)/);
+  assert.match(styles, /\.workspace-frame\.preview-centered:has\(> \.preview-center-module\)/);
+  assert.match(styles, /\.workspace-frame\.preview-centered:has\(> \.preview-center-module\) > \.task-column/);
+  assert.match(styles, /\.workspace-frame\.preview-centered:has\(> \.preview-center-module\) > \.preview-center-module/);
+});
+
+test("startup hydrates persisted sidebar thread rows before brain conversation sync", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /legacySidebarRowHydratedRef/);
+  assert.match(source, /shouldPreferSidebarRowThreadRestore/);
+  assert.match(source, /resolveSidebarRowThreadTarget/);
+  assert.match(source, /parseLegacyConversationThreadId\(selectedBrainConversationId\)/);
 });
 
 test("switching scenes restores the right-hand scene panel instead of the generic files side preview", () => {
@@ -313,6 +334,20 @@ test("docx preview fills the side panel and scrolls instead of using a fixed-hei
   assert.doesNotMatch(docxBlock, /<iframe[\s\S]*workspace-artifact-docx/);
   assert.match(styles, /\.workspace-artifact-docx-shell[\s\S]*flex:\s*1\s*1\s*auto/);
   assert.match(styles, /\.workspace-artifact-docx[\s\S]*overflow:\s*auto/);
+});
+
+test("audio preview uses the built-in music player plugin and display-name artifact routing", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const openPreview = source.slice(source.indexOf("const openLocalFilePreview = useCallback"), source.indexOf("}, [api, brainResourcePlacement, reportFilePreviewIssue"));
+  assert.match(openPreview, /isWorkspaceArtifactPreviewPath\(requestPath, displayName\)/);
+  assert.match(openPreview, /displayName \|\| openPath/);
+  assert.match(source, /displayName: file\.logicalName/);
+  const audioBlock = source.slice(source.indexOf('searchFilePreview.kind === "audio"'), source.indexOf('searchFilePreview.kind === "spreadsheet"'));
+  assert.match(audioBlock, /WorkspaceArtifactViewerHost preview=\{searchFilePreview\}/);
+  assert.doesNotMatch(audioBlock, /<audio controls preload="metadata"/);
+  assert.match(readFileSync(new URL("./artifact-viewer-registry.tsx", import.meta.url), "utf8"), /viewerRegistry\.set\("music"/);
+  assert.match(styles, /\.workspace-artifact-music[\s\S]*> audio/);
 });
 
 test("never substitutes fabricated market bars when the provider is empty or unavailable", () => {

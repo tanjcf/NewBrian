@@ -109,11 +109,31 @@ export function artifactProtocolResponseHeaders(mimeType, extra = {}) {
   };
 }
 
-const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus"]);
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus", ".mid", ".midi"]);
+
+/** True when an extension looks like an audio media file. */
+export function isAudioArtifactExtension(extension) {
+  const value = String(extension ?? "").toLowerCase();
+  return AUDIO_EXTENSIONS.has(value.startsWith(".") ? value : `.${value}`);
+}
+
+/** First audio extension found across one or more path/name hints. */
+export function firstAudioArtifactExtension(...paths) {
+  for (const filePath of paths) {
+    const ext = extname(String(filePath ?? "")).toLowerCase();
+    if (AUDIO_EXTENSIONS.has(ext)) return ext;
+  }
+  return "";
+}
+
+/** True when any provided path/name hint looks like audio by extension. */
+export function isAudioArtifactCandidate(...paths) {
+  return Boolean(firstAudioArtifactExtension(...paths));
+}
 
 /** True when a path looks like an audio media file by extension. */
 export function isAudioArtifactPath(filePath) {
-  return AUDIO_EXTENSIONS.has(extname(String(filePath ?? "")).toLowerCase());
+  return isAudioArtifactExtension(extname(String(filePath ?? "")));
 }
 
 /**
@@ -167,9 +187,11 @@ function b4IsFtyp(head) {
  */
 export function resolveArtifactMimeType(filePath, headBytes) {
   const byExt = mimeTypeForArtifactPath(filePath);
-  if (!isAudioArtifactPath(filePath)) return byExt;
   const sniffed = sniffAudioMimeFromBytes(headBytes);
-  if (sniffed) return sniffed;
+  if (isAudioArtifactPath(filePath) || sniffed) {
+    if (sniffed) return sniffed;
+    return byExt.startsWith("audio/") ? byExt : "audio/mpeg";
+  }
   return byExt;
 }
 
@@ -223,6 +245,9 @@ export function mimeTypeForArtifactPath(filePath) {
       return "audio/ogg";
     case ".flac":
       return "audio/flac";
+    case ".mid":
+    case ".midi":
+      return "audio/midi";
     case ".mp4":
     case ".m4v":
       return "video/mp4";

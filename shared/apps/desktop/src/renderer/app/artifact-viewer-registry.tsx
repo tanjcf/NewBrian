@@ -3,12 +3,21 @@ import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import type { AnnotationMarkingTool, BrainAnnotationDto, WorkspaceArtifactPreview } from "@codex-forge/protocol";
 import type { DocumentRect, DocumentViewport } from "@codex-forge/protocol/document-anchor";
 import { DocumentMarkingLayer } from "./DocumentMarkingLayer";
+import { WorkspaceMusicPlayer } from "./WorkspaceMusicPlayer";
 
 type SlidesResource = {
   resourceUri: string;
   artifactType: "slides";
   preview: Extract<WorkspaceArtifactPreview, { kind: "pptx" }>;
 };
+
+type MusicResource = {
+  resourceUri: string;
+  artifactType: "music";
+  preview: Extract<WorkspaceArtifactPreview, { kind: "audio" }>;
+};
+
+type ArtifactResource = SlidesResource | MusicResource;
 
 export type SlidesMarkingProps = {
   annotationActive: boolean;
@@ -19,8 +28,8 @@ export type SlidesMarkingProps = {
   onMarkComplete: (input: { rect: DocumentRect; viewport: DocumentViewport; slide: number; captureTarget: HTMLElement }) => void;
 };
 
-type ArtifactFileViewer = ComponentType<{ resource: SlidesResource; marking?: SlidesMarkingProps }>;
-const viewerRegistry = new Map<SlidesResource["artifactType"], ArtifactFileViewer>();
+type ArtifactFileViewer = ComponentType<{ resource: ArtifactResource; marking?: SlidesMarkingProps }>;
+const viewerRegistry = new Map<ArtifactResource["artifactType"], ArtifactFileViewer>();
 
 function dataUrlToBytes(dataUrl: string) {
   const binary = window.atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
@@ -109,12 +118,30 @@ function BuiltinSlidesFileViewer({ resource, marking }: { resource: SlidesResour
 
 viewerRegistry.set("slides", BuiltinSlidesFileViewer);
 
+function BuiltinMusicFileViewer({ resource }: { resource: MusicResource }) {
+  return <WorkspaceMusicPlayer preview={resource.preview} />;
+}
+
+viewerRegistry.set("music", BuiltinMusicFileViewer);
+
 export function WorkspaceArtifactViewerHost(props: { preview: WorkspaceArtifactPreview; marking?: SlidesMarkingProps }) {
-  const resource = useMemo<SlidesResource | null>(() => props.preview.kind === "pptx" ? {
-    resourceUri: `codecn-resource://${crypto.randomUUID()}`,
-    artifactType: "slides",
-    preview: props.preview
-  } : null, [props.preview]);
+  const resource = useMemo<ArtifactResource | null>(() => {
+    if (props.preview.kind === "pptx") {
+      return {
+        resourceUri: `codecn-resource://${crypto.randomUUID()}`,
+        artifactType: "slides",
+        preview: props.preview
+      };
+    }
+    if (props.preview.kind === "audio") {
+      return {
+        resourceUri: `codecn-resource://${crypto.randomUUID()}`,
+        artifactType: "music",
+        preview: props.preview
+      };
+    }
+    return null;
+  }, [props.preview]);
   if (!resource) return null;
   const FileViewer = viewerRegistry.get(resource.artifactType);
   return FileViewer

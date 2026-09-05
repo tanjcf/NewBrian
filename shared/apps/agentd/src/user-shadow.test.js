@@ -61,11 +61,14 @@ test("ensureProjectSkill scaffolds CODECN.md and Project OS skill", async () => 
     assert.match(skill, /update `CODECN\.md` with workspace tools/);
     assert.match(skill, /Programming Guardrails \(coding\)/);
     assert.match(skill, /references\/programming-guardrails\.md/);
+    assert.match(skill, /workspace\.glob/);
+    assert.match(skill, /workspace\.grep/);
+    assert.match(skill, /workspace\.read/);
     assert.match(skill, /references\/java-javadoc-rules\.md/);
     assert.match(skill, /references\/backend-technical-design-framework\.md/);
     assert.match(
       readFileSync(join(shadow.referencesPath, "programming-guardrails.md"), "utf8"),
-      /Encoding Rules/
+      /Workspace Retrieval|workspace\.glob/
     );
     assert.match(
       readFileSync(join(shadow.referencesPath, "java-javadoc-rules.md"), "utf8"),

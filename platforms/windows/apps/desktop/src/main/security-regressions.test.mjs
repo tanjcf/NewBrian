@@ -267,7 +267,7 @@ test("does not reorder threads merely because the user navigated between them", 
 
 test("bounds attachment size, extractor memory, output, and clipboard IPC payloads without a fixed execution deadline", () => {
   assert.match(source, /assertAttachmentSize\(extension, stat\.size\)/);
-  assert.match(composerContractSource, /assertClipboardPayloadSize\(input\.data\)/);
+  assert.match(composerContractSource, /assertClipboardPayloadSize\(input\.data,\s*name\)/);
   assert.match(source, /runBoundedExtractor/);
   assert.match(source, /MAX_EXTRACTOR_OUTPUT_BYTES/);
   assert.doesNotMatch(source, /timeoutMs: 30_000/);

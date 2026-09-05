@@ -58,8 +58,6 @@
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "1.2.4",
-    "@codex-forge/protocol": "workspace:*",
-    "@codex-forge/ui": "workspace:*",
     "@napi-rs/canvas": "0.1.80",
     "@uzen/kokoro-js": "1.2.4",
     "exceljs": "4.4.0",
@@ -81,6 +79,8 @@
     "saxes": "5.0.1"
   },
   "devDependencies": {
+    "@codex-forge/protocol": "workspace:*",
+    "@codex-forge/ui": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -141,6 +141,10 @@
       {
         "from": "build/plugins",
         "to": "plugins"
+      },
+      {
+        "from": "../../../../shared/apps/desktop/resources/experts",
+        "to": "experts"
       },
       {
         "from": "resources/novel-tts",

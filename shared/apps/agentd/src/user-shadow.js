@@ -674,10 +674,11 @@ This skill is the always-on shadow for ${projectName}. It combines Claude Code�
 
 When the user request edits, generates, completes, or documents source code—especially Java/Spring on Windows—follow the seeded programming-skill pack:
 
-1. Read and enforce \`references/programming-guardrails.md\` (core rules, encoding, patch strategy, recovery, real-fix evaluation).
+1. Read and enforce \`references/programming-guardrails.md\` (core rules, workspace retrieval via \`workspace.glob\`/\`workspace.grep\`/\`workspace.read\`, encoding, patch strategy, recovery, real-fix evaluation).
 2. When touching any \`.java\` file, also enforce \`references/java-javadoc-rules.md\`. Missing required method Javadoc in a touched type means the change is incomplete.
 3. Before designing or implementing Spring/backend modules, follow \`references/backend-technical-design-framework.md\`; mark unused sections \`N/A\` with a concrete reason.
 4. Prefer smallest safe patches; preserve UTF-8 without BOM; never claim a coding fix complete without stating verified vs unverified evidence.
+5. For locating or reading project source, use platform tools \`workspace.glob\` / \`workspace.grep\` / \`workspace.read\` (aliases \`glob\` / \`grep\` / \`read\`)—not unbounded shell recursive search.
 
 ## Runtime knowledge files (do not edit with tools)
 
@@ -767,6 +768,7 @@ export class UserShadow {
       || !existingSkill.includes("Project OS")
       || !existingSkill.includes(PROGRAMMING_SKILL_TEMPLATE_MARKER)
       || !existingSkill.includes("references/programming-guardrails.md")
+      || !existingSkill.includes("workspace.glob")
       || !existingSkill.includes(SCENE_TOOLS_TEMPLATE_MARKER)
       || !existingSkill.includes(SCENE_KNOWLEDGE_FILENAME)) {
       await fs.writeFile(skillFile, buildSkillMarkdown(this.projectName, this.brainWorkspaceKey), "utf8");

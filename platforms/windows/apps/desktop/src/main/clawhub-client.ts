@@ -1,11 +1,9 @@
 /**
  * ClawHub HTTP client (search / resolve / download).
  *
- * to-be-redirected (Phase 0 / Phase 3): product installs must go through spring-app
- * market / registry APIs. Desktop direct network use is gated by
- * `market.direct_clawhub_allowed` (default false). Keep this module for offline
- * tests and explicit developer override only — do not call from product UI when
- * the flag is closed.
+ * Desktop product path connects directly to ClawHub (`https://clawhub.ai` by default).
+ * Gate with `market.directClawhubAllowed` (default true) or `CODECN_MARKET_DIRECT_CLAWHUB=1`.
+ * Override base URL via `CODECN_CLAWHUB_URL` / `OPENCLAW_CLAWHUB_URL` / `CLAWHUB_URL`.
  */
 const DEFAULT_CLAWHUB_URL = "https://clawhub.ai";
 const MAX_JSON_BYTES = 2 * 1024 * 1024;

@@ -1,0 +1,59 @@
+{
+  "name": "long-document-writer",
+  "version": "1.0.0",
+  "description": "面向复杂主题完成资料治理、提纲、分章写作、交叉一致性和文档交付，保持事实可追溯。",
+  "expertType": "agent",
+  "agentName": "long-document-writer",
+  "agents": [
+    "./agents/long-document-writer.md"
+  ],
+  "skills": [
+    "./skills/long-document-production"
+  ],
+  "displayName": {
+    "zh": "长文档写作专家",
+    "en": "Long-Form Document Writer"
+  },
+  "profession": {
+    "zh": "长篇专业文档策划与写作",
+    "en": "Long-Form Professional Document Writing"
+  },
+  "displayDescription": {
+    "zh": "面向复杂主题完成资料治理、提纲、分章写作、交叉一致性和文档交付，保持事实可追溯。",
+    "en": "Plans and writes complex long-form documents with source control, chapter consistency, traceable facts, and document delivery."
+  },
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "请提供文档目的、读者、篇幅、素材、截止时间和格式要求。",
+    "en": "Provide the document purpose, audience, length, source material, deadline, and format requirements."
+  },
+  "tags": [
+    {
+      "zh": "长文写作",
+      "en": "Long-Form Writing"
+    },
+    {
+      "zh": "文档结构",
+      "en": "Document Structure"
+    },
+    {
+      "zh": "编辑校对",
+      "en": "Editing"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "把这些资料整理成一份结构完整的长报告",
+      "en": "Turn these materials into a well-structured long report"
+    },
+    {
+      "zh": "先为这个主题设计详细提纲和写作计划",
+      "en": "Create a detailed outline and writing plan for this topic"
+    },
+    {
+      "zh": "统一这份长文档的逻辑、术语和语气",
+      "en": "Unify the logic, terminology, and tone of this long document"
+    }
+  ],
+  "preferredWorkspaceKey": "document"
+}

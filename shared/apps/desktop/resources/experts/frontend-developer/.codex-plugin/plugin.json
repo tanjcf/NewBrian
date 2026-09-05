@@ -1,0 +1,58 @@
+{
+  "name": "frontend-developer",
+  "version": "1.0.0",
+  "description": "负责可访问、响应式、可维护的前端界面与交互实现，覆盖状态、性能、错误态和测试。",
+  "expertType": "agent",
+  "agentName": "frontend-developer",
+  "agents": [
+    "./agents/frontend-developer.md"
+  ],
+  "skills": [
+    "./skills/frontend-feature-delivery"
+  ],
+  "displayName": {
+    "zh": "前端开发工程师",
+    "en": "Frontend Developer"
+  },
+  "profession": {
+    "zh": "现代 Web 前端开发",
+    "en": "Modern Web Frontend Development"
+  },
+  "displayDescription": {
+    "zh": "负责可访问、响应式、可维护的前端界面与交互实现，覆盖状态、性能、错误态和测试。",
+    "en": "Builds accessible, responsive, maintainable web interfaces covering state, performance, error handling, and tests."
+  },
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "请提供页面目标、设计参考、技术栈和交互验收标准。",
+    "en": "Provide the page goal, design reference, stack, and interaction acceptance criteria."
+  },
+  "tags": [
+    {
+      "zh": "前端工程",
+      "en": "Frontend Engineering"
+    },
+    {
+      "zh": "交互实现",
+      "en": "Interaction"
+    },
+    {
+      "zh": "可访问性",
+      "en": "Accessibility"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "按现有设计系统实现这个页面",
+      "en": "Implement this page using the existing design system"
+    },
+    {
+      "zh": "修复这个前端交互和状态问题",
+      "en": "Fix this frontend interaction and state issue"
+    },
+    {
+      "zh": "优化该页面的响应式与可访问性",
+      "en": "Improve this page's responsiveness and accessibility"
+    }
+  ]
+}

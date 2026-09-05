@@ -85,11 +85,14 @@ test("returns an HTML preview URL and source for the embedded browser viewer", a
   });
 });
 
-test("returns image and video preview URLs for the embedded media viewers", async () => {
+test("returns image, video, and audio preview URLs for the embedded media viewers", async () => {
   await withWorkspace(async (root, service) => {
     await mkdir(join(root, "outputs"));
+    await mkdir(join(root, "media", "imports"), { recursive: true });
     await writeFile(join(root, "outputs", "shot.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     await writeFile(join(root, "outputs", "clip.mp4"), Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]));
+    await writeFile(join(root, "outputs", "track.mp3"), Buffer.from([0xff, 0xfb, 0x90, 0x00]));
+    await writeFile(join(root, "media", "imports", "import-1"), Buffer.from([0xff, 0xfb, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00]));
     const image = await service.preview({ workspaceId: "w1", filePath: "outputs/shot.png" });
     assert.equal(image.kind, "image");
     assert.equal(image.mimeType, "image/png");
@@ -98,6 +101,14 @@ test("returns image and video preview URLs for the embedded media viewers", asyn
     assert.equal(video.kind, "video");
     assert.equal(video.mimeType, "video/mp4");
     assert.match(String(video.previewUrl), /^codecn-artifact:\/\/preview\/w1\/outputs\/clip\.mp4$/);
+    const audio = await service.preview({ workspaceId: "w1", filePath: "outputs/track.mp3" });
+    assert.equal(audio.kind, "audio");
+    assert.equal(audio.mimeType, "audio/mpeg");
+    assert.match(String(audio.previewUrl), /^codecn-artifact:\/\/preview\/w1\/outputs\/track\.mp3$/);
+    const sniffed = await service.preview({ workspaceId: "w1", filePath: "media/imports/import-1" });
+    assert.equal(sniffed.kind, "audio");
+    assert.equal(sniffed.mimeType, "audio/mpeg");
+    assert.match(String(sniffed.previewUrl), /^codecn-artifact:\/\/preview\/w1\/media\/imports\/import-1$/);
   });
 });
 

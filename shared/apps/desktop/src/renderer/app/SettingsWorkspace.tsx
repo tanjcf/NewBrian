@@ -21,7 +21,8 @@ export function SettingsWorkspace(ctx: any) {
     notifications: { ...initialDesktopPreferences.notifications, ...(ctx.desktopPreferences?.notifications || {}) },
     shortcuts: { ...initialDesktopPreferences.shortcuts, ...(ctx.desktopPreferences?.shortcuts || {}) },
     worktree: { ...initialDesktopPreferences.worktree, ...(ctx.desktopPreferences?.worktree || {}) },
-    browser: { ...initialDesktopPreferences.browser, ...(ctx.desktopPreferences?.browser || {}) }
+    browser: { ...initialDesktopPreferences.browser, ...(ctx.desktopPreferences?.browser || {}) },
+    market: { ...initialDesktopPreferences.market, ...(ctx.desktopPreferences?.market || {}) }
   };
   const visibleProjectWorkspaces = projectWorkspaces(workspaceCatalog ?? []);
   const authorizedModelOptions = [
@@ -1502,6 +1503,22 @@ function renderSettingsWorkspace() {
                     <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, configuration: { ...current.configuration, requireApprovalForShell: !current.configuration.requireApprovalForShell } }))}><span>Shell 命令需要审批</span><SettingsSwitch enabled={desktopPreferences.configuration.requireApprovalForShell} /></button>
                     <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, configuration: { ...current.configuration, saveResponses: !current.configuration.saveResponses } }))}><span>保存模型响应</span><SettingsSwitch enabled={desktopPreferences.configuration.saveResponses} /></button>
                     <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, configuration: { ...current.configuration, telemetryEnabled: !current.configuration.telemetryEnabled } }))}><span>写入诊断日志</span><SettingsSwitch enabled={desktopPreferences.configuration.telemetryEnabled} /></button>
+                    <button
+                      type="button"
+                      onClick={() => setDesktopPreferences((current) => ({
+                        ...current,
+                        market: {
+                          ...current.market,
+                          directClawhubAllowed: !(current.market?.directClawhubAllowed ?? true)
+                        }
+                      }))}
+                    >
+                      <span>
+                        <strong>ClawHub 直连</strong>
+                        <em>直接访问 https://clawhub.ai 搜索/安装技能；关闭后仅允许本地 zip 导入</em>
+                      </span>
+                      <SettingsSwitch enabled={desktopPreferences.market?.directClawhubAllowed ?? true} />
+                    </button>
                   </div>
                 </section>
               </>

@@ -1,0 +1,58 @@
+{
+  "name": "wechat-miniprogram-developer",
+  "version": "1.0.0",
+  "description": "负责小程序页面、组件、分包、授权、网络与性能实现，并关注平台规范和真机差异。",
+  "expertType": "agent",
+  "agentName": "wechat-miniprogram-developer",
+  "agents": [
+    "./agents/wechat-miniprogram-developer.md"
+  ],
+  "skills": [
+    "./skills/miniprogram-feature-delivery"
+  ],
+  "displayName": {
+    "zh": "微信小程序开发工程师",
+    "en": "WeChat Mini Program Developer"
+  },
+  "profession": {
+    "zh": "微信小程序工程与交付",
+    "en": "WeChat Mini Program Engineering"
+  },
+  "displayDescription": {
+    "zh": "负责小程序页面、组件、分包、授权、网络与性能实现，并关注平台规范和真机差异。",
+    "en": "Builds Mini Program pages, components, subpackages, authorization, networking, and performance with platform and device constraints."
+  },
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "请提供小程序技术栈、页面流程、接口契约和目标基础库版本。",
+    "en": "Provide the Mini Program stack, page flow, API contract, and target base-library version."
+  },
+  "tags": [
+    {
+      "zh": "微信小程序",
+      "en": "WeChat Mini Program"
+    },
+    {
+      "zh": "移动体验",
+      "en": "Mobile UX"
+    },
+    {
+      "zh": "性能优化",
+      "en": "Performance"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "实现这个小程序业务流程",
+      "en": "Implement this Mini Program business flow"
+    },
+    {
+      "zh": "排查真机与开发工具表现不一致",
+      "en": "Investigate device versus developer-tool inconsistency"
+    },
+    {
+      "zh": "优化分包、首屏和列表性能",
+      "en": "Optimize subpackages, first screen, and list performance"
+    }
+  ]
+}

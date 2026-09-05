@@ -29,7 +29,28 @@ test("ensureSceneProjectInit seeds knowledge, routing, project-init skill, and D
     const routing = readFileSync(result.routingPath, "utf8");
     assert.match(routing, /Scene Tools sub-architecture \(mandatory\)/);
     assert.match(routing, /music\.song\.generate/);
+    assert.match(routing, /workspace\.glob/);
+    assert.match(routing, /workspace\.grep/);
+    assert.match(routing, /workspace\.read/);
     assert.equal(existsSync(join(root, "Docs", "BRAIN", "scene-knowledge-music.md")), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("explore scene routing documents platform retrieval tools", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-scene-explore-"));
+  try {
+    const result = await ensureSceneProjectInit({
+      workspacePath: root,
+      projectName: "ExploreDemo",
+      brainWorkspaceKey: "explore"
+    });
+    const knowledge = readFileSync(result.knowledgePath, "utf8");
+    assert.match(knowledge, /workspace\.glob/);
+    const routing = readFileSync(result.routingPath, "utf8");
+    assert.match(routing, /workspace\.grep/);
+    assert.match(routing, /workspace\.read/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

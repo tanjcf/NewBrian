@@ -1,4 +1,10 @@
 import type { ChatMessage } from "@codex-forge/protocol";
+import {
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+  estimateMessagesAndEventsTokens,
+  estimateTextTokens,
+  shouldCompactByTokenCount
+} from "./context-budget-policy.ts";
 
 export const CODEX_COMPACTION_PROMPT = `You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff summary for another LLM that will resume the task.
 
@@ -36,10 +42,12 @@ interface ThreadContextPolicyDependencies {
   makeId?: (prefix: string) => string;
   nowIso?: () => string;
   summary?: string;
+  /** Apply summarization even when under the soft threshold. */
+  force?: boolean;
 }
 
 export function estimateMessageTokens(messages: Array<{ content: string }>) {
-  return Math.ceil(messages.reduce((total, message) => total + message.content.length, 0) / 3.5);
+  return estimateTextTokens(messages.map((message) => message.content).join("\n"));
 }
 
 export function activeThreadMessages(messages: ChatMessage[], previous?: ThreadContextState): ChatMessage[] {
@@ -67,10 +75,13 @@ export function activeThreadMessages(messages: ChatMessage[], previous?: ThreadC
 export function shouldCompactThreadMessages(
   messages: ChatMessage[],
   previous?: ThreadContextState,
-  modelContextWindow = 128_000
+  modelContextWindow = DEFAULT_CONTEXT_WINDOW_TOKENS,
+  events?: Array<{ type?: string; payload?: unknown }>
 ) {
   const activeMessages = activeThreadMessages(messages, previous);
-  return activeMessages.length > 1 && estimateMessageTokens(activeMessages) >= Math.floor(modelContextWindow * 0.9);
+  if (activeMessages.length <= 1) return false;
+  const estimatedTokens = estimateMessagesAndEventsTokens(activeMessages, events);
+  return shouldCompactByTokenCount(estimatedTokens, modelContextWindow);
 }
 
 function collectRetainedUserMessages(messages: ChatMessage[]) {
@@ -85,7 +96,7 @@ function collectRetainedUserMessages(messages: ChatMessage[]) {
       remainingTokens -= tokens;
       continue;
     }
-    const maxCharacters = Math.max(0, Math.floor(remainingTokens * 3.5));
+    const maxCharacters = Math.max(0, Math.floor(remainingTokens * 4));
     retained.push({ ...message, content: message.content.slice(-maxCharacters) });
     break;
   }
@@ -95,14 +106,15 @@ function collectRetainedUserMessages(messages: ChatMessage[]) {
 export function compactThreadMessages(
   messages: ChatMessage[],
   previous?: ThreadContextState,
-  modelContextWindow = 128_000,
-  dependencies: ThreadContextPolicyDependencies = {}
+  modelContextWindow = DEFAULT_CONTEXT_WINDOW_TOKENS,
+  dependencies: ThreadContextPolicyDependencies = {},
+  events?: Array<{ type?: string; payload?: unknown }>
 ): { messages: ChatMessage[]; context: ThreadContextState; compacted: boolean } {
   const makeId = dependencies.makeId ?? ((prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`);
   const nowIso = dependencies.nowIso ?? (() => new Date().toISOString());
   const activeMessages = activeThreadMessages(messages, previous);
-  const estimatedTokens = estimateMessageTokens(activeMessages);
-  if (!shouldCompactThreadMessages(messages, previous, modelContextWindow)) {
+  const estimatedTokens = estimateMessagesAndEventsTokens(activeMessages, events);
+  if (!dependencies.force && !shouldCompactThreadMessages(messages, previous, modelContextWindow, events)) {
     return {
       messages: activeMessages,
       context: {

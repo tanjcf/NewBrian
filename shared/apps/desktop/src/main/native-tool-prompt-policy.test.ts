@@ -7,7 +7,14 @@ const { buildNativeToolSystemInstruction, requestedArtifactSatisfied } = await i
 
 test("uses platform-specific shell guidance", () => {
   assert.match(buildNativeToolSystemInstruction("inspect the repository", "win32"), /Windows PowerShell/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "win32"), /Set-Content/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "win32"), /workspace\.write_file/);
   assert.match(buildNativeToolSystemInstruction("inspect the repository", "darwin"), /shell is zsh/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "darwin"), /grep -r/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "darwin"), /cat>|tee|heredoc|workspace\.write_file/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "linux"), /grep -r/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "win32"), /Get-ChildItem -Recurse/);
+  assert.match(buildNativeToolSystemInstruction("inspect the repository", "win32"), /next_action/);
 });
 
 test("bootstrap prompt prefers local entrypoints over docker compose", async () => {
@@ -17,6 +24,9 @@ test("bootstrap prompt prefers local entrypoints over docker compose", async () 
   const instruction = buildNativeToolSystemInstruction("启动这个项目", "win32");
   assert.match(instruction, /workspace\.glob/);
   assert.match(instruction, /workspace\.grep/);
+  assert.match(instruction, /alias glob/);
+  assert.match(instruction, /alias grep/);
+  assert.match(instruction, /BRAIN threads/);
   assert.match(instruction, /workspace\.read/);
   assert.match(instruction, /workspace\.edit/);
   assert.match(instruction, /workspace\.apply_patch/);

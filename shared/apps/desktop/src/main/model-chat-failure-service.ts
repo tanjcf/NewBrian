@@ -1,6 +1,10 @@
 import type { WorkspaceCatalogItem, WorkspaceThreadRecord } from "@codex-forge/protocol";
 import type { ThreadStateFile } from "./thread-state-factory.js";
 import type { ThreadEventRecord } from "./thread-event-policy.js";
+import {
+  isSubscriptionInactiveError,
+  toUserFacingModelFailureMessage
+} from "../shared/model-user-facing-error.ts";
 
 export interface ModelChatFailureDependencies {
   nowIso: () => string;
@@ -68,23 +72,26 @@ export class ModelChatFailureService {
     partialContent?: string;
     error: unknown;
   }) {
-    const failureMessage = input.error instanceof Error ? input.error.message : String(input.error);
+    const rawFailureMessage = input.error instanceof Error ? input.error.message : String(input.error);
+    const failureMessage = toUserFacingModelFailureMessage(input.error);
     const httpStatus = input.error instanceof Error && "status" in input.error
       ? Number((input.error as { status?: unknown }).status)
-      : /\(403\)|HTTP 403|403:/i.test(failureMessage) ? 403 : undefined;
-    const failureCode = httpStatus === 403
+      : /\(403\)|HTTP 403|403:/i.test(rawFailureMessage) ? 403 : undefined;
+    const failureCode = isSubscriptionInactiveError(input.error)
+      ? "subscription_inactive"
+      : httpStatus === 403
       ? "model_forbidden"
-      : /Agent loop stalled|no tool progress across/i.test(failureMessage)
+      : /Agent loop stalled|no tool progress across/i.test(rawFailureMessage)
         ? "agent_loop_stalled"
       : input.error instanceof Error && "code" in input.error
       ? String((input.error as { code?: unknown }).code ?? "")
-      : /reasoning_content[\s\S]{0,120}must be passed back|must be passed back[\s\S]{0,120}reasoning_content/i.test(failureMessage)
+      : /reasoning_content[\s\S]{0,120}must be passed back|must be passed back[\s\S]{0,120}reasoning_content/i.test(rawFailureMessage)
         ? "gateway_reasoning_context_required"
-      : /model callback timed out|model_callback_timeout/i.test(failureMessage)
+      : /model callback timed out|model_callback_timeout/i.test(rawFailureMessage)
         ? "model_callback_timeout"
-        : /Tool Host exited|hostFailure|tool host/i.test(failureMessage)
+        : /Tool Host exited|hostFailure|tool host/i.test(rawFailureMessage)
           ? "tool_host_failure"
-          : /ECONNREFUSED|无法连接模型网关/i.test(failureMessage)
+          : /ECONNREFUSED|无法连接模型网关/i.test(rawFailureMessage)
             ? "gateway_unreachable"
             : "model_request_failed";
     const partialContent = String(input.partialContent ?? "").trim();
@@ -96,12 +103,13 @@ export class ModelChatFailureService {
     const existing = state.messages.find((message) => message.id === input.requestId)
       ?? [...state.messages].reverse().find((message) =>
         message.role === "assistant" && !message.excludeFromModelContext);
+    const subscriptionInactive = failureCode === "subscription_inactive";
     const persistedSummary = reasoningSummary
-      ? `${reasoningSummary}\n\n本轮在完成前发生异常：${failureMessage}`
-      : `本轮在完成前发生异常：${failureMessage}`;
+      ? `${reasoningSummary}\n\n${subscriptionInactive ? failureMessage : `本轮在完成前发生异常：${failureMessage}`}`
+      : (subscriptionInactive ? failureMessage : `本轮在完成前发生异常：${failureMessage}`);
     const failureContent = partialContent
       || (existing && String(existing.content || "").trim())
-      || `本轮执行失败：${failureMessage}`;
+      || (subscriptionInactive ? failureMessage : `本轮执行失败：${failureMessage}`);
     if (existing) {
       if (failureContent.length >= String(existing.content ?? "").length) {
         existing.content = failureContent;
@@ -125,24 +133,26 @@ export class ModelChatFailureService {
     await this.dependencies.appendEvents(input.workspace, input.thread, [this.dependencies.createEvent("error", {
       stage: "model_request",
       message: failureMessage,
+      rawMessage: rawFailureMessage,
       code: failureCode,
       ...(httpStatus ? { httpStatus } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(gatewayReasoningRepair ? {
         httpStatus: 400,
         remediation: "retry_without_stale_thinking_context"
-      } : {})
+      } : {}),
+      ...(subscriptionInactive ? { remediation: "renew_or_contact_admin" } : {})
     }, input.turnId)]);
     await this.dependencies.updateMetadata({
       workspaceId: input.workspace.id,
       threadId: input.thread.id,
       status: "failed",
-      statusLabel: "执行失败",
+      statusLabel: subscriptionInactive ? "订阅失效" : "执行失败",
       lastEventSummary: failureMessage.slice(0, 120) || "模型请求失败"
     });
     void this.dependencies.reportFailure?.({
       kind: "model_request_failed",
-      message: failureMessage,
+      message: rawFailureMessage,
       stackTrace: input.error instanceof Error ? input.error.stack : undefined,
       context: {
         workspaceId: input.workspace.id,
@@ -151,12 +161,14 @@ export class ModelChatFailureService {
         turnId: input.turnId,
         stage: "model_request",
         failureCode,
+        userFacingMessage: failureMessage,
         ...(httpStatus ? { httpStatus } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(gatewayReasoningRepair ? {
           httpStatus: 400,
           remediation: "retry_without_stale_thinking_context"
         } : {}),
+        ...(subscriptionInactive ? { remediation: "renew_or_contact_admin" } : {}),
         terminal: true
       }
     }).catch(() => undefined);

@@ -1,16 +1,63 @@
 import { realpath, readFile, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve } from "node:path";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import type { BrainMusicMediaInfo } from "@codex-forge/protocol/music-types";
+import { probeMediaAv } from "./video-media-peel.js";
+
+const COMPRESSED_AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "aac", "flac", "ogg", "opus"]);
+
+function audioExtension(...names: string[]) {
+  for (const name of names) {
+    const ext = extname(String(name || "")).toLowerCase().replace(/^\./, "");
+    if (ext) return ext;
+  }
+  return "";
+}
 
 export class MusicMediaService {
   private readonly storage: BrainWorkspaceStorage;
   private readonly resolveWorkspaceRoot: (id: string) => Promise<string>;
-  constructor(storage: BrainWorkspaceStorage, resolveWorkspaceRoot: (id: string) => Promise<string>) { this.storage = storage; this.resolveWorkspaceRoot = resolveWorkspaceRoot; }
+  private readonly resolveFfprobe?: () => Promise<string>;
+  constructor(
+    storage: BrainWorkspaceStorage,
+    resolveWorkspaceRoot: (id: string) => Promise<string>,
+    resolveFfprobe?: () => Promise<string>
+  ) {
+    this.storage = storage;
+    this.resolveWorkspaceRoot = resolveWorkspaceRoot;
+    this.resolveFfprobe = resolveFfprobe;
+  }
   async inspect(ownerId: string, projectId: string, sourceFileId: string): Promise<BrainMusicMediaInfo> {
     const project = this.storage.getProject(ownerId, projectId); if (project.primaryWorkspaceKey !== "music") throw new Error("BRAIN_MUSIC_WORKSPACE_REQUIRED"); if (!project.localWorkspaceId) throw new Error("BRAIN_LOCAL_WORKSPACE_REQUIRED");
     const file = this.storage.getFile(ownerId, projectId, sourceFileId); const root = await realpath(await this.resolveWorkspaceRoot(project.localWorkspaceId)); if (isAbsolute(file.storageKey)) throw new Error("BRAIN_MUSIC_PATH_OUTSIDE_PROJECT"); const path = await realpath(resolve(root, file.storageKey)); const rel = relative(root, path); if (!rel || rel.startsWith("..") || isAbsolute(rel) || !(await stat(path)).isFile()) throw new Error("BRAIN_MUSIC_PATH_OUTSIDE_PROJECT");
-    const bytes = await readFile(path); const ext = file.logicalName.toLowerCase().split(".").pop(); if (ext === "mid" || ext === "midi") return this.midi(sourceFileId, bytes); if (ext === "wav") return this.wav(sourceFileId, bytes); throw new Error("BRAIN_MUSIC_FORMAT_UNSUPPORTED");
+    const ext = audioExtension(file.logicalName, file.storageKey, path);
+    if (ext === "mid" || ext === "midi") return this.midi(sourceFileId, await readFile(path));
+    if (ext === "wav") return this.wav(sourceFileId, await readFile(path));
+    if (COMPRESSED_AUDIO_EXTENSIONS.has(ext)) return this.compressedAudio(sourceFileId, path);
+    throw new Error("BRAIN_MUSIC_FORMAT_UNSUPPORTED");
+  }
+  private async compressedAudio(id: string, path: string): Promise<BrainMusicMediaInfo> {
+    const ffprobe = this.resolveFfprobe ? await this.resolveFfprobe().catch(() => "") : "";
+    if (ffprobe) {
+      try {
+        const probe = await probeMediaAv(path, { ffprobeExecutable: ffprobe, timeoutMs: 30_000 });
+        if (!probe.hasAudio) throw new Error("BRAIN_MUSIC_FORMAT_UNSUPPORTED");
+        return {
+          sourceFileId: id,
+          kind: "audio",
+          durationMs: Math.max(0, Math.round(probe.durationSec * 1000)),
+          warnings: probe.hasVideo ? ["文件含视频轨，音乐工作区仅使用音频部分"] : []
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message === "BRAIN_MUSIC_FORMAT_UNSUPPORTED") throw error;
+      }
+    }
+    return {
+      sourceFileId: id,
+      kind: "audio",
+      durationMs: 0,
+      warnings: ["未能解析压缩音频时长，请确认已安装 ffprobe 或稍后重试"]
+    };
   }
   private wav(id: string, b: Buffer): BrainMusicMediaInfo {
     if (b.length < 44 || b.toString("ascii", 0, 4) !== "RIFF" || b.toString("ascii", 8, 12) !== "WAVE") throw new Error("BRAIN_MUSIC_WAV_INVALID");

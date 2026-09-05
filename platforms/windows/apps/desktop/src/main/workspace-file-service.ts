@@ -4,10 +4,14 @@ import type { SearchResultSpec } from "@codex-forge/protocol";
 import mammoth from "mammoth";
 import {
   buildWorkspaceArtifactPreviewUrl,
+  isAudioArtifactCandidate,
+  isAudioArtifactPath,
   isHtmlArtifactExtension,
   isImageArtifactExtension,
   isVideoArtifactExtension,
-  mimeTypeForArtifactPath
+  mimeTypeForArtifactPath,
+  resolveArtifactMimeType,
+  sniffAudioMimeFromBytes
 } from "./workspace-artifact-protocol.js";
 import { buildSpreadsheetPreview } from "./spreadsheet-preview.ts";
 
@@ -172,6 +176,18 @@ export class WorkspaceFileService {
           path: relativePath,
           name: basename(targetPath),
           mimeType: mimeTypeForArtifactPath(targetPath),
+          size: stat.size,
+          previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
+        };
+      }
+      const sniffedAudio = sniffAudioMimeFromBytes(buffer);
+      if (isAudioArtifactPath(targetPath) || isAudioArtifactCandidate(targetPath, input.filePath) || sniffedAudio) {
+        const normalizedRelative = relativePath.replace(/\\/g, "/");
+        return {
+          kind: "audio" as const,
+          path: relativePath,
+          name: basename(targetPath),
+          mimeType: resolveArtifactMimeType(targetPath, buffer),
           size: stat.size,
           previewUrl: buildWorkspaceArtifactPreviewUrl(input.workspaceId, normalizedRelative)
         };

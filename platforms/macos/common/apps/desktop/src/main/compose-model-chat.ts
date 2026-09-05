@@ -146,6 +146,9 @@ export interface MacModelChatCompositionDeps {
   appendDiagnosticsLog: (line: string) => Promise<unknown>;
   readGatewayBaseUrl: () => Promise<string>;
   readDesktopAuthState: () => Promise<Record<string, unknown> | null>;
+  refreshDesktopAccessToken?: () => Promise<string>;
+  /** Managed composer attachment directories for Auto media reference images. */
+  attachmentRoots?: string[];
   getActiveDesktopPreferences: () => Promise<{ personalization?: { autoSkillEnabled?: boolean } }>;
   defaultDesktopPreferences: { personalization?: { autoSkillEnabled?: boolean } };
   makeId: (prefix: string) => string;
@@ -283,6 +286,9 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       let bearerToken = authSelection.bearerToken;
       if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
         bearerToken = "codecn-e2e";
+      }
+      if (!bearerToken && deps.refreshDesktopAccessToken) {
+        bearerToken = await deps.refreshDesktopAccessToken().catch(() => "");
       }
       if (!bearerToken) {
         throw new Error("Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。");
@@ -436,8 +442,9 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
         workspaceId: workspace.id,
         threadId: thread.id,
         workspaceRoot: workspace.path,
+        attachmentRoots: deps.attachmentRoots,
         openLocalMedia: async ({ kind, relativePath }) => {
-          await openWorkspaceMediaForAgent(deps.runtimeSetup, kind, relativePath);
+          await openWorkspaceMediaForAgent(deps.runtimeSetup, kind, relativePath, { workspaceId: workspace.id });
         },
         resolveAbortSignal: () => {
           for (const task of deps.concurrentModelTasks.values()) {

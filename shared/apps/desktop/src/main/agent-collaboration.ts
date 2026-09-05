@@ -10,13 +10,37 @@ export const DELEGATE_CHILDREN_LIMIT = "delegate_children_limit";
 export const DELEGATE_REFUSED_AFTER_FAILURE = "delegate_refused_after_failure";
 export const WAIT_UNAVAILABLE = "wait_unavailable";
 
-export function normalizeDelegationRequest(input: Record<string, unknown>) {
+const EXTRA_ROLE_RE = /^[a-z][a-z0-9-]{1,63}$/;
+
+/** Recovery package when child failures hit the hard refuse threshold (Codex-style actionable stop). */
+export function buildDelegateFailureRecoveryMessage(failedCount: number) {
+  const failed = Math.max(0, Math.trunc(failedCount));
+  return [
+    `Too many child failures (${failed}). Merge evidence and finish; do not keep re-delegating.`,
+    "next_action: Do not call agent.delegate again this turn.",
+    "Finish yourself with workspace-relative workspace.write_file / workspace.edit / workspace.apply_patch.",
+    "Never write source via shell.exec (Set-Content, Out-File, heredoc, cat>).",
+    "Summarize child evidence you already have and produce the final deliverable."
+  ].join(" ");
+}
+
+export function normalizeDelegationRequest(
+  input: Record<string, unknown>,
+  options?: { allowedExtraRoles?: string[] }
+) {
   const title = String(input.title ?? "").trim().slice(0, 120);
   const instruction = String(input.instruction ?? "").trim().slice(0, 12_000);
-  const requestedRole = String(input.role ?? "researcher");
-  const role: AgentCollaborationRole = agentCollaborationRoles.includes(requestedRole as AgentCollaborationRole)
-    ? requestedRole as AgentCollaborationRole
-    : "researcher";
+  const requestedRole = String(input.role ?? "researcher").trim();
+  const allowedExtra = new Set(
+    (options?.allowedExtraRoles ?? [])
+      .map((role) => String(role || "").trim())
+      .filter((role) => EXTRA_ROLE_RE.test(role))
+  );
+  const role = agentCollaborationRoles.includes(requestedRole as AgentCollaborationRole)
+    ? requestedRole
+    : allowedExtra.has(requestedRole)
+      ? requestedRole
+      : "researcher";
   if (!title || !instruction) throw new Error("Child agent title and instruction are required.");
   const dependsOn = [...new Set((Array.isArray(input.dependsOn) ? input.dependsOn : [])
     .map((value) => String(value).trim()).filter(Boolean))].slice(0, 8);
@@ -71,10 +95,13 @@ export function assertCanDelegateChild(input: {
   const maxFailures = Math.max(1, Math.trunc(input.maxFailuresBeforeRefuse ?? 2));
   const failed = Math.max(0, Math.trunc(input.recentFailedCount ?? 0));
   if (failed >= maxFailures) {
-    const error = new Error(
-      `Too many child failures (${failed}). Merge evidence and finish; do not keep re-delegating.`
-    );
-    (error as Error & { code?: string }).code = DELEGATE_REFUSED_AFTER_FAILURE;
+    const error = new Error(buildDelegateFailureRecoveryMessage(failed));
+    (error as Error & { code?: string; nextAction?: string }).code = DELEGATE_REFUSED_AFTER_FAILURE;
+    (error as Error & { code?: string; nextAction?: string }).nextAction = [
+      "Do not call agent.delegate again this turn.",
+      "Use workspace.write_file with relative paths; do not write files via shell.exec.",
+      "Merge child evidence and finish the deliverable yourself."
+    ].join(" ");
     throw error;
   }
 }
@@ -93,6 +120,7 @@ export function buildAgentCollaborationInstruction(maxParallelAgents = DEFAULT_M
     "Start independent children before calling agent.wait so they can run concurrently.",
     "Use agent.list to inspect status and agent.wait to collect results before making claims based on delegated work.",
     "If a child fails, treat the failure as terminal evidence: merge what you have and finish. Do not empty-loop re-delegate the same work.",
+    "After repeated child failures the runtime refuses further agent.delegate; finish with workspace.write_file/edit/apply_patch using relative paths—never shell whole-file writes.",
     "The root agent remains responsible for resolving conflicts and producing the final deliverable."
   ].join(" ");
 }

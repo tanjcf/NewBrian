@@ -5,7 +5,7 @@ import { dialog } from "electron";
 import { shell as electronShell } from "electron";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, promises as fs, watch, type FSWatcher } from "node:fs";
+import { existsSync, readFileSync, promises as fs, watch, type FSWatcher } from "node:fs";
 import * as os from "node:os";
 import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -69,7 +69,9 @@ import {
 import {
   createDesktopAuthHeaders,
   buildDesktopDeviceFingerprint,
+  isUsableDesktopDeviceFingerprint,
   resolvePrimaryMacAddress,
+  reusePersistedDesktopDeviceFingerprint,
   type DesktopDeviceFingerprint
 } from "./desktop-device-policy.js";
 import { normalizeModelConfig as normalizeModelConfigValue } from "./model-config-policy.js";
@@ -456,7 +458,6 @@ import {
   sanitizeVisibleModelContent
 } from "./model-stream-visibility.js";
 import {
-  agentCollaborationRoles,
   assertCanDelegateChild,
   countActiveChildren,
   DEFAULT_MAX_CHILDREN_PER_PARENT,
@@ -466,6 +467,21 @@ import {
   WAIT_UNAVAILABLE,
   waitForAgentRun
 } from "./agent-collaboration.js";
+import {
+  clearExpertSummon,
+  installExpertFromBuiltin,
+  listExpertCatalog,
+  readExpertRegistry,
+  resolveSummonedExpert,
+  setExpertEnabled,
+  summonExpertToThread
+} from "./expert-marketplace.js";
+import { registerExpertMarketplaceIpcHandlers } from "./expert-marketplace-ipc.js";
+import {
+  buildExpertSkillIndex,
+  buildSkillExpertSummonInstruction,
+  resolveExpertIdFromSelectedSkills
+} from "./skill-expert-binding.js";
 const appDirectory = dirname(fileURLToPath(import.meta.url));
 const documentWorkerProcess = new DocumentWorkerProcess({
   appDirectory,
@@ -530,6 +546,67 @@ const featureConfigPath = join(workspacePath, "codecn.features.json");
 const builtinPluginsRoot = app.isPackaged
   ? join(process.resourcesPath, "plugins")
   : join(app.getAppPath(), "build", "plugins");
+function resolveExpertBuiltinRoot() {
+  const candidates = [
+    app.isPackaged ? join(process.resourcesPath, "experts") : "",
+    join(app.getAppPath(), "resources", "experts"),
+    join(app.getAppPath(), "build", "experts"),
+    join(appDirectory, "../../../../../../shared/apps/desktop/resources/experts")
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return candidates[0] || join(app.getAppPath(), "resources", "experts");
+}
+const expertBuiltinRoot = resolveExpertBuiltinRoot();
+const expertInstalledRoot = join(getPackagedUserDataPath(), "experts", "installed");
+const expertRegistryPath = join(getPackagedUserDataPath(), "experts", "registry.json");
+async function listExpertsForRuntime() {
+  return listExpertCatalog({
+    builtinRoot: expertBuiltinRoot,
+    installedRoot: expertInstalledRoot,
+    registry: await readExpertRegistry(expertRegistryPath)
+  });
+}
+function collectSkillRootsForExpertBridge(workspacePathValue?: string) {
+  const roots = [userSkillRoot];
+  if (workspacePathValue) {
+    roots.push(join(workspacePathValue, "skills"), join(workspacePathValue, ".codecn", "skills"));
+  }
+  roots.push(join(workspacePath, "skills"), join(workspacePath, ".codecn", "skills"));
+  return [...new Set(roots.filter(Boolean))];
+}
+async function resolveExpertBindingForSkills(skillNames: string[], workspacePathValue?: string) {
+  const catalog = await listExpertsForRuntime();
+  return resolveExpertIdFromSelectedSkills({
+    skillNames,
+    skillRoots: collectSkillRootsForExpertBridge(workspacePathValue),
+    expertSkillIndex: buildExpertSkillIndex(catalog)
+  });
+}
+async function ensureExpertSummonedFromSkills(input: {
+  threadId: string;
+  skillNames: string[];
+  workspacePathValue?: string;
+}) {
+  const existing = await resolveSummonedExpert({
+    threadId: input.threadId,
+    registryPath: expertRegistryPath,
+    builtinRoot: expertBuiltinRoot,
+    installedRoot: expertInstalledRoot
+  });
+  if (existing?.expertId) return null;
+  const hit = await resolveExpertBindingForSkills(input.skillNames, input.workspacePathValue);
+  if (!hit) return null;
+  await summonExpertToThread({
+    threadId: input.threadId,
+    expertId: hit.expertId,
+    registryPath: expertRegistryPath,
+    builtinRoot: expertBuiltinRoot,
+    installedRoot: expertInstalledRoot
+  });
+  return hit;
+}
 const bootstrapConfigPath = join(workspacePath, "codecn.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".codecn");
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
@@ -537,6 +614,8 @@ const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentia
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
 const desktopAuthStatePath = join(workspaceStateRoot, "desktop-auth.json");
+const desktopDeviceFingerprintPath = join(workspaceStateRoot, "desktop-device.json");
+let cachedDesktopDeviceFingerprint: DesktopDeviceFingerprint | null = null;
 const authorizedModelsCachePath = join(workspaceStateRoot, "authorized-models.json");
 /** Last successfully loaded authorized model catalog for main-agent economics briefing. */
 let cachedAuthorizedModels: Array<{
@@ -681,6 +760,23 @@ const resolveManagedFfmpeg = async () => {
   if (resolved) {
     activeShellEnv = environmentDiscoveryService.prependPathEntries(activeShellEnv, dirname(executable));
     runtime?.setShellEnv(activeShellEnv);
+  }
+  return executable;
+};
+const resolveManagedFfprobe = async () => {
+  const autoInstall = process.env.BRAIN_ENGINE_AUTO_INSTALL !== "false";
+  let resolved = await engineDiscovery.resolve("ffprobe");
+  if (!resolved && autoInstall) {
+    try { resolved = await engineInstaller.ensureInstalled("ffprobe"); } catch { /* fall through */ }
+  }
+  let executable = resolved?.executable || (process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
+  if (!executable.includes("/") && !executable.includes("\\") && process.platform === "win32") {
+    const located = lookupCommandSync("where.exe", [executable]);
+    const first = String(located.stdout ?? "").split(/\r?\n/u).map((line) => line.trim()).find(Boolean);
+    if (first) executable = first;
+  }
+  if (executable.includes("/") || executable.includes("\\")) {
+    try { executable = await fs.realpath(executable); } catch { /* keep unresolved path */ }
   }
   return executable;
 };
@@ -1424,7 +1520,22 @@ function readWmicValue(alias: string, property: string) {
   const match = String(result.stdout).match(new RegExp(`${property}=([^\\r\\n]+)`, "i"));
   return match?.[1]?.trim() || "";
 }
-function collectDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
+function readPersistedDesktopDeviceFingerprintSync(): DesktopDeviceFingerprint | null {
+  try {
+    const parsed = JSON.parse(readFileSync(desktopDeviceFingerprintPath, "utf8")) as unknown;
+    return isUsableDesktopDeviceFingerprint(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writePersistedDesktopDeviceFingerprint(device: DesktopDeviceFingerprint) {
+  cachedDesktopDeviceFingerprint = device;
+  await ensureDirectory(dirname(desktopDeviceFingerprintPath));
+  await writeTextAtomically(desktopDeviceFingerprintPath, `${JSON.stringify(device, null, 2)}\n`);
+}
+
+function collectLiveDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
   const machineGuid = readWindowsMachineIdentifier();
   const primaryMac = resolvePrimaryMacAddress(os.networkInterfaces());
   const boardSerial = readWmicValue("baseboard", "serialnumber");
@@ -1444,6 +1555,27 @@ function collectDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
     buildStableDeviceId: buildStableDesktopDeviceId
   });
 }
+
+/** Reuse persisted device identity so WiFi/MAC churn does not force re-login. */
+function collectDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
+  const live = collectLiveDesktopDeviceFingerprint();
+  if (cachedDesktopDeviceFingerprint) {
+    return reusePersistedDesktopDeviceFingerprint(cachedDesktopDeviceFingerprint, live);
+  }
+  const persisted = readPersistedDesktopDeviceFingerprintSync();
+  if (persisted) {
+    cachedDesktopDeviceFingerprint = reusePersistedDesktopDeviceFingerprint(persisted, live);
+    return cachedDesktopDeviceFingerprint;
+  }
+  cachedDesktopDeviceFingerprint = live;
+  void writePersistedDesktopDeviceFingerprint(live).catch((error) => {
+    void appendDesktopDebugLog(
+      `persist desktop device fingerprint failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  return live;
+}
+
 async function readDesktopAuthState(): Promise<PersistedDesktopAuthState | null> {
   try {
     const raw = await readTextWithTransientRetry(desktopAuthStatePath);
@@ -2052,6 +2184,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       rum_view_tags: desktopPayload?.rumViewTags ?? persisted.rum_view_tags,
       last_synced_at: checkedAt
     });
+    await writePersistedDesktopDeviceFingerprint(device).catch(() => undefined);
     return {
       authenticated: true,
       loading: false,
@@ -2286,6 +2419,7 @@ async function finalizeDesktopAuthLogin(email: string, desktopPayload: DesktopAu
     rum_view_tags: desktopPayload.rumViewTags,
     last_synced_at: nowIso()
   });
+  await writePersistedDesktopDeviceFingerprint(collectDesktopDeviceFingerprint()).catch(() => undefined);
   await appendAuthAuditLog("login_success", `${maskEmail(email)} mode=desktop_token`);
   const currentConfig = await readRootConfig();
   if (currentConfig.llm.baseUrl.trim() === defaultModelConfig.baseUrl && currentConfig.llm.apiKey.trim() === defaultModelConfig.apiKey) {
@@ -5723,9 +5857,14 @@ function publishWorkspaceFilePreview(event: {
   mainWindowRef?.webContents.send(desktopIpcChannels.events.openWorkspaceFilePreview, event);
 }
 
-async function openWorkspaceMediaForAgent(kind: WorkspaceMediaKind, targetPath: string) {
+async function openWorkspaceMediaForAgent(
+  kind: WorkspaceMediaKind,
+  targetPath: string,
+  options?: { workspaceId?: string }
+) {
   const catalog = await readWorkspaceCatalog();
-  const workspace = catalog.workspaces.find((item) => item.id === activeWorkspaceId);
+  const workspaceId = String(options?.workspaceId || activeWorkspaceId || "").trim();
+  const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
   if (!workspace) throw new Error("No active workspace is available for media preview.");
   const requestedPath = assertWorkspaceMediaKind(targetPath, kind);
   const { targetPath: resolvedPath, relativePath } = await resolveExistingFileInsideRoot(
@@ -5758,9 +5897,11 @@ async function openWorkspaceMediaForAgent(kind: WorkspaceMediaKind, targetPath: 
 }
 
 function registerWorkspaceMediaAgentTools(
-  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>> = runtime
+  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>> = runtime,
+  options?: { workspaceId?: string }
 ) {
   targetRuntime.unregisterExternalTools("workspace-media");
+  const workspaceId = String(options?.workspaceId || "").trim() || undefined;
   const imageSchema = {
     type: "object",
     properties: {
@@ -5795,7 +5936,7 @@ function registerWorkspaceMediaAgentTools(
     requiresApproval: false,
     namespace: "workspace-media",
     inputSchema: imageSchema
-  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("image", String(input.targetPath ?? "")));
+  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("image", String(input.targetPath ?? ""), { workspaceId }));
   targetRuntime.registerExternalTool({
     name: "artifact.open_image",
     title: "打开图片预览",
@@ -5805,7 +5946,7 @@ function registerWorkspaceMediaAgentTools(
     requiresApproval: false,
     namespace: "workspace-media",
     inputSchema: imageSchema
-  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("image", String(input.targetPath ?? "")));
+  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("image", String(input.targetPath ?? ""), { workspaceId }));
   targetRuntime.registerExternalTool({
     name: "workspace.open_video",
     title: "打开视频预览",
@@ -5816,7 +5957,7 @@ function registerWorkspaceMediaAgentTools(
     requiresApproval: false,
     namespace: "workspace-media",
     inputSchema: videoSchema
-  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("video", String(input.targetPath ?? "")));
+  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("video", String(input.targetPath ?? ""), { workspaceId }));
   targetRuntime.registerExternalTool({
     name: "artifact.open_video",
     title: "打开视频预览",
@@ -5826,7 +5967,7 @@ function registerWorkspaceMediaAgentTools(
     requiresApproval: false,
     namespace: "workspace-media",
     inputSchema: videoSchema
-  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("video", String(input.targetPath ?? "")));
+  }, async (input: { targetPath?: string }) => openWorkspaceMediaForAgent("video", String(input.targetPath ?? ""), { workspaceId }));
 }
 async function capturePreviewWindow() {
   const preferences = await getActiveDesktopPreferences();
@@ -6343,6 +6484,85 @@ function registerAgentCollaborationTools(
   // OpenClaw OC-11: leaf/subagent sessions never receive collaboration spawn tools.
   if (parentThread.kind === "subagent") return;
   targetRuntime.registerExternalTool({
+    name: "expert.list",
+    title: "List Expert Marketplace experts",
+    description: "List installable/summonable BRAIN experts. Global and project Skills can summon these via expert.summon or SKILL.md frontmatter expert: <id>.",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    namespace: "collaboration",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => {
+    const catalog = await listExpertsForRuntime();
+    return {
+      ok: true,
+      output: JSON.stringify(catalog.map((item) => ({
+        id: item.id,
+        profession: item.profession,
+        expertType: item.expertType,
+        installed: item.installed,
+        enabled: item.enabled,
+        skillNames: item.skillNames,
+        preferredWorkspaceKey: item.preferredWorkspaceKey
+      })))
+    };
+  });
+  targetRuntime.registerExternalTool({
+    name: "expert.summon",
+    title: "Summon an expert to this thread",
+    description: "Skill-only summon path: bind an Expert Marketplace expert when an active global/project Skill decides the current user task needs that specialist. Do not summon for greetings or trivial one-step asks. There is no UI summon button.",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    namespace: "collaboration",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expertId: { type: "string", minLength: 1, maxLength: 64 }
+      },
+      required: ["expertId"],
+      additionalProperties: false
+    }
+  }, async (toolInput) => {
+    try {
+      const expertId = String((toolInput as { expertId?: string }).expertId || "").trim();
+      const context = await summonExpertToThread({
+        threadId: parentThread.id,
+        expertId,
+        registryPath: expertRegistryPath,
+        builtinRoot: expertBuiltinRoot,
+        installedRoot: expertInstalledRoot
+      });
+      return {
+        ok: true,
+        output: JSON.stringify({
+          expertId: context.expertId,
+          profession: context.profession,
+          allowedDelegateRoles: context.allowedDelegateRoles,
+          preferredWorkspaceKey: context.preferredWorkspaceKey
+        })
+      };
+    } catch (error) {
+      return { ok: false, output: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  targetRuntime.registerExternalTool({
+    name: "expert.clear",
+    title: "Clear summoned expert",
+    description: "Remove the Expert Marketplace summon binding from the current conversation.",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    namespace: "collaboration",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => {
+    await clearExpertSummon({
+      threadId: parentThread.id,
+      registryPath: expertRegistryPath
+    });
+    return { ok: true, output: JSON.stringify({ cleared: true }) };
+  });
+  targetRuntime.registerExternalTool({
     name: "agent.delegate",
     title: "Delegate to a child agent",
     description: "Start an independent child agent in the background for a bounded task. Use agent.wait to collect its result.",
@@ -6355,7 +6575,7 @@ function registerAgentCollaborationTools(
       properties: {
         title: { type: "string", minLength: 1, maxLength: 120 },
         instruction: { type: "string", minLength: 1, maxLength: 12000 },
-        role: { type: "string", enum: agentCollaborationRoles },
+        role: { type: "string", minLength: 1, maxLength: 64, description: "Builtin role or summoned expert member id" },
         dependsOn: {
           type: "array",
           maxItems: 8,
@@ -6367,9 +6587,17 @@ function registerAgentCollaborationTools(
       additionalProperties: false
     }
   }, async (toolInput) => {
+    const summoned = await resolveSummonedExpert({
+      threadId: parentThread.id,
+      registryPath: expertRegistryPath,
+      builtinRoot: expertBuiltinRoot,
+      installedRoot: expertInstalledRoot
+    }).catch(() => null);
     let request: ReturnType<typeof normalizeDelegationRequest>;
     try {
-      request = normalizeDelegationRequest(toolInput);
+      request = normalizeDelegationRequest(toolInput, {
+        allowedExtraRoles: summoned?.allowedDelegateRoles
+      });
     } catch (error) {
       return { ok: false, output: error instanceof Error ? error.message : String(error) };
     }
@@ -6386,7 +6614,15 @@ function registerAgentCollaborationTools(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const code = error instanceof Error && "code" in error ? String((error as Error & { code?: string }).code || "") : "";
-      return { ok: false, output: message, ...(code ? { code } : {}) };
+      const nextAction = error instanceof Error && "nextAction" in error
+        ? String((error as Error & { nextAction?: string }).nextAction || "").trim()
+        : "";
+      return {
+        ok: false,
+        output: message,
+        ...(code ? { code } : {}),
+        ...(nextAction ? { next_action: nextAction } : {})
+      };
     }
     const graph = delegatedTaskGraphs.get(parentThread.id) ?? new TaskGraph();
     delegatedTaskGraphs.set(parentThread.id, graph);
@@ -8152,7 +8388,7 @@ function registerIpc() {
     if (!(await fs.stat(root)).isDirectory()) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_DIRECTORY");
     return root;
   };
-  const musicMediaService = new MusicMediaService(brainWorkspaceStorage, resolveBrainWorkspaceRoot);
+  const musicMediaService = new MusicMediaService(brainWorkspaceStorage, resolveBrainWorkspaceRoot, resolveManagedFfprobe);
   const musicRenderService = new MusicRenderService({ acquireRustCore: (binding) => getRustCoreService().acquire(binding), storage: brainWorkspaceStorage, platform: process.platform, resolveFfmpegExecutable: resolveManagedFfmpeg, prepareOutput: prepareBrainRenderOutput, confirmRender: async ({ projectId, command }) => confirmBrainSceneUiAction({ kind: "music_render", projectId, summary: command }), validateOutput: async (root, output) => { try { const rootReal = await fs.realpath(root); const target = resolve(rootReal, output); const targetReal = await fs.realpath(target); const boundary = rootReal.endsWith(sep) ? rootReal : `${rootReal}${sep}`; const file = await fs.stat(targetReal); return (targetReal === rootReal || targetReal.startsWith(boundary)) && file.isFile() && file.size > 0; } catch { return false; } } });
   const brainDataImport = new DataImportService(brainWorkspaceStorage, resolveBrainWorkspaceRoot);
   const brainDataAnalysis = new DataAnalysisService(brainWorkspaceStorage, brainDataImport);
@@ -8430,9 +8666,9 @@ function registerIpc() {
     addSkillRoots: (roots) => runtime.addSkillRoots(roots),
     deleteSkill: (id) => deleteFeatureItem("skills", id),
     isDirectClawhubAllowed: async () => {
-      // Fleet/bootstrap may also publish market.direct_clawhub_allowed=false.
-      // Local preference default is false; env CODECN_MARKET_DIRECT_CLAWHUB=1 is a
-      // developer override only (not a product path).
+      // Local preference controls desktop direct ClawHub. Env CODECN_MARKET_DIRECT_CLAWHUB=1
+      // is a developer force-on override. Fleet metadata may still publish
+      // market.direct_clawhub_allowed=false but does not override local preference here.
       const { resolveDirectClawhubAllowed } = await import("./market-clawhub-policy.js");
       if (process.env.CODECN_MARKET_DIRECT_CLAWHUB === "1") return true;
       const preferences = await getActiveDesktopPreferences().catch(() => defaultDesktopPreferences);
@@ -8508,6 +8744,56 @@ function registerIpc() {
     writePolicyRules,
     codexStorage,
     processUuid
+  });
+  registerExpertMarketplaceIpcHandlers(desktopIpcChannels.experts, {
+    list: async () => listExpertsForRuntime(),
+    install: (expertId) => installExpertFromBuiltin({
+      expertId,
+      builtinRoot: expertBuiltinRoot,
+      installedRoot: expertInstalledRoot,
+      registryPath: expertRegistryPath
+    }),
+    setEnabled: (expertId, enabled) => setExpertEnabled({
+      expertId,
+      enabled,
+      registryPath: expertRegistryPath,
+      builtinRoot: expertBuiltinRoot,
+      installedRoot: expertInstalledRoot
+    }).then(async () => listExpertsForRuntime()),
+    summon: (threadId, expertId) => summonExpertToThread({
+      threadId,
+      expertId,
+      registryPath: expertRegistryPath,
+      builtinRoot: expertBuiltinRoot,
+      installedRoot: expertInstalledRoot
+    }),
+    clearSummon: (threadId) => clearExpertSummon({
+      threadId,
+      registryPath: expertRegistryPath
+    }).then(() => ({ ok: true })),
+    getSummon: (threadId) => resolveSummonedExpert({
+      threadId,
+      registryPath: expertRegistryPath,
+      builtinRoot: expertBuiltinRoot,
+      installedRoot: expertInstalledRoot
+    }),
+    resolveFromSkill: async (skillName, skillNames) => {
+      const hit = await resolveExpertBindingForSkills(skillNames?.length ? skillNames : [skillName]);
+      return hit || null;
+    },
+    summonFromSkill: async (threadId, skillName) => {
+      const hit = await ensureExpertSummonedFromSkills({
+        threadId,
+        skillNames: [skillName]
+      });
+      if (!hit?.expertId) return null;
+      return resolveSummonedExpert({
+        threadId,
+        registryPath: expertRegistryPath,
+        builtinRoot: expertBuiltinRoot,
+        installedRoot: expertInstalledRoot
+      });
+    }
   });
   const workspaceThreadService = new WorkspaceThreadService({
     getActiveWorkspaceId: () => activeWorkspaceId,
@@ -8847,6 +9133,9 @@ function registerIpc() {
         bearerToken = "codecn-e2e";
       }
       if (!bearerToken) {
+        bearerToken = await refreshDesktopAccessTokenForGateway().catch(() => "");
+      }
+      if (!bearerToken) {
         throw new Error("Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。");
       }
       const gatewayBaseUrl = await readGatewayBaseUrl();
@@ -8985,7 +9274,7 @@ function registerIpc() {
     buildShellEnv: buildWorkspaceShellEnvWithPreferences,
     configureRuntime: async (targetRuntime, workspace, thread) => {
       registerDesktopArtifactRenderer(targetRuntime, workspace.path);
-      registerWorkspaceMediaAgentTools(targetRuntime);
+      registerWorkspaceMediaAgentTools(targetRuntime, { workspaceId: workspace.id });
       const brainOwnerId = await resolveBrainLocalOwnerId();
       const brainWorkspaceKey = workspace.brainWorkspaceKey;
       let boundBrainProject = brainWorkspaceKey
@@ -9006,6 +9295,7 @@ function registerIpc() {
         workspaceId: workspace.id,
         threadId: thread.id,
         workspaceRoot: workspace.path,
+        attachmentRoots: [join(workspaceStateRoot, "attachments")],
         ...(boundBrainProject ? {
           ownerId: resolveBrainLocalOwnerId,
           projectId: boundBrainProject.id,
@@ -9016,7 +9306,7 @@ function registerIpc() {
           }
         } : {}),
         openLocalMedia: async ({ kind, relativePath }) => {
-          await openWorkspaceMediaForAgent(kind, relativePath);
+          await openWorkspaceMediaForAgent(kind, relativePath, { workspaceId: workspace.id });
         },
         resolveAbortSignal: () => {
           for (const task of concurrentModelTasks.values()) {
@@ -9377,6 +9667,44 @@ function registerIpc() {
     ),
     loadProjectOs: async ({ workspace }) => loadProjectOsInstruction(workspace.path),
     loadSkills: (input) => modelChatSkillService.load(input),
+    loadSkillExpertBridgeInstruction: async ({ workspace, skillNames }) => {
+      const catalog = await listExpertsForRuntime();
+      const suggested: string[] = [];
+      for (const skillName of skillNames) {
+        const hit = await resolveExpertBindingForSkills([skillName], workspace.path);
+        if (hit?.expertId) suggested.push(hit.expertId);
+      }
+      return buildSkillExpertSummonInstruction({
+        experts: catalog.map((item) => ({
+          id: item.id,
+          profession: item.profession,
+          expertType: item.expertType,
+          skillNames: item.skillNames
+        })),
+        selectedSkillNames: skillNames,
+        suggestedExpertIds: suggested
+      });
+    },
+    resolveExpertSummon: async ({ thread }) => {
+      const summoned = await resolveSummonedExpert({
+        threadId: thread.id,
+        registryPath: expertRegistryPath,
+        builtinRoot: expertBuiltinRoot,
+        installedRoot: expertInstalledRoot
+      });
+      if (!summoned) return null;
+      try {
+        const catalog = await listExpertsForRuntime();
+        const expert = catalog.find((item) => item.id === summoned.expertId);
+        const skillsRoot = expert ? join(expert.rootPath, "skills") : "";
+        if (skillsRoot && existsSync(skillsRoot) && runtime?.addSkillRoots) {
+          await runtime.addSkillRoots([skillsRoot]);
+        }
+      } catch {
+        // skill root registration is best-effort
+      }
+      return summoned;
+    },
     prepareContext: (input) => modelChatContextService.prepare(input as never) as never,
     buildSystemPrompt: (input) => buildModelChatSystemPrompt(input as never),
     getAuthorizedModels: () => cachedAuthorizedModels,

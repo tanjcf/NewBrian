@@ -45,6 +45,9 @@ test("buildModelChatSystemPrompt keeps platform layers when a user skill is load
   });
   assert.match(prompt, /User-skill platform inheritance/i);
   assert.match(prompt, /music\.song\.generate/);
+  assert.match(prompt, /workspace\.glob/);
+  assert.match(prompt, /workspace\.grep/);
+  assert.match(prompt, /workspace\.read/);
   assert.match(prompt, /<skill name="writing-style">/);
   assert.match(prompt, /Follow the user's tone/);
 });

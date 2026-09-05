@@ -634,8 +634,8 @@ export interface DesktopPreferences {
   };
   /**
    * Skill market install policy.
-   * `directClawhubAllowed` maps to fleet/bootstrap flag `market.direct_clawhub_allowed`.
-   * Default false — product path must use spring-app market APIs (Phase 3).
+   * Desktop connects to ClawHub directly when `directClawhubAllowed` is true (default).
+   * Fleet may still publish `market.direct_clawhub_allowed=false` as metadata; local preference wins.
    */
   market: {
     directClawhubAllowed: boolean;
@@ -830,6 +830,16 @@ export const desktopIpcChannels = {
     setEnabled: "plugins:set-enabled",
     remove: "plugins:remove",
     reconcile: "plugins:reconcile"
+  },
+  experts: {
+    list: "experts:list",
+    install: "experts:install",
+    setEnabled: "experts:set-enabled",
+    summon: "experts:summon",
+    clearSummon: "experts:clear-summon",
+    getSummon: "experts:get-summon",
+    resolveFromSkill: "experts:resolve-from-skill",
+    summonFromSkill: "experts:summon-from-skill"
   },
   openclawSkills: {
     search: "phase1:search-openclaw-skills",
@@ -1236,6 +1246,13 @@ export type WorkspaceArtifactPreview = {
   previewUrl: string;
 } | {
   kind: "video";
+  path: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  previewUrl: string;
+} | {
+  kind: "audio";
   path: string;
   name: string;
   mimeType: string;

@@ -23,6 +23,7 @@ import type {
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
 import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
+import { mapSubscriptionInactiveUserMessage } from "../shared/model-user-facing-error.ts";
 import {
   SettingsNavIcon,
   SettingsSwitch,
@@ -82,6 +83,8 @@ function normalizeModelErrorMessage(error: unknown) {
     .replace(/^Error invoking remote method 'phase1:chat-with-model': Error:\s*/i, "")
     .replace(/^Error invoking remote method \"phase1:chat-with-model\": Error:\s*/i, "")
     .trim();
+  const subscriptionMessage = mapSubscriptionInactiveUserMessage(message);
+  if (subscriptionMessage) return subscriptionMessage;
   if (/this operation was aborted|aborterror|model request aborted|agent loop was cancelled/i.test(message)) {
     return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
   }
@@ -261,6 +264,7 @@ export function App() {
   const [forkThreadTitle, setForkThreadTitle] = useState("");
   const [editingThreadTitle, setEditingThreadTitle] = useState("");
   const [editingThreadSummary, setEditingThreadSummary] = useState("");
+  const [showRenameThreadDialog, setShowRenameThreadDialog] = useState(false);
   const [activeFeature, setActiveFeature] = useState<FeatureTab>("new-chat");
   const [featureConfig, setFeatureConfig] = useState<FeatureConfigPayload>(initialFeatureConfig);
   const [searchQuery, setSearchQuery] = useState("");
@@ -742,7 +746,7 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "automation", "mobile", "mcp"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
@@ -795,6 +799,7 @@ export function App() {
 	    addExistingProject,
 	    createThread,
     forkThread,
+    renameThread,
     deleteThread,
     saveFeature,
     removeFeature,
@@ -816,6 +821,7 @@ export function App() {
     setShellCommand, setEnvironmentEnvText, setFeatureConfig, setMcpServers, setMcpDiscoveredTools,
     setSystemTools, setAuthStatus, setDesktopBootstrapStatus, setLoginForm, setIsRetryingCondaBootstrap,
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
+    setShowRenameThreadDialog,
     setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary,
     setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
@@ -2318,6 +2324,11 @@ export function App() {
         unreadThreadIds={unreadThreadIds}
         setThreadContextMenu={setThreadContextMenu}
         handleThreadMenuAction={handleThreadMenuAction}
+        showRenameThreadDialog={showRenameThreadDialog}
+        setShowRenameThreadDialog={setShowRenameThreadDialog}
+        editingThreadTitle={editingThreadTitle}
+        setEditingThreadTitle={setEditingThreadTitle}
+        renameThread={renameThread}
         formatRelativeTimeLabel={formatRelativeTimeLabel}
         formatSearchKind={formatSearchKind}
         reviewDrawerOpen={reviewDrawerOpen}

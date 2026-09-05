@@ -1,7 +1,7 @@
 {
   "llm": {
     "provider": "DeepSeek",
-    "baseUrl": "http://127.0.0.1:8790/v1",
+    "baseUrl": "http://120.48.151.202:8790/v1",
     "apiKey": "",
     "wireApi": "responses",
     "model": "auto",

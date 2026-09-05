@@ -102,9 +102,9 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
     highResScreenshots: false,
     previewUrl: "http://127.0.0.1:3000"
   },
-  // Product path: ClawHub network installs go through spring-app (to-be-redirected).
+  // Desktop searches/installs OpenClaw skills directly from ClawHub (clawhub.ai).
   market: {
-    directClawhubAllowed: false
+    directClawhubAllowed: true
   },
   shortcuts: {}
   };

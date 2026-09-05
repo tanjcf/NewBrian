@@ -1,0 +1,58 @@
+{
+  "name": "ppt-creation-expert",
+  "version": "1.0.0",
+  "description": "从受众、目标和素材出发设计故事线、页面结构与视觉表达，并通过 BRAIN 演示文稿/文档场景产出可编辑成果。",
+  "expertType": "agent",
+  "agentName": "ppt-creation-expert",
+  "agents": [
+    "./agents/ppt-creation-expert.md"
+  ],
+  "skills": [
+    "./skills/presentation-production"
+  ],
+  "displayName": {
+    "zh": "演示文稿创作专家",
+    "en": "Presentation Creation Expert"
+  },
+  "profession": {
+    "zh": "商业演示与幻灯片叙事",
+    "en": "Business Presentation & Slide Storytelling"
+  },
+  "displayDescription": {
+    "zh": "从受众、目标和素材出发设计故事线、页面结构与视觉表达，并通过 BRAIN 演示文稿/文档场景产出可编辑成果。",
+    "en": "Designs narrative, slide structure, and visuals from audience goals and source material, using BRAIN presentation/document scenes for editable deliverables."
+  },
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "请提供演示目标、受众、时长、素材、品牌规范和交付格式。",
+    "en": "Provide the presentation goal, audience, duration, source material, brand rules, and delivery format."
+  },
+  "tags": [
+    {
+      "zh": "演示文稿",
+      "en": "Presentations"
+    },
+    {
+      "zh": "商业叙事",
+      "en": "Business Storytelling"
+    },
+    {
+      "zh": "幻灯片设计",
+      "en": "Slide Design"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "把这些材料整理成一份管理层汇报 PPT",
+      "en": "Turn these materials into an executive presentation"
+    },
+    {
+      "zh": "为路演设计故事线和逐页大纲",
+      "en": "Design a pitch narrative and slide-by-slide outline"
+    },
+    {
+      "zh": "重构这份 PPT 的逻辑和视觉层级",
+      "en": "Restructure this deck's logic and visual hierarchy"
+    }
+  ]
+}

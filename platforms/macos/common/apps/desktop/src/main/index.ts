@@ -5,7 +5,7 @@ import { dialog } from "electron";
 import { shell as electronShell } from "electron";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams, type ChildProcessWithoutNullStreams as ShellChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, promises as fs, watch, type FSWatcher } from "node:fs";
+import { existsSync, readFileSync, promises as fs, watch, type FSWatcher } from "node:fs";
 import { createServer, type Server as HttpServer } from "node:http";
 import * as os from "node:os";
 import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -165,6 +165,8 @@ const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentia
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
 const desktopAuthStatePath = join(workspaceStateRoot, "desktop-auth.json");
+const desktopDeviceFingerprintPath = join(workspaceStateRoot, "desktop-device.json");
+let cachedDesktopDeviceFingerprint: DesktopDeviceFingerprint | null = null;
 const desktopControlPlaneStatePath = join(workspaceStateRoot, "desktop-control-plane.json");
 const desktopBootstrapStatePath = join(workspaceStateRoot, "desktop-bootstrap.json");
 const desktopWorktreeBindingsPath = join(workspaceStateRoot, "worktree-bindings.json");
@@ -838,17 +840,31 @@ function safeMachineToken(...values: Array<string | undefined>) {
   return source ? createHash("sha256").update(source).digest("hex").slice(0, 48) : "";
 }
 
+function scoreNetworkInterfaceName(name: string) {
+  const lower = String(name || "").toLowerCase();
+  let score = 0;
+  if (/ethernet|eth\d|en\d|局域网|本地连接|本地網路/.test(lower)) score += 40;
+  if (/wi-?fi|wlan|wireless|无线|wlan\d|wl|en0/.test(lower)) score += 25;
+  if (/bluetooth|virtual|vethernet|hyper-v|vmware|virtualbox|docker|wsl|loopback|vpn|tap|tun|npcap|pseudo|bridge/.test(lower)) {
+    score -= 60;
+  }
+  return score;
+}
+
 function resolvePrimaryMacAddress() {
   const interfaces = os.networkInterfaces();
-  for (const records of Object.values(interfaces)) {
+  const candidates: Array<{ mac: string; score: number }> = [];
+  for (const [name, records] of Object.entries(interfaces)) {
     for (const record of records ?? []) {
-      if (!record || record.internal || !record.mac || record.mac === "00:00:00:00:00:00") {
-        continue;
-      }
-      return record.mac.replace(/:/g, "-").toLowerCase();
+      if (!record || record.internal || !record.mac || record.mac === "00:00:00:00:00:00") continue;
+      const mac = record.mac.replace(/:/g, "-").toLowerCase();
+      if (!mac || mac === "00-00-00-00-00-00") continue;
+      candidates.push({ mac, score: scoreNetworkInterfaceName(name) });
     }
   }
-  return "";
+  if (!candidates.length) return "";
+  candidates.sort((left, right) => right.score - left.score || left.mac.localeCompare(right.mac));
+  return candidates[0]!.mac;
 }
 
 function readWindowsMachineIdentifier() {
@@ -881,12 +897,53 @@ function readWmicValue(alias: string, property: string) {
   return match?.[1]?.trim() || "";
 }
 
-function collectDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
+function isUsableDesktopDeviceFingerprint(value: unknown): value is DesktopDeviceFingerprint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return ["device_id", "mac_id", "motherboard_id", "disk_id"]
+    .every((key) => typeof record[key] === "string" && String(record[key]).trim().length > 0);
+}
+
+function reusePersistedDesktopDeviceFingerprint(
+  persisted: DesktopDeviceFingerprint,
+  live: DesktopDeviceFingerprint
+): DesktopDeviceFingerprint {
+  return {
+    ...persisted,
+    device_name: live.device_name || persisted.device_name,
+    device_type: live.device_type || persisted.device_type,
+    os_name: live.os_name || persisted.os_name,
+    os_version: live.os_version || persisted.os_version,
+    app_version: live.app_version || persisted.app_version
+  };
+}
+
+function readPersistedDesktopDeviceFingerprintSync(): DesktopDeviceFingerprint | null {
+  try {
+    const parsed = JSON.parse(readFileSync(desktopDeviceFingerprintPath, "utf8")) as unknown;
+    return isUsableDesktopDeviceFingerprint(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writePersistedDesktopDeviceFingerprint(device: DesktopDeviceFingerprint) {
+  cachedDesktopDeviceFingerprint = device;
+  await ensureDirectory(dirname(desktopDeviceFingerprintPath));
+  await fs.writeFile(desktopDeviceFingerprintPath, `${JSON.stringify(device, null, 2)}\n`, "utf8");
+}
+
+function collectLiveDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
   const machineGuid = readWindowsMachineIdentifier();
   const primaryMac = resolvePrimaryMacAddress();
   const boardSerial = readWmicValue("baseboard", "serialnumber");
   const diskSerial = readWmicValue("diskdrive", "serialnumber");
-  const deviceId = safeMachineToken(process.platform, workspacePath, app.getVersion(), app.getPath("userData"), machineGuid || primaryMac || os.hostname()).slice(0, 24);
+  // Keep device_id free of app version / live MAC churn so WiFi handoff stays logged in.
+  const deviceId = safeMachineToken(
+    process.platform,
+    app.getPath("userData"),
+    machineGuid || primaryMac || os.hostname()
+  ).slice(0, 24);
   return {
     device_id: deviceId,
     device_name: os.hostname() || `${platformLabel}-desktop`,
@@ -898,6 +955,22 @@ function collectDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
     motherboard_id: safeMachineToken(boardSerial, machineGuid, os.hostname()),
     disk_id: safeMachineToken(diskSerial, machineGuid, workspacePath)
   };
+}
+
+/** Reuse persisted device identity so WiFi/MAC churn does not force re-login. */
+function collectDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
+  const live = collectLiveDesktopDeviceFingerprint();
+  if (cachedDesktopDeviceFingerprint) {
+    return reusePersistedDesktopDeviceFingerprint(cachedDesktopDeviceFingerprint, live);
+  }
+  const persisted = readPersistedDesktopDeviceFingerprintSync();
+  if (persisted) {
+    cachedDesktopDeviceFingerprint = reusePersistedDesktopDeviceFingerprint(persisted, live);
+    return cachedDesktopDeviceFingerprint;
+  }
+  cachedDesktopDeviceFingerprint = live;
+  void writePersistedDesktopDeviceFingerprint(live).catch(() => undefined);
+  return live;
 }
 
 function createDesktopAuthHeaders(input: {
@@ -1363,6 +1436,39 @@ async function refreshDesktopTokens(persisted: PersistedDesktopAuthState, device
   return { response, payload };
 }
 
+async function refreshDesktopAccessTokenForGateway(): Promise<string> {
+  const persisted = await readDesktopAuthState();
+  if (!persisted?.refresh_token) return "";
+  const refreshed = await refreshDesktopTokens(persisted, collectDesktopDeviceFingerprint());
+  const payload = refreshed?.payload as Record<string, unknown> | null;
+  if (!refreshed?.response.ok || !payload || payload.ok !== true) return "";
+  const tokens = payload.data && typeof payload.data === "object"
+    ? (payload.data as { tokens?: { access_token?: string; refresh_token?: string } }).tokens
+    : undefined;
+  const accessToken =
+    typeof payload.accessToken === "string" && payload.accessToken
+      ? payload.accessToken
+      : typeof tokens?.access_token === "string"
+        ? tokens.access_token
+        : "";
+  if (!accessToken) return "";
+  const refreshToken =
+    typeof payload.sessionToken === "string" && payload.sessionToken
+      ? payload.sessionToken
+      : typeof tokens?.refresh_token === "string"
+        ? tokens.refresh_token
+        : persisted.refresh_token;
+  await writeDesktopAuthState({
+    ...persisted,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires: typeof payload.expires === "string" ? payload.expires : persisted.expires,
+    last_synced_at: nowIso()
+  });
+  await writePersistedDesktopDeviceFingerprint(collectDesktopDeviceFingerprint()).catch(() => undefined);
+  return accessToken;
+}
+
 async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
   const agreement = await fetchAgreementConfig();
   const persisted = await readDesktopAuthState();
@@ -1451,6 +1557,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       rum_view_tags: desktopPayload?.rumViewTags ?? persisted.rum_view_tags,
       last_synced_at: checkedAt
     });
+    await writePersistedDesktopDeviceFingerprint(device).catch(() => undefined);
 
     return {
       authenticated: true,
@@ -1551,6 +1658,7 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
     rum_view_tags: desktopPayload.rumViewTags,
     last_synced_at: nowIso()
   });
+  await writePersistedDesktopDeviceFingerprint(device).catch(() => undefined);
   await appendAuthAuditLog("login_success", `${maskEmail(email)} mode=desktop_token`);
 
   const currentConfig = await readRootConfig();
@@ -10376,6 +10484,8 @@ function registerIpc() {
     appendDiagnosticsLog,
     readGatewayBaseUrl,
     readDesktopAuthState,
+    refreshDesktopAccessToken: refreshDesktopAccessTokenForGateway,
+    attachmentRoots: [join(workspaceStateRoot, "attachments")],
     getActiveDesktopPreferences,
     defaultDesktopPreferences,
     makeId,

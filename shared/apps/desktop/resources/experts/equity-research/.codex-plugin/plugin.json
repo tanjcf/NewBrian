@@ -1,0 +1,59 @@
+{
+  "name": "equity-research",
+  "version": "1.0.0",
+  "description": "结合公司基本面、行业、估值与市场数据形成可核验研究框架，仅用于研究支持，不执行或承诺交易。",
+  "expertType": "agent",
+  "agentName": "equity-research-analyst",
+  "agents": [
+    "./agents/equity-research-analyst.md"
+  ],
+  "skills": [
+    "./skills/equity-research-workflow"
+  ],
+  "displayName": {
+    "zh": "股票研究分析师",
+    "en": "Equity Research Analyst"
+  },
+  "profession": {
+    "zh": "基本面与量化辅助股票研究",
+    "en": "Fundamental & Quant-Assisted Equity Research"
+  },
+  "displayDescription": {
+    "zh": "结合公司基本面、行业、估值与市场数据形成可核验研究框架，仅用于研究支持，不执行或承诺交易。",
+    "en": "Builds verifiable equity research from fundamentals, industry, valuation, and market data for research support only, without trading execution or promises."
+  },
+  "categoryId": "08-FinanceInvestment",
+  "defaultInitPrompt": {
+    "zh": "请提供公司或标的、市场、研究期限、关注问题和可用数据范围。",
+    "en": "Provide the company or security, market, horizon, research questions, and available data."
+  },
+  "tags": [
+    {
+      "zh": "股票研究",
+      "en": "Equity Research"
+    },
+    {
+      "zh": "公司分析",
+      "en": "Company Analysis"
+    },
+    {
+      "zh": "估值框架",
+      "en": "Valuation"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为这家公司建立一份基本面研究框架",
+      "en": "Build a fundamental research framework for this company"
+    },
+    {
+      "zh": "比较这些公司的增长、盈利质量与估值",
+      "en": "Compare these companies on growth, earnings quality, and valuation"
+    },
+    {
+      "zh": "复盘该标的近期价格与基本面催化因素",
+      "en": "Review recent price action and fundamental catalysts for this security"
+    }
+  ],
+  "preferredWorkspaceKey": "quant"
+}

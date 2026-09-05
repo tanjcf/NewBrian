@@ -9,9 +9,13 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
     ? [
         "The shell is Windows PowerShell, not cmd.exe and not Bash.",
         "Submit only the PowerShell command body to shell.exec. Never wrap it in powershell -Command or pwsh -Command because the host starts exactly one PowerShell process.",
-        "Never use Bash `&&` / `||`, cmd-only `2>nul`, `echo.`, or `del`. Use PowerShell `;` chaining when shell.exec is necessary."
+        "Never use Bash `&&` / `||`, cmd-only `2>nul`, `echo.`, or `del`. Use PowerShell `;` chaining when shell.exec is necessary.",
+        "Never use shell.exec to create or overwrite source/HTML/Markdown (no Set-Content, Out-File, Add-Content, heredoc, cat>, echo>). Call workspace.write_file with a workspace-relative path instead. Absolute paths inside the workspace are accepted and coerced."
       ]
-    : ["The shell is zsh. Use POSIX-compatible commands."];
+    : [
+        "The shell is zsh. Use POSIX-compatible commands.",
+        "Never use shell.exec to create or overwrite source files with cat>/tee/heredoc; call workspace.write_file with a workspace-relative path instead."
+      ];
   const artifactContract = requestsOutputArtifact(latestUserRequest)
       ? [
         "The user requested a real output artifact. You must create it inside the attached workspace before claiming completion.",
@@ -32,17 +36,21 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
       ]
     : [];
   const searchContract = [
-    "For finding files, use workspace.glob (pattern/path/namePattern). For searching code contents, use workspace.grep (pattern/path/glob/context). They ignore node_modules/.git/venv and cap depth/hits—like OpenClaw find/grep.",
-    "Use workspace.scan only when you need a shallow directory listing.",
-    "Avoid PowerShell Get-ChildItem -Recurse unless scoped to a subfolder with -Filter/-Include or -Depth; unbounded recurse can crash the tool host."
+    "For workspace retrieval in BRAIN threads, always use built-in workspace tools—not shell.exec—for finding or reading project files (Windows, macOS, and Ubuntu share the same tools).",
+    "Find files: workspace.glob (alias glob) with pattern/path/namePattern. Search contents: workspace.grep (alias grep) with pattern/path/glob/context. Read files: workspace.read (alias read) with optional offset/limit.",
+    "Use workspace.scan only when you need a shallow directory listing. These tools ignore node_modules/.git/venv and cap depth/hits.",
+    platform === "win32"
+      ? "Do not use Get-ChildItem -Recurse, Select-String -Recurse, or unbounded dir /s for code search."
+      : "Do not use grep -r, find without -maxdepth, or ls -R for code search."
   ];
   const codingFileContract = [
     "For reading source or SKILL.md files, prefer workspace.read (alias: read) with optional offset/limit—do not use shell Get-Content/cat/type for ordinary file reads.",
     "For localized code edits, prefer workspace.edit (alias: edit) with unique oldText→newText replacements.",
     "For multi-file Add/Update/Delete changes, prefer workspace.apply_patch (alias: apply_patch) with a *** Begin Patch envelope.",
-    "Prefer workspace.write_file (alias: write) only when creating or replacing an entire file.",
+    "Prefer workspace.write_file (alias: write) when creating or replacing an entire file. Prefer relative targetPath; in-workspace absolute paths are coerced.",
     "If apply_patch fails twice (bad envelope/format), stop retrying patches and create files with workspace.write_file instead.",
     "If workspace.edit fails once because oldText does not match exactly, immediately workspace.read that file (or a nearby offset), then retry edit with exact text or replace the whole file via workspace.write_file. Do not keep guessing the same stale oldText.",
+    "If workspace.write_file fails, fix the relative path and retry write_file—never fall back to shell.exec for whole-file writes.",
     "Do not narrate long plans between every file. Call tools immediately; keep user-visible text short.",
     "For long-running commands, use shell.exec with background=true or yieldMs, then shell.process (alias: process) to poll/log/kill."
   ];
@@ -66,6 +74,7 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
     ...codingFileContract,
     ...bootstrapContract,
     "Prefer workspace.read/edit/apply_patch over shell for file IO; use workspace.write_file for whole-file create/replace to avoid shell escaping failures.",
+    "Tool failures may include next_action guidance—follow it immediately instead of re-delegating or retrying the same bad shell write.",
     "To open or preview workspace images/videos in the side panel, call workspace.open_image or workspace.open_video (aliases: artifact.open_image / artifact.open_video). Prefer these over shell.open / Start-Process / explorer for media files.",
     "For PDF or DOCX government/writing output, prefer document.create_pdf or document.create_docx with structured { title, sections:[{heading,body,bullets}] }. Never pass HTML/XML.",
     "For PPTX/HTML decks or XLSX, call artifact.create. Do not generate temporary scripts or write fake text files with office extensions.",

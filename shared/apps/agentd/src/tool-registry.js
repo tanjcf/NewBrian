@@ -11,6 +11,7 @@ import {
 import {
   enrichShellEnvForTools,
   formatMissingHostToolGuidance,
+  guardShellWholeFileWrite,
   guardUnboundedRecursiveSearch
 } from "./shell-env.js";
 import { decodeChildOutputBuffer } from "./windows-encoding.js";
@@ -46,6 +47,8 @@ const IGNORED_NAMES = WORKSPACE_IGNORED_NAMES;
 const MAX_TREE_ENTRIES = 400;
 const TOOL_ALIASES = Object.freeze({
   read: "workspace.read",
+  glob: "workspace.glob",
+  grep: "workspace.grep",
   edit: "workspace.edit",
   write: "workspace.write_file",
   apply_patch: "workspace.apply_patch",
@@ -218,12 +221,60 @@ function toRelativeWorkspacePath(workspacePath, targetPath) {
   return path.relative(workspacePath, targetPath).split(path.sep).join("/");
 }
 
+/** Prefer relative paths; in-workspace absolute paths are coerced (OpenClaw-style). */
 async function resolveSafeWorkspaceTarget(workspacePath, targetPath) {
-  // workspace.write_file keeps the historical relative-only contract.
   const requested = String(targetPath ?? "").trim();
-  if (!requested) throw new Error("targetPath is required.");
-  if (path.isAbsolute(requested)) throw new Error("targetPath must be relative to the attached workspace.");
-  return resolveSafeWorkspacePath(workspacePath, requested, { fieldName: "targetPath" });
+  if (!requested) {
+    const error = new Error("targetPath is required.");
+    error.nextAction = "Pass a workspace-relative path such as outputs/report.html or src/app.ts.";
+    throw error;
+  }
+  try {
+    return await resolveSafeWorkspacePath(workspacePath, requested, { fieldName: "targetPath" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof Error && !error.nextAction) {
+      error.nextAction = [
+        "Use a path relative to the attached workspace (example: outputs/foo.html).",
+        "Absolute paths are accepted only when they resolve inside that workspace; outside paths are rejected.",
+        "Do not fall back to shell.exec / Set-Content / heredoc to write the file—call workspace.write_file again with a relative path."
+      ].join(" ");
+    }
+    if (error instanceof Error) throw error;
+    const wrapped = new Error(message);
+    wrapped.nextAction = "Retry with a workspace-relative targetPath via workspace.write_file.";
+    throw wrapped;
+  }
+}
+
+function enrichFailedToolResult(toolName, error, durationMs) {
+  const message = error instanceof Error ? error.message : String(error);
+  const nextAction = error instanceof Error && typeof error.nextAction === "string" && error.nextAction.trim()
+    ? error.nextAction.trim()
+    : inferToolFailureNextAction(toolName, message);
+  return {
+    ok: false,
+    toolName,
+    exitCode: 1,
+    output: nextAction ? `${message}\n\nnext_action: ${nextAction}` : message,
+    durationMs,
+    ...(nextAction ? { next_action: nextAction } : {})
+  };
+}
+
+function inferToolFailureNextAction(toolName, message) {
+  const text = String(message || "");
+  const name = String(toolName || "");
+  if (/must stay inside|resolves outside|must be relative|targetPath is required/i.test(text)) {
+    return "Retry with a workspace-relative path (e.g. outputs/file.html). Prefer workspace.write_file; do not write via shell.exec.";
+  }
+  if (name === "workspace.write_file" || name === "write") {
+    return "Fix targetPath/content and retry workspace.write_file. Do not switch to shell.exec to create the file.";
+  }
+  if (name === "shell.exec" || name === "exec") {
+    return "Prefer workspace.read/edit/apply_patch/write_file for file IO. On Windows use PowerShell syntax only—never Bash $(...) / heredoc for writing files.";
+  }
+  return "";
 }
 
 function requireWorkspaceWrite(input) {
@@ -416,13 +467,7 @@ export class ToolRegistry {
       const result = await tool.execute(normalizedInput, context);
       return { ...result, toolName: tool.name || resolvedName, durationMs: Date.now() - startedAt };
     } catch (error) {
-      return {
-        ok: false,
-        toolName: tool.name || resolvedName,
-        exitCode: 1,
-        output: error instanceof Error ? error.message : String(error),
-        durationMs: Date.now() - startedAt
-      };
+      return enrichFailedToolResult(tool.name || resolvedName, error, Date.now() - startedAt);
     }
   }
 }
@@ -725,14 +770,18 @@ export function createBuiltinToolRegistry() {
     .register({
       name: "workspace.write_file",
       title: "Write workspace file",
-      description: "Write UTF-8 or base64 content to a relative file path inside the attached workspace. Prefer workspace.edit for localized changes and workspace.write_file for create/replace whole files. Alias: write.",
+      description: "Write UTF-8 or base64 content inside the attached workspace. Prefer a relative targetPath (e.g. outputs/a.html); absolute paths are accepted only when they resolve under the workspace. Prefer workspace.edit for localized changes. Never use shell.exec to write source. Alias: write.",
       kind: "write",
       risk: "medium",
       requiresApproval: false,
       inputSchema: {
         type: "object",
         properties: {
-          targetPath: { type: "string", minLength: 1 },
+          targetPath: {
+            type: "string",
+            minLength: 1,
+            description: "Workspace-relative path preferred (outputs/report.html). In-workspace absolute paths are coerced."
+          },
           content: { type: "string" },
           encoding: { type: "string", enum: ["utf8", "base64"] }
         },
@@ -956,6 +1005,10 @@ export function createBuiltinToolRegistry() {
         const normalizedCommand = process.platform === "win32"
           ? normalizeWindowsShellCommand(input.command)
           : input.command;
+        const blockedWrite = guardShellWholeFileWrite(normalizedCommand);
+        if (blockedWrite) {
+          return { ...blockedWrite, command: normalizedCommand, requestedCommand: input.command };
+        }
         const blocked = guardUnboundedRecursiveSearch(normalizedCommand);
         if (blocked) {
           return { ...blocked, command: normalizedCommand, requestedCommand: input.command };
@@ -1044,6 +1097,8 @@ export function createBuiltinToolRegistry() {
       }
     })
     .registerAlias("read", "workspace.read")
+    .registerAlias("glob", "workspace.glob")
+    .registerAlias("grep", "workspace.grep")
     .registerAlias("edit", "workspace.edit")
     .registerAlias("write", "workspace.write_file")
     .registerAlias("apply_patch", "workspace.apply_patch")

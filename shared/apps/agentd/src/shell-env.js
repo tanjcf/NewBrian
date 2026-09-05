@@ -161,7 +161,9 @@ export function formatMissingHostToolGuidance(command = "", output = "") {
 }
 
 const UNBOUNDED_RECURSIVE_RE =
-  /Get-ChildItem[\s\S]*-Recurse|\bdir\s+\/s\b|\btree\s+\/[fFaA]|\bfind\s+\S+\s+-type\b|\bls\s+-[a-zA-Z]*R|\*\*\/\*\*/i;
+  /Get-ChildItem[\s\S]*-Recurse|Select-String[\s\S]*-Recurse|\bdir\s+\/s\b|\btree\s+\/[fFaA]|\bfind\s+\S+\s+-type\b|\bls\s+-[a-zA-Z]*R|\*\*\/\*\*/i;
+
+const GREP_RECURSE_RE = /\bgrep\b[\s\S]*(?:\s-[a-zA-Z]*[rR][a-zA-Z]*\s|\s-R\s|--recursive\b)/i;
 
 const MAX_ALLOWED_RECURSE_DEPTH = 8;
 
@@ -212,8 +214,61 @@ function hasListingFileFilter(command = "") {
 
 function hasDepthLimit(command = "", maxDepth = MAX_ALLOWED_RECURSE_DEPTH) {
   const text = String(command ?? "");
-  const depthMatch = text.match(/-Depth\s+(\d+)/i) || text.match(/--max-depth(?:=|\s+)(\d+)/i);
+  const depthMatch = text.match(/-Depth\s+(\d+)/i)
+    || text.match(/--max-depth(?:=|\s+)(\d+)/i)
+    || text.match(/-maxdepth\s+(\d+)/i);
   return Boolean(depthMatch && Number(depthMatch[1]) <= maxDepth);
+}
+
+function extractSelectStringPath(command = "") {
+  const text = String(command ?? "");
+  const flagMatch =
+    text.match(/-Path\s+(["'])(.*?)\1/i) ||
+    text.match(/-Path\s+([^\s|;&]+)/i);
+  return flagMatch ? (flagMatch[2] ?? flagMatch[1]) : "";
+}
+
+function extractGrepRecursivePath(command = "") {
+  const text = String(command ?? "").trim();
+  const recursive = text.match(/\bgrep\b[\s\S]*?(?:\s-[a-zA-Z]*[rR][a-zA-Z]*\s|\s-R\s|--recursive\b)/i);
+  if (!recursive) return "";
+  const tail = text.slice(recursive.index + recursive[0].length).trim();
+  if (!tail) return ".";
+  const tokens = [];
+  const tokenRe = /(["'])(.*?)\1|(\S+)/g;
+  let match;
+  while ((match = tokenRe.exec(tail)) !== null) {
+    const token = match[2] ?? match[3] ?? "";
+    if (token.startsWith("-")) continue;
+    tokens.push(token);
+  }
+  return tokens.length >= 2 ? tokens[tokens.length - 1] : ".";
+}
+
+function isUnboundedGrepRecurse(command = "") {
+  if (!GREP_RECURSE_RE.test(String(command ?? ""))) return false;
+  return isBroadListingRoot(extractGrepRecursivePath(command));
+}
+
+function isUnboundedSelectStringRecurse(command = "") {
+  const text = String(command ?? "");
+  if (!/Select-String[\s\S]*-Recurse/i.test(text)) return false;
+  const listingPath = extractSelectStringPath(text);
+  return !listingPath || isBroadListingRoot(listingPath);
+}
+
+/** Cross-platform guidance when shell recurse/search is blocked. */
+export function formatUnboundedRecursiveSearchGuidance(platform = process.platform) {
+  const lines = [
+    "已拒绝可能撑爆内存的超大递归检索（并非安全策略拦截）。",
+    "请优先使用 workspace.glob / workspace.grep（别名 glob / grep；查找文件或内容，自带忽略与命中上限），或 workspace.scan 浏览结构。"
+  ];
+  if (platform === "win32") {
+    lines.push("若必须用 PowerShell，请为 Get-ChildItem 指定子目录并加 -Filter/-Include，或加 -Depth 2~8 后重试。");
+  } else {
+    lines.push("若必须用 shell，请限定子目录并加深度上限（如 find src -maxdepth 4），不要用无范围 grep -r / find / ls -R。");
+  }
+  return lines.join("\n");
 }
 
 function isScopedFilteredRecurse(command = "") {
@@ -226,19 +281,55 @@ function isScopedFilteredRecurse(command = "") {
 /** Soft-fail clearly unbounded recursive listing that often OOMs the tool host. */
 export function guardUnboundedRecursiveSearch(command = "") {
   const text = String(command ?? "").trim();
-  if (!text || !UNBOUNDED_RECURSIVE_RE.test(text)) return null;
+  const matchesRecursivePattern = UNBOUNDED_RECURSIVE_RE.test(text)
+    || isUnboundedGrepRecurse(text)
+    || isUnboundedSelectStringRecurse(text);
+  if (!text || !matchesRecursivePattern) return null;
   if (hasDepthLimit(text)) return null;
   if (/\b(rg|ripgrep)\b/i.test(text) && /--max-depth\b/i.test(text)) return null;
   if (/Get-ChildItem[\s\S]*-Recurse/i.test(text) && isScopedFilteredRecurse(text)) return null;
   return {
     ok: false,
     exitCode: 1,
-    output: [
-      "已拒绝可能撑爆内存的超大递归检索（并非安全策略拦截）。",
-      "请优先使用 workspace.glob / workspace.grep（查找文件或内容，自带忽略与命中上限），或 workspace.scan 浏览结构。",
-      "若必须用 PowerShell，请为 Get-ChildItem 指定子目录并加 -Filter/-Include，或加 -Depth 2~8 后重试。"
-    ].join("\n"),
+    output: formatUnboundedRecursiveSearchGuidance(),
     command: text,
     guarded: "unbounded_recursive_search"
+  };
+}
+
+const SHELL_WHOLE_FILE_WRITE_RE = new RegExp([
+  String.raw`\b(?:Set-Content|Add-Content|Out-File)\b`,
+  String.raw`\bNew-Item\b[\s\S]*-ItemType\s+['"]?File\b`,
+  String.raw`(?:^|[;&|]\s*)(?:cat|tee)\s+.*?(?:>|>>)`,
+  String.raw`<<['"]?EOF\b`,
+  String.raw`@'\s*$`,
+  String.raw`\$\s*\(\s*cat\b`,
+  String.raw`(?:^|[;&|]\s*)(?:echo|printf)\s+.*?(?:>|>>)\s*['"]?[\w./\\-]`
+].join("|"), "im");
+
+function formatShellWholeFileWriteGuidance() {
+  return [
+    "拒绝：请勿用 shell.exec 整文件写盘（Set-Content / Out-File / Add-Content / heredoc / cat> / echo>）。",
+    "请改用 workspace.write_file（相对路径，例如 outputs/report.html），局部修改用 workspace.edit 或 workspace.apply_patch。",
+    "Windows 宿主是 PowerShell，Bash 的 $(...) / <<EOF 会导致语法失败。",
+    "",
+    "next_action: Call workspace.write_file with a workspace-relative targetPath and full content; do not retry shell file writes."
+  ].join("\n");
+}
+
+/**
+ * Block shell-based whole-file writes. Models often fall back to Set-Content/heredoc
+ * after write_file mistakes; that path fails on PowerShell and bypasses file tools.
+ */
+export function guardShellWholeFileWrite(command = "") {
+  const text = String(command ?? "").trim();
+  if (!text || !SHELL_WHOLE_FILE_WRITE_RE.test(text)) return null;
+  return {
+    ok: false,
+    exitCode: 1,
+    output: formatShellWholeFileWriteGuidance(),
+    next_action: "Call workspace.write_file with a workspace-relative targetPath and full content; do not retry shell file writes.",
+    command: text,
+    guarded: "shell_whole_file_write"
   };
 }

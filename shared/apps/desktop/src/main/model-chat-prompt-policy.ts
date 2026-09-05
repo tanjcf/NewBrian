@@ -42,6 +42,12 @@ export interface ModelChatPromptInput {
   /** True when the turn uses MODEL_AUTO_ID / Auto routing. */
   autoMode?: boolean;
   autoTaskClass?: AutoTaskClass | string;
+  /** Expert Marketplace summon instruction (thread-bound expert lead persona + SOP). */
+  expertSummonInstruction?: string;
+  /** True when an expert is summoned on this thread (suppresses generic Auto strong-delegate). */
+  expertSummonActive?: boolean;
+  /** Bridge text so global/project skills know how to summon marketplace experts. */
+  skillExpertBridgeInstruction?: string;
   /** Test override for runtime clock (defaults to Date.now). */
   runtimeNow?: Date;
   /** IANA timezone for runtime date context (defaults to Asia/Shanghai). */
@@ -196,13 +202,16 @@ export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
     getCentralSkillInstruction(input.centralSkillNames),
     buildNativeToolSystemInstruction(input.latestUserRequest),
     buildUserSkillPlatformInheritanceInstruction(),
+    input.skillExpertBridgeInstruction?.trim() || "",
     input.autoMode
       ? buildAutoModeRoleInstruction({
           taskClass: input.autoTaskClass,
-          latestUserText: input.latestUserRequest
+          latestUserText: input.latestUserRequest,
+          expertSummonActive: input.expertSummonActive
         })
       : "",
     buildAgentCollaborationInstruction(3),
+    input.expertSummonInstruction?.trim() || "",
     memoryInstruction,
     buildProjectOsPromptBlock(input.projectOs ?? ""),
     buildPersonalizationInstruction(input.loadedSkills, input.personalizationGuidance),

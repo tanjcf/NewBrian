@@ -32,16 +32,62 @@ export function mapDesktopReleasePlatform(platform: string | undefined | null): 
   return "windows";
 }
 
+function scoreNetworkInterfaceName(name: string) {
+  const lower = String(name || "").toLowerCase();
+  let score = 0;
+  if (/ethernet|eth\d|en\d|局域网|本地连接|本地網路/.test(lower)) score += 40;
+  if (/wi-?fi|wlan|wireless|无线|wlan\d|wl/.test(lower)) score += 25;
+  if (/bluetooth|virtual|vethernet|hyper-v|vmware|virtualbox|docker|wsl|loopback|vpn|tap|tun|npcap|pseudo/.test(lower)) {
+    score -= 60;
+  }
+  return score;
+}
+
+/**
+ * Pick a stable primary MAC across WiFi/Ethernet churn.
+ * Prefer physical adapters and break ties with a sorted MAC so Object.values order
+ * changes (common after WiFi handoff) do not rotate device identity.
+ */
 export function resolvePrimaryMacAddress(
   interfaces: Record<string, Array<{ internal?: boolean; mac?: string } | null | undefined> | undefined>
 ) {
-  for (const records of Object.values(interfaces)) {
+  const candidates: Array<{ mac: string; score: number }> = [];
+  for (const [name, records] of Object.entries(interfaces ?? {})) {
     for (const record of records ?? []) {
       if (!record || record.internal || !record.mac || record.mac === "00:00:00:00:00:00") continue;
-      return record.mac.replace(/:/g, "-").toLowerCase();
+      const mac = record.mac.replace(/:/g, "-").toLowerCase();
+      if (!mac || mac === "00-00-00-00-00-00") continue;
+      candidates.push({ mac, score: scoreNetworkInterfaceName(name) });
     }
   }
-  return "";
+  if (!candidates.length) return "";
+  candidates.sort((left, right) => right.score - left.score || left.mac.localeCompare(right.mac));
+  return candidates[0]!.mac;
+}
+
+export function isUsableDesktopDeviceFingerprint(value: unknown): value is DesktopDeviceFingerprint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return ["device_id", "mac_id", "motherboard_id", "disk_id"]
+    .every((key) => typeof record[key] === "string" && String(record[key]).trim().length > 0);
+}
+
+/**
+ * Keep durable device identity fields across network changes; refresh soft fields only.
+ * This prevents WiFi MAC churn from forcing desktop re-login.
+ */
+export function reusePersistedDesktopDeviceFingerprint(
+  persisted: DesktopDeviceFingerprint,
+  live: DesktopDeviceFingerprint
+): DesktopDeviceFingerprint {
+  return {
+    ...persisted,
+    device_name: live.device_name || persisted.device_name,
+    device_type: live.device_type || persisted.device_type,
+    os_name: live.os_name || persisted.os_name,
+    os_version: live.os_version || persisted.os_version,
+    app_version: live.app_version || persisted.app_version
+  };
 }
 
 export function buildDesktopDeviceFingerprint(input: {
@@ -58,6 +104,7 @@ export function buildDesktopDeviceFingerprint(input: {
   diskSerial?: string;
   buildStableDeviceId: (input: { platform: string; userDataPath: string; machineIdentifier: string }) => string;
 }): DesktopDeviceFingerprint {
+  // Prefer durable machine identifiers; MAC is last-resort only for brand-new installs.
   const machineIdentifier = input.machineGuid || input.primaryMac || input.hostname;
   return {
     device_id: input.buildStableDeviceId({

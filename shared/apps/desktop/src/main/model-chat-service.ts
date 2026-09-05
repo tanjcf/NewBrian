@@ -220,6 +220,31 @@ export interface ModelChatServiceDependencies {
     disclosedSkills: SkillDescriptor[];
     disclosure: string;
   }>;
+  /** Resolve Expert Marketplace summon bound to the current thread (optional). */
+  resolveExpertSummon?: (input: {
+    workspace: WorkspaceCatalogItem;
+    thread: WorkspaceThreadRecord;
+  }) => Promise<{
+    expertId: string;
+    profession: string;
+    displayName: string;
+    skillNames: string[];
+    systemInstruction: string;
+    allowedDelegateRoles: string[];
+  } | null> | {
+    expertId: string;
+    profession: string;
+    displayName: string;
+    skillNames: string[];
+    systemInstruction: string;
+    allowedDelegateRoles: string[];
+  } | null;
+  /** Catalog + usage text so skills can decide whether to summon experts. */
+  loadSkillExpertBridgeInstruction?: (input: {
+    workspace: WorkspaceCatalogItem;
+    thread: WorkspaceThreadRecord;
+    skillNames: string[];
+  }) => Promise<string> | string;
   prepareContext: (input: {
     workspace: WorkspaceCatalogItem;
     thread: WorkspaceThreadRecord;
@@ -585,11 +610,29 @@ export class ModelChatService {
         explicitSkillNames,
         composerModes,
         centralSkillNames,
-        selectedLocalSkillNames,
+        selectedLocalSkillNames: goalSelectedLocalSkillNames,
         goalRuntimeRequested,
         goalRuntimeEnabled,
         goalSnapshot
       } = goalSession;
+      const expertSummon = typeof this.dependencies.resolveExpertSummon === "function"
+        ? await this.dependencies.resolveExpertSummon({ workspace, thread })
+        : null;
+      const expertSummonActive = Boolean(expertSummon?.expertId);
+      // Expert bind beats ordinary Composer skill selection on the same thread.
+      const selectedLocalSkillNames = expertSummonActive
+        ? [...new Set([...(expertSummon?.skillNames ?? []), ...goalSelectedLocalSkillNames])].slice(0, 6)
+        : goalSelectedLocalSkillNames;
+      if (expertSummonActive) {
+        emitReasoningSummary(`已召唤专家：${expertSummon?.profession || expertSummon?.displayName || expertSummon?.expertId}\n`);
+      }
+      const skillExpertBridgeInstruction = typeof this.dependencies.loadSkillExpertBridgeInstruction === "function"
+        ? await this.dependencies.loadSkillExpertBridgeInstruction({
+          workspace,
+          thread,
+          skillNames: selectedLocalSkillNames
+        })
+        : "";
       if (
         centralSkillNames.some((name) => isGovernmentResearchWritingSkill(name))
         || selectedLocalSkillNames.some((name) => isGovernmentResearchWritingSkill(name))
@@ -662,7 +705,8 @@ export class ModelChatService {
       if (prepared.autoDecision?.mode === "auto" && prepared.autoDecision.allow_auto_delegate) {
         requestMessages = appendAutoDelegateTurnConstraint(requestMessages, {
           taskClass: prepared.autoDecision.task_class,
-          latestUserText: latestUserRequest
+          latestUserText: latestUserRequest,
+          expertSummonActive
         });
       }
       const effectiveSystemPrompt = this.dependencies.buildSystemPrompt({
@@ -682,7 +726,10 @@ export class ModelChatService {
         brainWorkspaceKey: workspace.brainWorkspaceKey,
         projectOs,
         autoMode: prepared.autoDecision?.mode === "auto",
-        autoTaskClass: prepared.autoDecision?.task_class
+        autoTaskClass: prepared.autoDecision?.task_class,
+        expertSummonActive,
+        expertSummonInstruction: expertSummon?.systemInstruction || "",
+        skillExpertBridgeInstruction
       });
       if (state.context) {
         state = await this.dependencies.updateModelContext({

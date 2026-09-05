@@ -16,7 +16,7 @@ function message(index: number, content = `message-${index}`): ChatMessage {
 
 test("uses the Codex 90 percent auto-compaction threshold", () => {
   const below = [message(0, "x".repeat(300)), message(1)];
-  const above = [message(0, "x".repeat(306)), message(1)];
+  const above = [message(0, "x".repeat(400)), message(1)];
   assert.equal(shouldCompactThreadMessages(below, undefined, 100), false);
   assert.equal(shouldCompactThreadMessages(above, undefined, 100), true);
 });
@@ -57,4 +57,26 @@ test("continues from persisted replacement history without immediately compactin
 
 test("estimates tokens from aggregate content length", () => {
   assert.equal(estimateMessageTokens([{ content: "1234567" }, { content: "1234567" }]), 4);
+});
+
+test("counts oversized tool events toward the compaction threshold", () => {
+  const messages = [message(0, "short"), message(1, "short")];
+  const events = [{
+    type: "tool_result",
+    payload: { output: "y".repeat(2_000) }
+  }];
+  assert.equal(shouldCompactThreadMessages(messages, undefined, 100), false);
+  assert.equal(shouldCompactThreadMessages(messages, undefined, 100, events), true);
+});
+
+test("force compaction replaces history even when under soft threshold", () => {
+  const messages = [message(0, "keep me"), message(1, "assistant reply")];
+  const result = compactThreadMessages(messages, undefined, 200_000, {
+    makeId: (prefix: string) => `${prefix}-forced`,
+    nowIso: () => "2026-02-03T04:05:06.000Z",
+    summary: "Forced checkpoint",
+    force: true
+  });
+  assert.equal(result.compacted, true);
+  assert.match(result.messages.at(-1)?.content ?? "", /Forced checkpoint/);
 });

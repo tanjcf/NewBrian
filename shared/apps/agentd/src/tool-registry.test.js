@@ -29,6 +29,8 @@ test("registry exposes model-safe descriptors without handlers", () => {
     "shell.exec",
     "shell.process",
     "read",
+    "glob",
+    "grep",
     "edit",
     "write",
     "apply_patch",
@@ -43,6 +45,8 @@ test("registry exposes model-safe descriptors without handlers", () => {
   assert.equal(registry.get("shell.exec").requiresApproval, true);
   assert.deepEqual(registry.get("shell.exec").inputSchema.required, ["command"]);
   assert.equal(registry.get("read").canonicalName, "workspace.read");
+  assert.equal(registry.get("glob").canonicalName, "workspace.glob");
+  assert.equal(registry.get("grep").canonicalName, "workspace.grep");
 });
 
 test("shell execution preserves stdout and stderr as structured fields", async () => {
@@ -197,6 +201,53 @@ test("shell.exec allows scoped filtered recursive PowerShell listing", async () 
     if (process.platform === "win32") {
       assert.match(String(result.output || result.stdout), /auth\.py/i);
     }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("workspace.write_file coerces in-workspace absolute paths and rejects escapes", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-write-abs-"));
+  try {
+    const registry = createBuiltinToolRegistry();
+    const absoluteInside = join(root, "outputs", "note.html");
+    const written = await registry.invoke("workspace.write_file", {
+      targetPath: absoluteInside,
+      content: "<!DOCTYPE html><html></html>\n"
+    }, { workspacePath: root, shellEnv: {} });
+    assert.equal(written.ok, true);
+    assert.equal(written.artifact.path, "outputs/note.html");
+    assert.match(String(written.output), /outputs\/note\.html/);
+
+    const escaped = await registry.invoke("workspace.write_file", {
+      targetPath: join(root, "..", "escape.txt"),
+      content: "nope"
+    }, { workspacePath: root, shellEnv: {} });
+    assert.equal(escaped.ok, false);
+    assert.match(String(escaped.output), /inside the attached workspace|outside/i);
+    assert.match(String(escaped.next_action || escaped.output), /workspace\.write_file|relative/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("shell.exec rejects whole-file write fallbacks with next_action", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codecn-shell-write-guard-"));
+  try {
+    const registry = createBuiltinToolRegistry();
+    const setContent = await registry.invoke("shell.exec", {
+      command: "Set-Content -Path outputs/a.html -Value '<html/>'"
+    }, { workspacePath: root, shellEnv: {} });
+    assert.equal(setContent.ok, false);
+    assert.equal(setContent.guarded, "shell_whole_file_write");
+    assert.match(String(setContent.output), /workspace\.write_file/);
+    assert.match(String(setContent.next_action || ""), /workspace\.write_file/);
+
+    const heredoc = await registry.invoke("shell.exec", {
+      command: "cat <<'EOF' > outputs/b.html\n<html/>\nEOF"
+    }, { workspacePath: root, shellEnv: {} });
+    assert.equal(heredoc.ok, false);
+    assert.equal(heredoc.guarded, "shell_whole_file_write");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

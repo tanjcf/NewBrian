@@ -17,17 +17,26 @@ import {
   filePreviewRetryDelayMs,
   findMatchingArtifactTab,
   formatFilePreviewStatus,
+  isAudioPreviewFileName,
   isReusableArtifactPreview,
   isStaleFilePreviewRequest,
+  isWorkspaceArtifactPreviewPath,
   patchArtifactTabsForRequest,
   withFilePreviewTimeout,
   type FilePreviewIssue
 } from "./file-preview-policy";
+import {
+  estimateContextMeter,
+  formatContextMeterBreakdown,
+  formatContextTokens,
+  readServerEstimatedTokens
+} from "./context-meter-policy";
 import { ComposerTextarea, type ComposerTextareaHandle } from "./ComposerTextarea";
 import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
 import { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } from "../../shared/product-flags.js";
+import { isSubscriptionInactiveError } from "../../shared/model-user-facing-error.ts";
 import { builtinPluginCatalog } from "../../shared/builtin-plugins";
 import { executionKindDescription, executionKindLabel } from "../../shared/plugin-execution";
 import { projectPersistedActivities } from "./persisted-activity-policy";
@@ -44,17 +53,21 @@ import {
   buildLegacyConversationThreadMappings,
   mergeConversationThreadMappings,
   resolveBrainProjectForWorkspace,
+  parseLegacyConversationThreadId,
   resolveLegacyConversationIdForThread,
   shouldSyncBrainConversationThread
 } from "./brain-project-binding";
 import {
   LEGACY_SIDEBAR_ROW_STORAGE_KEY,
-  resolveLegacySidebarRowForThread
+  resolveLegacySidebarRowForThread,
+  resolveSidebarRowThreadTarget,
+  shouldPreferSidebarRowThreadRestore
 } from "./thread-hydration";
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { HolonWorkspace } from "./HolonWorkspace";
+import { ExpertsMarketplace } from "./ExpertsMarketplace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
 import { attachMarkOverlay, buildAnnotationChatReference, bindDocxPreviewParagraphs, buildMarkingAnchor, documentAnchorsNeedChunkRefresh, isValidDocumentMarkRect, linesFromPreviewRect, resolveDocxAnchorFromMark, resolveMarkdownAnchorFromMark, resolvePdfAnchorFromMark, resolvePptxAnchorFromMark, resolveTxtAnchorFromMark, resolveXlsxAnchorFromMark } from "./document-annotation-policy";
@@ -619,6 +632,7 @@ export function WorkspaceModules(ctx: any) {
     } catch { return {}; }
   });
   const activatedBrainThreadRef = useRef("");
+  const legacySidebarRowHydratedRef = useRef(false);
   const composerTextareaRef = useRef<ComposerTextareaHandle | null>(null);
   const textPreviewShellRef = useRef<HTMLDivElement | null>(null);
   const imagePreviewShellRef = useRef<HTMLDivElement | null>(null);
@@ -710,6 +724,11 @@ export function WorkspaceModules(ctx: any) {
     try { localStorage.setItem("brain.resource-panel-width", String(brainResourceWidth)); } catch { /* local preferences may be unavailable */ }
     return () => frame.style.removeProperty("--brain-resource-panel-width");
   }, [brainResourceWidth]);
+  // Center file preview shares the main row with chat; keep Tools on the side to avoid a 3-way grid fight.
+  useEffect(() => {
+    if (previewPlacement !== "center" || previewMode === "empty" || brainResourcePlacement !== "center") return;
+    setBrainResourcePlacement("side");
+  }, [previewPlacement, previewMode, brainResourcePlacement]);
   const attachBrainResourcePanel = useCallback((node: HTMLElement | null) => {
     brainResourcePanelRef.current = node;
     node?.closest<HTMLElement>(".workspace-frame")?.style.setProperty("--brain-resource-panel-width", `${brainResourceWidth}px`);
@@ -771,7 +790,7 @@ export function WorkspaceModules(ctx: any) {
     } else {
       setSelectedSidebarRow(null);
     }
-    if (["extensions", "skills", "plugins", "automation", "mobile", "mcp", "holon"].includes(activeFeature)) {
+    if (["extensions", "skills", "plugins", "automation", "mobile", "mcp", "holon", "experts"].includes(activeFeature)) {
       setActiveFeature("new-chat");
     }
     // 切场景时收起通用文件侧栏，恢复右侧场景专业面板（脚本/行情/关卡等）。
@@ -966,6 +985,85 @@ export function WorkspaceModules(ctx: any) {
     void refreshBrainConversations(selectedBrainProjectId)
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)));
   }, [selectedBrainProjectId, selectedBrainWorkspaceKey, refreshBrainConversations]);
+  // Prefer persisted sidebar row (`chat:` / `project-thread:`) over lastSelectedThreadId on startup.
+  useEffect(() => {
+    if (legacySidebarRowHydratedRef.current) return;
+    if (!visibleWorkspaceCatalog.length) return;
+    const row = String(selectedSidebarRow || "");
+    if (!row.startsWith("chat:") && !row.startsWith("project-thread:")) {
+      legacySidebarRowHydratedRef.current = true;
+      return;
+    }
+    if (!shouldPreferSidebarRowThreadRestore({
+      sidebarRow: row,
+      selectedWorkspaceId,
+      selectedThreadId,
+      workspaces: visibleWorkspaceCatalog
+    })) {
+      legacySidebarRowHydratedRef.current = true;
+      return;
+    }
+    const target = resolveSidebarRowThreadTarget({
+      sidebarRow: row,
+      workspaces: visibleWorkspaceCatalog
+    });
+    legacySidebarRowHydratedRef.current = true;
+    if (!target) return;
+    setSearchFilePreview(null);
+    setIsComposingNewThread(false);
+    setActiveFeature("new-chat");
+    if (target.kind === "chat") {
+      setNewThreadScope("chat");
+      setChatUsesProject?.(false);
+    } else {
+      setNewThreadScope("project");
+      setChatUsesProject?.(true);
+      const legacyConversationId = resolveLegacyConversationIdForThread(target.thread.id);
+      bindBrainProjectToWorkspace(target.workspace.id, {
+        conversationId: brainConversations.some((conversation) => conversation.id === legacyConversationId)
+          ? legacyConversationId
+          : ""
+      });
+    }
+    activatedBrainThreadRef.current = "";
+    if (selectWorkspaceThread) {
+      void selectWorkspaceThread(target.workspace.id, target.thread.id, { force: true });
+      return;
+    }
+    setSelectedWorkspaceId(target.workspace.id);
+    setSelectedThreadId(target.thread.id);
+    if (!api?.activateWorkspaceThread) return;
+    const activationKey = `${target.workspace.id}:${target.thread.id}`;
+    activatedBrainThreadRef.current = activationKey;
+    void api.activateWorkspaceThread({
+      workspaceId: target.workspace.id,
+      threadId: target.thread.id
+    }).then((threadSnapshot) => {
+      if (activatedBrainThreadRef.current !== activationKey) return;
+      syncSnapshot(threadSnapshot, target.thread.id);
+    }).catch((error) => {
+      if (activatedBrainThreadRef.current === activationKey) activatedBrainThreadRef.current = "";
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
+  }, [
+    visibleWorkspaceCatalog,
+    selectedSidebarRow,
+    selectedWorkspaceId,
+    selectedThreadId,
+    brainConversations,
+    api,
+    bindBrainProjectToWorkspace,
+    selectWorkspaceThread,
+    setActiveFeature,
+    setChatUsesProject,
+    setErrorMessage,
+    setIsComposingNewThread,
+    setNewThreadScope,
+    setSearchFilePreview,
+    setSelectedThreadId,
+    setSelectedWorkspaceId,
+    syncSnapshot
+  ]);
   useEffect(() => {
     if (!selectedBrainConversationId || !selectedBrainProjectId) return;
     const boundProject = resolveBrainProjectForWorkspace(brainProjects, selectedWorkspace?.id)
@@ -994,13 +1092,34 @@ export function WorkspaceModules(ctx: any) {
     });
     // BRAIN conversations are backed by their own native threads. Never leave
     // the previously selected project thread active while this effect runs.
-    const mappedThreadId = String(brainConversationThreads[selectedBrainConversationId] || "").trim();
+    let mappedThreadId = String(brainConversationThreads[selectedBrainConversationId] || "").trim();
+    const sidebarTarget = resolveSidebarRowThreadTarget({
+      sidebarRow: selectedSidebarRow,
+      workspaces: visibleWorkspaceCatalog
+    });
+    if (
+      sidebarTarget
+      && sidebarTarget.workspace.id === selectedWorkspace?.id
+      && (!mappedThreadId || !selectedWorkspace?.threads?.some((thread: any) => thread.id === mappedThreadId))
+    ) {
+      mappedThreadId = sidebarTarget.thread.id;
+    }
+    if (
+      !mappedThreadId
+      && selectedThreadId
+      && selectedWorkspace?.threads?.some((thread: any) => thread.id === selectedThreadId)
+    ) {
+      mappedThreadId = String(selectedThreadId);
+    }
+    if (!mappedThreadId) {
+      const legacyThreadId = parseLegacyConversationThreadId(selectedBrainConversationId);
+      if (legacyThreadId && selectedWorkspace?.threads?.some((thread: any) => thread.id === legacyThreadId)) {
+        mappedThreadId = legacyThreadId;
+      }
+    }
     const mappedThreadBelongsToWorkspace = !mappedThreadId
       || Boolean(selectedWorkspace?.threads?.some((thread: any) => thread.id === mappedThreadId));
     if (!mappedThreadBelongsToWorkspace) {
-      // A scene/project switch must invalidate the old conversation-to-thread
-      // mapping before activation. Otherwise the new project tries to activate
-      // a thread that only exists in the outgoing project.
       setBrainConversationThreads((current) => {
         if (!current[selectedBrainConversationId]) return current;
         const next = { ...current };
@@ -1011,6 +1130,13 @@ export function WorkspaceModules(ctx: any) {
       setSelectedThreadId("");
       setIsComposingNewThread(true);
       return;
+    }
+    if (brainConversationThreads[selectedBrainConversationId] !== mappedThreadId) {
+      setBrainConversationThreads((current) => (
+        current[selectedBrainConversationId] === mappedThreadId
+          ? current
+          : { ...current, [selectedBrainConversationId]: mappedThreadId }
+      ));
     }
     // Guard same-id updates: setSelectedThreadId(same) used to re-activate the
     // thread and re-enter this effect via snapshot updates (chat jump + busy cursor).
@@ -1045,7 +1171,7 @@ export function WorkspaceModules(ctx: any) {
       if (activatedBrainThreadRef.current === activationKey) activatedBrainThreadRef.current = "";
       setErrorMessage(error instanceof Error ? error.message : String(error));
     });
-  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, brainProjects, selectedWorkspace?.id, api, syncSnapshot, setErrorMessage, setIsComposingNewThread, setSelectedThreadId]);
+  }, [selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations, brainConversationThreads, brainProjects, selectedWorkspace?.id, selectedThreadId, visibleWorkspaceCatalog, api, syncSnapshot, setErrorMessage, setIsComposingNewThread, setSelectedThreadId]);
   useEffect(() => {
     if (!selectedBrainConversationId || isComposingNewThread || !selectedThreadId) return;
     setBrainConversationThreads((current) => current[selectedBrainConversationId] === selectedThreadId
@@ -1156,6 +1282,11 @@ export function WorkspaceModules(ctx: any) {
   }, [brainWorkspaceMenuOpen]);
   const [projectContextMenu, setProjectContextMenu] = useState<any>(null);
   const [renameProjectDialog, setRenameProjectDialog] = useState<any>(null);
+  const showRenameThreadDialog = Boolean(ctx.showRenameThreadDialog);
+  const setShowRenameThreadDialog = ctx.setShowRenameThreadDialog;
+  const editingThreadTitle = ctx.editingThreadTitle ?? "";
+  const setEditingThreadTitle = ctx.setEditingThreadTitle;
+  const renameThread = ctx.renameThread;
   const [pinnedWorkspaceIds, setPinnedWorkspaceIds] = useState<Set<string>>(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem("codecn.pinnedWorkspaceIds.v1") || "[]");
@@ -1238,12 +1369,42 @@ export function WorkspaceModules(ctx: any) {
   const [skillsView, setSkillsView] = useState<"list" | "detail" | "new">("list");
   const [skillsTab, setSkillsTab] = useState<"installed" | "recommended">("installed");
   const [skillSearchText, setSkillSearchText] = useState("");
+  const [summonedExpert, setSummonedExpert] = useState<null | {
+    expertId: string;
+    profession: string;
+    displayName: string;
+    preferredWorkspaceKey?: string;
+  }>(null);
   const [clawhubQuery, setClawhubQuery] = useState("");
   const [clawhubResults, setClawhubResults] = useState<any[]>([]);
   const [clawhubBusy, setClawhubBusy] = useState(false);
   const [clawhubAckRisk, setClawhubAckRisk] = useState(false);
   const [clawhubInstallRef, setClawhubInstallRef] = useState("");
   const [automationView, setAutomationView] = useState<"list" | "detail" | "new">("list");
+  useEffect(() => {
+    let cancelled = false;
+    const threadId = String(selectedThread?.id || "").trim();
+    if (!threadId || !window.codecn?.getExpertSummon) {
+      setSummonedExpert(null);
+      return;
+    }
+    void window.codecn.getExpertSummon({ threadId }).then((result) => {
+      if (cancelled) return;
+      if (!result || typeof result !== "object") {
+        setSummonedExpert(null);
+        return;
+      }
+      setSummonedExpert({
+        expertId: String((result as any).expertId || ""),
+        profession: String((result as any).profession || (result as any).displayName || ""),
+        displayName: String((result as any).displayName || ""),
+        preferredWorkspaceKey: (result as any).preferredWorkspaceKey
+      });
+    }).catch(() => {
+      if (!cancelled) setSummonedExpert(null);
+    });
+    return () => { cancelled = true; };
+  }, [selectedThread?.id, activeFeature]);
   useEffect(() => {
     if (!selectedBrainConversationId || selectedSidebarRow !== `brain-conversation:${selectedBrainConversationId}`) return;
     const timer = window.setTimeout(() => {
@@ -1967,8 +2128,6 @@ export function WorkspaceModules(ctx: any) {
   const [brainChatComposerHost, setBrainChatComposerHost] = useState<HTMLElement | null>(null);
   const [quotaWarning, setQuotaWarning] = useState<any>(null);
   const [dailyBalance, setDailyBalance] = useState<{ remaining: number; quota: number; percent: number } | null>(null);
-  const [contextMeterOpen, setContextMeterOpen] = useState(false);
-  const contextMeterHoverTimerRef = useRef<number | null>(null);
   const [dismissedQuotaWarningKey, setDismissedQuotaWarningKey] = useState("");
   const [expandedAssistantTurns, setExpandedAssistantTurns] = useState<Set<string>>(() => new Set());
   const [expandedActivityGroups, setExpandedActivityGroups] = useState<Set<string>>(() => new Set());
@@ -2287,8 +2446,9 @@ export function WorkspaceModules(ctx: any) {
     setChatStatus(formatFilePreviewStatus(input.issue, reportId || undefined));
     return reportId;
   }, [api, setChatStatus]);
-  const openLocalFilePreview = useCallback((filePath: string, location?: { line?: number; endLine?: number; column?: number; workspaceId?: string }) => {
+  const openLocalFilePreview = useCallback((filePath: string, location?: { line?: number; endLine?: number; column?: number; workspaceId?: string; displayName?: string }) => {
     const workspaceId = location?.workspaceId || selectedWorkspace?.id;
+    const displayName = String(location?.displayName || "").trim();
     if (!api || !workspaceId || !filePath) {
       const issue: FilePreviewIssue = {
         ok: false,
@@ -2326,11 +2486,12 @@ export function WorkspaceModules(ctx: any) {
     const requestedHasDir = /[\\/]/.test(filePath) || /^[a-zA-Z]:/.test(filePath);
     const existingHasDir = /[\\/]/.test(existingPath);
     const openPath = requestedHasDir || !existingHasDir ? filePath : existingPath || filePath;
+    const previewName = displayName || openPath.split(/[\\/]/).pop() || openPath;
     const tabKey = String(existing?.tabPath || openPath || filePath);
     const loadingTab = {
       tabPath: tabKey,
       path: openPath,
-      name: openPath.split(/[\\/]/).pop() || openPath,
+      name: previewName,
       loading: true,
       error: undefined,
       blankReason: undefined,
@@ -2351,7 +2512,7 @@ export function WorkspaceModules(ctx: any) {
     const requestPath = openPath;
     const requestTabKey = tabKey;
     const requestWorkspaceId = workspaceId;
-    const artifact = /\.(pdf|docx|pptx|xlsx|csv|tsv|html?|png|jpe?g|gif|webp|bmp|svg|ico|mp4|webm|mov|m4v|mkv|avi)$/i.test(requestPath);
+    const artifact = isWorkspaceArtifactPreviewPath(requestPath, displayName);
     const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
     const stillActiveForRequest = () => {
       const active = String(activeArtifactPathRef.current || "");
@@ -2664,29 +2825,30 @@ export function WorkspaceModules(ctx: any) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
   };
-  const contextWindowTokens = 353_000;
-  const estimateTokenCount = (value: unknown) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
-    return Math.ceil(text.length / 2.8);
-  };
-  const contextUsedTokens = Math.min(
-    contextWindowTokens,
-    Math.max(
-      0,
-      Math.round((
-        conversationTurns.reduce((total: number, turn: any) => {
-          const parts = [turn.user?.content, turn.assistant?.content, ...(turn.tools ?? []).map((tool: any) => tool.content)];
-          return total + parts.reduce((sum, part) => sum + estimateTokenCount(part || ""), 0);
-        }, 0) +
-        estimateTokenCount(question) +
-        selectedComposerTools.reduce((total: number, tool: any) => total + estimateTokenCount(tool), 0) +
-        composerImages.length * 250
-      ) / 1000) * 1000
-    )
-  );
-  const contextUsedPercent = Math.min(100, Math.max(0, Math.round(contextUsedTokens / contextWindowTokens * 100)));
-  const contextRemainingPercent = Math.max(0, 100 - contextUsedPercent);
-  const formatContextTokens = (tokens: number) => tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens);
+  const contextMeter = estimateContextMeter({
+    modelConfig,
+    conversationTurns,
+    activities: [
+      ...persistedRunActivities,
+      ...historicalRunActivities,
+      ...visibleAssistantActivities
+    ],
+    events: snapshot?.events,
+    draftText: question,
+    composerTools: selectedComposerTools,
+    imageCount: composerImages.length,
+    selectedSkill: selectedComposerSkill,
+    skillContext: composerSkillContext,
+    mcpTools: mcpDiscoveredTools,
+    liveAssistantContent: activeStreamContent,
+    liveReasoningSummary: activeReasoningSummary,
+    serverEstimatedTokens: readServerEstimatedTokens(snapshot?.events)
+  });
+  const contextWindowTokens = contextMeter.windowTokens;
+  const contextUsedTokens = contextMeter.usedTokens;
+  const contextUsedPercent = contextMeter.usedPercent;
+  const contextRemainingPercent = contextMeter.remainingPercent;
+  const contextMeterBreakdownLines = formatContextMeterBreakdown(contextMeter.breakdown);
   const formatQuotaMoney = (value: unknown) => {
     const amount = Number(value || 0);
     if (!Number.isFinite(amount)) return "$0.00";
@@ -2694,17 +2856,6 @@ export function WorkspaceModules(ctx: any) {
       minimumFractionDigits: amount > 0 && amount < 1 ? 6 : 2,
       maximumFractionDigits: amount > 0 && amount < 1 ? 6 : 2
     })}`;
-  };
-  const showContextMeter = () => {
-    if (contextMeterHoverTimerRef.current != null) window.clearTimeout(contextMeterHoverTimerRef.current);
-    contextMeterHoverTimerRef.current = window.setTimeout(() => setContextMeterOpen(true), 900);
-  };
-  const hideContextMeter = () => {
-    if (contextMeterHoverTimerRef.current != null) {
-      window.clearTimeout(contextMeterHoverTimerRef.current);
-      contextMeterHoverTimerRef.current = null;
-    }
-    setContextMeterOpen(false);
   };
   const clearQueuedComposerDraft = () => {
     if (queuedComposerDraftRef) queuedComposerDraftRef.current = null;
@@ -4336,7 +4487,7 @@ function renderSidebarModule() {
                                   {isFailedThread ? <em className="thread-failed-badge">{thread.statusLabel || "失败"}</em> : null}
                                 </span>
                                 <time>{formatRelativeTimeLabel(thread.updatedAt)}</time>
-                                {/* codex 风格：侧栏 hover 仅显示置顶、归档；其余操作在对话区顶部 “…” 菜单 */}
+                                {/* 侧栏 hover 仅显示置顶、归档；其余操作通过右键菜单 */}
                                 <span className="thread-hover-actions">
                                   <span
                                     role="button"
@@ -4585,6 +4736,38 @@ function renderSidebarModule() {
                       <div className="project-name-dialog-actions">
                         <button type="button" onClick={() => setRenameProjectDialog(null)}>取消</button>
                         <button className="primary" type="submit" disabled={!renameProjectDialog.name.trim()}>保存</button>
+                      </div>
+                    </form>
+                  </div>,
+                  document.body
+                )
+              : null}
+            {showRenameThreadDialog && typeof document !== "undefined"
+              ? createPortal(
+                  <div className="project-name-dialog-backdrop" role="presentation">
+                    <form
+                      className="project-name-dialog"
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        if (!editingThreadTitle.trim() || typeof renameThread !== "function") {
+                          return;
+                        }
+                        await renameThread();
+                      }}
+                    >
+                      <div className="project-name-dialog-head">
+                        <div><strong>重命名对话</strong><span>修改当前对话线程名称</span></div>
+                        <button type="button" aria-label="关闭" onClick={() => setShowRenameThreadDialog?.(false)}>×</button>
+                      </div>
+                      <input
+                        autoFocus
+                        value={editingThreadTitle}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onChange={(event) => setEditingThreadTitle?.(event.target.value)}
+                      />
+                      <div className="project-name-dialog-actions">
+                        <button type="button" onClick={() => setShowRenameThreadDialog?.(false)}>取消</button>
+                        <button className="primary" type="submit" disabled={!editingThreadTitle.trim()}>保存</button>
                       </div>
                     </form>
                   </div>,
@@ -5119,6 +5302,8 @@ function renderSidebarModule() {
         setPreviewPlacement("hidden");
       }
     };
+    const isBrainAudioFile = (file: { logicalName?: string; storageKey?: string }) =>
+      isAudioPreviewFileName(file.logicalName, file.storageKey);
     const selectBrainDocumentFile = (file: any, openPreview = true, options?: { keepMarkingActive?: boolean }) => {
       setActiveBrainDocumentFileId(file.id);
       if (!options?.keepMarkingActive) {
@@ -5137,10 +5322,13 @@ function renderSidebarModule() {
         const workspaceId = selectedBrainProject?.localWorkspaceId
           || resourceBrainProject?.localWorkspaceId
           || selectedWorkspace?.id;
-        openLocalFilePreview(file.storageKey, workspaceId ? { workspaceId } : undefined);
+        openLocalFilePreview(file.storageKey, {
+          ...(workspaceId ? { workspaceId } : {}),
+          ...(file.logicalName ? { displayName: file.logicalName } : {})
+        });
       }
       setBrainDocumentAnchors([]);
-      if (selectedBrainProjectId && window.codecn?.ingestBrainFile) {
+      if (selectedBrainProjectId && window.codecn?.ingestBrainFile && !isBrainAudioFile(file)) {
         void window.codecn.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: file.id })
           .then((result) => { setBrainDocumentAnchors(result.anchors || []); if (result.warnings?.length) setChatStatus(result.warnings.join(" ")); })
           .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解析失败"));
@@ -5395,27 +5583,6 @@ function renderChatModule() {
           <div className="task-thread-title">
             <span className="task-topbar-kicker">当前工作区</span>
             <strong>{taskTitle}</strong>
-            <button
-              className="task-more-button"
-              type="button"
-              title="更多操作"
-              aria-label="更多操作"
-              aria-expanded={Boolean(selectedWorkspace && selectedThread && threadContextMenu?.thread?.id === selectedThread.id)}
-              disabled={!selectedWorkspace || !selectedThread}
-              onClick={(event) => {
-                if (!selectedWorkspace || !selectedThread) return;
-                event.stopPropagation();
-                const rect = event.currentTarget.getBoundingClientRect();
-                setThreadContextMenu({
-                  x: rect.left,
-                  y: rect.bottom + 5,
-                  workspace: selectedWorkspace,
-                  thread: selectedThread
-                });
-              }}
-            >
-              <SidebarIcon name="more" />
-            </button>
           </div>
           <div className="task-topbar-actions">
             {renderPreviewHeaderActions("topbar")}
@@ -6114,9 +6281,13 @@ function renderChatModule() {
             })}
           {ctx.generationFailure && ctx.generationFailure.threadId === selectedThread?.id && !isGlobalModelBusy ? (
             <section className="goal-failure-card" data-testid="generation-failure-card" role="alert">
-              <strong>生成异常终止</strong>
+              <strong>{isSubscriptionInactiveError(ctx.generationFailure.message) ? "订阅未激活或已过期" : "生成异常终止"}</strong>
               <p>{ctx.generationFailure.message}</p>
-              <small>已保存当前进度，未完成的内容不会计入后续上下文，可安全重试。</small>
+              <small>
+                {isSubscriptionInactiveError(ctx.generationFailure.message)
+                  ? "请先完成订阅或联系管理员确认状态后再继续；当前进度已保存。"
+                  : "已保存当前进度，未完成的内容不会计入后续上下文，可安全重试。"}
+              </small>
               <div className="goal-paused-actions">
                 <button type="button" data-testid="generation-failure-retry" onClick={() => void (async () => {
                   const recovery = await recoverActiveThreadRetry({
@@ -6561,6 +6732,35 @@ function renderChatModule() {
                     </div>
                   ) : null}
                 </div>
+                {summonedExpert?.expertId ? (
+                  <div className="composer-picker-wrap">
+                    <button
+                      type="button"
+                      data-testid="composer-expert-chip"
+                      className="composer-skill-button active"
+                      title={`Skill 已召唤专家：${summonedExpert.profession}${summonedExpert.preferredWorkspaceKey ? ` · 建议场景 ${summonedExpert.preferredWorkspaceKey}` : ""}`}
+                      onClick={() => {
+                        setSelectedSidebarRow("feature:experts");
+                        setActiveFeature("experts");
+                      }}
+                    >
+                      <span>专家 · {summonedExpert.profession || summonedExpert.displayName}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="composer-expert-clear"
+                      className="composer-permission-button"
+                      title="取消当前对话的专家召唤"
+                      onClick={() => {
+                        const threadId = String(selectedThread?.id || "").trim();
+                        if (!threadId || !window.codecn?.clearExpertSummon) return;
+                        void window.codecn.clearExpertSummon({ threadId }).then(() => setSummonedExpert(null));
+                      }}
+                    >
+                      <span>取消</span>
+                    </button>
+                  </div>
+                ) : null}
                 {availableComposerSkills.length > 0 ? (
                   <div className="composer-picker-wrap">
                     <button
@@ -6647,20 +6847,9 @@ function renderChatModule() {
                 <span
                   className="composer-daily-balance composer-context-meter"
                   style={{ "--daily-balance-percent": `${contextUsedPercent}%` } as any}
-                  onMouseEnter={showContextMeter}
-                  onMouseLeave={hideContextMeter}
-                  onFocus={showContextMeter}
-                  onBlur={hideContextMeter}
-                  title={`背景信息窗口：${contextUsedPercent}% 已用（剩余 ${contextRemainingPercent}%）。已用 ${formatContextTokens(contextUsedTokens)} 标记，共 ${formatContextTokens(contextWindowTokens)}`}
-                  aria-label={`背景信息窗口：${contextUsedPercent}% 已用，剩余 ${contextRemainingPercent}%，已用 ${formatContextTokens(contextUsedTokens)} 标记，共 ${formatContextTokens(contextWindowTokens)}`}
+                  title={`上下文已用 ${contextUsedPercent}%（剩余 ${contextRemainingPercent}%）。已用 ${formatContextTokens(contextUsedTokens)} / ${formatContextTokens(contextWindowTokens)}${contextMeterBreakdownLines.length ? ` · ${contextMeterBreakdownLines.join(" · ")}` : ""}`}
+                  aria-label={`上下文已用 ${contextUsedPercent}%，剩余 ${contextRemainingPercent}%，已用 ${formatContextTokens(contextUsedTokens)}，共 ${formatContextTokens(contextWindowTokens)}`}
                 />
-                {contextMeterOpen ? (
-                  <span className="composer-context-tooltip" role="tooltip">
-                    <strong>背景信息窗口:</strong>
-                    <span>{contextUsedPercent}% 已用（剩余 {contextRemainingPercent}%）</span>
-                    <span>已用 {formatContextTokens(contextUsedTokens)} 标记，共 {formatContextTokens(contextWindowTokens)}</span>
-                  </span>
-                ) : null}
                 <div className="composer-picker-wrap" ref={reasoningPickerWrapRef}>
                   <button type="button" className="composer-reasoning-button" onClick={() => void openModelMenu()}>{compactModelLabel} {reasoningLabel}<SidebarIcon name="chevron-down" /></button>
                 </div>
@@ -7044,7 +7233,10 @@ function renderChatModule() {
     if (file) {
       setDocumentAnnotationActive(true);
       setDocumentAnnotationCandidate(annotation?.anchor || null);
-      await openLocalFilePreview(file.storageKey || file.logicalName, { workspaceId: selectedWorkspace?.id });
+      await openLocalFilePreview(file.storageKey || file.logicalName, {
+        workspaceId: selectedWorkspace?.id,
+        ...(file.logicalName ? { displayName: file.logicalName } : {})
+      });
     }
     if (changeSet) await previewDocumentChangeSet(changeSet);
     setBrainResourceTab("tasks");
@@ -7424,6 +7616,8 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 previewUrl={String(searchFilePreview.previewUrl || "")}
                 name={searchFilePreview.name}
               />
+            ) : searchFilePreview.kind === "audio" ? (
+              <WorkspaceArtifactViewerHost preview={searchFilePreview} />
             ) : searchFilePreview.kind === "spreadsheet" ? (
               <WorkspaceSpreadsheetViewer
                 sheets={Array.isArray(searchFilePreview.sheets) ? searchFilePreview.sheets : []}
@@ -7754,7 +7948,7 @@ function renderSkillsModule() {
 
     async function searchClawHub() {
       if (desktopPreferences?.market?.directClawhubAllowed !== true) {
-        setErrorMessage("市场安装须经服务端，直连已关闭");
+        setErrorMessage("ClawHub 直连已关闭。请在设置 → 配置中开启，或使用本地 zip 导入。");
         return;
       }
       if (!api?.searchOpenClawSkills) {
@@ -7775,7 +7969,7 @@ function renderSkillsModule() {
 
     async function installClawHubRef(ref: string) {
       if (desktopPreferences?.market?.directClawhubAllowed !== true) {
-        setErrorMessage("市场安装须经服务端，直连已关闭");
+        setErrorMessage("ClawHub 直连已关闭。请在设置 → 配置中开启，或使用本地 zip 导入。");
         return;
       }
       if (!api?.installOpenClawSkillFromClawHub) return;
@@ -7876,8 +8070,8 @@ function renderSkillsModule() {
             <h2>OpenClaw / ClawHub 技能</h2>
             <p>
               {directClawhubAllowed
-                ? "搜索并安装兼容 OpenClaw 的社区技能（SKILL.md）。脚本不会自动执行，安装前需确认风险。"
-                : "市场安装须经服务端，直连已关闭。可继续从本地 zip 离线导入；网络市场将经 spring-app 代理（Phase 3）。"}
+                ? "直接连接 https://clawhub.ai 搜索并安装兼容 OpenClaw 的社区技能（SKILL.md）。脚本不会自动执行，安装前需确认风险。可在设置 → 配置中关闭直连。"
+                : "ClawHub 直连已关闭。可从本地 zip 离线导入；需要联网安装时请在设置 → 配置中开启「ClawHub 直连」。"}
             </p>
           </div>
         </div>
@@ -7923,7 +8117,7 @@ function renderSkillsModule() {
             </>
           ) : (
             <>
-              <div className="skills-empty-state" role="status">市场安装须经服务端，直连已关闭</div>
+              <div className="skills-empty-state" role="status">ClawHub 直连已关闭，仅支持本地 zip 导入</div>
               <div className="skills-detail-actions">
                 <button type="button" disabled={clawhubBusy} onClick={() => void installOpenClawZip()}>从 zip 安装（离线导入）</button>
               </div>
@@ -7957,6 +8151,17 @@ function renderSkillsModule() {
         <header className="skills-page-toolbar">
           <div className="skills-page-title"><h1>技能</h1><p>赋予 codeCN 更强大的能力。</p></div>
           <div className="skills-toolbar-actions">
+            <button
+              type="button"
+              data-testid="open-experts-marketplace"
+              title="浏览并安装专家包（召唤仅由 Skill 自行 expert.summon）"
+              onClick={() => {
+                setSelectedSidebarRow("feature:experts");
+                setActiveFeature("experts");
+              }}
+            >
+              安装专家包
+            </button>
             <button type="button" onClick={() => void runAction(() => api!.queueWorkspaceScan())} disabled={!api}><span>↻</span>刷新</button>
             <button type="button" onClick={() => void uninstallWritingSkillsAction()} disabled={!api} title="先卸载本地写作技能，再用 zip 备份其余技能">卸载写作技能</button>
             <label className="skills-search"><span aria-hidden="true">⌕</span><input value={skillSearchText} onChange={(event) => setSkillSearchText(event.target.value)} placeholder="搜索技能" /></label>
@@ -8920,26 +9125,31 @@ function renderWorkspaceModules() {
 
     const brainToolsCentered = activeFeature === "new-chat" && brainResourcePlacement === "center" && previewPlacement !== "side";
     const brainToolsSide = activeFeature === "new-chat" && brainResourcePlacement === "side" && previewPlacement !== "side";
-    // Expand must keep chat like artifact-workbench open-file — never swap chat out for Tools.
-    const mainModule = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat"
-      ? renderPreviewModule("center")
-      : isThreadSidebarSelection
-        ? renderChatModule()
-        : activeFeature === "extensions"
-        ? renderExtensionsModule()
-        : activeFeature === "skills"
-          ? renderSkillsModule()
-          : activeFeature === "plugins"
-            ? renderPluginsModule()
-            : activeFeature === "automation"
-              ? renderAutomationPrototypeModule()
-              : activeFeature === "mobile"
-                ? renderMobileModule()
-                : activeFeature === "mcp"
-                  ? renderMcpModule()
-                  : activeFeature === "holon"
-                    ? <HolonWorkspace threadId={selectedThread?.id} />
-                  : renderChatModule();
+    const showCenterPreview = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat";
+    // Full-page features must win over an active thread selection; otherwise Holon/专家/技能
+    // opened while a chat row is selected would silently keep showing chat.
+    const fullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp", "holon"].includes(activeFeature);
+    const mainModule = fullPageFeature
+      ? (
+        activeFeature === "extensions"
+          ? renderExtensionsModule()
+          : activeFeature === "skills"
+            ? renderSkillsModule()
+            : activeFeature === "plugins"
+              ? renderPluginsModule()
+              : activeFeature === "automation"
+                ? renderAutomationPrototypeModule()
+                : activeFeature === "mobile"
+                  ? renderMobileModule()
+                  : activeFeature === "mcp"
+                    ? renderMcpModule()
+                    : activeFeature === "holon"
+                      ? <HolonWorkspace threadId={selectedThread?.id} />
+                      : activeFeature === "experts"
+                        ? <ExpertsMarketplace />
+                        : renderChatModule()
+      )
+      : renderChatModule();
 
     return (
       <>
@@ -8968,15 +9178,16 @@ function renderWorkspaceModules() {
           <button
             type="button"
             className="preview-icon-button preview-panel-toggle brain-tools-restore-toggle"
-            title="显示侧栏"
-            aria-label="显示侧栏"
+            title="显示工具侧栏"
+            aria-label="显示工具侧栏"
             data-testid="brain-tools-restore-toggle"
             onClick={() => setBrainResourcePlacement("side")}
           >
-            <span className="preview-panel-glyph hidden"><SidebarIcon name="panel-right" /></span>
+            <span className="preview-panel-glyph visible"><SidebarIcon name="panel-right" /></span>
           </button>
         ) : null}
         {previewPlacement === "side" && activeFeature === "new-chat" ? renderPreviewModule("side") : null}
+        {showCenterPreview ? renderPreviewModule("center") : null}
         {renderSearchDialog()}
         {workspaceFileMenu && selectedWorkspace?.id ? <LocalFileContextMenu
           menu={workspaceFileMenu}

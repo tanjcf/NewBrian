@@ -403,6 +403,22 @@ contextBridge.exposeInMainWorld("codecn", {
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.exportZip, input),
   uninstallWritingSkills: (input: UninstallWritingSkillsInput = {}): Promise<UninstallWritingSkillsResult> =>
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.uninstallWritingSkills, input),
+  listExperts: (): Promise<Array<Record<string, unknown>>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.list),
+  installExpert: (input: { expertId: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.install, input),
+  setExpertEnabled: (input: { expertId: string; enabled: boolean }): Promise<Array<Record<string, unknown>>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.setEnabled, input),
+  summonExpert: (input: { threadId: string; expertId: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.summon, input),
+  clearExpertSummon: (input: { threadId: string }): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.clearSummon, input),
+  getExpertSummon: (input: { threadId: string }): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.getSummon, input),
+  resolveExpertFromSkill: (input: { skillName: string; skillNames?: string[] }): Promise<{ expertId: string; skillName: string } | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.resolveFromSkill, input),
+  summonExpertFromSkill: (input: { threadId: string; skillName: string }): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.summonFromSkill, input),
   searchWorkspaces: (query: string): Promise<SearchResultSpec[]> => ipcRenderer.invoke(desktopIpcChannels.search.workspaces, query),
   readWorkspaceFile: (input: WorkspaceFileInput): Promise<{
     path: string;

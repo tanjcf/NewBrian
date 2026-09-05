@@ -116,6 +116,26 @@ test("labels agent loop stall failures with a dedicated failure code", async () 
   assert.equal(state.reports[0].context.failureCode, "agent_loop_stalled");
 });
 
+test("labels subscription inactive refusals as subscription_inactive with purchase guidance", async () => {
+  const state = fixture();
+  await state.service.persistFailure({
+    workspace: { id: "ws" },
+    thread: { id: "thread" },
+    requestId: "request-sub",
+    turnId: "turn-sub",
+    reasoningSummary: "",
+    error: new Error("subscription inactive or expired")
+  });
+  assert.equal(state.events.at(-1)?.code, "subscription_inactive");
+  assert.equal(state.events.at(-1)?.remediation, "renew_or_contact_admin");
+  assert.equal(state.metadata[0].statusLabel, "订阅失效");
+  assert.match(String(state.state.messages[0].content), /重新购买订阅/);
+  assert.match(String(state.state.messages[0].content), /联系管理员/);
+  assert.doesNotMatch(String(state.state.messages[0].content), /本轮执行失败：subscription inactive/);
+  assert.equal(state.reports[0].context.failureCode, "subscription_inactive");
+  assert.match(String(state.reports[0].context.userFacingMessage), /重新购买订阅/);
+});
+
 test("persists streamed partial content when a turn fails mid-generation", async () => {
   const state = fixture();
   await state.service.persistFailure({
