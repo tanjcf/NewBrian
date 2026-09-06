@@ -766,7 +766,7 @@ const automationTickMs = 60_000;
 const configuredGatewayBaseUrlEnv = process.env.CODECN_MODEL_BASE_URL?.trim() || "";
 // Development defaults to the local Spring gateway. Packaged MSI must use the
 // production endpoint from build/package-resources/codecn.config.json.
-const productionGatewayBaseUrl = "http://120.48.151.202:8790/v1";
+const productionGatewayBaseUrl = "https://api.sinnauze.cn/v1";
 const defaultGatewayBaseUrl = app.isPackaged
   ? productionGatewayBaseUrl
   : "http://127.0.0.1:8790/v1";

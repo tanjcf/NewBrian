@@ -1,13 +1,17 @@
-# Windows Test MSI
+# Windows MSI packaging
 
-在 BRAIN 根目录双击 `package-test-msi.cmd`，按提示输入版本号，例如 `1.4.4`。
+在 BRAIN 根目录双击 `package-msi.cmd`，按提示选择环境（test / production）并输入版本号，例如 `1.4.4`。
 失败时窗口会保留错误信息；完成后显示 MSI 路径。无需自行进入 `.materialized`。
 
 也可以在 BRAIN 根目录的 PowerShell 中运行：
 
 ```powershell
-.\package-test-msi.cmd -Version 1.4.4
+.\package-msi.cmd
+.\package-msi.cmd -Channel test -Version 1.4.4
+.\package-msi.cmd -Channel production -Version 1.4.4
 ```
+
+兼容入口：`package-test-msi.cmd` 固定走 test 环境，只提示版本号。
 
 版本号必须为三段数字：主版本和次版本不超过 255，修订号不超过 65535。
 不输入 `v` 前缀或 `-test` 后缀；测试标识由打包器添加到文件名。
@@ -16,12 +20,15 @@
 
 ## 环境与产物
 
-- 网关：`http://120.48.151.202:8790/v1`
-- 预览：`http://120.48.151.202:3000`
-- 输出：`.materialized/windows/apps/desktop/release/test/`
-- 未签名产物：`codeCN <版本号>-test-unsigned.msi`
+| 渠道 | 网关 | 预览 | 输出 |
+|------|------|------|------|
+| test | `http://120.48.151.202:8790/v1` | `http://120.48.151.202:3000` | `.materialized/windows/apps/desktop/release/test/` |
+| production | `https://api.sinnauze.cn/v1` | `https://api.sinnauze.cn` | `.materialized/windows/apps/desktop/release/production/` |
 
-此入口固定远程测试地址，会覆盖本次打包进程继承的 test 地址变量，退出后恢复。
+test 产物：`codeCN <版本号>-test-unsigned.msi`（默认不签名）。
+production 产物要求干净 Git 工作区，并需要 Authenticode 签名。
+
+此入口会覆盖本次打包进程继承的对应环境地址变量，退出后恢复。
 现有打包器写入无凭据的远程配置，替换编译产物中的本地业务网关默认值，
 并检查 `app.asar` 主程序不得残留 `127.0.0.1:8790` 或 `localhost:8790`。
 Electron 的本地 IPC、文件预览等本机机制不属于 Spring 接口。

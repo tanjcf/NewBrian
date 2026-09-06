@@ -1,0 +1,102 @@
+param(
+  [string]$Channel,
+  [string]$Version
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot "msi-version.ps1")
+
+$sourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
+if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "scripts\materialize.mjs"))) {
+  throw "Run this entry point from the BRAIN source repository."
+}
+
+function Resolve-MsiChannel {
+  param([string]$Raw)
+  $value = ([string]$Raw).Trim().ToLowerInvariant()
+  switch -Regex ($value) {
+    '^(test|t|1|测试)$' { return "Test" }
+    '^(production|prod|p|2|生产|线上)$' { return "Production" }
+    default { return $null }
+  }
+}
+
+$current = (Get-Content -LiteralPath (Join-Path $sourceRoot "platforms\windows\apps\desktop\package.json") -Raw | ConvertFrom-Json).version
+
+$resolvedChannel = Resolve-MsiChannel $Channel
+if (-not $resolvedChannel) {
+  Write-Host ""
+  Write-Host "Current source version: $current"
+  Write-Host "Select MSI environment:"
+  Write-Host "  1) test        -> http://120.48.151.202:8790/v1"
+  Write-Host "  2) production  -> https://api.sinnauze.cn/v1"
+  $channelInput = (Read-Host "Enter environment (test/production or 1/2)").Trim()
+  $resolvedChannel = Resolve-MsiChannel $channelInput
+  if (-not $resolvedChannel) {
+    throw "Unknown environment '$channelInput'. Use test or production."
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+  Write-Host "Current source version: $current"
+  $hint = if ($resolvedChannel -eq "Production") { "example: 1.4.4" } else { "example: 1.4.4 (no -test suffix)" }
+  $Version = (Read-Host "Enter $resolvedChannel MSI version ($hint)").Trim()
+}
+Assert-MsiVersion $Version
+
+foreach ($tool in @("node", "pnpm", "cargo")) {
+  if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+    throw "Missing $tool. Install it and reopen this terminal."
+  }
+}
+
+$isProduction = $resolvedChannel -eq "Production"
+$names = @(
+  "CODECN_SOURCE_ROOT",
+  "CODECN_TEST_GATEWAY_BASE_URL",
+  "CODECN_TEST_PREVIEW_URL",
+  "CODECN_PRODUCTION_GATEWAY_BASE_URL",
+  "CODECN_PRODUCTION_PREVIEW_URL"
+)
+$saved = @{}
+foreach ($name in $names) {
+  $saved[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+}
+
+try {
+  $env:CODECN_SOURCE_ROOT = $sourceRoot
+  if ($isProduction) {
+    $env:CODECN_PRODUCTION_GATEWAY_BASE_URL = "https://api.sinnauze.cn/v1"
+    $env:CODECN_PRODUCTION_PREVIEW_URL = "https://api.sinnauze.cn"
+    $gateway = $env:CODECN_PRODUCTION_GATEWAY_BASE_URL
+  } else {
+    $env:CODECN_TEST_GATEWAY_BASE_URL = "http://120.48.151.202:8790/v1"
+    $env:CODECN_TEST_PREVIEW_URL = "http://120.48.151.202:3000"
+    $gateway = $env:CODECN_TEST_GATEWAY_BASE_URL
+  }
+
+  Write-Host "$resolvedChannel MSI $Version -> $gateway" -ForegroundColor Cyan
+  & node (Join-Path $sourceRoot "scripts\verify-layout.mjs")
+  if ($LASTEXITCODE -ne 0) { throw "Repository layout verification failed." }
+  & node (Join-Path $sourceRoot "scripts\materialize.mjs") windows
+  if ($LASTEXITCODE -ne 0) { throw "Windows materialization failed." }
+
+  $workspace = Join-Path $sourceRoot ".materialized\windows"
+  Push-Location $workspace
+  try {
+    & pnpm install --frozen-lockfile
+    if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
+    & (Join-Path $workspace "scripts\package-win-msi.ps1") -Channel $resolvedChannel -Version $Version
+    if ($LASTEXITCODE -ne 0) { throw "$resolvedChannel MSI packaging failed." }
+  } finally {
+    Pop-Location
+  }
+
+  $channelSlug = $resolvedChannel.ToLowerInvariant()
+  Write-Host "Output: $workspace\apps\desktop\release\$channelSlug" -ForegroundColor Green
+} finally {
+  foreach ($name in $names) {
+    [Environment]::SetEnvironmentVariable($name, $saved[$name], "Process")
+  }
+}

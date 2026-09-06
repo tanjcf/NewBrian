@@ -56,13 +56,13 @@ $rustCorePackagePath = Join-Path $desktopRoot "build\rust-core\brain-core.exe"
 $sourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $repoRoot } else { $env:CODECN_SOURCE_ROOT }
 $gatewayBaseUrl = if ($isProduction) { $env:CODECN_PRODUCTION_GATEWAY_BASE_URL } else { $env:CODECN_TEST_GATEWAY_BASE_URL }
 $previewUrl = if ($isProduction) { $env:CODECN_PRODUCTION_PREVIEW_URL } else { $env:CODECN_TEST_PREVIEW_URL }
-# wangjietech.com domains are currently parked/blocked and cannot serve model traffic.
-# Keep the known-live Spring gateway as the default until a reachable HTTPS domain is restored.
+# Test keeps the known-live Spring IP. Production defaults to the HTTPS api.sinnauze.cn
+# gateway; retired *.wangjietech.com hosts stay in rewrite lists for legacy asar cleanup only.
 if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
-  $gatewayBaseUrl = "http://120.48.151.202:8790/v1"
+  $gatewayBaseUrl = if ($isProduction) { "https://api.sinnauze.cn/v1" } else { "http://120.48.151.202:8790/v1" }
 }
 if ([string]::IsNullOrWhiteSpace($previewUrl)) {
-  $previewUrl = "http://120.48.151.202:3000"
+  $previewUrl = if ($isProduction) { "https://api.sinnauze.cn" } else { "http://120.48.151.202:3000" }
 }
 $requireSignature = $isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")
 
@@ -294,15 +294,17 @@ try {
         $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
         $utf8 = [System.Text.Encoding]::UTF8
         $text = $utf8.GetString($bytes)
-        if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202") -or $text.Contains("wangjietech.com")) {
+        if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202") -or $text.Contains("wangjietech.com") -or $text.Contains("sinnauze.cn")) {
           $updated = $text.Replace("http://127.0.0.1:8790/v1", $gatewayBaseUrl).
             Replace("http://120.48.151.202:8790/v1", $gatewayBaseUrl).
+            Replace("https://api.sinnauze.cn/v1", $gatewayBaseUrl).
             Replace("https://test.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("https://api.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("http://test.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("http://api.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("http://127.0.0.1:3000", $previewUrl).
             Replace("http://120.48.151.202:3000", $previewUrl).
+            Replace("https://api.sinnauze.cn", $previewUrl).
             Replace("https://test.wangjietech.com", $previewUrl).
             Replace("https://api.wangjietech.com", $previewUrl)
           [System.IO.File]::WriteAllText($_.FullName, $updated, [System.Text.UTF8Encoding]::new($false))
