@@ -283,6 +283,8 @@ export interface DesktopAppUpdateServiceDependencies {
   fetchImpl?: typeof fetch;
   /** Preferred path: silent msiexec upgrade matching current install scope. */
   runSilentInstall: (input: {
+    expectedVersion?: string;
+    fullMsi?: boolean;
     msiPath: string;
     args: string[];
     scope: DesktopMsiInstallScope;
@@ -439,6 +441,11 @@ export class DesktopAppUpdateService {
       report("error", 0, status.detail || "没有可安装的更新。");
       return { ok: false, detail: status.detail || "没有可安装的更新。" };
     }
+    if (!fresh.sha256) {
+      const detail = "更新包缺少 SHA-256 校验值，已阻止下载和安装。";
+      report("error", 0, detail);
+      return { ok: false, detail };
+    }
 
     report(
       "preparing",
@@ -540,7 +547,7 @@ export class DesktopAppUpdateService {
         installRoot
       });
       if (isSilentDesktopMsiSuccess(patchResult.exitCode) && !patchResult.error) {
-        const detail = `补丁已应用即将重启（${fresh.latestVersion}）。聊天记录、项目与本地历史会保留。`;
+        const detail = `补丁已就绪，即将退出并应用更新（${fresh.latestVersion}）。`;
         reportWithMode("done", 100, detail, "patch");
         try {
           this.dependencies.afterSilentSuccess?.();
@@ -568,12 +575,14 @@ export class DesktopAppUpdateService {
     );
 
     const silentResult = await this.dependencies.runSilentInstall({
+      expectedVersion: normalizeDesktopUpdateVersionLabel(fresh.latestVersion),
+      fullMsi: packageKind === "full-msi",
       msiPath: targetPath,
       args: silentArgs,
       scope
     });
     if (isSilentDesktopMsiSuccess(silentResult.exitCode) && !silentResult.error) {
-      const detail = `安装完成即将重启（${fresh.latestVersion}）。聊天记录、项目与本地历史会保留。`;
+      const detail = `更新包已就绪，即将退出并安装（${fresh.latestVersion}）。安装前会备份用户数据。`;
       reportWithMode("done", 100, detail, "silent");
       try {
         this.dependencies.afterSilentSuccess?.();

@@ -1,0 +1,3 @@
+import{execFile}from'node:child_process';import{promisify}from'node:util';const run=promisify(execFile);await run('powershell.exe',['-NoProfile','-NonInteractive','-Command',`Add-Type @'
+using System; using System.Runtime.InteropServices; public class D { [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f,int x,int y,int d,UIntPtr e); }
+'@; [D]::SetCursorPos(700,450); 1..12 | ForEach-Object { [D]::mouse_event(0x0800,0,0,120,[UIntPtr]::Zero); Start-Sleep -Milliseconds 40 }`],{windowsHide:true});await new Promise(r=>setTimeout(r,1000));

@@ -47,11 +47,11 @@ test("resolves expert from skill roots on disk", async () => {
       experts: [{ id: "software-delivery-team", profession: "交付团", expertType: "team" }],
       selectedSkillNames: ["my-delivery"],
       suggestedExpertIds: ["software-delivery-team"]
-    }), /ONLY summon path|唯一路径/i);
-    assert.equal(buildSkillExpertSummonInstruction({
+    }), /expert.propose/i);
+    assert.match(buildSkillExpertSummonInstruction({
       experts: [{ id: "software-delivery-team", profession: "交付团" }],
       selectedSkillNames: []
-    }), "");
+    }), /First-time users/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

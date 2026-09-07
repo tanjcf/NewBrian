@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "inspiredBy": [
+    {
+      "repository": "https://github.com/the0cp/beatflow-skill",
+      "license": "GPL-3.0-only",
+      "notes": "Inspiration only for symbolic multi-track workflow; BRAIN pack is an original rewrite and does not vendor GPL engine/scripts."
+    },
+    {
+      "repository": "https://github.com/lostviolinist/music-composer-skill",
+      "notes": "Lightweight MIDI composer framing reference."
+    }
+  ],
+  "licenseOfPack": "Apache-2.0-or-project-default",
+  "adaptations": [
+    "BRAIN ExpertPack layout",
+    "expert.summon binding",
+    "music preferredWorkspaceKey",
+    "no vendored Python MIDI engine"
+  ]
+}

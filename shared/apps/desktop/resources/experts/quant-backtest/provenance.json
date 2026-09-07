@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "inspiredBy": [
+    {
+      "repository": "https://github.com/quantskills/skill-backtest",
+      "license": "GPL-3.0",
+      "notes": "Inspiration for cross-sectional long-only research protocol; BRAIN pack is an original rewrite and does not vendor upstream references/agents."
+    },
+    {
+      "repository": "https://github.com/quantskills/agent-quantspace",
+      "notes": "Broader quant skill-pack framing reference."
+    }
+  ],
+  "licenseOfPack": "Apache-2.0-or-project-default",
+  "adaptations": [
+    "BRAIN ExpertPack layout",
+    "expert.summon binding",
+    "quant/data workspace keys",
+    "research-only compliance wording"
+  ]
+}

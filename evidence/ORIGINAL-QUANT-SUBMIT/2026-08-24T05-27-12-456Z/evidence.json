@@ -1,0 +1,47 @@
+{
+  "caseId": "ORIGINAL-QUANT-SUBMIT",
+  "timestamp": "2026-08-24T05:27:12.456Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "submit",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "submit",
+      "port": 9350
+    },
+    {
+      "type": "connect",
+      "port": 9350
+    },
+    {
+      "type": "submit",
+      "text": "先将代码提交到git，接下来你用过操控鼠标和键盘进行输入，直接界面操作进行案例测试。这个案例就是通过通过对话实现量化交易AI操作右侧tools：1、行情：切换股票查询，查询不同的股票的走势图、不同的周期、不同的时间段、不同复权。2、组合：创建skill、删除skill、让skill基于一直股票历史走势进行模拟交易。3、雷达：创建skill雷达进行自动模拟。4、笔记：让AI进行总结并添加笔记。"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "execution",
+      "passed": false,
+      "detail": "Visible runtime failure: 生成异常终止"
+    }
+  ],
+  "result": "FAIL",
+  "firstFailure": "Visible runtime failure: 生成异常终止",
+  "screenshots": [
+    "before.png",
+    "submitted.png",
+    "failure.png"
+  ],
+  "finalState": {
+    "title": "codeCN",
+    "selectedScene": "explore",
+    "activeView": null,
+    "visibleText": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n先将代码提交到git，接下来你用过操控鼠标和键盘进行输入，直接界面操作进\n打开位置\n先将代码提交到git，接下来你用过操控鼠标和键盘进行输入，直接界面操作进行案例测试。这个案例就是通过通过对话实现量化交易AI操作右侧tools：1、行情：切换股票查询，查询不同的股票的走势图、不同的周期、不同的时间段、不同复权。2、组合：创建skill、删除skill、让skill基于一直股票历史走势进行模拟交易。3、雷达：创建skill雷达进行自动模拟。4、笔记：让AI进行总结并添加笔记。\n›\n生成中断 刚刚\n思考过程\n展开\n查看源码\n\n请求未能完成：Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。\n\n生成异常终止\n\nAuto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。\n\n已保存当前进度，未完成的内容不会计入后续上下文，可安全重试。\n↻\n重试并从断点继续\n✍\n修改要求后继续\n⚑\n反馈此异常\n忽略\n×\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\n项目资源\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n场景知识\n可用工具\n场景知识\n该功能入口已按产品原型归位，正在接入对应的真实编辑与执行能力。",
+    "rendererError": null
+  }
+}

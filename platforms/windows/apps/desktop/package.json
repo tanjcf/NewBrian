@@ -57,6 +57,7 @@
     "package:win-ulit": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/package-win-ulit-patch.ps1"
   },
   "dependencies": {
+    "yaml": "2.8.1",
     "@aiden0z/pptx-renderer": "1.2.4",
     "@napi-rs/canvas": "0.1.80",
     "@uzen/kokoro-js": "1.2.4",
@@ -122,6 +123,7 @@
       "node_modules/pinyin-pro/**"
     ],
     "extraResources": [
+      { "from": "resources/garden", "to": "garden" },
       {
         "from": "build/package-resources/codecn.config.json",
         "to": "codecn.config.json"
@@ -170,8 +172,11 @@
       ]
     },
     "msi": {
+      "upgradeCode": "2D97097C-03A2-54F7-B1D4-7E34233F7A65",
       "oneClick": false,
       "additionalLightArgs": [
+        "-loc",
+        "codecn-localization.wxl",
         "-sval",
         "-ct",
         "1"

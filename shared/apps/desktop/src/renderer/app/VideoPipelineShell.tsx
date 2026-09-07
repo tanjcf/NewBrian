@@ -1,3 +1,5 @@
+import { VideoScriptWorkbench } from "./VideoScriptWorkbench";
+import { VideoVoiceCasting } from "./VideoVoiceCasting";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type {
   BrainVideoCanvas,
@@ -113,6 +115,7 @@ export type VideoPipelineModelOption = {
 export type VideoPipelineShellProps = {
   projectId?: string;
   activeStep?: VideoPipelineStep;
+  onStepChange?: (step: VideoPipelineStep) => void;
   files?: ProjectFileOption[];
   /** Parent refreshes project file list after media import / TTS persist. */
   onFilesChanged?: () => void;
@@ -300,7 +303,7 @@ function narrationFileNameForSpeech(shotId: string, mimeType?: string) {
         ? "m4a"
         : "mp3";
   const safeId = String(shotId || "shot").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
-  return `narration-${safeId}.${ext}`;
+  return `narration-${safeId}-${crypto.randomUUID()}.${ext}`;
 }
 
 function formatTimecode(sec: number) {
@@ -416,14 +419,13 @@ function resolveClipFileId(files: ProjectFileOption[], clip: string): string | u
 
 async function pollVideoRender(renderId: string, onTick: (status: string) => void) {
   const getStatus = window.codecn?.getVideoRenderStatus;
-  if (!getStatus) return { status: "SUCCEEDED", renderId };
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  if (!getStatus) throw new Error("当前构建未接入渲染状态查询");
+  for (;;) {
     const state = await getStatus({ renderId });
     onTick(String(state?.status || "RUNNING"));
     if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(String(state?.status || ""))) return state;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error("视频渲染超时");
 }
 
 const VIDEO_PIPELINE_MODEL_KEY = "brain.video.pipeline.model";
@@ -484,6 +486,7 @@ function writeStoredVideoModel(model: string) {
 export function VideoPipelineShell({
   projectId,
   activeStep,
+  onStepChange,
   files = [],
   onFilesChanged,
   onAskBrain,
@@ -565,13 +568,13 @@ export function VideoPipelineShell({
   const [shotAudioUrls, setShotAudioUrls] = useState<Record<string, string>>({});
   /** Preview URLs keyed by normalized relativePath (A2 peel + multi-track mix). */
   const [pathAudioUrls, setPathAudioUrls] = useState<Record<string, string>>({});
-  const [scriptPreviewOpen, setScriptPreviewOpen] = useState(false);
   const [textClips, setTextClips] = useState<TimelineTextClip[]>([]);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [textEditorFocusToken, setTextEditorFocusToken] = useState(0);
   const [mediaBin, setMediaBin] = useState<MediaBinItem[]>([]);
   const [clipInstances, setClipInstances] = useState<BrainVideoClipInstance[]>([]);
   const [narrationVoiceId, setNarrationVoiceId] = useState<MinimaxNarrationVoiceId>(DEFAULT_MINIMAX_NARRATION_VOICE_ID);
+  const [voiceCasting, setVoiceCasting] = useState<BrainVideoPipelineState["voiceCasting"]>();
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -654,7 +657,6 @@ export function VideoPipelineShell({
   const readyCount = shots.filter((item) => item.ready && String(item.clip || "").trim()).length;
   const muxUnlocked = shots.length > 0 && readyCount === shots.length;
   const aspectRatio = canvas.width / Math.max(1, canvas.height);
-  const showAdapter = pane === "script";
   // Compute early: later useCallbacks must not hit TDZ on dependency-array evaluation
   // (historical crash: "Cannot access 'usingExportPreview' before initialization").
   const sequenceHasClipUrl = Boolean(String(sequenceUrls[sequenceIndex] || "").trim());
@@ -672,7 +674,7 @@ export function VideoPipelineShell({
     });
   }, []);
 
-  const persistSpeechToProject = useCallback(async (shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string }) => {
+  const persistSpeechToProject = useCallback(async (shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string; durationMs?: number }) => {
     if (!projectId || !result?.ok || !result.audioBase64 || !window.codecn?.importBrainMedia) return null;
     try {
       const imported = await window.codecn.importBrainMedia({
@@ -686,7 +688,8 @@ export function VideoPipelineShell({
       if (!relativePath) return null;
       updateShot(shotId, { audio: relativePath });
       const edit = trackEdits[shotId] ?? defaultTrackEdit();
-      const durationSec = Math.max(0.1, (Number.isFinite(edit.outSec) ? edit.outSec : 4) - (Number.isFinite(edit.inSec) ? edit.inSec : 0));
+      const durationSec = result.durationMs && result.durationMs > 0 ? result.durationMs / 1000
+        : Math.max(0.1, (Number.isFinite(edit.outSec) ? edit.outSec : 4) - (Number.isFinite(edit.inSec) ? edit.inSec : 0));
       const startSec = sequenceBaseSecForShot(shots, shotId, trackEdits, clipInstances) + (edit.offsetSec || 0);
       setClipInstances((current) => upsertPrimaryInstance(current, {
         kind: "audio",
@@ -704,11 +707,12 @@ export function VideoPipelineShell({
     }
   }, [projectId, onFilesChanged, trackEdits, shots, clipInstances]);
 
-  const ingestSpeechResult = useCallback((shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string }) => {
+  const ingestSpeechResult = useCallback(async (shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string }) => {
     if (!result?.ok || !result.audioBase64) return false;
+    const stored = await persistSpeechToProject(shotId, result);
+    if (!stored) throw new Error("旁白已生成，但写入项目失败，请重试");
     const url = base64ToObjectUrl(result.audioBase64, result.mimeType || "audio/wav");
     rememberShotAudio(shotId, url);
-    void persistSpeechToProject(shotId, result);
     return true;
   }, [rememberShotAudio, persistSpeechToProject]);
 
@@ -1166,6 +1170,7 @@ export function VideoPipelineShell({
   };
 
   const applyLoadedState = useCallback((state: BrainVideoPipelineState, source: string) => {
+    setVoiceCasting(state.voiceCasting);
     setScript(state.script || "");
     const loaded = shotsFromPipeline(state);
     setShots(loaded);
@@ -1252,6 +1257,7 @@ export function VideoPipelineShell({
   }, []);
 
   const pipelineSnapshotRef = useRef({
+    voiceCasting,
     script,
     shots,
     canvas,
@@ -1262,6 +1268,7 @@ export function VideoPipelineShell({
     clipInstances
   });
   pipelineSnapshotRef.current = {
+    voiceCasting,
     script,
     shots,
     canvas,
@@ -1278,6 +1285,7 @@ export function VideoPipelineShell({
     const snap = pipelineSnapshotRef.current;
     return {
       schemaVersion: 1,
+      voiceCasting: snap.voiceCasting,
       pipeline: "brain-video-runtime-v1",
       script: snap.script,
       shots: snap.shots.map(({ id: _id, ...item }) => ({
@@ -1758,8 +1766,8 @@ export function VideoPipelineShell({
     setBusyAction("mux");
     setStatus(`正在${label}（FFmpeg concat，非 AI 模型）…`);
     try {
-      await savePipeline(`${label}前已保存分镜`);
-      if (window.codecn.cookBrainVideoPipeline) await window.codecn.cookBrainVideoPipeline({ projectId });
+      if (!await savePipeline(`${label}前已保存分镜`)) return;
+      setStatus(`正在启动全片${label}…`);
       const started = await window.codecn.startVideoRender({
         projectId,
         outputRelativePath: `exports/pipeline-${Date.now()}.mp4`,
@@ -1768,8 +1776,8 @@ export function VideoPipelineShell({
       setStatus(`FFmpeg 已启动 · ${started.renderId}`);
       const finished = await pollVideoRender(started.renderId, (tick) => setStatus(`FFmpeg ${tick} · ${started.renderId}`));
       if (finished?.status === "SUCCEEDED") {
+        onFilesChanged?.();
         setStatus(`${label}完成 · ${finished.outputPath || started.outputPath || "exports/*.mp4"}`);
-        await reloadPipeline("合成完成 · 工程状态已刷新");
       } else {
         setStatus(`${label}结束：${finished?.status || "unknown"}${finished?.errorCode ? ` · ${finished.errorCode}` : ""}`);
       }
@@ -1886,6 +1894,11 @@ export function VideoPipelineShell({
       });
       if (resolvedModel) writeStoredVideoModel(resolvedModel);
       const clipPath = String((result as { clipRelativePath?: string })?.clipRelativePath || "").trim();
+      if (!clipPath) {
+        throw new Error("视频生成尚未返回可播放文件，原镜头已保留。");
+      }
+      // Preview URLs resolve through the registered file catalog, not just shot.clip.
+      onFilesChanged?.();
       const resolvedClip = clipPath || `media/clips/shot-${String(index + 1).padStart(3, "0")}.mp4`;
       setShots((current) => current.map((item, i) => (
         i === index
@@ -1901,7 +1914,7 @@ export function VideoPipelineShell({
       const peeled = await peelShotClipIfNeeded(target.id, clipPath || resolvedClip);
       const line = String(target.line || "").trim();
       // Only auto-TTS when peel did not already put embedded audio on A (avoid overwriting 原声).
-      if (!peeled && looksLikeLiteralDialogueLine(line) && window.codecn?.synthesizeNovelSpeech) {
+      if (!voiceCasting && !peeled && looksLikeLiteralDialogueLine(line) && window.codecn?.synthesizeNovelSpeech) {
         try {
           setStatus(`镜 ${index + 1} 视频就绪，正在生成旁白 TTS…`);
           const narrationVoice = resolveMinimaxNarrationVoice(narrationVoiceId);
@@ -1913,7 +1926,7 @@ export function VideoPipelineShell({
             preferGateway: true
           } as { text: string; voiceId: string; voiceLabel: string; playback?: boolean; preferGateway?: boolean });
           if (speech?.ok) {
-            ingestSpeechResult(target.id, speech);
+            await ingestSpeechResult(target.id, speech);
             setStatus(`镜 ${index + 1} 视频+TTS 完成 · ${clipPath || "clip"}`);
           } else setStatus(`镜 ${index + 1} 视频已就绪；TTS 失败：${speech?.detail || "未知错误"}`);
         } catch (ttsError) {
@@ -2030,6 +2043,12 @@ export function VideoPipelineShell({
 
   /** Direct Kokoro/TTS only for short literal dialogue — never for AI instruction strings. */
   const regenerateLiteralTts = async (shotId: string, textOverride?: string) => {
+    if (voiceCasting) {
+      const panel = document.querySelector<HTMLDetailsElement>(".video-voice-casting");
+      if (panel) { panel.open = true; panel.scrollIntoView({ block: "nearest" }); }
+      setStatus("请在角色配音中重做台词，试听并采用新版本。");
+      return;
+    }
     const target = shots.find((item) => item.id === shotId);
     const line = String(textOverride ?? target?.line ?? "").trim();
     if (!line) {
@@ -2077,10 +2096,14 @@ export function VideoPipelineShell({
         setStatus(`TTS 失败：${result?.detail || "未知错误"}`);
         return;
       }
-      const stored = ingestSpeechResult(shotId, result);
+      const stored = await persistSpeechToProject(shotId, result);
+      if (stored && result.audioBase64) {
+        rememberShotAudio(shotId, base64ToObjectUrl(result.audioBase64, result.mimeType || "audio/wav"));
+        schedulePipelineSave("旁白绑定已保存");
+      }
       setStatus(stored
-        ? `TTS 已生成并可预览 · ${shotId}${result.durationMs ? ` · ${Math.round(result.durationMs)}ms` : ""}`
-        : `TTS 已生成但未返回音频数据 · ${shotId}`);
+        ? `TTS 已生成并写入项目 · ${shotId}${result.durationMs ? ` · ${Math.round(result.durationMs)}ms` : ""}`
+        : `TTS 已返回，但音频未能写入项目，请重试 · ${shotId}`);
     } catch (error) {
       setStatus(`TTS 失败：${formatMediaError(error)}`);
     } finally {
@@ -2090,13 +2113,14 @@ export function VideoPipelineShell({
 
   /** Explicit A-track / prompt regenerate: hand off to BRAIN Auto (not raw TTS of the prompt). */
   const regenerateNarrationFromPrompt = async (shotId: string, textOverride?: string) => {
+    if (voiceCasting) { await regenerateLiteralTts(shotId, textOverride); return; }
     const target = shots.find((item) => item.id === shotId);
     const line = String(textOverride ?? target?.line ?? "").trim();
     if (!line) {
       setStatus("本镜无旁白文案，无法重生成");
       return;
     }
-    if (onAskBrain || looksLikeAiInstructionPrompt(line) || !looksLikeLiteralDialogueLine(line)) {
+    if (looksLikeAiInstructionPrompt(line) || !looksLikeLiteralDialogueLine(line)) {
       await handoffToBrainAi({
         kind: "narration",
         shotId,
@@ -2119,7 +2143,7 @@ export function VideoPipelineShell({
     if (promptOverride !== undefined) {
       updateShot(shotId, { prompt: promptOverride });
     }
-    if (onAskBrain || looksLikeAiInstructionPrompt(promptText)) {
+    if (looksLikeAiInstructionPrompt(promptText)) {
       await handoffToBrainAi({
         kind: "video",
         shotId,
@@ -2273,7 +2297,7 @@ export function VideoPipelineShell({
   }, [timelineDuration, previewMode, exportPreviewUrl, sequenceUrls, shots, seekPreviewLocal, syncSequenceClock, sequenceClipForShotIndex]);
 
   const onSequenceClipEnded = useCallback(() => {
-    if (previewMode !== "sequence") return;
+    if (previewMode !== "sequence" || !sequencePlayingRef.current) return;
     const idx = sequenceIndexRef.current;
     const hasSeqMedia = Boolean(String(sequenceUrls[idx] || "").trim())
       || Boolean(shotAudioUrlsRef.current[shots[idx]?.id || ""]);
@@ -4103,7 +4127,14 @@ export function VideoPipelineShell({
             onTransitionConsumed={(consumedSec) => {
               transitionConsumedRef.current = Math.max(0, Number(consumedSec) || 0);
             }}
-            onTimeUpdate={handlePreviewTimeUpdate}
+            onTimeUpdate={(currentTime, duration) => {
+              const clip = sequenceClipForShotIndex(timelineClipsRef.current, sequenceIndexRef.current);
+              if (previewMode === "sequence" && !usingExportPreview && clip && currentTime >= clip.duration) {
+                onSequenceClipEnded();
+                return;
+              }
+              handlePreviewTimeUpdate(currentTime, duration);
+            }}
             onDurationChange={handlePreviewDuration}
             onEnded={previewMode === "sequence" && !usingExportPreview ? onSequenceClipEnded : undefined}
             onNarrationError={(detail) => setStatus(`旁白播放失败：${detail}`)}
@@ -5172,44 +5203,37 @@ export function VideoPipelineShell({
 
       <div className="brain-video-pipe__pane" role="tabpanel">
         <div className="brain-video-pipe__main">
+          {projectId && <VideoVoiceCasting key={projectId} projectId={projectId} script={script} shots={shots}
+            value={voiceCasting} onChange={value => {
+              setVoiceCasting(value);
+              pipelineSnapshotRef.current = { ...pipelineSnapshotRef.current, voiceCasting: value };
+              pipelineDirtyRef.current = true;
+            }} onSave={() => savePipeline("角色配音方案已保存")}
+            onApply={async (shotId, result) => {
+              const path = await persistSpeechToProject(shotId, result);
+              if (path) rememberShotAudio(shotId, base64ToObjectUrl(result.audioBase64, result.mimeType));
+              return path;
+            }} />}
           {pane === "script" && (
-            <div className="brain-video-pipe__section brain-video-pipe__section--script" data-testid="brain-video-script-pane">
-              <div className="brain-video-pipe__script-head">
-                <div>
-                  <h3>脚本</h3>
-                  <p>主题、旁白与成片结构；画幅会随分镜一并持久化到 pipeline-editor.json。</p>
-                </div>
-                <button type="button" className="brain-video-pipe__action" onClick={() => void savePipeline("脚本与画幅已保存到工程")}>
-                  保存脚本与画幅
-                </button>
-              </div>
-              {showAdapter ? adapterPanel : null}
-              <label className="brain-video-pipe__script-editor-label">
-                <span>剧本正文</span>
-                <textarea
-                  className="brain-video-pipe__editor brain-video-pipe__editor--script"
-                  value={script}
-                  onChange={(event) => setScript(event.target.value)}
-                  placeholder="写入主题、旁白、分场结构…"
-                />
-              </label>
-              <div className="brain-video-pipe__script-preview">
-                <button
-                  type="button"
-                  className="brain-video-pipe__script-preview-toggle"
-                  aria-expanded={scriptPreviewOpen}
-                  onClick={() => setScriptPreviewOpen((open) => !open)}
-                >
-                  <span>{scriptPreviewOpen ? "收起预览" : "展开预览"}</span>
-                  <small>{brainVideoCanvasSize(canvas)} · {previewMode === "shot" ? "本镜" : "全片"}</small>
-                </button>
-                {scriptPreviewOpen ? (
-                  <div className="brain-video-pipe__script-preview-body">
-                    {previewPanel}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            <VideoScriptWorkbench
+              key={projectId || "unbound"}
+              script={script}
+              segments={shots.map(item => ({ title: item.title, prompt: item.prompt, line: item.line, duration: Math.max(0, (trackEdits[item.id]?.outSec ?? 4) - (trackEdits[item.id]?.inSec ?? 0)) }))}
+              disabled={!projectId}
+              canvasControls={adapterPanel}
+              onScriptChange={(value) => { setScript(value); pipelineDirtyRef.current = true; }}
+              onSegmentChange={(index, patch) => {
+                const target = shots[index];
+                if (!target) return;
+                const { duration, ...fields } = patch;
+                updateShot(target.id, fields);
+                if (duration !== undefined) patchTrack(target.id, { outSec: (trackEdits[target.id]?.inSec ?? 0) + duration });
+                pipelineDirtyRef.current = true;
+              }}
+              onAdd={addShot}
+              onSave={() => savePipeline("脚本分段与画幅已保存到工程")}
+              onConfirm={() => { if (onStepChange) onStepChange("storyboard"); else setLocalStep("storyboard"); }}
+            />
           )}
 
           {pane === "storyboard" && (

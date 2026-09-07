@@ -365,7 +365,8 @@ declare global {
       applyGovernmentWritingSuggestions: (input: any) => Promise<any>;
       confirmGovernmentWritingSpecification: (input: { threadId?: string; goalId: string; versionId: string }) => Promise<any>;
       getAuthStatus: () => Promise<DesktopAuthStatusState>;
-      getBillingSubscription: () => Promise<Record<string, unknown>>;
+  getBillingSubscription: () => Promise<Record<string, unknown>>;
+  redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
       listRepositoryPlugins: (input?: PluginCatalogQuery) => Promise<PluginCatalogSnapshot>;
       getRepositoryPlugin: (input: PluginKeyInput) => Promise<Record<string, unknown>>;
       installRepositoryPlugin: (input: PluginInstallInput) => Promise<PluginOperationResult>;
@@ -449,10 +450,13 @@ declare global {
         stackTrace?: string;
         context?: Record<string, unknown>;
       }) => Promise<{ ok: boolean; id: string }>;
+      analyzeVideoVoices?: (input: import("@codex-forge/protocol/brain-video-runtime").VideoVoiceAnalysisInput) => Promise<import("@codex-forge/protocol/brain-video-runtime").VideoVoiceCasting>;
+      importBrainMedia: (input: { projectId: string; sourcePath?: string; fileName?: string; mimeType?: string; bytesBase64?: string; folder?: "imports" | "audio" | "clips" | "refs" }) => Promise<{ relativePath?: string; file?: { id?: string } }>;
       synthesizeNovelSpeech: (input: {
         text: string;
         voiceId: string;
         voiceLabel?: string;
+        playback?: boolean;
       }) => Promise<{
         ok: boolean;
         audioBase64?: string;
@@ -784,13 +788,10 @@ declare global {
 export const featureItems: FeatureItem[] = [
   { id: "new-chat", label: "新建对话", icon: "+", description: "创建新线程或从当前线程分叉上下文。" },
   { id: "experts", label: "专家市场", icon: "◎", description: "浏览并安装专家包；召唤仅由全局/项目 Skill 自行 expert.summon。" },
-  { id: "holon", label: "Holon", icon: "H", description: "远程任务、本地执行与私有学习控制面。" },
   { id: "extensions", label: "扩展", icon: "◇", description: "管理 GitHub、Jira、Slack 等外部服务集成。" },
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
-  { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" },
-  { id: "mobile", label: "codeCN 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
-  { id: "mcp", label: "MCP 集成", icon: "↔", description: "管理 MCP 服务器、连接状态和工具能力。" }
+  { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" }
 ];
 
 export const settingsFeatureItem: FeatureItem = {

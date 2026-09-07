@@ -1,0 +1,2 @@
+import { createSceneTestCdpClient } from './platforms/windows/apps/desktop/scripts/scene-test-cdp-client.mjs';
+const c=await createSceneTestCdpClient(9566); await c.mouseClickButtonText('新建空白项目','.project-create-menu'); await new Promise(r=>setTimeout(r,800)); console.log(await c.evaluate(`JSON.stringify({text:document.body.innerText.slice(0,1800), inputs:[...document.querySelectorAll('input')].map(x=>({ph:x.placeholder,val:x.value,aria:x.getAttribute('aria-label')}))})`)); c.close();

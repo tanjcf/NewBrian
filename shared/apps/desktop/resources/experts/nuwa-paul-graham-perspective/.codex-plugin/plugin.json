@@ -1,0 +1,23 @@
+{
+  "name": "nuwa-paul-graham-perspective",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "nuwa-paul-graham-perspective",
+  "agents": [
+    "./agents/nuwa-paul-graham-perspective.md"
+  ],
+  "skills": [
+    "./skills/nuwa-paul-graham-perspective"
+  ],
+  "displayName": "保罗·格雷厄姆",
+  "profession": "创业与产品",
+  "description": "Paul Graham的思维框架与表达方式。基于200+篇essays、12个播客/访谈、\nTwitter/X分析、7位核心批评者视角和完整人生时间线的深度调研，\n提炼5个核心心智模型、8条决策启发式和完整的表达DNA。\n用途：作为思维顾问，用PG的视角分析创业、写作、产品和人生选择。\n当用户提到「用PG的视角」「Paul Graham会怎么看」「PG模式」「paul graham perspective」时使用。\n即使用户只是说「帮我用PG的角度想想」「如果PG会怎么做」「切换到PG」也应触发。",
+  "categoryId": "01-ProductDesign",
+  "tags": [
+    "女娲",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用保罗·格雷厄姆的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

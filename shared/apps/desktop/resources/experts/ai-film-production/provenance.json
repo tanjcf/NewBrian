@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "inspiredBy": [
+    {
+      "repository": "https://github.com/62656456/ai-film-skills",
+      "notes": "Director / storyboard / asset / short-drama production modules; BRAIN pack is original rewrite, not a verbatim import."
+    },
+    {
+      "repository": "https://github.com/zhangzhangco/film-production-skills",
+      "notes": "Pipeline shape reference only."
+    }
+  ],
+  "licenseOfPack": "Apache-2.0-or-project-default",
+  "adaptations": [
+    "BRAIN ExpertPack layout",
+    "expert.summon binding",
+    "video preferredWorkspaceKey",
+    "no upstream Team/runtime hooks"
+  ]
+}

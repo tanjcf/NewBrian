@@ -1,0 +1,22 @@
+{
+  "approval": null,
+  "pendingTool": null,
+  "session": null,
+  "suspiciousThreads": [
+    {
+      "workspaceId": "workspace-1787555859255-61d2ea",
+      "id": "thread-1787556214634-44c3bc",
+      "title": "请读取当前绑定的真实游戏工程状态，返回工程类型、关卡数量、资产数量和试玩",
+      "status": "awaiting-approval",
+      "statusLabel": "等待批准",
+      "lastEventSummary": "原生工具调用等待批准"
+    }
+  ],
+  "composerPermButtons": [
+    "替我审批",
+    "☝ 替我审批"
+  ],
+  "liveStatusText": [
+    "请只使用右侧「软件与自动化」Tools 操作当前软件项目，完成真实可运行闭环（不得只回复方案或代码）： 1) 在当前已绑定本地工作区用 workspace.write_file / workspace.apply_patch 创建真实 Node 项目「本地待办 CLI」：至少包含 package.json、src/index.js（或 .mjs）、README.md。package.json 必须声明 scripts：test（可用 node --test）、build（可简单拷贝/打包到 dist）、deploy（把产物写到 dist/deployed.txt 或类似可验证文件）。 2) 写"
+  ]
+}

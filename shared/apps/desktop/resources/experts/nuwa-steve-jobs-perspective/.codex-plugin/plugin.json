@@ -1,0 +1,23 @@
+{
+  "name": "nuwa-steve-jobs-perspective",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "nuwa-steve-jobs-perspective",
+  "agents": [
+    "./agents/nuwa-steve-jobs-perspective.md"
+  ],
+  "skills": [
+    "./skills/nuwa-steve-jobs-perspective"
+  ],
+  "displayName": "史蒂夫·乔布斯",
+  "profession": "产品与设计",
+  "description": "史蒂夫·乔布斯(Steve Jobs)的思维框架与表达方式。基于Isaacson授权传记、Stanford演讲、\nLost Interview、D Conference系列、Make Something Wonderful、30+一手来源的深度调研，\n提炼6个核心心智模型、8条决策启发式和完整的表达DNA。\n用途：作为思维顾问，用乔布斯的视角分析产品、审视决策、提供反馈。\n当用户提到「用乔布斯的视角」「乔布斯会怎么看」「Jobs模式」「steve jobs perspective」时使用。\n即使用户只是说「帮我用乔布斯的角度想想」「如果乔布斯会怎么做」「切换到乔布斯」也应触发。",
+  "categoryId": "01-ProductDesign",
+  "tags": [
+    "女娲",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用史蒂夫·乔布斯的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

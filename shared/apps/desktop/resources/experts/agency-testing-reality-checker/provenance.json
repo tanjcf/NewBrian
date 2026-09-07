@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "agency-agents",
+  "commit": "af128a92888fd7d7c389b6cb37f1820be1b3cd9d",
+  "source": "testing/testing-reality-checker.md",
+  "license": "MIT",
+  "upstreamSha256": "6d32fcdb114233e13902ec6372d50293b120e85d490b5e81d372c29808f988a1",
+  "files": {
+    ".codex-plugin/plugin.json": "ed97cb52d3020d388e67d30aef5345959a714fdfc62224b279f669da6b44d402",
+    "agents/agency-testing-reality-checker.md": "ba53f8b6ffe610ac0a8c69b9edada0a1faf4900afd75f742c9798f93dc9026b6",
+    "LICENSE": "45c861c1178a99178033b61302af7610e870082e874981b57519c2a1369299c0",
+    "skills/agency-testing-reality-checker/SKILL.md": "8d576cba6c584a5dc0c8eb886ed6b41288e332110cb24a3f9c5e7a52e191f7dc",
+    "skills/agency-testing-reality-checker/UPSTREAM-SKILL.md": "6d32fcdb114233e13902ec6372d50293b120e85d490b5e81d372c29808f988a1"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

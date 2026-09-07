@@ -454,7 +454,8 @@
  $('#shellSearch').onclick=()=>{const box=document.createElement('div');box.innerHTML='<input placeholder="搜索项目或对话"><div></div>';const results=box.querySelector('div');box.querySelector('input').oninput=e=>{results.textContent=$$('.shell-thread').filter(b=>b.textContent.includes(e.target.value)).map(b=>b.textContent).join(' · ')||'无匹配结果';};dialog('搜索',box);};
  $('#shellSwitch').onclick=()=>{const box=document.createElement('div');['学习与探索','股票与量化','游戏制作','视频制作','音乐创作','数据与决策','软件与自动化','文档写作'].forEach(name=>{const b=document.createElement('button');b.type='button';b.className='project';b.textContent=name+(name==='视频制作'?' ✓':'');b.onclick=()=>{if(name==='视频制作')$('#shellDialog').close();else toast('此原型仅实现视频制作场景');};box.append(b);});dialog('工作台',box);};
  const global=document.createElement('nav');global.className='shell-global';global.innerHTML='<button data-global="files">文件 3</button><button data-global="artifacts">产物 2</button><button data-global="tasks">任务 1</button>';
- $('.tools-head').after(global);
+ $('.tools-head').insertBefore(global, $('#expandBtn'));
+ const toolsButton=document.createElement('button');toolsButton.textContent='Tools';toolsButton.className='active';global.prepend(toolsButton);toolsButton.onclick=()=>{panel.hidden=true;$('.workbench').style.display='';global.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===toolsButton));};
  const panel=document.createElement('div');panel.className='shell-panel';panel.hidden=true;$('.inspector').append(panel);
  global.onclick=e=>{const key=e.target.dataset.global;if(!key)return;$('.workbench').style.display='none';panel.hidden=false;global.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===e.target));panel.replaceChildren();const entries={files:['脚本.md','镜头01.mp4','旁白-v2.wav'],artifacts:['短片预览.mp4','字幕草稿.srt'],tasks:['配音生成 · 已完成']}[key];entries.forEach(name=>{const b=document.createElement('button');b.textContent=name;b.onclick=()=>{const text=document.createElement('p');text.textContent=name+' · 示例资源，尚未连接实际项目文件。';dialog('资源预览',text);};panel.append(b);});};
  $$('.scene-tab').forEach(b=>b.addEventListener('click',()=>{panel.hidden=true;$('.workbench').style.display='';global.querySelectorAll('button').forEach(x=>x.classList.remove('active'));}));
@@ -496,5 +497,6 @@
 @media(max-width:860px){.layout{grid-template-columns:minmax(280px,.8fr) minmax(320px,1fr)}.layout>.sidebar{display:none}.layout.expanded{grid-template-columns:minmax(260px,.65fr) minmax(320px,1fr)}}
 @media(max-width:620px){body{overflow:auto}.app{height:auto;min-height:100vh}.layout,.layout.expanded{display:flex;flex-direction:column;overflow:visible}.main{min-height:460px}.inspector{height:760px;flex:none}.topbar .crumb{display:none}.topbar{gap:8px}.chat-scroll{max-height:380px}}
 </style>
+<style>.inspector{grid-template-rows:58px auto minmax(0,1fr)}.shell-global{border:0;padding:0;margin-left:auto}.shell-panel{grid-row:3}.tools-head .icon-btn{margin-left:8px}</style>
 </body>
 </html>

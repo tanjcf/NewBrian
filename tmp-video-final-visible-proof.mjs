@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createSceneTestCdpClient } from "./platforms/windows/apps/desktop/scripts/scene-test-cdp-client.mjs";
+import { osMouseClick } from "./platforms/windows/apps/desktop/scripts/scene-test-os-input.mjs";
+const dir="evidence/VIDEO-E2E-REAL-002-PASS";await mkdir(dir,{recursive:true});const c=await createSceneTestCdpClient(9356);
+const p=await c.evaluate(`(()=>{const e=[...document.querySelectorAll('button')].filter(x=>x.textContent?.trim()==='导出'&&x.getBoundingClientRect().x>1000).at(0);if(!e)return null;const r=e.getBoundingClientRect(),d=devicePixelRatio||1;return{x:Math.round((screenX+r.left+r.width/2)*d),y:Math.round((screenY+r.top+r.height/2)*d)}})()`);assert.ok(p,"右侧导出");await osMouseClick(p.x,p.y);await new Promise(r=>setTimeout(r,1800));
+let shot=await c.command("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(`${dir}/01-preview-open.png`,Buffer.from(shot.data,"base64"));
+const videoPoint=await c.evaluate(`(()=>{const e=document.querySelector('video');if(!e)return null;const r=e.getBoundingClientRect(),d=devicePixelRatio||1;return{x:Math.round((screenX+r.left+r.width/2)*d),y:Math.round((screenY+r.top+r.height/2)*d)}})()`);assert.ok(videoPoint,"video");await osMouseClick(videoPoint.x,videoPoint.y);await new Promise(r=>setTimeout(r,3200));
+const playback=await c.evaluate(`(()=>{const e=document.querySelector('video');return{currentTime:e.currentTime,duration:e.duration,paused:e.paused,readyState:e.readyState,volume:e.volume,src:e.currentSrc}})()`);
+shot=await c.command("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(`${dir}/02-playing.png`,Buffer.from(shot.data,"base64"));await writeFile(`${dir}/playback.json`,JSON.stringify({actions:[{method:"Windows SendInput mouse",target:"文件 7"},{method:"Windows SendInput mouse",target:"qingshigu-final-pass.mp4"},{method:"Windows SendInput mouse",target:"视频播放器中心"}],playback},null,2));console.log(JSON.stringify(playback,null,2));await c.close({preserveWorkspace:true});

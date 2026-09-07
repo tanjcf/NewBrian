@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/paul-graham-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "c6cd92efbbfa85e0e3cdc93bc5182685b1f10d427b6e216cd6dffb6dc6d56fdc",
+  "files": {
+    ".codex-plugin/plugin.json": "bd0afcccd0aee7b6929baf7e0463bd99c47f8df82019343cff60832321dcb96e",
+    "agents/nuwa-paul-graham-perspective.md": "ed9593de5de1c8a7b3ba71f772739e78a5f1bc30fd194c03b8bb94d4ba7c077b",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-paul-graham-perspective/FIDELITY.md": "b04eef8714677db5bed1b7b69ace62bbbe845bd465b22a9c4f5fad0a2ede5db8",
+    "skills/nuwa-paul-graham-perspective/references/research/01-writings.md": "eda8dbbde5bfdee10d09897958b4c31f168f44c5d3261461ca5d6cc8e7374805",
+    "skills/nuwa-paul-graham-perspective/references/research/02-conversations.md": "a3cea284f18088090934749b64ac6b4998389751937c2d3885d9f7e046ea7518",
+    "skills/nuwa-paul-graham-perspective/references/research/03-expression-dna.md": "e37295d14eb05271059409d583df45f2a523c6a537a7b8bd8534d1c4170d1e42",
+    "skills/nuwa-paul-graham-perspective/references/research/04-external-views.md": "221e47c61bc9dee9fb936b734e56d31ac6443b44ccae2e9d812def76a8689b53",
+    "skills/nuwa-paul-graham-perspective/references/research/05-decisions.md": "7d7333e20978818598a794ddab17470a17a6d087e48a709e2c067cbea670f07e",
+    "skills/nuwa-paul-graham-perspective/references/research/06-timeline.md": "05c6b77f17ab17b12be61f3763091be4d246fffecfcc657aefa2443e1eb15fda",
+    "skills/nuwa-paul-graham-perspective/SKILL.md": "85853797144b0e30597039404576a4990c026415a34570593bdd094c229ddf05",
+    "skills/nuwa-paul-graham-perspective/UPSTREAM-SKILL.md": "c6cd92efbbfa85e0e3cdc93bc5182685b1f10d427b6e216cd6dffb6dc6d56fdc"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

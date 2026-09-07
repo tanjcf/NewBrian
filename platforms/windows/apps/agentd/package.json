@@ -10,6 +10,7 @@
     "test": "node --test src/*.test.js"
   },
   "dependencies": {
+    "yaml": "2.8.1",
     "@codex-forge/protocol": "workspace:*",
     "docx": "9.5.1",
     "exceljs": "4.4.0",

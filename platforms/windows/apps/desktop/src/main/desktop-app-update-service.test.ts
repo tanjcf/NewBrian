@@ -18,6 +18,19 @@ const {
   resolveDesktopMsiInstallScope
 } = await import(new URL("./desktop-app-update-service.ts", import.meta.url).href);
 
+test("an update without a checksum never reaches download or installation", async () => {
+  const service = new DesktopAppUpdateService({
+    getCurrentVersion: () => "1.4.4",
+    readCachedRelease: async () => ({ latest_version: "1.4.5", download_url: "https://example.test/update.msi" }),
+    downloadDir: () => { throw new Error("must not create a download directory"); },
+    runSilentInstall: async () => { throw new Error("must not install"); },
+    openInstallerFallback: async () => { throw new Error("must not open installer"); }
+  });
+  const result = await service.startUpdate();
+  assert.equal(result.ok, false);
+  assert.match(result.detail, /缺少 SHA-256/);
+});
+
 test("parses and compares app_release offers for click-to-upgrade", () => {
   assert.equal(parseDesktopAppRelease(null), null);
   assert.equal(parseDesktopAppRelease({ latest_version: "0.1.61" }), null);
@@ -212,10 +225,10 @@ test("downloads MSI and runs silent install after the user clicks update", async
       "APPLICATIONFOLDER=C:\\Users\\Ada\\AppData\\Local\\.codecn",
       "ALLUSERS="
     ]);
-    assert.match(result.detail, /安装完成即将重启/);
+    assert.match(result.detail, /即将退出并安装/);
     assert.equal(afterSilent, 1);
     assert.ok(progress.some((item) => item.phase === "installing" && /正在安装/.test(item.detail)));
-    assert.ok(progress.some((item) => item.phase === "done" && /安装完成即将重启/.test(item.detail)));
+    assert.ok(progress.some((item) => item.phase === "done" && /即将退出并安装/.test(item.detail)));
     assert.deepEqual(await readFile(silentCalls[0]!.msiPath), payload);
     const verify = await service.verifyUpdate({ ok: true });
     assert.equal(verify.ok, true);

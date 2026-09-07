@@ -92,7 +92,7 @@ test("video render layers tracks with xfade and drawtext", async () => {
   const args = calls[1].payload.args as string[];
   const filter = args[args.indexOf("-filter_complex") + 1]!;
   assert.match(filter, /xfade=transition=dissolve/);
-  assert.match(filter, /drawtext=text='标题'/);
+  assert.match(filter, /drawtext=fontfile=[^:]+:text='标题'/);
   assert.match(filter, /overlay=eof_action=pass/);
 });
 

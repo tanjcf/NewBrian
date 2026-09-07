@@ -1,0 +1,12 @@
+import { readFile } from 'node:fs/promises';
+import { createSceneTestCdpClient } from './platforms/windows/apps/desktop/scripts/scene-test-cdp-client.mjs';
+import { osPressEnter } from './platforms/windows/apps/desktop/scripts/scene-test-os-input.mjs';
+const prompt=await readFile('tmp-video-prompt.txt','utf8');
+const c=await createSceneTestCdpClient(9570);
+await c.clearAndType('[data-testid="composer-input"]',prompt);
+console.log('typed', await c.evaluate(`document.querySelector('[data-testid="composer-input"]')?.value?.length`));
+await c.mouseClickSelector('button[title="发送"]');
+console.log('sent');
+await new Promise(r=>setTimeout(r,5000));
+console.log((await c.evaluate(`document.body.innerText.slice(-4500)`)));
+c.close();

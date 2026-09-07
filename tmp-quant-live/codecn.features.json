@@ -1,0 +1,348 @@
+{
+  "skills": [
+    {
+      "id": "skill-thread-fork",
+      "name": "线程分叉",
+      "summary": "从当前线程快速复制上下文，适合并行推进不同方案。",
+      "status": "enabled"
+    },
+    {
+      "id": "skill-workspace-scan",
+      "name": "工作区扫描",
+      "summary": "重新扫描当前项目文件树，适合切换目录后刷新上下文。",
+      "status": "enabled"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "plugin-browser",
+      "name": "Browser",
+      "summary": "使用 codeCN 浏览器预览打开并验证页面。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:browser",
+      "manifestPath": "builtin:browser/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "browser",
+        "preview",
+        "verification"
+      ],
+      "builtinToolNames": [
+        "browser.open",
+        "browser.capture"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：browser.open",
+        "内置工具：browser.capture",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\browser\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\browser\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-computer",
+      "name": "Computer",
+      "summary": "通过审批保护的本机工具安全操作本机。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:computer",
+      "manifestPath": "builtin:computer/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "computer",
+        "approval"
+      ],
+      "builtinToolNames": [
+        "shell.run",
+        "file.read",
+        "file.write"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：shell.run",
+        "内置工具：file.read",
+        "内置工具：file.write",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\computer\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\computer\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-figma",
+      "name": "Figma",
+      "summary": "生成 Figma 设计稿与 FigJam 流程图（需绑定 Figma 账号/令牌后才能写入云端）。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:figma",
+      "manifestPath": "builtin:figma/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "figma",
+        "figjam",
+        "design",
+        "flowchart",
+        "design-to-code"
+      ],
+      "builtinToolNames": [],
+      "executionKind": "instructions",
+      "executionEvidence": [
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\figma\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\figma\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-documents",
+      "name": "Documents",
+      "summary": "创建、编辑、检查并验证 Word 文档。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:documents",
+      "manifestPath": "builtin:documents/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "docx",
+        "documents",
+        "artifact-verification"
+      ],
+      "builtinToolNames": [
+        "document.create_docx",
+        "artifact.inspect"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：document.create_docx",
+        "内置工具：artifact.inspect",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\documents\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\documents\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-pdf",
+      "name": "PDF",
+      "summary": "读取、创建、渲染并验证 PDF 文件。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:pdf",
+      "manifestPath": "builtin:pdf/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "pdf",
+        "render",
+        "artifact-verification"
+      ],
+      "builtinToolNames": [
+        "document.create_pdf",
+        "artifact.inspect"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：document.create_pdf",
+        "内置工具：artifact.inspect",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\pdf\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\pdf\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-spreadsheets",
+      "name": "Spreadsheets",
+      "summary": "创建、编辑、分析并验证电子表格。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:spreadsheets",
+      "manifestPath": "builtin:spreadsheets/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "xlsx",
+        "csv",
+        "charts"
+      ],
+      "builtinToolNames": [
+        "spreadsheet.inspect",
+        "spreadsheet.analyze",
+        "spreadsheet.update"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：spreadsheet.inspect",
+        "内置工具：spreadsheet.analyze",
+        "内置工具：spreadsheet.update",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\spreadsheets\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\spreadsheets\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-presentations",
+      "name": "Presentations",
+      "summary": "创建、编辑、检查并验证演示文稿。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:presentations",
+      "manifestPath": "builtin:presentations/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "pptx",
+        "slides",
+        "artifact-verification"
+      ],
+      "builtinToolNames": [
+        "artifact.create",
+        "artifact.inspect"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：artifact.create",
+        "内置工具：artifact.inspect",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\presentations\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\presentations\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-template-creator",
+      "name": "Template Creator",
+      "summary": "从 Office 文件创建可复用模板。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:template-creator",
+      "manifestPath": "builtin:template-creator/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "templates",
+        "artifacts"
+      ],
+      "builtinToolNames": [],
+      "executionKind": "instructions",
+      "executionEvidence": [
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\template-creator\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\template-creator\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-sites",
+      "name": "Sites",
+      "summary": "构建并验证本地网站和 Web 应用。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:sites",
+      "manifestPath": "builtin:sites/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "sites",
+        "html",
+        "local-preview"
+      ],
+      "builtinToolNames": [
+        "file.write",
+        "browser.open"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：file.write",
+        "内置工具：browser.open",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\sites\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\sites\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-visualize",
+      "name": "Visualize",
+      "summary": "创建可交互的本地可视化、图表和说明工具。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:visualize",
+      "manifestPath": "builtin:visualize/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "visualize",
+        "html",
+        "charts"
+      ],
+      "builtinToolNames": [
+        "file.write",
+        "browser.open"
+      ],
+      "executionKind": "builtin-tools",
+      "executionEvidence": [
+        "内置工具：file.write",
+        "内置工具：browser.open",
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\visualize\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\visualize\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-default-templates",
+      "name": "Default Templates",
+      "summary": "使用经过验证的默认模板创建办公文件。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:default-templates",
+      "manifestPath": "builtin:default-templates/.codex-plugin/plugin.json",
+      "publisher": "codeCN",
+      "capabilities": [
+        "templates",
+        "documents",
+        "spreadsheets",
+        "presentations"
+      ],
+      "builtinToolNames": [],
+      "executionKind": "instructions",
+      "executionEvidence": [
+        "技能目录：I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\default-templates\\skills"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\BRAIN\\.materialized\\windows\\apps\\desktop\\build\\plugins\\default-templates\\skills"
+      ],
+      "mcpServerIds": []
+    }
+  ],
+  "automations": [
+    {
+      "id": "automation-git-check",
+      "title": "Git 巡检",
+      "status": "idle",
+      "trigger": "按固定间隔刷新 Git 状态并写入时间线",
+      "action": "git_status",
+      "intervalMinutes": 60
+    },
+    {
+      "id": "automation-workspace-scan",
+      "title": "工作区扫描",
+      "status": "idle",
+      "trigger": "按固定间隔刷新文件树",
+      "action": "workspace_scan",
+      "intervalMinutes": 30
+    }
+  ],
+  "runtime": {
+    "rustCoreTools": "disabled"
+  }
+}

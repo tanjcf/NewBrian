@@ -1,0 +1,23 @@
+{
+  "name": "agency-testing-reality-checker",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "agency-testing-reality-checker",
+  "agents": [
+    "./agents/agency-testing-reality-checker.md"
+  ],
+  "skills": [
+    "./skills/agency-testing-reality-checker"
+  ],
+  "displayName": "交付验收专家",
+  "profession": "真实交付与验收证据",
+  "description": "Stops fantasy approvals, evidence-based certification - Default to \"NEEDS WORK\", requires overwhelming proof for production readiness",
+  "categoryId": "02-Engineering",
+  "tags": [
+    "agency-agents",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用交付验收专家的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

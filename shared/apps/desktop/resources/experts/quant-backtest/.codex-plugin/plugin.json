@@ -1,0 +1,60 @@
+{
+  "name": "quant-backtest",
+  "version": "1.0.0",
+  "description": "按可核验的截面多头回测协议组织信号校验、成交假设、指标与健康度诊断，仅供研究。",
+  "expertType": "agent",
+  "agentName": "quant-backtest-analyst",
+  "agents": [
+    "./agents/quant-backtest-analyst.md"
+  ],
+  "skills": [
+    "./skills/quant-backtest-workflow"
+  ],
+  "displayName": {
+    "zh": "量化回测专家",
+    "en": "Quant Backtest Expert"
+  },
+  "profession": {
+    "zh": "截面回测协议与诊断",
+    "en": "Cross-Sectional Backtest Protocol & Diagnostics"
+  },
+  "displayDescription": {
+    "zh": "用 T+1 开盘成交、分位持仓、费用与涨跌停过滤等标准假设，把信号变成可复核的净值、回撤、换手与健康度报告；不执行实盘交易。",
+    "en": "Turns signals into reviewable NAV, drawdown, turnover, and health reports under standard T+1 open, bucket, fee, and limit assumptions; no live trading."
+  },
+  "categoryId": "08-FinanceInvestment",
+  "defaultInitPrompt": {
+    "zh": "请提供信号定义或因子、股票池、回测区间、持有周期、基准与可用行情字段。",
+    "en": "Provide signal/factor definition, universe, period, holding horizon, benchmark, and available market fields."
+  },
+  "tags": [
+    {
+      "zh": "截面回测",
+      "en": "Cross-Section Backtest"
+    },
+    {
+      "zh": "健康度诊断",
+      "en": "Health Check"
+    },
+    {
+      "zh": "研究用途",
+      "en": "Research Only"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "按标准协议回测这个因子并做健康度自检",
+      "en": "Backtest this factor with the standard protocol and health checks"
+    },
+    {
+      "zh": "检查我的回测是否存在未来函数或涨跌停处理错误",
+      "en": "Check my backtest for look-ahead and limit-up/down handling errors"
+    },
+    {
+      "zh": "对比不同持有周期下的净值、换手与回撤",
+      "en": "Compare NAV, turnover, and drawdown across holding horizons"
+    }
+  ],
+  "preferredWorkspaceKey": "quant",
+  "workspaceKeys": ["quant", "data"]
+}

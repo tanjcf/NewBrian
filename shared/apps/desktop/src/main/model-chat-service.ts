@@ -624,7 +624,7 @@ export class ModelChatService {
         ? [...new Set([...(expertSummon?.skillNames ?? []), ...goalSelectedLocalSkillNames])].slice(0, 6)
         : goalSelectedLocalSkillNames;
       if (expertSummonActive) {
-        emitReasoningSummary(`已召唤专家：${expertSummon?.profession || expertSummon?.displayName || expertSummon?.expertId}\n`);
+        emitReasoningSummary(`参与专家：${expertSummon?.profession || expertSummon?.displayName || expertSummon?.expertId}\n`);
       }
       const skillExpertBridgeInstruction = typeof this.dependencies.loadSkillExpertBridgeInstruction === "function"
         ? await this.dependencies.loadSkillExpertBridgeInstruction({

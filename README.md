@@ -72,11 +72,11 @@ Test artifacts are written to `apps/desktop/release/test`; production artifacts 
 written to `apps/desktop/release/production`. Production packaging always requires a
 valid Authenticode signature. Override service endpoints with
 `CODECN_TEST_GATEWAY_BASE_URL` / `CODECN_TEST_PREVIEW_URL` or
-`CODECN_PRODUCTION_GATEWAY_BASE_URL` / `CODECN_PRODUCTION_PREVIEW_URL`. Current
-defaults (until a reachable HTTPS domain is restored) are
-`http://120.48.151.202:8790/v1` and `http://120.48.151.202:3000` for both Test and
-Production channels. Do not use the retired `*.wangjietech.com` hosts — they are
-parked/blocked and cannot reach the model gateway.
+`CODECN_PRODUCTION_GATEWAY_BASE_URL` / `CODECN_PRODUCTION_PREVIEW_URL`.
+Defaults: Test uses `http://120.48.151.202:8790/v1` and
+`http://120.48.151.202:3000`; Production uses `https://api.sinnauze.cn/v1` and
+`https://api.sinnauze.cn`. Do not use the retired `*.wangjietech.com` hosts —
+they are parked/blocked and cannot reach the model gateway.
 
 Create architecture-specific macOS installers with:
 

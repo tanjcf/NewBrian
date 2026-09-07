@@ -1,0 +1,56 @@
+{
+  "caseId": "GAME-INSPECT-CHAT-RETRY2",
+  "timestamp": "2026-08-24T08:41:36.419Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "submit",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "submit",
+      "port": 9350
+    },
+    {
+      "type": "connect",
+      "port": 9350
+    },
+    {
+      "type": "switch-scene",
+      "scene": "game"
+    },
+    {
+      "type": "new-chat"
+    },
+    {
+      "type": "submit",
+      "text": "请检查当前游戏项目，不要编造数据"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "application-ready",
+      "passed": true
+    },
+    {
+      "name": "expected-visible-text",
+      "expected": "未绑定工程",
+      "passed": true
+    }
+  ],
+  "result": "PASS",
+  "firstFailure": "",
+  "screenshots": [
+    "before.png",
+    "submitted.png",
+    "completed.png"
+  ],
+  "finalState": {
+    "busy": false,
+    "text": "文件\n编辑\n查看\n窗口\n帮助\n游戏制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n原任务已不存在，已恢复到可用工作区。请新建任务或选择其他任务。\n我们该在 workspace 中做什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\nChoose project\n本地模式\nmain\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n项目资源\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n关卡\n项目与文件\n游戏策划\n角色与世界观\n战斗设计\n资产与测试\n▶ Play\n✦ AI 补全本关\n✦ 敌人\n✦ Boss\n✦ NPC\n未绑定 · 不可用\n关卡列表\n一关一草稿 · 共 0 关 · 非演示数据\n＋ 新建\n未绑定工程\n绑定本地游戏工程后，从磁盘加载真实关卡状态。\n无关卡\n非 UE 视口 · 仅展示已保存草稿坐标，不假装渲染场景\nContent\nOutliner\n全部\nLevels\nAI/\n★\n未绑定工程\n详情 · —\n类型\n—\n位置\n—\nAI 资产\n—\n行为\n—\n✦ 材质\n贴图 / 发光\n✦ 动作\n待机 / 技能\n✦ 叙事\n对白 / 目标\n✦ 逻辑\n蓝图级脚本\n✦ 行为\n巡逻 / 仇恨 / 对话\n✦ 战斗\n技能表 / 血条\nCook / 保存\n请先绑定本地游戏工程；未绑定工程时不提供演示关卡或假 Content\n保存关卡状态\nCook 工程",
+    "error": null
+  }
+}

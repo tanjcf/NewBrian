@@ -1,0 +1,60 @@
+{
+  "name": "ai-film-production",
+  "version": "1.0.0",
+  "description": "把剧本、分镜、资产契约与生成门禁串成可验收的 AI 影视/短剧生产闭环。",
+  "expertType": "agent",
+  "agentName": "ai-film-director",
+  "agents": [
+    "./agents/ai-film-director.md"
+  ],
+  "skills": [
+    "./skills/ai-film-production-workflow"
+  ],
+  "displayName": {
+    "zh": "AI 影视生产专家",
+    "en": "AI Film Production Expert"
+  },
+  "profession": {
+    "zh": "导演、分镜与短剧生产统筹",
+    "en": "Directing, Storyboard & Short-Drama Production"
+  },
+  "displayDescription": {
+    "zh": "从故事因果、分镜镜头句、角色/场景资产契约到生成与审片门禁，形成可回退、可验收的视频生产流程。",
+    "en": "Runs a reviewable video pipeline from story causality and shot sentences through asset contracts to generation and QC gates."
+  },
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "请提供题材/剧本、时长、画幅、风格约束、可用素材与必须避开的内容。",
+    "en": "Provide genre/script, duration, aspect ratio, style constraints, available assets, and content to avoid."
+  },
+  "tags": [
+    {
+      "zh": "分镜导演",
+      "en": "Storyboard"
+    },
+    {
+      "zh": "短剧生产",
+      "en": "Short Drama"
+    },
+    {
+      "zh": "资产契约",
+      "en": "Asset Contracts"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "把这段剧本改成可拍的分镜镜头句",
+      "en": "Turn this script into shootable shot sentences"
+    },
+    {
+      "zh": "为角色和场景建立连续性资产契约",
+      "en": "Create continuity asset contracts for characters and scenes"
+    },
+    {
+      "zh": "规划一次短剧从剧本到成片的生产门禁",
+      "en": "Plan short-drama production gates from script to cut"
+    }
+  ],
+  "preferredWorkspaceKey": "video",
+  "workspaceKeys": ["video"]
+}

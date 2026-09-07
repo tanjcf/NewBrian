@@ -1,16 +1,16 @@
 import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { BrowserWindow, app, shell } from "electron";
 import { desktopIpcChannels, type DesktopAppUpdateProgress } from "@codex-forge/protocol";
 import {
-  buildDeferredSilentMsiexecScript,
   controlPlaneCacheRelease,
   DesktopAppUpdateService,
   parseDesktopAppRelease
 } from "./desktop-app-update-service.js";
 import { buildDeferredUlitZipApplyScript } from "./desktop-app-update-patch.js";
 import { registerDesktopAppUpdateIpc } from "./desktop-app-update-ipc.js";
+import { buildMsiUpdateRunner } from "./desktop-app-update-runner.js";
 
 interface DesktopAppUpdateCompositionDeps {
   readControlPlaneState: () => Promise<unknown>;
@@ -43,16 +43,27 @@ function broadcastAppUpdateProgress(progress: DesktopAppUpdateProgress) {
  * Returns immediately so the UI can show「安装完成即将重启」and quit.
  */
 async function scheduleDeferredSilentMsiexec(input: {
+  expectedVersion?: string;
+  fullMsi?: boolean;
   msiPath: string;
   args: string[];
   downloadDir: string;
 }): Promise<{ exitCode: number | null; error?: string }> {
-  const scriptPath = join(input.downloadDir, `silent-upgrade-${Date.now()}.cmd`);
-  const script = buildDeferredSilentMsiexecScript({
+  const runId = `${Date.now()}-${process.pid}`;
+  const scriptPath = join(input.downloadDir, `silent-upgrade-${runId}.ps1`);
+  const executablePath = app.getPath("exe");
+  const script = buildMsiUpdateRunner({
     msiPath: input.msiPath,
+    expectedVersion: input.expectedVersion,
+    fullMsi: input.fullMsi,
     args: input.args,
-    processImageName: "codeCN.exe",
-    maxWaitSeconds: 90
+    executablePath,
+    processId: process.pid,
+    dataRoot: dirname(app.getPath("userData")),
+    chatRoot: join(dirname(executablePath), "tmp"),
+    downloadDir: input.downloadDir,
+    backupRoot: join(app.getPath("appData"), "codecn-update-backups", runId),
+    resultPath: join(input.downloadDir, "last-msi-update.json")
   });
   try {
     await writeFile(scriptPath, script, "utf8");
@@ -62,7 +73,13 @@ async function scheduleDeferredSilentMsiexec(input: {
       error: error instanceof Error ? error.message : String(error)
     };
   }
-  return await spawnDetachedCmd(scriptPath);
+  return await new Promise((resolve) => {
+    const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], {
+      windowsHide: true, detached: true, stdio: "ignore"
+    });
+    child.once("error", error => resolve({ exitCode: null, error: error.message }));
+    child.once("spawn", () => { child.unref(); resolve({ exitCode: 0 }); });
+  });
 }
 
 async function scheduleDeferredUlitZipApply(input: {
@@ -151,9 +168,11 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
       }
     },
     downloadDir,
-    runSilentInstall: async ({ msiPath, args }) => scheduleDeferredSilentMsiexec({
+    runSilentInstall: async ({ msiPath, args, expectedVersion, fullMsi }) => scheduleDeferredSilentMsiexec({
       msiPath,
       args,
+      expectedVersion,
+      fullMsi,
       downloadDir: downloadDir()
     }),
     runUlitZipApply: async ({ zipPath, installRoot }) => scheduleDeferredUlitZipApply({

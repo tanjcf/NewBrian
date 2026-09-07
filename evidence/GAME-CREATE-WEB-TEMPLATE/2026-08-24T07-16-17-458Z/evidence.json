@@ -1,0 +1,42 @@
+{
+  "caseId": "GAME-CREATE-WEB-TEMPLATE",
+  "timestamp": "2026-08-24T07:16:17.458Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "submit",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "submit",
+      "port": 9350
+    },
+    {
+      "type": "connect",
+      "port": 9350
+    }
+  ],
+  "assertions": [
+    {
+      "name": "execution",
+      "passed": false,
+      "detail": "Timed out: Boolean(document.querySelector('.brain-workspace-menu'))\n文件\n编辑\n查看\n窗口\n帮助\n量化交易\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n只执行量化删除验收：调用 quant.portfolio.delete\n打开位置\n只执行量化删除验收：调用 quant.portfolio.delete 删除当前 ces 项目已经存在的 skillId=sany-radar-e2e；删除对应右侧组合账本和项目 Skill 目录。不要执行 git、shell 或其他工具，完成后返回 quant.portfolio.delete 原始结果。\n›\n已处理 2 小时前\n查看源码\n\n已请求执行工具，等待你批准后继续。\n\n待确认工具：quant.portfolio.delete\n\n批准后会继续生成可见结果；拒绝则本轮停止。\n\n＋\n请求批准\n选择技能\nAuto·均衡 中\n↑\nces\n仅保存在本机\n文件\n0\n产物\n0\n任务\n1\n行情\n组合\n策略\n雷达\n研究笔记\n量化交易\n行情分析\n已加载 241 条真实行情 · akshare-adapter · 不连接真实券商\n代码\n周期\n日线\n周线\n月线\n复权\n前复权\n后复权\n不复权\n开始日期\n结束日期\n查询行情\n自选股\n新建分组\n默认自选 1\n600519移出当前分组\n分组监控已更新 1 只 · 真实行情刷新监控\n6"
+    }
+  ],
+  "result": "FAIL",
+  "firstFailure": "Timed out: Boolean(document.querySelector('.brain-workspace-menu'))\n文件\n编辑\n查看\n窗口\n帮助\n量化交易\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n只执行量化删除验收：调用 quant.portfolio.delete\n打开位置\n只执行量化删除验收：调用 quant.portfolio.delete 删除当前 ces 项目已经存在的 skillId=sany-radar-e2e；删除对应右侧组合账本和项目 Skill 目录。不要执行 git、shell 或其他工具，完成后返回 quant.portfolio.delete 原始结果。\n›\n已处理 2 小时前\n查看源码\n\n已请求执行工具，等待你批准后继续。\n\n待确认工具：quant.portfolio.delete\n\n批准后会继续生成可见结果；拒绝则本轮停止。\n\n＋\n请求批准\n选择技能\nAuto·均衡 中\n↑\nces\n仅保存在本机\n文件\n0\n产物\n0\n任务\n1\n行情\n组合\n策略\n雷达\n研究笔记\n量化交易\n行情分析\n已加载 241 条真实行情 · akshare-adapter · 不连接真实券商\n代码\n周期\n日线\n周线\n月线\n复权\n前复权\n后复权\n不复权\n开始日期\n结束日期\n查询行情\n自选股\n新建分组\n默认自选 1\n600519移出当前分组\n分组监控已更新 1 只 · 真实行情刷新监控\n6",
+  "screenshots": [
+    "before.png",
+    "failure.png"
+  ],
+  "finalState": {
+    "title": "codeCN",
+    "selectedScene": "quant",
+    "activeView": "market",
+    "visibleText": "文件\n编辑\n查看\n窗口\n帮助\n量化交易\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n只执行量化删除验收：调用 quant.portfolio.delete\n打开位置\n只执行量化删除验收：调用 quant.portfolio.delete 删除当前 ces 项目已经存在的 skillId=sany-radar-e2e；删除对应右侧组合账本和项目 Skill 目录。不要执行 git、shell 或其他工具，完成后返回 quant.portfolio.delete 原始结果。\n›\n已处理 2 小时前\n查看源码\n\n已请求执行工具，等待你批准后继续。\n\n待确认工具：quant.portfolio.delete\n\n批准后会继续生成可见结果；拒绝则本轮停止。\n\n＋\n请求批准\n选择技能\nAuto·均衡 中\n↑\nces\n仅保存在本机\n文件\n0\n产物\n0\n任务\n1\n行情\n组合\n策略\n雷达\n研究笔记\n量化交易\n行情分析\n已加载 241 条真实行情 · akshare-adapter · 不连接真实券商\n代码\n周期\n日线\n周线\n月线\n复权\n前复权\n后复权\n不复权\n开始日期\n结束日期\n查询行情\n自选股\n新建分组\n默认自选 1\n600519移出当前分组\n分组监控已更新 1 只 · 真实行情刷新监控\n600519¥1272.83-1.45%量 3,347,231\n大盘与板块\n刷新大盘\n大盘指数\n行业板块\n概念板块\n资金流向\n涨停池\n点击刷新后读取真实大盘数据\n尚未请求大盘数据\n600519\n日线 · 前复权 · 区间 -11.08%\n点击开启十字线 · 点击量柱 → 当天开高低收走势\n08-25\n最高 1531.75 / 最低 1151.01\n08-21",
+    "rendererError": null
+  }
+}

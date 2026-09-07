@@ -1,0 +1,60 @@
+{
+  "startedAt": "2026-08-30T12:07:34.707Z",
+  "debugPort": 9555,
+  "items": [
+    {
+      "id": "P1",
+      "item": "clipInstances persistence",
+      "result": "PASS",
+      "evidence": "count=8 path=I:/py_workerposse/aigc/.brain-video/pipeline-editor.json"
+    },
+    {
+      "id": "P2",
+      "item": "linkGroupId V↔A2 peel pairs",
+      "result": "PASS",
+      "evidence": "linked=7 peelGroups={\"peel-shot-1-1788070362713\":[\"video:v1\",\"audio:a2\"],\"peel-shot-2-1788070363382\":[\"video:v1\",\"audio:a2\"],\"link-shot-1\":[\"audio:a1\"],\"link-shot-2\":[\"audio:a1\"],\"link-shot-3\":[\"audio:a1\"]}"
+    },
+    {
+      "id": "P3",
+      "item": "A2 peel volume keyframes not all-zero",
+      "result": "PASS",
+      "evidence": "a2Peels=2 allZero=0 sample=[{\"t\":0,\"v\":1},{\"t\":6.583333,\"v\":1}]"
+    },
+    {
+      "id": "U-heal",
+      "item": "envelope heal all-zero → 100%",
+      "result": "FAIL",
+      "evidence": "node:internal/modules/esm/load:195\r\n    throw new ERR_UNSUPPORTED_ESM_URL_SCHEME(parsed, schemes);\r\n          ^\r\n\r\nError [ERR_UNSUPPORTED_ESM_URL_SCHEME]: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'i:'\r\n    at throwIfUnsupportedURLScheme (node:internal/modules/esm/load:195:11)\r\n    at defaultLoadSync (node:internal/modules/esm/load:142:3)\r\n    at #loadAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:776:12)\r\n    at #loadSync (node:internal/modules/esm/loader:796:49)\r\n    at ModuleLoader.load (node:internal/modules/esm/loader:762:26)\r\n    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:504:31)\r\n    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:555:36)\r\n    at afterResolve (node:internal/modules/esm/loader:603:52)\r\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:609:12)\r\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:162:33) {\r\n  code: 'ERR_UNSUPPORTED_ESM_URL_SCHEME'\r\n}\r\n\r\nNode.js v24.15.0"
+    },
+    {
+      "id": "CDP-ui",
+      "item": "Video UI reachable (scene/tabs)",
+      "result": "PASS",
+      "evidence": "{\"videoScene\":true,\"hasTracksTab\":true,\"hasShotMode\":true,\"hasSeqMode\":true,\"title\":\"codeCN\",\"snippet\":\"文件 编辑 查看 窗口 帮助 你要你能帮我做个视频吗 打开位置 你要你能帮我做个视频吗 › 已处理 1 天前 查看源码 好的！当前项目中已有一个视频管道，但还只是一个占位框架（\\\"一段等待创作的故事\\\"），需要我们来填充实际内容。 在开始之前，我想先了解一下你的想法： 请告诉我： 视频主题 — 你想做什么类型的视频？（例如：产品宣传、科普讲解、个人 Vlog、教程、音乐短片、AI 视觉大片……） 视频时长 — 大概多长？15秒、30秒、1分钟、还是更长？ 参考风格 — 有没有参考\"}"
+    },
+    {
+      "id": "F-mute-dom",
+      "item": "Mute controls present per track (DOM)",
+      "result": "SKIP",
+      "evidence": "muteButtons=0; open 本镜音视频轨 first"
+    },
+    {
+      "id": "E-link-dom",
+      "item": "Linked clips visible (DOM)",
+      "result": "SKIP",
+      "evidence": "linkedClipCount=0"
+    },
+    {
+      "id": "D-filter",
+      "item": "本镜/全片 mode controls present",
+      "result": "PASS",
+      "evidence": "{\"hasShotMode\":true,\"hasSeqMode\":true}"
+    },
+    {
+      "id": "F24",
+      "item": "Mute isolation click A1 does not change A2 (CDP)",
+      "result": "SKIP",
+      "evidence": "{\"ok\":false,\"reason\":\"A1/A2 mute buttons not found\",\"laneCount\":0}"
+    }
+  ]
+}

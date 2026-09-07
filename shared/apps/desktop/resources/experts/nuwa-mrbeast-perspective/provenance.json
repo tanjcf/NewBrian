@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/mrbeast-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "d7674a52a043ac933f89966eff6f3127bfbff247c03c22757330dd2224121800",
+  "files": {
+    ".codex-plugin/plugin.json": "d44a0e58f9de65c79009889abb9388aa9fd8bf6440717d275b1f8b1dc6281d87",
+    "agents/nuwa-mrbeast-perspective.md": "974fd71b2000289c218757b6db2213c5dde92029d1e0a462a84b156598b2f781",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-mrbeast-perspective/FIDELITY.md": "602c11aa2ddabb83688dae1f8e7234241fbd4544ab5fdb49ad175d18c4d8b1b5",
+    "skills/nuwa-mrbeast-perspective/references/research/02-conversations.md": "5ea4f1eb87390e1e3b096bc59a31c83103ac51df7383ad42fb1c4a431d48fe30",
+    "skills/nuwa-mrbeast-perspective/references/research/03-expression-dna.md": "6671f534a8c2b28c3fbe3cbb4b807242ef55e79cf0bcc23015b2d96bb880a732",
+    "skills/nuwa-mrbeast-perspective/references/research/04-external-views.md": "817a3f3702af8e288c70d672de8bdc49e7131e9ff089cf218b5057fb7c55f970",
+    "skills/nuwa-mrbeast-perspective/references/research/05-decisions.md": "5769191b10ce69e377808210eaa6508eb04380a8b10b50fadb66d637eba1bd8f",
+    "skills/nuwa-mrbeast-perspective/references/research/06-timeline.md": "c238874914784ca11d331c2f5be70bbdedcbf9332533fb16a8b7f6e33da143c7",
+    "skills/nuwa-mrbeast-perspective/scripts/analyze_titles.py": "7d02c3d8f2fb14d06914a946ed85ae31ae26bdf3c3816756d6e4630e3df285b2",
+    "skills/nuwa-mrbeast-perspective/scripts/fetch_youtube_subtitles.sh": "d7f72a9405becb7144d922a973ef4282212a7c6ac7604966ae44bcbbf87bdb45",
+    "skills/nuwa-mrbeast-perspective/scripts/retention_curve_checker.py": "89a0c36fdfab9848c3bdb61959c6799ad75c7548dcd2d4550eee0c9cd0846a9a",
+    "skills/nuwa-mrbeast-perspective/scripts/thumbnail_audit.py": "45720a5b1bf64ff30775294c897206cedd7c9eef6beb174f874fc6106cc233e4",
+    "skills/nuwa-mrbeast-perspective/SKILL.md": "4e651b4a8ce8d01d449c084ad1a10098bf1a8c865744013bd47d5de9860f80ef",
+    "skills/nuwa-mrbeast-perspective/UPSTREAM-SKILL.md": "d7674a52a043ac933f89966eff6f3127bfbff247c03c22757330dd2224121800"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

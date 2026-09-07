@@ -161,7 +161,12 @@ export class NovelTtsService {
   async synthesizeToFile(input: NovelTtsSynthesizeInput): Promise<NovelTtsSynthesizeResult> {
     const text = trimText(input.text);
     if (!text) return { ok: false, detail: "没有可生成的内容。" };
-    const preferGateway = input.preferGateway !== false && this.dependencies.enableGatewaySpeech;
+    const preferGateway = isMinimaxVoiceId(input.voiceId) && input.preferGateway !== false && this.dependencies.enableGatewaySpeech;
+
+    // A chosen remote voice must never silently become a different local speaker.
+    if (isMinimaxVoiceId(input.voiceId) && !preferGateway) {
+      return { ok: false, detail: "所选远程声音不可用，请启用配音网关后重试，或试听并选择本地声音。" };
+    }
 
     if (preferGateway) {
       const remote = await this.synthesizeViaMinimax(text, input.voiceId);
@@ -189,8 +194,9 @@ export class NovelTtsService {
         }
       }
       await this.dependencies.appendDebugLog?.(
-        `novel tts minimax miss detail=${remote.detail || "unknown"}; falling back to kokoro`
+        `novel tts minimax miss detail=${remote.detail || "unknown"}; selected voice preserved`
       );
+      return { ok: false, detail: remote.detail || "所选声音生成失败，请重试；未切换音色或引擎。" };
     }
 
     const kokoroVoiceId = this.resolveKokoroVoiceId(input.voiceId);
@@ -236,7 +242,7 @@ export class NovelTtsService {
         this.dependencies.readBearerToken()
       ]);
       if (!baseUrl || !bearerToken) {
-        return { ok: false, detail: "未登录或网关不可用，将尝试本地配音。" };
+        return { ok: false, detail: "未登录或网关不可用，请登录后重试。" };
       }
       const voice = resolveMinimaxNarrationVoice(
         isMinimaxVoiceId(voiceId) ? voiceId : undefined
@@ -261,7 +267,7 @@ export class NovelTtsService {
         || Boolean(error && typeof error === "object" && "name" in error && (error as { name?: string }).name === "AbortError");
       const detail = aborted
         ? "朗读已取消。"
-        : "朗读服务请求失败，将尝试本地配音。";
+        : "朗读服务请求失败，请重试。";
       await this.dependencies.appendDebugLog?.(
         `novel tts minimax error ${aborted ? "cancelled" : error instanceof Error ? error.message : String(error)}`
       );

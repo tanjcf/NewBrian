@@ -1,0 +1,11 @@
+{
+  "workspaces": [
+    {
+      "id": "workspace:internal-chat",
+      "name": "__internal_chat__",
+      "path": "I:\\G盘迁移备份\\workrpase\\BRAIN\\tmp-quant-live\\tmp",
+      "brainWorkspaceKey": "document",
+      "threads": []
+    }
+  ]
+}

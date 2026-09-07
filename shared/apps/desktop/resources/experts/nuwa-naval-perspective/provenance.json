@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/naval-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "18344d4e44f7f850df4399bcc8fc73cd7b10edc6436dbc769022f504d03a944e",
+  "files": {
+    ".codex-plugin/plugin.json": "2c6fa8d5eb4d32eba4ee70a6ef42293e59284435a664f6b32c3ec862e7ae9450",
+    "agents/nuwa-naval-perspective.md": "2f796a8daedfab74a65d456fe96c74fa0197823130f9227f1f391e6f0b2daf74",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-naval-perspective/FIDELITY.md": "7f09feee86ddee442afd4c5648f03880c4fae3d24be08b4e5fd1aec902901148",
+    "skills/nuwa-naval-perspective/references/naval-agent2-conversations.md": "f9b96f20c24191e36594724db160a0aa8ef011da45b583e14a24de13c8dbab3e",
+    "skills/nuwa-naval-perspective/references/naval-agent3-expression-dna.md": "cf3a6354d24925cc0534eeab4a97e26bd75b4db9893a152eb6b225730237d154",
+    "skills/nuwa-naval-perspective/references/naval-ravikant-agent1-著作与系统思考.md": "df05c56c05585abf9ab0ff658627bc4708e7ca56a93c248a0444cc790ab02809",
+    "skills/nuwa-naval-perspective/references/quality-validation.md": "9c0b9c0549e6388ef0431533393469997721c906c678b7dd6420c895d86dd98b",
+    "skills/nuwa-naval-perspective/SKILL.md": "6a1d26d70d8d358bcd596774e4083e7623ea9a5764123def49546fc8d3fe0bdb",
+    "skills/nuwa-naval-perspective/UPSTREAM-SKILL.md": "18344d4e44f7f850df4399bcc8fc73cd7b10edc6436dbc769022f504d03a944e"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

@@ -141,7 +141,9 @@ export interface BrainVideoClipInstance {
   linkGroupId?: string;
 }
 
+export type { VideoVoiceCasting, VideoVoiceAnalysisInput } from "./video-voice-casting.js";
 export interface BrainVideoPipelineState {
+  voiceCasting?: import("./video-voice-casting.js").VideoVoiceCasting;
   schemaVersion?: number;
   pipeline?: typeof BRAIN_VIDEO_RUNTIME_VERSION;
   script: string;

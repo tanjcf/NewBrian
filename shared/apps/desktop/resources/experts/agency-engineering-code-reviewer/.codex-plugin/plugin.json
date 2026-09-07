@@ -1,0 +1,23 @@
+{
+  "name": "agency-engineering-code-reviewer",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "agency-engineering-code-reviewer",
+  "agents": [
+    "./agents/agency-engineering-code-reviewer.md"
+  ],
+  "skills": [
+    "./skills/agency-engineering-code-reviewer"
+  ],
+  "displayName": "代码审查专家",
+  "profession": "代码质量与安全审查",
+  "description": "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance — not style preferences.",
+  "categoryId": "02-Engineering",
+  "tags": [
+    "agency-agents",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用代码审查专家的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

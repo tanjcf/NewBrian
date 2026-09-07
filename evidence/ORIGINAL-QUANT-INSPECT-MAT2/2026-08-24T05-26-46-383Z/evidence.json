@@ -1,0 +1,41 @@
+{
+  "caseId": "ORIGINAL-QUANT-INSPECT-MAT2",
+  "timestamp": "2026-08-24T05:26:46.383Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "inspect",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "inspect",
+      "port": 9350
+    },
+    {
+      "type": "connect",
+      "port": 9350
+    }
+  ],
+  "assertions": [
+    {
+      "name": "application-ready",
+      "passed": true
+    }
+  ],
+  "result": "PASS",
+  "firstFailure": "",
+  "screenshots": [
+    "before.png",
+    "completed.png"
+  ],
+  "finalState": {
+    "title": "codeCN",
+    "selectedScene": "explore",
+    "activeView": null,
+    "visibleText": "文件\n编辑\n查看\n窗口\n帮助\n场景学习探索\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该聊什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\nChoose project\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n项目资源\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n场景知识\n可用工具\n场景知识\n该功能入口已按产品原型归位，正在接入对应的真实编辑与执行能力。",
+    "rendererError": null
+  }
+}

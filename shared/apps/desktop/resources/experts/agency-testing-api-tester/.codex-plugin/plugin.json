@@ -1,0 +1,23 @@
+{
+  "name": "agency-testing-api-tester",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "agency-testing-api-tester",
+  "agents": [
+    "./agents/agency-testing-api-tester.md"
+  ],
+  "skills": [
+    "./skills/agency-testing-api-tester"
+  ],
+  "displayName": "API 测试专家",
+  "profession": "接口合同与集成测试",
+  "description": "Expert API testing specialist focused on comprehensive API validation, performance testing, and quality assurance across all systems and third-party integrations",
+  "categoryId": "02-Engineering",
+  "tags": [
+    "agency-agents",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用API 测试专家的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

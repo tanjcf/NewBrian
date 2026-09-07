@@ -1,0 +1,23 @@
+{
+  "name": "agency-engineering-backend-architect",
+  "version": "1.0.0",
+  "expertType": "agent",
+  "agentName": "agency-engineering-backend-architect",
+  "agents": [
+    "./agents/agency-engineering-backend-architect.md"
+  ],
+  "skills": [
+    "./skills/agency-engineering-backend-architect"
+  ],
+  "displayName": "后端架构专家",
+  "profession": "后端架构与服务设计",
+  "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices",
+  "categoryId": "02-Engineering",
+  "tags": [
+    "agency-agents",
+    "原始 Skill"
+  ],
+  "quickPrompts": [
+    "请用后端架构专家的工作方法分析当前任务，并给出依据与行动建议。"
+  ]
+}

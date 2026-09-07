@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/sun-yuchen-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "61b53ce2427726761767ca7d96ef869e54c6dd9005ab491e22f4bd043676c5d5",
+  "files": {
+    ".codex-plugin/plugin.json": "68b254b9a10482a14f840017fed0f0c27d8e964a528534834eb4cb0f80f7718b",
+    "agents/nuwa-sun-yuchen-perspective.md": "f290577e6e2606358b48b4561f5f4eea36a9b88f73567a722776889a61f8b7df",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-sun-yuchen-perspective/FIDELITY.md": "3f61d608918b0f8dabf46d4d2083ff64b8337d187397a49a4eed4a2cd713c55b",
+    "skills/nuwa-sun-yuchen-perspective/README.md": "f93985869c297d259475ca20f6a7e869b9d86257deafbf74444fb8a9c2ab2c29",
+    "skills/nuwa-sun-yuchen-perspective/references/research/01-writings.md": "c84eab3fcde670fd79946e33cd9654a86c5ad22e0a8440d74113b0adb96299e4",
+    "skills/nuwa-sun-yuchen-perspective/references/research/02-conversations.md": "e64bdbfab183e0ca5b26890b0f52ff700ebd3240aa009ab126909965b4440bcb",
+    "skills/nuwa-sun-yuchen-perspective/references/research/03-expression-dna.md": "529a3ead692c351b1b07c6dba73ecd4a0c123112b01dfe16ced550286c773e30",
+    "skills/nuwa-sun-yuchen-perspective/references/research/04-external-views.md": "b823bc8bd0a35460947cc5bd0eeefbb97c26c9b3a5acff5c020ccf999be8692d",
+    "skills/nuwa-sun-yuchen-perspective/references/research/05-decisions.md": "d81f35e779e63afccca60ac2b0a65a9db74405bf54807ad564fef1005a29209f",
+    "skills/nuwa-sun-yuchen-perspective/references/research/06-timeline.md": "7f28206941c3e54f9d57a2e69bafcb98473289a14985c637e667b429268e8e03",
+    "skills/nuwa-sun-yuchen-perspective/SKILL.md": "7b823a48a2cf6d92a5ad3a515dc33c4284a6df7e2afb5e897f60b54c6adfa4ef",
+    "skills/nuwa-sun-yuchen-perspective/UPSTREAM-SKILL.md": "61b53ce2427726761767ca7d96ef869e54c6dd9005ab491e22f4bd043676c5d5"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

@@ -949,6 +949,7 @@ export const desktopIpcChannels = {
     reportRendererFailure: "phase1:report-renderer-failure",
     reportRendererDiagnostic: "phase1:report-renderer-diagnostic",
     synthesizeNovelSpeech: "phase1:synthesize-novel-speech",
+    analyzeVideoVoices: "phase1:analyze-video-voices",
     cancelNovelSpeech: "phase1:cancel-novel-speech"
   },
   usageExceptionFeedback: {

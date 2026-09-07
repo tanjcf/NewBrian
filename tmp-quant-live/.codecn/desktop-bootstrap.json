@@ -1,0 +1,32 @@
+{
+  "overall": {
+    "status": "running",
+    "currentTaskId": "conda",
+    "message": "正在检查系统 conda 并准备桌面环境...",
+    "updatedAt": "2026-08-24T10:56:54.748Z"
+  },
+  "tasks": [
+    {
+      "id": "conda",
+      "label": "Conda 环境",
+      "status": "running",
+      "detail": "正在检查系统 conda 并准备桌面环境...",
+      "startedAt": "2026-08-24T10:56:54.748Z"
+    },
+    {
+      "id": "python",
+      "label": "Python 运行时",
+      "status": "pending"
+    },
+    {
+      "id": "node",
+      "label": "Node.js 运行时",
+      "status": "pending"
+    },
+    {
+      "id": "project-deps",
+      "label": "项目依赖",
+      "status": "pending"
+    }
+  ]
+}

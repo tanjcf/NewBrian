@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/ilya-sutskever-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "c8f68e9e7646ef4aa2ff07876f9ae3b4a379d80c822f4b13d37c7d02006fba84",
+  "files": {
+    ".codex-plugin/plugin.json": "7efa56510331a272e734957468e92d3832c750bf1f220c90ac410087a7194add",
+    "agents/nuwa-ilya-sutskever-perspective.md": "111a903ecd8743b81683cb910a894863e43d75eb558b25fe76d20167c1ee7261",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-ilya-sutskever-perspective/FIDELITY.md": "ed47bfbbb7f9fa12d68f95c6be46722d9929ea74269e470cc7ced7c2057424f0",
+    "skills/nuwa-ilya-sutskever-perspective/references/research/01-writings.md": "03a5660754f32af5c384dee82964f43df3b0ccb53be49e77d154552ae4c83563",
+    "skills/nuwa-ilya-sutskever-perspective/references/research/02-conversations.md": "0505fd248ca4c6b5bb3af719a2e49ff004ab5bab2b2bbef096be538c1c221f9b",
+    "skills/nuwa-ilya-sutskever-perspective/references/research/03-expression-dna.md": "97e6a1827d31bdfcb484eb7ed2c50e2020003bbbca37cdd1c5797cb03ebcd71d",
+    "skills/nuwa-ilya-sutskever-perspective/references/research/04-external-views.md": "bfc77354f2e9d6e97cab4d89c69047abccd1a1c4e3de62c14fe2eeaf17feb1c2",
+    "skills/nuwa-ilya-sutskever-perspective/references/research/05-decisions.md": "d56451130f6b97c22458bdf142f3602570c68df274a931c5a3d4ff34464e5f4a",
+    "skills/nuwa-ilya-sutskever-perspective/references/research/06-timeline.md": "2cae4464a6199a783ddd60cbbcc6f07a298fc464ba8ac0d39914f78c7a584a71",
+    "skills/nuwa-ilya-sutskever-perspective/SKILL.md": "812610da39174b726a4c0f0fdc35a1f6de53a627fb3fcf0568b6441ded5b69fa",
+    "skills/nuwa-ilya-sutskever-perspective/UPSTREAM-SKILL.md": "c8f68e9e7646ef4aa2ff07876f9ae3b4a379d80c822f4b13d37c7d02006fba84"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

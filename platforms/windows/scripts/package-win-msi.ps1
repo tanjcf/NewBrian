@@ -1,9 +1,12 @@
 param(
+  [string]$Version,
   [switch]$SkipBuild,
   [ValidateSet("Test", "Production")]
   [string]$Channel = "Test",
   # Transitional upgrade substitute package ("升级文件替代包"): emit {version}ulit.MSI
-  [switch]$Ulit
+  [switch]$Ulit,
+  # Allow Production artifacts without Authenticode when no signing cert is configured.
+  [switch]$AllowUnsigned
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +27,11 @@ if (-not (Test-Path -LiteralPath $asarPackageRoot)) {
 }
 $asarCli = Join-Path $asarPackageRoot "bin\asar.js"
 $desktopPackage = Get-Content (Join-Path $desktopRoot "package.json") -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot "msi-version.ps1")
+if (-not [string]::IsNullOrWhiteSpace($Version)) {
+  Assert-MsiVersion $Version
+  $desktopPackage.version = $Version
+}
 $isProduction = $Channel -eq "Production"
 $channelSlug = $Channel.ToLowerInvariant()
 $productName = $desktopPackage.name
@@ -50,15 +58,22 @@ $rustCorePackagePath = Join-Path $desktopRoot "build\rust-core\brain-core.exe"
 $sourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $repoRoot } else { $env:CODECN_SOURCE_ROOT }
 $gatewayBaseUrl = if ($isProduction) { $env:CODECN_PRODUCTION_GATEWAY_BASE_URL } else { $env:CODECN_TEST_GATEWAY_BASE_URL }
 $previewUrl = if ($isProduction) { $env:CODECN_PRODUCTION_PREVIEW_URL } else { $env:CODECN_TEST_PREVIEW_URL }
-# wangjietech.com domains are currently parked/blocked and cannot serve model traffic.
-# Keep the known-live Spring gateway as the default until a reachable HTTPS domain is restored.
+# Test keeps the known-live Spring IP. Production defaults to the HTTPS api.sinnauze.cn
+# gateway; retired *.wangjietech.com hosts stay in rewrite lists for legacy asar cleanup only.
 if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
-  $gatewayBaseUrl = "http://120.48.151.202:8790/v1"
+  $gatewayBaseUrl = if ($isProduction) { "https://api.sinnauze.cn/v1" } else { "http://120.48.151.202:8790/v1" }
 }
 if ([string]::IsNullOrWhiteSpace($previewUrl)) {
-  $previewUrl = "http://120.48.151.202:3000"
+  $previewUrl = if ($isProduction) { "https://api.sinnauze.cn" } else { "http://120.48.151.202:3000" }
 }
-$requireSignature = $isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")
+$allowUnsigned = $AllowUnsigned -or ($env:CODECN_ALLOW_UNSIGNED -eq "true")
+$requireSignature = ($isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned
+$hasSigningMaterial = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) `
+  -or -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK) `
+  -or -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
+if ($requireSignature -and -not $hasSigningMaterial) {
+  throw "Production MSI requires Authenticode signing, but CSC_LINK / WINDOWS_CSC_LINK is not configured. Re-run with -AllowUnsigned to emit an unsigned production package, or configure a code-signing certificate."
+}
 
 foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
   $endpointUri = $null
@@ -70,10 +85,13 @@ foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
   }
 }
 
-if ($isProduction) {
+if ($isProduction -and -not $allowUnsigned) {
   $gitStatus = @(& git -C $sourceRoot status --porcelain)
   if ($LASTEXITCODE -ne 0) { throw "Unable to verify Git status for the production release." }
   if ($gitStatus.Count -gt 0) { throw "Production release requires a clean Git worktree." }
+}
+if ($isProduction -and $allowUnsigned -and (@(& git -C $sourceRoot status --porcelain)).Count -gt 0) {
+  Write-Host "Unsigned production package: continuing with a dirty Git worktree." -ForegroundColor Yellow
 }
 
 if (-not (Test-Path -LiteralPath $electronVite)) {
@@ -288,15 +306,17 @@ try {
         $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
         $utf8 = [System.Text.Encoding]::UTF8
         $text = $utf8.GetString($bytes)
-        if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202") -or $text.Contains("wangjietech.com")) {
+        if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202") -or $text.Contains("wangjietech.com") -or $text.Contains("sinnauze.cn")) {
           $updated = $text.Replace("http://127.0.0.1:8790/v1", $gatewayBaseUrl).
             Replace("http://120.48.151.202:8790/v1", $gatewayBaseUrl).
+            Replace("https://api.sinnauze.cn/v1", $gatewayBaseUrl).
             Replace("https://test.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("https://api.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("http://test.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("http://api.wangjietech.com/v1", $gatewayBaseUrl).
             Replace("http://127.0.0.1:3000", $previewUrl).
             Replace("http://120.48.151.202:3000", $previewUrl).
+            Replace("https://api.sinnauze.cn", $previewUrl).
             Replace("https://test.wangjietech.com", $previewUrl).
             Replace("https://api.wangjietech.com", $previewUrl)
           [System.IO.File]::WriteAllText($_.FullName, $updated, [System.Text.UTF8Encoding]::new($false))
@@ -322,8 +342,11 @@ try {
         $env:CODECN_MSI_INSTALL_DIR = $msiInstallDir
       }
       $dirArgs = @("--win", "dir", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
+      $dirArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
       if (-not $requireSignature) { $dirArgs += "--config.win.signAndEditExecutable=false" }
-      & node $electronBuilder @dirArgs
+      $builderStage = "application"
+      $builderLog = Join-Path $builderOut "electron-builder-application.log"
+      & node $electronBuilder @dirArgs 2>&1 | Tee-Object -FilePath $builderLog
       $lastBuilderExit = $LASTEXITCODE
       if ($lastBuilderExit -eq 0) {
         $unpackedRoot = Join-Path $builderOut "win-unpacked"
@@ -370,6 +393,11 @@ const asar = require(process.argv[1]);
 const archive = process.argv[2];
 const file = path.join(...String(process.argv[3]).split(/[\\/]+/).filter(Boolean));
 const text = asar.extractFile(archive, file).toString('utf8');
+const packagedVersion = JSON.parse(asar.extractFile(archive, 'package.json').toString('utf8')).version;
+if (packagedVersion !== process.argv[5]) {
+  console.error('Packaged application version does not match requested MSI version.');
+  process.exit(6);
+}
 if (text.includes('http://127.0.0.1:8790') || text.includes('http://localhost:8790')) {
   console.error('Packaged app.asar still contains a local business gateway endpoint.');
   process.exit(4);
@@ -386,7 +414,7 @@ if (!text.includes('Get-Process -Name')) {
   console.error('Packaged app.asar is missing the hidden Get-Process update wait loop.');
   process.exit(3);
 }
-"@ $asarPackageRoot $packagedAsar "out/main/index.js" $gatewayBaseUrl
+"@ $asarPackageRoot $packagedAsar "out/main/index.js" $gatewayBaseUrl $desktopPackage.version
         if ($LASTEXITCODE -ne 0) {
           throw "Unable to inspect the packaged desktop main bundle."
         }
@@ -407,8 +435,11 @@ process.stdout.write(asar.extractFile(archive, file));
         Write-Host "Verified packaged codeCN executable and icon resource." -ForegroundColor DarkGray
 
         $msiArgs = @("--win", "msi", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
+        $msiArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
         if (-not $requireSignature) { $msiArgs += "--config.win.signAndEditExecutable=false" }
-        & node $electronBuilder @msiArgs
+        $builderStage = "msi"
+        $builderLog = Join-Path $builderOut "electron-builder-msi.log"
+        & node $electronBuilder @msiArgs 2>&1 | Tee-Object -FilePath $builderLog
         $lastBuilderExit = $LASTEXITCODE
       }
     } finally {
@@ -440,7 +471,7 @@ process.stdout.write(asar.extractFile(archive, file));
 }
 
 if ($null -eq $generatedMsi) {
-  throw "electron-builder failed with exit code $lastBuilderExit after $maxPackageAttempts attempts"
+  throw "electron-builder failed at stage '$builderStage' with exit code $lastBuilderExit after $maxPackageAttempts attempts. Full log: $builderLog"
 }
 
 if (Test-Path -LiteralPath $generatedMsi) {
@@ -469,14 +500,15 @@ if (Test-Path -LiteralPath $generatedMsi) {
     throw "MSI signature gate failed: $($signature.Status). Configure a signing certificate before release."
   }
   if (-not $requireSignature -and $signature.Status -ne "Valid") {
-    $unsignedPath = Join-Path $releaseRoot ("{0} {1}-test-unsigned.msi" -f $productName, $desktopPackage.version)
+    $unsignedSuffix = if ($isProduction) { "production-unsigned" } else { "test-unsigned" }
+    $unsignedPath = Join-Path $releaseRoot ("{0} {1}-{2}.msi" -f $productName, $desktopPackage.version, $unsignedSuffix)
     try {
       if (Test-Path -LiteralPath $unsignedPath) {
         Remove-Item -LiteralPath $unsignedPath -Force -ErrorAction Stop
       }
       Move-Item -LiteralPath $msiOut -Destination $unsignedPath -ErrorAction Stop
     } catch {
-      $unsignedPath = Join-Path $releaseRoot ("{0} {1}-test-unsigned-{2}.msi" -f $productName, $desktopPackage.version, (Get-Date -Format "yyyyMMdd-HHmmss"))
+      $unsignedPath = Join-Path $releaseRoot ("{0} {1}-{2}-{3}.msi" -f $productName, $desktopPackage.version, $unsignedSuffix, (Get-Date -Format "yyyyMMdd-HHmmss"))
       Move-Item -LiteralPath $msiOut -Destination $unsignedPath -ErrorAction Stop
       Write-Host "Default unsigned MSI path was locked; wrote timestamped artifact instead." -ForegroundColor Yellow
     }
@@ -496,6 +528,5 @@ if ($emitUlit) {
   throw "Use package-win-ulit-patch.ps1 for ulit packages (full MSI rename is not a patch)."
 }
 } else {
-  Write-Host "MSI build finished, but no MSI artifact was found under: $builderOut" -ForegroundColor Yellow
-  Write-Host "Check: $builderOut" -ForegroundColor Yellow
+  throw "MSI build finished, but no MSI artifact was found under: $builderOut"
 }

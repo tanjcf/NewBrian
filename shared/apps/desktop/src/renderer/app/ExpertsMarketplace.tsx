@@ -1,7 +1,11 @@
 // @ts-nocheck
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SidebarIcon } from "./SidebarIcon";
+import { EXPERT_WORKSPACE_LABELS, expertWorkspaceKeys, isExpertAvailableInWorkspace } from "../../shared/expert-workspace-policy";
+import { ExpertCandidateReview } from "./ExpertCandidateReview";
 
 export type ExpertCatalogCard = {
+  workspaceKeys?: string[];
   id: string;
   expertType: "agent" | "team";
   displayName: string;
@@ -28,13 +32,19 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 /** Catalog / install only. Summoning is exclusively via global/project Skill → expert.summon. */
-export function ExpertsMarketplace() {
+export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?: string }) {
   const [experts, setExperts] = useState<ExpertCatalogCard[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [view, setView] = useState("catalog");
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (selectedId) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [selectedId]);
 
   const refresh = useCallback(async () => {
     if (!window.codecn?.listExperts) {
@@ -54,14 +64,16 @@ export function ExpertsMarketplace() {
     void refresh();
   }, [refresh]);
 
+  const available = useMemo(() => experts.filter(item => isExpertAvailableInWorkspace(item, workspaceKey)), [experts, workspaceKey]);
   const categories = useMemo(() => {
-    const ids = [...new Set(experts.map((item) => item.categoryId).filter(Boolean))];
+    const ids = [...new Set(available.map((item) => item.categoryId).filter(Boolean))];
     return ids.sort();
-  }, [experts]);
+  }, [available]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return experts.filter((item) => {
+    return available.filter((item) => {
+      if (view === "installed" && !item.installed) return false;
       if (category !== "all" && item.categoryId !== category) return false;
       if (!q) return true;
       return [item.displayName, item.profession, item.description, ...(item.tags || [])]
@@ -69,9 +81,10 @@ export function ExpertsMarketplace() {
         .toLowerCase()
         .includes(q);
     });
-  }, [experts, query, category]);
+  }, [available, query, category, view]);
 
-  const selected = visible.find((item) => item.id === selectedId) || experts.find((item) => item.id === selectedId) || visible[0] || null;
+  const selected = available.find((item) => item.id === selectedId) || null;
+  const source = (item: ExpertCatalogCard) => item.id.startsWith("nuwa-") ? "女娲 Nuwa" : item.id.startsWith("agency-") ? "Agency Agents" : item.id.startsWith("game-studios") ? "Game Studios" : "BRAIN";
 
   const install = async (expert: ExpertCatalogCard) => {
     if (!window.codecn?.installExpert) return;
@@ -107,28 +120,32 @@ export function ExpertsMarketplace() {
       <header className="experts-marketplace-header">
         <div>
           <h1>专家市场</h1>
-          <p>
-            仅用于浏览与安装专家包。召唤只有一种方式：启用全局/项目 Skill 后，由 Skill 按任务自行调用
-            <code> expert.summon </code>。
-          </p>
+          <p>{EXPERT_WORKSPACE_LABELS[workspaceKey]} · {available.length} 位专家</p>
         </div>
         <button type="button" onClick={() => void refresh()}>刷新</button>
       </header>
       {error ? <div className="experts-marketplace-error" role="alert">{error}</div> : null}
+      <div className="experts-view-tabs" role="tablist" aria-label="专家视图">
+        <button role="tab" aria-selected={view === "catalog"} onClick={() => setView("catalog")}>发现专家</button>
+        <button role="tab" aria-selected={view === "installed"} onClick={() => setView("installed")}>我的专家 <small>{available.filter(item => item.installed).length}</small></button>
+        {workspaceKey === "explore" && <button role="tab" aria-selected={view === "candidates"} onClick={() => setView("candidates")}>候选审核</button>}
+      </div>
+      {view === "candidates" ? <ExpertCandidateReview /> : <>
       <div className="experts-marketplace-toolbar">
-        <input
+        <label className="experts-search"><SidebarIcon name="search" /><input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索专家、标签或能力"
           aria-label="搜索专家"
-        />
-        <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="专家分类">
-          <option value="all">全部分类</option>
-          {categories.map((id) => (
-            <option key={id} value={id}>{CATEGORY_LABELS[id] || id}</option>
-          ))}
-        </select>
+        /></label>
+        <span className="experts-result-count">{visible.length} 位{view === "installed" ? "已安装" : "可用"}专家</span>
       </div>
+      <nav className="experts-categories" aria-label="专家分类">
+          <button aria-pressed={category === "all"} onClick={() => setCategory("all")}>全部领域</button>
+          {categories.map((id) => (
+            <button key={id} aria-pressed={category === id} onClick={() => setCategory(id)}>{CATEGORY_LABELS[id] || id}</button>
+          ))}
+      </nav>
       <div className="experts-marketplace-layout">
         <div className="experts-marketplace-grid">
           {visible.length ? visible.map((expert) => (
@@ -136,16 +153,20 @@ export function ExpertsMarketplace() {
               key={expert.id}
               className={`experts-card${selected?.id === expert.id ? " active" : ""}`}
               onClick={() => setSelectedId(expert.id)}
+              onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setSelectedId(expert.id); } }}
+              tabIndex={0}
+              aria-label={`${expert.displayName}，查看详情`}
             >
               <div className="experts-card-top">
-                <strong>{expert.profession || expert.displayName}</strong>
-                <span>{expert.expertType === "team" ? "专家团" : "单专家"}</span>
+                <div className="experts-avatar" data-category={expert.categoryId}><SidebarIcon name={expert.expertType === "team" ? "plugins" : "experts"} /></div>
+                <div className="experts-card-identity"><strong title={expert.displayName}>{expert.displayName}</strong><span title={expert.profession}>{expert.profession || CATEGORY_LABELS[expert.categoryId]}</span></div>
               </div>
               <p>{expert.description || "暂无简介"}</p>
               <div className="experts-card-tags">
                 {(expert.tags || []).slice(0, 3).map((tag) => <em key={tag}>{tag}</em>)}
               </div>
               <div className="experts-card-actions">
+                <span className="experts-source">{source(expert)}</span>
                 <button
                   type="button"
                   disabled={busyId === expert.id || expert.installed}
@@ -156,37 +177,42 @@ export function ExpertsMarketplace() {
                 >
                   {expert.installed ? "已安装" : busyId === expert.id ? "安装中…" : "安装"}
                 </button>
-                <button
+                {expert.installed && <button
                   type="button"
+                  role="switch"
+                  aria-checked={expert.enabled !== false}
+                  aria-label={`${expert.enabled === false ? "启用" : "停用"}${expert.displayName}`}
+                  className="experts-enable-switch"
                   disabled={busyId === expert.id}
                   onClick={(event) => {
                     event.stopPropagation();
                     void toggleEnabled(expert);
                   }}
                 >
-                  {expert.enabled === false ? "启用" : "禁用"}
-                </button>
+                  <span />
+                </button>}
               </div>
             </article>
           )) : (
-            <div className="experts-empty">没有匹配的专家。请检查内置种子包是否已打包。</div>
+            <div className="experts-empty">当前场景没有匹配的专家。</div>
           )}
         </div>
-        {selected ? (
-          <aside className="experts-detail">
-            <h2>{selected.profession}</h2>
+        <dialog ref={dialog} className="experts-detail" onClose={() => setSelectedId("")} onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}>
+        {selected ? <div className="experts-detail-content">
+            <button className="experts-detail-close" aria-label="关闭专家详情" onClick={() => setSelectedId("")}>关闭</button>
+            <div className="experts-detail-source">{source(selected)} · {selected.expertType === "team" ? "专家团" : "专家"}</div>
+            <h2>{selected.displayName}</h2>
             <p>{selected.description}</p>
             <dl>
               <div><dt>类型</dt><dd>{selected.expertType === "team" ? "专家团" : "单专家"}</dd></div>
               <div><dt>分类</dt><dd>{CATEGORY_LABELS[selected.categoryId] || selected.categoryId}</dd></div>
               <div><dt>成员</dt><dd>{selected.memberAgentIds?.length ? selected.memberAgentIds.join(", ") : "—"}</dd></div>
               <div><dt>Skills</dt><dd>{selected.skillNames?.length ? selected.skillNames.join(", ") : "—"}</dd></div>
-              <div><dt>建议场景</dt><dd>{selected.preferredWorkspaceKey || "不强制"}</dd></div>
-              <div><dt>召唤方式</dt><dd>仅全局/项目 Skill → expert.summon</dd></div>
+              <div><dt>适用场景</dt><dd>{[...expertWorkspaceKeys(selected), "explore"].map(key => EXPERT_WORKSPACE_LABELS[key]).join("、")}</dd></div>
             </dl>
             {selected.quickPrompts?.length ? (
               <>
-                <h3>示例问题（需在对话中由 Skill 决定是否召唤）</h3>
+                <h3>擅长的任务</h3>
                 <div className="experts-quick-prompts">
                   {selected.quickPrompts.map((prompt) => (
                     <div key={prompt} className="experts-prompt-sample">{prompt}</div>
@@ -194,9 +220,11 @@ export function ExpertsMarketplace() {
                 </div>
               </>
             ) : null}
-          </aside>
-        ) : null}
+            <button disabled={busyId === selected.id} onClick={() => void (selected.installed ? toggleEnabled(selected) : install(selected))}>{selected.installed ? selected.enabled === false ? "启用专家" : "停用专家" : "安装专家"}</button>
+          </div> : null}
+        </dialog>
       </div>
+      </>}
     </section>
   );
 }

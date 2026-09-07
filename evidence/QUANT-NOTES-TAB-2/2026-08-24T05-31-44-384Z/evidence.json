@@ -1,0 +1,49 @@
+{
+  "caseId": "QUANT-NOTES-TAB-2",
+  "timestamp": "2026-08-24T05:31:44.384Z",
+  "environment": {
+    "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+    "platform": "win32",
+    "mode": "click-tab",
+    "port": 9350
+  },
+  "actions": [
+    {
+      "type": "preflight",
+      "repository": "I:\\G盘迁移备份\\workrpase\\BRAIN",
+      "mode": "click-tab",
+      "port": 9350
+    },
+    {
+      "type": "connect",
+      "port": 9350
+    },
+    {
+      "type": "switch-scene",
+      "scene": "quant"
+    },
+    {
+      "type": "click-tab",
+      "tab": "研究笔记"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "application-ready",
+      "passed": true
+    }
+  ],
+  "result": "PASS",
+  "firstFailure": "",
+  "screenshots": [
+    "before.png",
+    "completed.png"
+  ],
+  "finalState": {
+    "title": "codeCN",
+    "selectedScene": "quant",
+    "activeView": "research",
+    "visibleText": "文件\n编辑\n查看\n窗口\n帮助\n量化交易\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\n聊天\n+\n暂无聊天\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该聊什么？\n＋\n替我审批\n选择技能\nAuto·均衡 中\n↑\nChoose project\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作\n项目资源\n仅保存在本机\n文件\n0\n产物\n0\n任务\n0\n行情\n组合\n策略\n雷达\n研究笔记\n量化交易\n研究笔记\n尚未查询行情 · 不连接真实券商\n研究笔记\n由 AI 基于真实行情、组合和雷达结果总结并写入当前项目\n尚无研究笔记。可在对话中要求 AI 总结当前行情或模拟结果并添加笔记。",
+    "rendererError": null
+  }
+}

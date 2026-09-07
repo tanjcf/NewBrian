@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "examples/munger-perspective/SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "170c68aec453ac1ea5e0af22190c642310d942b688fea331f78d8e2288a9a889",
+  "files": {
+    ".codex-plugin/plugin.json": "efecf7d7db25c3d4a11b9ba31e2f4741e3b501885107116d0bb9ff8b6b0929ce",
+    "agents/nuwa-munger-perspective.md": "b7c1082da3082e171833760b4e67b8d7e54adbc630a8c45cb2e13fb5c3bef530",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-munger-perspective/FIDELITY.md": "0b153b572642494ae8bddd67c417e00115d9928bb1a3a3c00e618eecc16b3687",
+    "skills/nuwa-munger-perspective/references/25-biases.md": "f40312ac4fcda67bb4e65ff9abb8593c8a21fcba7bdb92f938886937c6e8e060",
+    "skills/nuwa-munger-perspective/references/research.md": "91dc7b7bcf8876821b946265e389c8dd1974ae136bf30bc9b98e2ad596166906",
+    "skills/nuwa-munger-perspective/references/查理芒格思想体系深度调研-20260404.md": "ead0277f103b5b9082691450ad7506b03229db534848d7bd0bdfaf2cd42792d9",
+    "skills/nuwa-munger-perspective/references/芒格表达风格DNA分析.md": "94ba7041427304c66426d6b9b4f479e089d79b3c338e392f6954ff5999d9222f",
+    "skills/nuwa-munger-perspective/SKILL.md": "153181badf032d57a4a9f6a19e47e322a88574ed49470064e0cf71ce37a0d65b",
+    "skills/nuwa-munger-perspective/UPSTREAM-SKILL.md": "170c68aec453ac1ea5e0af22190c642310d942b688fea331f78d8e2288a9a889"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}

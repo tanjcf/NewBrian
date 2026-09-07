@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "nuwa-skill",
+  "commit": "fe0374687037c4cc51a65c1e0c145afe2981dc69",
+  "source": "SKILL.md",
+  "license": "MIT",
+  "upstreamSha256": "1e6b43ce0f833cf6743e0397c96bba76f7dcc1e745c2dcadd712fb2a7cccc9e0",
+  "files": {
+    ".codex-plugin/plugin.json": "2702d0a42431f465d78c1e517af7462379e62e0071bcc321ddfc5fd3325206ef",
+    "agents/nuwa-creator.md": "89903da4353b631adc26c4199716def11d91ff97d383dd08cabf02a797e107ed",
+    "LICENSE": "f95ab582239aee0ab16d9547c1a1428ec07e26281a75977092852ba4cda951a3",
+    "skills/nuwa-creator/references/extraction-framework.md": "7da6c351224ce4a04c096f39592c67b1c0544afc2e8bc805ed9d832a7a025785",
+    "skills/nuwa-creator/references/fidelity-scorecard.md": "5c647461ee45e3f75af31652d3f6f159ed1793f0bf629438bfacc7d917185aa7",
+    "skills/nuwa-creator/references/skill-template.md": "bc7e2a0d08e90daba3676151d433e5bd3a15966e4a059f6d95b8f5cb79ee30dd",
+    "skills/nuwa-creator/scripts/download_subtitles.sh": "35701e02f9f29a3fcdbb8c554630e47f8980f6b0479117f19173b513b2d1f96e",
+    "skills/nuwa-creator/scripts/merge_research.py": "c20e275d4c889fb16e76daf6a54a7a483dc7c56d47257208287dc3630288e24c",
+    "skills/nuwa-creator/scripts/quality_check.py": "a927486733ff5f5f5692a3286f1edcd4c0dd3d388268e2ccc95ebb8c73445b9a",
+    "skills/nuwa-creator/scripts/srt_to_transcript.py": "f4cab60e178ba4d7250433c1cfe3d793b3fe8e7ee36720c5ea3fbf961afc7386",
+    "skills/nuwa-creator/SKILL.md": "da9d25a3d9fe17c0d46ec615b6b28e9278df7abba1652963dc93084fc33a30fa",
+    "skills/nuwa-creator/UPSTREAM-SKILL.md": "1e6b43ce0f833cf6743e0397c96bba76f7dcc1e745c2dcadd712fb2a7cccc9e0"
+  },
+  "adaptations": [
+    "BRAIN tool and output-path mapping",
+    "expert binding",
+    "localized catalog metadata"
+  ]
+}
