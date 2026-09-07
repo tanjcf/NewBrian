@@ -13,6 +13,7 @@ type MaybePromise<T> = T | Promise<T>;
 interface AuthIpcServices {
   getStatus: () => MaybePromise<DesktopAuthStatus>;
   getBillingSubscription: () => MaybePromise<unknown>;
+  redeemCode: (input: { code: string }) => MaybePromise<unknown>;
   sendLoginCode: (input: DesktopAuthSendCodeInput) => MaybePromise<unknown>;
   login: (input: DesktopAuthLoginInput) => MaybePromise<DesktopAuthStatus>;
   changePassword: (input: DesktopAuthChangePasswordInput) => MaybePromise<unknown>;
@@ -24,6 +25,7 @@ interface AuthIpcServices {
 export function registerAuthIpcHandlers(services: AuthIpcServices) {
   ipcMain.handle(desktopIpcChannels.auth.getStatus, () => services.getStatus());
   ipcMain.handle(desktopIpcChannels.auth.getBillingSubscription, () => services.getBillingSubscription());
+  ipcMain.handle(desktopIpcChannels.auth.redeemCode, (_event, input: { code: string }) => services.redeemCode(input));
   ipcMain.handle(desktopIpcChannels.auth.sendLoginCode, (_event, input: DesktopAuthSendCodeInput) => services.sendLoginCode(input));
   ipcMain.handle(desktopIpcChannels.auth.login, (_event, input: DesktopAuthLoginInput) => services.login(input));
   ipcMain.handle(desktopIpcChannels.auth.changePassword, (_event, input: DesktopAuthChangePasswordInput) => services.changePassword(input));

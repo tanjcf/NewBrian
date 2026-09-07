@@ -26,7 +26,9 @@
 | production | `https://api.sinnauze.cn/v1` | `https://api.sinnauze.cn` | `.materialized/windows/apps/desktop/release/production/` |
 
 test 产物：`codeCN <版本号>-test-unsigned.msi`（默认不签名）。
-production 产物要求干净 Git 工作区，并需要 Authenticode 签名。
+production 有签名证书时产出已签名 MSI；本机未配置 `CSC_LINK` / `WINDOWS_CSC_LINK` 时自动打未签名包：
+`codeCN <版本号>-production-unsigned.msi`。正式发布仍需配置 Authenticode。
+production 还要求干净 Git 工作区。
 
 此入口会覆盖本次打包进程继承的对应环境地址变量，退出后恢复。
 现有打包器写入无凭据的远程配置，替换编译产物中的本地业务网关默认值，

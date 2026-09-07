@@ -1,6 +1,7 @@
 param(
   [string]$Channel,
-  [string]$Version
+  [string]$Version,
+  [switch]$AllowUnsigned
 )
 
 $ErrorActionPreference = "Stop"
@@ -76,6 +77,20 @@ try {
     $gateway = $env:CODECN_TEST_GATEWAY_BASE_URL
   }
 
+  $packageArgs = @{
+    Channel = $resolvedChannel
+    Version = $Version
+  }
+  $hasSigningMaterial = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) `
+    -or -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK) `
+    -or -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
+  if ($isProduction -and ($AllowUnsigned -or -not $hasSigningMaterial)) {
+    if (-not $hasSigningMaterial -and -not $AllowUnsigned) {
+      Write-Host "No code-signing certificate configured; packaging unsigned production MSI." -ForegroundColor Yellow
+    }
+    $packageArgs.AllowUnsigned = $true
+  }
+
   Write-Host "$resolvedChannel MSI $Version -> $gateway" -ForegroundColor Cyan
   & node (Join-Path $sourceRoot "scripts\verify-layout.mjs")
   if ($LASTEXITCODE -ne 0) { throw "Repository layout verification failed." }
@@ -87,7 +102,7 @@ try {
   try {
     & pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
-    & (Join-Path $workspace "scripts\package-win-msi.ps1") -Channel $resolvedChannel -Version $Version
+    & (Join-Path $workspace "scripts\package-win-msi.ps1") @packageArgs
     if ($LASTEXITCODE -ne 0) { throw "$resolvedChannel MSI packaging failed." }
   } finally {
     Pop-Location

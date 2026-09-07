@@ -365,7 +365,8 @@ declare global {
       applyGovernmentWritingSuggestions: (input: any) => Promise<any>;
       confirmGovernmentWritingSpecification: (input: { threadId?: string; goalId: string; versionId: string }) => Promise<any>;
       getAuthStatus: () => Promise<DesktopAuthStatusState>;
-      getBillingSubscription: () => Promise<Record<string, unknown>>;
+  getBillingSubscription: () => Promise<Record<string, unknown>>;
+  redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
       listRepositoryPlugins: (input?: PluginCatalogQuery) => Promise<PluginCatalogSnapshot>;
       getRepositoryPlugin: (input: PluginKeyInput) => Promise<Record<string, unknown>>;
       installRepositoryPlugin: (input: PluginInstallInput) => Promise<PluginOperationResult>;

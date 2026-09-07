@@ -4,7 +4,9 @@ param(
   [ValidateSet("Test", "Production")]
   [string]$Channel = "Test",
   # Transitional upgrade substitute package ("升级文件替代包"): emit {version}ulit.MSI
-  [switch]$Ulit
+  [switch]$Ulit,
+  # Allow Production artifacts without Authenticode when no signing cert is configured.
+  [switch]$AllowUnsigned
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,7 +66,14 @@ if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
 if ([string]::IsNullOrWhiteSpace($previewUrl)) {
   $previewUrl = if ($isProduction) { "https://api.sinnauze.cn" } else { "http://120.48.151.202:3000" }
 }
-$requireSignature = $isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")
+$allowUnsigned = $AllowUnsigned -or ($env:CODECN_ALLOW_UNSIGNED -eq "true")
+$requireSignature = ($isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned
+$hasSigningMaterial = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) `
+  -or -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK) `
+  -or -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
+if ($requireSignature -and -not $hasSigningMaterial) {
+  throw "Production MSI requires Authenticode signing, but CSC_LINK / WINDOWS_CSC_LINK is not configured. Re-run with -AllowUnsigned to emit an unsigned production package, or configure a code-signing certificate."
+}
 
 foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
   $endpointUri = $null
@@ -76,10 +85,13 @@ foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
   }
 }
 
-if ($isProduction) {
+if ($isProduction -and -not $allowUnsigned) {
   $gitStatus = @(& git -C $sourceRoot status --porcelain)
   if ($LASTEXITCODE -ne 0) { throw "Unable to verify Git status for the production release." }
   if ($gitStatus.Count -gt 0) { throw "Production release requires a clean Git worktree." }
+}
+if ($isProduction -and $allowUnsigned -and (@(& git -C $sourceRoot status --porcelain)).Count -gt 0) {
+  Write-Host "Unsigned production package: continuing with a dirty Git worktree." -ForegroundColor Yellow
 }
 
 if (-not (Test-Path -LiteralPath $electronVite)) {
@@ -488,14 +500,15 @@ if (Test-Path -LiteralPath $generatedMsi) {
     throw "MSI signature gate failed: $($signature.Status). Configure a signing certificate before release."
   }
   if (-not $requireSignature -and $signature.Status -ne "Valid") {
-    $unsignedPath = Join-Path $releaseRoot ("{0} {1}-test-unsigned.msi" -f $productName, $desktopPackage.version)
+    $unsignedSuffix = if ($isProduction) { "production-unsigned" } else { "test-unsigned" }
+    $unsignedPath = Join-Path $releaseRoot ("{0} {1}-{2}.msi" -f $productName, $desktopPackage.version, $unsignedSuffix)
     try {
       if (Test-Path -LiteralPath $unsignedPath) {
         Remove-Item -LiteralPath $unsignedPath -Force -ErrorAction Stop
       }
       Move-Item -LiteralPath $msiOut -Destination $unsignedPath -ErrorAction Stop
     } catch {
-      $unsignedPath = Join-Path $releaseRoot ("{0} {1}-test-unsigned-{2}.msi" -f $productName, $desktopPackage.version, (Get-Date -Format "yyyyMMdd-HHmmss"))
+      $unsignedPath = Join-Path $releaseRoot ("{0} {1}-{2}-{3}.msi" -f $productName, $desktopPackage.version, $unsignedSuffix, (Get-Date -Format "yyyyMMdd-HHmmss"))
       Move-Item -LiteralPath $msiOut -Destination $unsignedPath -ErrorAction Stop
       Write-Host "Default unsigned MSI path was locked; wrote timestamped artifact instead." -ForegroundColor Yellow
     }

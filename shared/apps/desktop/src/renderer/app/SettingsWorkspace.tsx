@@ -3,6 +3,100 @@ import { useEffect, useRef, useState } from "react";
 import { initialDesktopPreferences } from "./desktop-model";
 import { projectWorkspaces } from "./workspace-visibility";
 
+const FEATURE_UNDER_DEVELOPMENT_MESSAGE = "该接口处于开发中，暂时无法使用。";
+
+function formatFeatureAvailabilityError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (!message.trim()) return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
+  if (
+    /is not defined|not implemented|尚未接入|尚未由|即将上线|处于开发中|Error invoking remote method|ENOENT|ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed|404|501|Unable to fetch subscription|订阅信息加载失败|gatewayOrigin/i.test(message)
+  ) {
+    return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
+  }
+  return message;
+}
+
+function WalletSettingsPage(props: {
+  api: any;
+  displayUserEmail?: string;
+}) {
+  const { api, displayUserEmail } = props;
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [walletMessage, setWalletMessage] = useState("");
+  const [walletError, setWalletError] = useState("");
+  const [wallet, setWallet] = useState<any>(null);
+  const loadingRef = useRef(false);
+  const settledRef = useRef(false);
+
+  const loadWallet = async (force = false) => {
+    if (!force && (loadingRef.current || settledRef.current)) return;
+    if (!api?.getBillingSubscription) {
+      setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      settledRef.current = true;
+      return;
+    }
+    loadingRef.current = true;
+    try {
+      if (!settledRef.current) setWalletError("");
+      const next = await api.getBillingSubscription();
+      setWallet(next && typeof next === "object" ? next : { summary: {}, subscriptions: [] });
+      if (next?.under_development) {
+        setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      } else {
+        setWalletError("");
+      }
+      settledRef.current = true;
+    } catch (error) {
+      setWallet((current: any) => current || { summary: {}, subscriptions: [] });
+      setWalletError(formatFeatureAvailabilityError(error));
+      settledRef.current = true;
+    } finally {
+      loadingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    void loadWallet(false);
+  }, [api]);
+
+  const summary = wallet?.summary || {};
+  const subscription = (Array.isArray(wallet?.subscriptions) ? wallet.subscriptions : [])[0] || {};
+  const balance = Number(summary.available_balance ?? summary.balance ?? subscription.balance ?? 0);
+  const redeem = async () => {
+    if (!code.trim() || redeeming) return;
+    if (!api?.redeemCode) {
+      setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      return;
+    }
+    setRedeeming(true); setWalletError(""); setWalletMessage("");
+    try {
+      await api.redeemCode({ code: code.trim() });
+      setCode("");
+      setWalletMessage("兑换成功，钱包权益已更新。");
+      settledRef.current = false;
+      await loadWallet(true);
+    } catch (error) {
+      setWalletError(formatFeatureAvailabilityError(error));
+    } finally {
+      setRedeeming(false);
+    }
+  };
+  const openPurchase = () => {
+    const origin = String(wallet?.gateway_origin || "").replace(/\/$/, "");
+    if (!origin) { setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE); return; }
+    void api?.openBrowserPreview?.(`${origin}/dashboard#subscriptions`);
+  };
+
+  return <div className="wallet-settings-page">
+    <div className="settings-page-head"><div><h3>钱包</h3><p>充值余额，选择套餐，兑换后即时到账。</p></div><button type="button" onClick={() => { settledRef.current = false; void loadWallet(true); }}>刷新余额</button></div>
+    <section className="wallet-summary-card"><div><span>钱包余额</span><strong>¥{Number.isFinite(balance) ? balance.toFixed(2) : "0.00"}</strong><p>{displayUserEmail || "当前登录账号"}</p></div><dl><div><dt>当前套餐</dt><dd>{subscription.plan_name || "暂无套餐"}</dd></div><div><dt>有效期</dt><dd>{subscription.expires_at_display || "--"}</dd></div><div><dt>并发</dt><dd>{subscription.concurrency_limit || 0} 路</dd></div></dl></section>
+    <section className="settings-card wallet-recharge-card"><div className="settings-card-head"><div><strong>充值</strong><p>为钱包增加余额。</p></div></div><div className="wallet-recharge-actions"><input aria-label="充值金额" placeholder="充值金额" inputMode="decimal" /><select aria-label="支付方式"><option>微信支付</option><option>支付宝</option></select><button type="button" onClick={openPurchase}>立即充值</button></div><small>支付流程将在 spring-app 中完成。</small></section>
+    <section className="wallet-package-section"><div className="settings-card-head"><div><strong>套餐</strong><p>在线购买或使用兑换码。</p></div><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>输入兑换码</button></div><div className="wallet-package-list"><article><strong>Starter</strong><b>¥29 / 30 天</b><span>余额 ¥30 · 并发 1 路</span><div><button type="button" onClick={openPurchase}>在线购买</button><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>兑换</button></div></article><article className="recommended"><strong>Pro</strong><b>¥99 / 30 天</b><span>余额 ¥120 · 并发 3 路</span><div><button type="button" onClick={openPurchase}>在线购买</button><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>兑换</button></div></article><article><strong>Team</strong><b>¥299 / 30 天</b><span>余额 ¥400 · 并发 10 路</span><div><button type="button" onClick={openPurchase}>在线购买</button><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>兑换</button></div></article></div></section>
+    <section className="settings-card wallet-redeem-card"><strong>兑换码</strong><p>输入 spring-app 发放的兑换码。</p><div><input id="wallet-redeem-code" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void redeem(); }} placeholder="请输入兑换码" disabled={redeeming} /><button type="button" onClick={() => void redeem()} disabled={redeeming || !code.trim()}>{redeeming ? "处理中…" : "确认兑换"}</button></div>{walletMessage ? <small className="wallet-success">{walletMessage}</small> : null}{walletError ? <small className="wallet-error">{walletError}</small> : null}</section>
+  </div>;
+}
+
 export function SettingsWorkspace(ctx: any) {
   const { authStatus, setAuthStatus, setActiveSettingsSection, activeSettingsSection, setActiveFeature, setPreviewMode, modelConfig, setModelConfig, apiKeyConfigured, isUsingLoginSession, handleLogout, isAuthenticated, displayUserAvatar, displayUserName, displayUserEmail, displayUserPlan, onAccountProfileChange, saveDesktopPreferences, setDesktopPreferences, setChatUsesProject, setComposerPermission, isComposingNewThread, newThreadScope, environmentEnvText, setEnvironmentEnvText, formatEnvText, mcpServers, mcpDraft, setMcpDraft, editingMcpId, saveModelConfig, saveMcpServers, resetMcpDraft, handleSaveMcpServer, loadMcpDraft, handleDeleteMcpServer, handleToggleMcpServer, handleTestMcpServer, handleStartMcpServer, handleStopMcpServer, handleLoadMcpLogs, handleClearMcpLogs, handleInspectMcpServer, testingMcpId, mcpHealth, mcpLogs, expandedMcpLogId, setExpandedMcpLogId, mcpInspection, systemTools, setSystemTools, api, runAction, archivedThreads, workspaceCatalog, addExistingProject, selectedWorkspace, setSelectedWorkspaceId, setSelectedThreadId, setArchivedThreadIds, deleteThread, setWorkspaceCatalog, renderFeaturePanel, SettingsNavIcon, SettingsSwitch, writeClipboard, shellCommand, setShellCommand, bootstrapState, snapshot, desktopBootstrapStatus, setChatStatus, setErrorMessage } = ctx;
   const desktopPreferences = {
@@ -308,7 +402,7 @@ function PrototypeBillingSettingsPage() {
           setBilling((current: any) => current || data || { summary: {}, subscriptions: [] });
         }
       } catch (error) {
-        setLoadError(error instanceof Error ? error.message : String(error));
+        setLoadError(formatFeatureAvailabilityError(error));
       } finally {
         setLoading(false);
       }
@@ -378,7 +472,7 @@ function PrototypeBillingSettingsPage() {
     };
     const submitInvoiceRequest = () => {
       if (!invoiceBill) return;
-      setInvoiceError("线上开票服务尚未接入，本次申请未提交。请联系财务支持处理。");
+      setInvoiceError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
     };
     const statusText = (status: string) => {
       const normalized = status.toLowerCase();
@@ -412,7 +506,7 @@ function PrototypeBillingSettingsPage() {
             <strong>{planName}</strong>
             <span>{planPrice}/月 · 下次续费日期： {renewalDate}</span>
           </div>
-          <button type="button" disabled title="线上订阅管理页面尚未接入">管理订阅（即将上线）</button>
+          <button type="button" disabled title={FEATURE_UNDER_DEVELOPMENT_MESSAGE}>管理订阅（开发中）</button>
         </section>
 
         <section className="billing-prototype-card billing-month-usage">
@@ -518,7 +612,7 @@ function renderSettingsWorkspace() {
                 onClick={() => setActiveSettingsSection("billing")}
               >
                 <SettingsNavIcon name="card" />
-                <strong>订阅与计费</strong>
+                <strong>钱包</strong>
               </button>
             </div>
 
@@ -638,7 +732,7 @@ function renderSettingsWorkspace() {
 
           <section className="settings-workspace-content prototype">
             {settingsSavedMessage ? <div className="settings-save-toast">{settingsSavedMessage}</div> : null}
-            {activeSettingsSection === "billing" ? <PrototypeBillingSettingsPage /> : null}
+            {activeSettingsSection === "billing" ? <WalletSettingsPage api={api} displayUserEmail={displayUserEmail} /> : null}
             {activeSettingsSection === "account" ? (
               <>
                 <div className="settings-page-head">

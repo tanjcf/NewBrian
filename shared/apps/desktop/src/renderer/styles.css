@@ -4143,6 +4143,40 @@ textarea {
   font-size: 40px;
   letter-spacing: -0.02em;
 }
+.wallet-settings-page .settings-page-head h3 { font-size: 40px; letter-spacing: -0.02em; }
+.wallet-summary-card { margin-top: 18px; border: 1px solid #cfe5fb; background: linear-gradient(135deg,#f1f8ff,#fff); border-radius: 18px; padding: 22px; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
+.wallet-summary-card span,.wallet-summary-card dt { color:#667085; font-size:12px; }
+.wallet-summary-card strong { display:block; margin-top:4px; font-size:34px; line-height:1.1; }
+.wallet-summary-card p { margin:7px 0 0; color:#667085; font-size:12px; }
+.wallet-summary-card dl { display:flex; gap:26px; margin:0; }
+.wallet-summary-card dl div { border-left:1px solid #dceaf7; padding-left:18px; }
+.wallet-summary-card dd { margin:6px 0 0; font-size:17px; font-weight:600; }
+.wallet-recharge-card { margin-top:18px; }
+.wallet-recharge-actions,.wallet-redeem-card > div { display:flex; gap:10px; align-items:center; margin-top:14px; }
+.wallet-recharge-actions input,.wallet-recharge-actions select,.wallet-redeem-card input { min-height:42px; border:1px solid #cfd8e3; border-radius:10px; padding:0 12px; background:#fff; }
+.wallet-recharge-actions input { width:180px; }
+.wallet-recharge-actions select { width:160px; }
+.wallet-recharge-actions button,.wallet-redeem-card button,.wallet-package-list article button { min-height:40px; border-radius:10px; padding:0 14px; background:#0b6bdb; color:#fff; }
+.wallet-recharge-card small { display:block; margin-top:10px; color:#98a2b3; }
+.wallet-package-section { margin-top:22px; }
+.wallet-package-section > .settings-card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.wallet-package-section > .settings-card-head strong { font-size:18px; }
+.wallet-package-section > .settings-card-head p { margin:4px 0 0; color:#667085; font-size:13px; }
+.wallet-package-section > .settings-card-head button { min-height:36px; border-radius:9px; background:#f2f4f7; color:#344054; padding:0 12px; }
+.wallet-package-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.wallet-package-list article { border:1px solid #e6eaf0; border-radius:15px; padding:17px; }
+.wallet-package-list article.recommended { border:2px solid #7ab7ef; padding:16px; }
+.wallet-package-list article > strong { display:block; font-size:16px; }
+.wallet-package-list article > b { display:block; margin:10px 0; font-size:22px; }
+.wallet-package-list article > span { display:block; color:#667085; font-size:12px; }
+.wallet-package-list article > div { display:flex; gap:7px; margin-top:14px; }
+.wallet-package-list article > div button:last-child { background:#eaf4ff; color:#0b6bdb; }
+.wallet-redeem-card { margin-top:18px; }
+.wallet-redeem-card > strong { font-size:17px; }
+.wallet-redeem-card > p { margin:4px 0 0; color:#667085; font-size:13px; }
+.wallet-redeem-card > div input { flex:1; }
+.wallet-redeem-card small { display:block; margin-top:10px; font-size:12px; }
+.wallet-success { color:#198754; }.wallet-error { color:#c4322e; }
 
 .billing-plan-card {
   margin-top: 18px;

@@ -2044,9 +2044,12 @@ async function fetchDesktopBillingSubscription() {
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason))
       .filter(Boolean);
+    if (errors.some((message) => /404|501|not found|not implemented|尚未/i.test(message))) {
+      throw new Error("该接口处于开发中，暂时无法使用。");
+    }
     throw new Error(`Unable to fetch subscription information${errors.length ? `: ${errors.join("; ")}` : "."}`);
   }
-  return normalizeDesktopBillingPayload({
+  const normalized = normalizeDesktopBillingPayload({
     bootstrap,
     subscription: subscriptions,
     usage,
@@ -2054,6 +2057,28 @@ async function fetchDesktopBillingSubscription() {
       ? usageResult.reason instanceof Error ? usageResult.reason.message : String(usageResult.reason)
       : undefined
   });
+  const gatewayOrigin = await readGatewayOrigin();
+  return { ...(normalized as Record<string, unknown>), gateway_origin: gatewayOrigin };
+}
+async function redeemDesktopCode(input: { code: string }) {
+  const code = String(input?.code || "").trim();
+  if (!code) throw new Error("请输入兑换码。");
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录再兑换。");
+  const gatewayOrigin = await readGatewayOrigin();
+  const device = collectDesktopDeviceFingerprint();
+  const headers = { "Content-Type": "application/json", ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device }) };
+  if (authState.session_cookie?.trim()) headers.Cookie = authState.session_cookie.trim();
+  const response = await fetch(`${gatewayOrigin}/api/redeem`, { method: "POST", headers, body: JSON.stringify({ code }) });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 501) {
+      throw new Error("该接口处于开发中，暂时无法使用。");
+    }
+    const message = payload && typeof payload === "object" ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "") : "";
+    throw new Error(message || `兑换失败：HTTP ${response.status}`);
+  }
+  return payload;
 }
 async function fetchDashboardWithSessionCookie(sessionCookie: string) {
   const gatewayOrigin = await readGatewayOrigin();
@@ -8776,7 +8801,26 @@ function registerIpc() {
   });
   registerAuthIpcHandlers({
     getStatus: resolveDesktopAuthStatus,
-    getBillingSubscription: fetchDesktopBillingSubscription,
+    getBillingSubscription: async () => {
+      try {
+        return await fetchDesktopBillingSubscription();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? "");
+        if (/is not defined|gatewayOrigin|处于开发中|404|501|not implemented|尚未/i.test(message)) {
+          const gatewayOrigin = await readGatewayOrigin().catch(() => "");
+          return {
+            summary: {},
+            subscriptions: [],
+            billing_history: [],
+            under_development: true,
+            gateway_origin: gatewayOrigin,
+            message: "该接口处于开发中，暂时无法使用。"
+          };
+        }
+        throw error;
+      }
+    },
+    redeemCode: redeemDesktopCode,
     sendLoginCode: sendDesktopLoginCode,
     login: loginDesktopAuth,
     changePassword: changeDesktopAuthPassword,
