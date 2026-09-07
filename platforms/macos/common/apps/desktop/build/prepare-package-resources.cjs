@@ -62,16 +62,41 @@ const features = {
   runtime: { rustCoreTools: "disabled" }
 };
 
-function preparePackageResources() {
-  mkdirSync(packageResourcesDir, { recursive: true });
-  const input = JSON.parse(readFileSync(join(repoRoot, "codecn.config.json"), "utf8"));
-  const config = sanitizeConfig(input);
-  writeFileSync(join(packageResourcesDir, "codecn.config.json"), JSON.stringify(config, null, 2) + "\n", "utf8");
-  writeFileSync(join(packageResourcesDir, "codecn.features.json"), JSON.stringify(features, null, 2) + "\n", "utf8");
-  console.log("Prepared sanitized mac package resources.");
+function resolveChannelEndpoints(channel) {
+  const isProduction = channel === "production";
+  const gatewayBaseUrl = (
+    (isProduction ? process.env.CODECN_PRODUCTION_GATEWAY_BASE_URL : process.env.CODECN_TEST_GATEWAY_BASE_URL) ||
+    "http://120.48.151.202:8790/v1"
+  ).trim();
+  const previewUrl = (
+    (isProduction ? process.env.CODECN_PRODUCTION_PREVIEW_URL : process.env.CODECN_TEST_PREVIEW_URL) ||
+    "http://120.48.151.202:3000"
+  ).trim();
+  return { gatewayBaseUrl, previewUrl };
 }
 
-module.exports = { preparePackageResources, sanitizeConfig };
+function applyChannelEndpoints(config, channel) {
+  if (channel !== "test" && channel !== "production") return config;
+  const { gatewayBaseUrl, previewUrl } = resolveChannelEndpoints(channel);
+  const next = structuredClone(config);
+  if (next.llm) {
+    next.llm.baseUrl = gatewayBaseUrl;
+  }
+  if (next.preferences?.browser) next.preferences.browser.previewUrl = previewUrl;
+  return next;
+}
+
+function preparePackageResources(channel = process.env.CODECN_PACKAGE_CHANNEL || "") {
+  mkdirSync(packageResourcesDir, { recursive: true });
+  const input = JSON.parse(readFileSync(join(repoRoot, "codecn.config.json"), "utf8"));
+  const config = applyChannelEndpoints(sanitizeConfig(input), channel);
+  writeFileSync(join(packageResourcesDir, "codecn.config.json"), JSON.stringify(config, null, 2) + "\n", "utf8");
+  writeFileSync(join(packageResourcesDir, "codecn.features.json"), JSON.stringify(features, null, 2) + "\n", "utf8");
+  console.log(channel ? `Prepared sanitized mac ${channel} package resources.` : "Prepared sanitized mac package resources.");
+  return config;
+}
+
+module.exports = { preparePackageResources, sanitizeConfig, applyChannelEndpoints, resolveChannelEndpoints };
 
 if (require.main === module) {
   preparePackageResources();
