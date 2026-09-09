@@ -4,7 +4,7 @@
  * UX: fully automatic — login / project open / after local learning writes
  * trigger background pull → merge → push. Users never manually sync.
  *
- * Project OS (`CODECN.md`) is included as doc type `project-os` so switching
+ * Project OS (`NEWBRAIN.md`) is included as doc type `project-os` so switching
  * devices restores project instructions with the same knowledge sync path.
  * Source files / whole workspaces are still NOT synced.
  */
@@ -31,8 +31,8 @@ export const GLOBAL_DOC_TYPES: KnowledgeDocType[] = [
 
 /**
  * Project-scoped knowledge docs.
- * `project-os` maps to repo-root CODECN.md; other types live under
- * `.codecn/skills/*-project-manager/references`.
+ * `project-os` maps to repo-root NEWBRAIN.md; other types live under
+ * `.newbrain/skills/*-project-manager/references`.
  */
 export const PROJECT_DOC_TYPES: KnowledgeDocType[] = [
   "user-output-rules",
@@ -43,7 +43,7 @@ export const PROJECT_DOC_TYPES: KnowledgeDocType[] = [
 ];
 
 /** Filename used for Project OS at the workspace root. */
-export const PROJECT_OS_SYNC_FILENAME = "CODECN.md";
+export const PROJECT_OS_SYNC_FILENAME = "NEWBRAIN.md";
 
 export type UserKnowledgeSyncState = {
   generation: number;
@@ -55,8 +55,8 @@ export type UserKnowledgeSyncState = {
 };
 
 export type UserKnowledgeSyncPaths = {
-  /** App-level .codecn root (holds user-knowledge/global + sync-state). */
-  userCodecnRoot: string;
+  /** App-level .newbrain root (holds user-knowledge/global + sync-state). */
+  userNewbrainRoot: string;
   /** Current project workspace root; optional for global-only sync. */
   projectWorkspacePath?: string;
   projectKey?: string;
@@ -91,29 +91,29 @@ function safeProjectKey(value: string | undefined): string {
 }
 
 /** Global cache directory for user-wide preference knowledge. */
-export function resolveGlobalKnowledgeDir(userCodecnRoot: string): string {
-  return path.join(userCodecnRoot, "user-knowledge", "global");
+export function resolveGlobalKnowledgeDir(userNewbrainRoot: string): string {
+  return path.join(userNewbrainRoot, "user-knowledge", "global");
 }
 
 /** Sync-state JSON path (local generation mirror). */
-export function resolveKnowledgeSyncStatePath(userCodecnRoot: string): string {
-  return path.join(userCodecnRoot, "user-knowledge", "sync-state.json");
+export function resolveKnowledgeSyncStatePath(userNewbrainRoot: string): string {
+  return path.join(userNewbrainRoot, "user-knowledge", "sync-state.json");
 }
 
 /** Project-manager references directory for a workspace. */
 export function resolveProjectReferencesDir(projectWorkspacePath: string, projectKey?: string): string {
   const key = safeProjectKey(projectKey || path.basename(projectWorkspacePath));
-  return path.join(projectWorkspacePath, ".codecn", "skills", `${key}-project-manager`, "references");
+  return path.join(projectWorkspacePath, ".newbrain", "skills", `${key}-project-manager`, "references");
 }
 
 export function resolveDocFilePath(input: {
-  userCodecnRoot: string;
+  userNewbrainRoot: string;
   scope: KnowledgeScope;
   docType: KnowledgeDocType;
   projectWorkspacePath?: string;
   projectKey?: string;
 }): string {
-  // Project OS is the repo-root CODECN.md (not buried under .codecn references).
+  // Project OS is the repo-root NEWBRAIN.md (not buried under .newbrain references).
   if (input.docType === "project-os") {
     if (input.scope !== "PROJECT" || !input.projectWorkspacePath) {
       throw new Error("project-os knowledge requires PROJECT scope and projectWorkspacePath");
@@ -122,7 +122,7 @@ export function resolveDocFilePath(input: {
   }
   const fileName = `${input.docType}.md`;
   if (input.scope === "GLOBAL") {
-    return path.join(resolveGlobalKnowledgeDir(input.userCodecnRoot), fileName);
+    return path.join(resolveGlobalKnowledgeDir(input.userNewbrainRoot), fileName);
   }
   if (!input.projectWorkspacePath) {
     throw new Error("PROJECT knowledge requires projectWorkspacePath");
@@ -147,8 +147,8 @@ async function writeText(filePath: string, content: string): Promise<void> {
 }
 
 /** Load local sync generation state. */
-export async function readKnowledgeSyncState(userCodecnRoot: string): Promise<UserKnowledgeSyncState> {
-  const raw = await readText(resolveKnowledgeSyncStatePath(userCodecnRoot));
+export async function readKnowledgeSyncState(userNewbrainRoot: string): Promise<UserKnowledgeSyncState> {
+  const raw = await readText(resolveKnowledgeSyncStatePath(userNewbrainRoot));
   if (!raw.trim()) {
     return { generation: 0, contentHash: "", updatedAt: "" };
   }
@@ -168,10 +168,10 @@ export async function readKnowledgeSyncState(userCodecnRoot: string): Promise<Us
 }
 
 async function writeKnowledgeSyncState(
-  userCodecnRoot: string,
+  userNewbrainRoot: string,
   state: UserKnowledgeSyncState
 ): Promise<void> {
-  await writeText(resolveKnowledgeSyncStatePath(userCodecnRoot), `${JSON.stringify(state, null, 2)}\n`);
+  await writeText(resolveKnowledgeSyncStatePath(userNewbrainRoot), `${JSON.stringify(state, null, 2)}\n`);
 }
 
 async function applyRemoteDocument(
@@ -190,7 +190,7 @@ async function applyRemoteDocument(
     return false;
   }
   const filePath = resolveDocFilePath({
-    userCodecnRoot: paths.userCodecnRoot,
+    userNewbrainRoot: paths.userNewbrainRoot,
     scope: remote.scope,
     docType: remote.doc_type,
     projectWorkspacePath: paths.projectWorkspacePath,
@@ -212,7 +212,7 @@ async function collectLocalDocuments(paths: UserKnowledgeSyncPaths): Promise<Kno
   const documents: KnowledgePushDocument[] = [];
   for (const docType of GLOBAL_DOC_TYPES) {
     const content = await readText(resolveDocFilePath({
-      userCodecnRoot: paths.userCodecnRoot,
+      userNewbrainRoot: paths.userNewbrainRoot,
       scope: "GLOBAL",
       docType
     }));
@@ -228,7 +228,7 @@ async function collectLocalDocuments(paths: UserKnowledgeSyncPaths): Promise<Kno
     const projectKey = safeProjectKey(paths.projectKey || path.basename(paths.projectWorkspacePath));
     for (const docType of PROJECT_DOC_TYPES) {
       const content = await readText(resolveDocFilePath({
-        userCodecnRoot: paths.userCodecnRoot,
+        userNewbrainRoot: paths.userNewbrainRoot,
         scope: "PROJECT",
         docType,
         projectWorkspacePath: paths.projectWorkspacePath,
@@ -250,7 +250,7 @@ async function collectLocalDocuments(paths: UserKnowledgeSyncPaths): Promise<Kno
  * Read bounded global + current-project knowledge for prompt injection (disk hot path).
  */
 export async function loadLocalKnowledgeForInjection(input: {
-  userCodecnRoot: string;
+  userNewbrainRoot: string;
   projectWorkspacePath?: string;
   projectKey?: string;
   maxChars?: number;
@@ -259,7 +259,7 @@ export async function loadLocalKnowledgeForInjection(input: {
   const chunks: string[] = [];
   for (const docType of GLOBAL_DOC_TYPES) {
     const content = (await readText(resolveDocFilePath({
-      userCodecnRoot: input.userCodecnRoot,
+      userNewbrainRoot: input.userNewbrainRoot,
       scope: "GLOBAL",
       docType
     }))).trim();
@@ -269,10 +269,10 @@ export async function loadLocalKnowledgeForInjection(input: {
   if (input.projectWorkspacePath) {
     const projectKey = safeProjectKey(input.projectKey || path.basename(input.projectWorkspacePath));
     // Prefer preference docs here; Project OS is injected separately via loadProjectOsInstruction
-    // to avoid duplicating CODECN.md in the system prompt.
+    // to avoid duplicating NEWBRAIN.md in the system prompt.
     for (const docType of ["user-output-rules", "project-knowledge", "learning-open-questions"] as KnowledgeDocType[]) {
       const content = (await readText(resolveDocFilePath({
-        userCodecnRoot: input.userCodecnRoot,
+        userNewbrainRoot: input.userNewbrainRoot,
         scope: "PROJECT",
         docType,
         projectWorkspacePath: input.projectWorkspacePath,
@@ -354,7 +354,7 @@ export async function syncUserKnowledgeOnce(input: {
     };
   }
 
-  const state = await readKnowledgeSyncState(input.paths.userCodecnRoot);
+  const state = await readKnowledgeSyncState(input.paths.userNewbrainRoot);
   const since = input.forceFullPull ? null : state.generation;
   const pulled = await pullKnowledgeDocuments({
     ...input.auth,
@@ -388,7 +388,7 @@ export async function syncUserKnowledgeOnce(input: {
     pushedCount = localDocuments.length;
   }
 
-  await writeKnowledgeSyncState(input.paths.userCodecnRoot, {
+  await writeKnowledgeSyncState(input.paths.userNewbrainRoot, {
     generation,
     contentHash,
     updatedAt: pulled.space.updated_at || new Date().toISOString(),
@@ -426,7 +426,7 @@ export function scheduleUserKnowledgeSync(input: {
   onResult?: (result: UserKnowledgeSyncResult) => void;
   onError?: (error: unknown) => void;
 }): void {
-  const key = input.paths.userCodecnRoot;
+  const key = input.paths.userNewbrainRoot;
   const existing = scheduledByRoot.get(key) ?? { timer: null, inFlight: null, retryNotBefore: 0 };
   // A background sync must never fan out concurrent requests or retry a failing
   // gateway on every state update. Chat and rendering remain independent.
@@ -449,8 +449,8 @@ export function scheduleUserKnowledgeSync(input: {
       existing.retryNotBefore = Date.now() + (message.includes("exhausted conflict retries") ? 300_000 : 60_000);
       input.onError?.(error);
       try {
-        const state = await readKnowledgeSyncState(input.paths.userCodecnRoot);
-        await writeKnowledgeSyncState(input.paths.userCodecnRoot, {
+        const state = await readKnowledgeSyncState(input.paths.userNewbrainRoot);
+        await writeKnowledgeSyncState(input.paths.userNewbrainRoot, {
           ...state,
           pendingPush: true,
           lastError: error instanceof Error ? error.message : String(error)
@@ -481,13 +481,13 @@ export function scheduleUserKnowledgeSync(input: {
  * After local absorbExchange, mirror durable prefs into the global cache then schedule sync.
  */
 export async function mirrorProjectRulesToGlobal(input: {
-  userCodecnRoot: string;
+  userNewbrainRoot: string;
   projectWorkspacePath: string;
   projectKey?: string;
 }): Promise<boolean> {
   const projectKey = safeProjectKey(input.projectKey || path.basename(input.projectWorkspacePath));
   const projectRules = await readText(resolveDocFilePath({
-    userCodecnRoot: input.userCodecnRoot,
+    userNewbrainRoot: input.userNewbrainRoot,
     scope: "PROJECT",
     docType: "user-output-rules",
     projectWorkspacePath: input.projectWorkspacePath,
@@ -495,7 +495,7 @@ export async function mirrorProjectRulesToGlobal(input: {
   }));
   if (!projectRules.trim()) return false;
   const globalPath = resolveDocFilePath({
-    userCodecnRoot: input.userCodecnRoot,
+    userNewbrainRoot: input.userNewbrainRoot,
     scope: "GLOBAL",
     docType: "user-output-rules"
   });

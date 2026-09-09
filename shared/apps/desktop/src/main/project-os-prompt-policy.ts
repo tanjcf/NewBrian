@@ -23,8 +23,8 @@ export const PROJECT_MANAGER_TAIL_INJECT = new Set([
   "project-knowledge.md"
 ]);
 
-/** Priority: CODECN.md > CLAUDE.md > AGENTS.md (first non-empty wins among equals). */
-export const PROJECT_OS_FILE_CANDIDATES = ["CODECN.md", "CLAUDE.md", "AGENTS.md"] as const;
+/** Priority: NEWBRAIN.md > CLAUDE.md > AGENTS.md (first non-empty wins among equals). */
+export const PROJECT_OS_FILE_CANDIDATES = ["NEWBRAIN.md", "CLAUDE.md", "AGENTS.md"] as const;
 
 export type ProjectOsReference = { name: string; content: string };
 
@@ -43,7 +43,7 @@ async function readUtf8(filePath: string): Promise<string> {
 }
 
 /**
- * Detect the stock CODECN.md template so upgrades do not hide richer legacy files.
+ * Detect the stock NEWBRAIN.md template so upgrades do not hide richer legacy files.
  * Exported for unit tests and sync/merge helpers.
  */
 export function isDefaultProjectOsScaffold(text: string): boolean {
@@ -70,7 +70,7 @@ export function truncateReferenceTail(content: string, maxChars = PROJECT_MANAGE
 
 /**
  * Choose Project OS source with legacy-project compatibility:
- * prefer real content over stock scaffolds; among equals keep CODECN > CLAUDE > AGENTS.
+ * prefer real content over stock scaffolds; among equals keep NEWBRAIN > CLAUDE > AGENTS.
  */
 export function selectProjectOsSource(
   candidates: Array<{ fileName: string; text: string }>
@@ -87,7 +87,7 @@ export function selectProjectOsSource(
 
 /**
  * Loads repo-root Project OS instruction text.
- * Prefer real CODECN.md; fall back to CLAUDE.md / AGENTS.md when CODECN is empty or only a scaffold.
+ * Prefer real NEWBRAIN.md; fall back to CLAUDE.md / AGENTS.md when NEWBRAIN is empty or only a scaffold.
  */
 export async function loadProjectOsInstruction(
   workspacePath: string,
@@ -118,7 +118,7 @@ export function buildProjectOsPromptBlock(input: LoadedProjectOs | string): stri
   if (!text) return "";
   const source = loaded.sourceFile ? ` source=${loaded.sourceFile}` : "";
   return [
-    `Project OS (repo-root source of truth${source}; agent may update CODECN.md with workspace tools):`,
+    `Project OS (repo-root source of truth${source}; agent may update NEWBRAIN.md with workspace tools):`,
     text
   ].join("\n");
 }

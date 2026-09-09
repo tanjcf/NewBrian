@@ -7,7 +7,7 @@ import test from "node:test";
 import { createLocalRuntime } from "./runtime.js";
 
 test("critical workspace, approval, shell, git, and patch journey", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn 全功能 smoke "));
+  const root = mkdtempSync(join(tmpdir(), "newbrain 全功能 smoke "));
   try {
     const sourcePath = join(root, "中文 文件.txt");
     writeFileSync(sourcePath, "before\n", "utf8");
@@ -82,7 +82,7 @@ test("critical workspace, approval, shell, git, and patch journey", async () => 
 });
 
 test("patch preview counts all changes and replaces every occurrence", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-patch-counts-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-patch-counts-"));
   try {
     const sourcePath = join(root, "many.txt");
     writeFileSync(sourcePath, Array.from({ length: 40 }, () => "before").join("\n"), "utf8");
@@ -106,7 +106,7 @@ test("patch preview counts all changes and replaces every occurrence", async () 
 });
 
 test("patch application refuses to overwrite an externally changed file", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-patch-conflict-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-patch-conflict-"));
   try {
     const sourcePath = join(root, "conflict.txt");
     writeFileSync(sourcePath, "before\n", "utf8");
@@ -127,7 +127,7 @@ test("patch application refuses to overwrite an externally changed file", async 
 });
 
 test("git status keeps Chinese workspace paths human-readable instead of octal escaped", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-git-chinese-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-git-chinese-"));
   try {
     assert.equal(spawnSync("git", ["init"], { cwd: root, encoding: "utf8", windowsHide: true }).status, 0);
     writeFileSync(join(root, "中文文件.txt"), "content", "utf8");

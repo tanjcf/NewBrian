@@ -53,8 +53,8 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
         value: accessTokenCredential,
         headers: deps.createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
       } : null,
-      process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv
-        ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
+      process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv
+        ? { value: "newbrain-e2e", headers: { Authorization: "Bearer newbrain-e2e" } }
         : null,
       apiKeyCredential ? {
         value: apiKeyCredential,

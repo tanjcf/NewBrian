@@ -9,7 +9,7 @@ app.whenReady().then(async () => {
     ]);
     PDFParse.setWorker(getData());
     const parser = new PDFParse({
-      data: await fs.readFile("../../.codecn/projects/New project/personal-intro-verified.pdf")
+      data: await fs.readFile("../../.newbrain/projects/New project/personal-intro-verified.pdf")
     });
     const result = await parser.getText();
     console.log(result.text);

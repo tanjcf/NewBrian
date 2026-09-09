@@ -34,7 +34,7 @@ export function executionKindLabel(kind: ExecutionKind | undefined) {
 export function executionKindDescription(kind: ExecutionKind | undefined) {
   switch (kind) {
     case "mcp": return "提供可由对话直接调用的 MCP 工具。";
-    case "builtin-tools": return "使用 codeCN 内置工具执行真实读写或操作。";
+    case "builtin-tools": return "使用 NewBrain 内置工具执行真实读写或操作。";
     case "script-assisted": return "包含辅助脚本，但脚本不会自动运行，执行前需要审批。";
     case "hybrid": return "同时包含两种或更多真实执行来源。";
     default: return "仅提供流程说明和提示词，不包含独立执行器。";

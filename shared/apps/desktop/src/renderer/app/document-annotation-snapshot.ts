@@ -185,7 +185,7 @@ export function resolveAnnotationSnapshotPreview(geometry?: { snapshotUrl?: stri
   if (previewUrl) return previewUrl;
   const snapshotPath = geometry?.snapshotPath?.trim();
   if (!snapshotPath) return "";
-  return snapshotPath.startsWith("data:") || snapshotPath.startsWith("codecn-attachment://")
+  return snapshotPath.startsWith("data:") || snapshotPath.startsWith("newbrain-attachment://")
     ? snapshotPath
     : "";
 }

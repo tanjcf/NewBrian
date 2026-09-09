@@ -420,7 +420,7 @@ export type SettingsNavIconName =
 
 declare global {
   interface Window {
-    codecn?: {
+    newbrain?: {
       listBrainWorkspaces: () => Promise<BrainWorkspaceDto[]>;
       listBrainProjects: (input?: BrainProjectListInput) => Promise<BrainProjectDto[]>;
       createBrainProject: (input: BrainProjectCreateInput) => Promise<BrainProjectDto>;
@@ -752,7 +752,7 @@ export const featureItems: FeatureItem[] = [
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
   { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" },
-  { id: "mobile", label: "codeCN 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
+  { id: "mobile", label: "NewBrain 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
   { id: "mcp", label: "MCP 集成", icon: "↔", description: "管理 MCP 服务器、连接状态和工具能力。" }
 ];
 
@@ -792,7 +792,7 @@ export const initialModelConfig: ModelConfigState = {
   reviewModel: "gpt-5.4-mini",
   reasoningEffort: "low",
   disableResponseStorage: true,
-  systemPrompt: "You are a helpful coding assistant for the codeCN desktop workspace."
+  systemPrompt: "You are a helpful coding assistant for the NewBrain desktop workspace."
 };
 
 export const initialDesktopPreferences: DesktopPreferencesState = {
@@ -880,7 +880,7 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
   worktree: {
     defaultIsolated: true,
     keepArchived: false,
-    rootDir: ".codecn/worktrees"
+    rootDir: ".newbrain/worktrees"
   },
   browser: {
     autoOpenPreview: false,

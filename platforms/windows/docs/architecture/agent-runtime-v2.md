@@ -1,4 +1,4 @@
-# codeCN Agent Runtime v2
+# NewBrain Agent Runtime v2
 
 ## Scope
 

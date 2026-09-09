@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { initialDesktopPreferences } from "./desktop-model";
 import { projectWorkspaces } from "./workspace-visibility";
+import { WalletSettingsPage } from "./WalletSettingsPage";
 
 const FEATURE_UNDER_DEVELOPMENT_MESSAGE = "该接口处于开发中，暂时无法使用。";
 
@@ -14,87 +15,6 @@ function formatFeatureAvailabilityError(error: unknown): string {
     return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
   }
   return message;
-}
-
-function WalletSettingsPage(props: {
-  api: any;
-  displayUserEmail?: string;
-}) {
-  const { api, displayUserEmail } = props;
-  const [code, setCode] = useState("");
-  const [redeeming, setRedeeming] = useState(false);
-  const [walletMessage, setWalletMessage] = useState("");
-  const [walletError, setWalletError] = useState("");
-  const [wallet, setWallet] = useState<any>(null);
-  const loadingRef = useRef(false);
-  const settledRef = useRef(false);
-
-  const loadWallet = async (force = false) => {
-    if (!force && (loadingRef.current || settledRef.current)) return;
-    if (!api?.getBillingSubscription) {
-      setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
-      settledRef.current = true;
-      return;
-    }
-    loadingRef.current = true;
-    try {
-      if (!settledRef.current) setWalletError("");
-      const next = await api.getBillingSubscription();
-      setWallet(next && typeof next === "object" ? next : { summary: {}, subscriptions: [] });
-      if (next?.under_development) {
-        setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
-      } else {
-        setWalletError("");
-      }
-      settledRef.current = true;
-    } catch (error) {
-      setWallet((current: any) => current || { summary: {}, subscriptions: [] });
-      setWalletError(formatFeatureAvailabilityError(error));
-      settledRef.current = true;
-    } finally {
-      loadingRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    void loadWallet(false);
-  }, [api]);
-
-  const summary = wallet?.summary || {};
-  const subscription = (Array.isArray(wallet?.subscriptions) ? wallet.subscriptions : [])[0] || {};
-  const balance = Number(summary.available_balance ?? summary.balance ?? subscription.balance ?? 0);
-  const redeem = async () => {
-    if (!code.trim() || redeeming) return;
-    if (!api?.redeemCode) {
-      setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
-      return;
-    }
-    setRedeeming(true); setWalletError(""); setWalletMessage("");
-    try {
-      await api.redeemCode({ code: code.trim() });
-      setCode("");
-      setWalletMessage("兑换成功，钱包权益已更新。");
-      settledRef.current = false;
-      await loadWallet(true);
-    } catch (error) {
-      setWalletError(formatFeatureAvailabilityError(error));
-    } finally {
-      setRedeeming(false);
-    }
-  };
-  const openPurchase = () => {
-    const origin = String(wallet?.gateway_origin || "").replace(/\/$/, "");
-    if (!origin) { setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE); return; }
-    void api?.openBrowserPreview?.(`${origin}/dashboard#subscriptions`);
-  };
-
-  return <div className="wallet-settings-page">
-    <div className="settings-page-head"><div><h3>钱包</h3><p>充值余额，选择套餐，兑换后即时到账。</p></div><button type="button" onClick={() => { settledRef.current = false; void loadWallet(true); }}>刷新余额</button></div>
-    <section className="wallet-summary-card"><div><span>钱包余额</span><strong>¥{Number.isFinite(balance) ? balance.toFixed(2) : "0.00"}</strong><p>{displayUserEmail || "当前登录账号"}</p></div><dl><div><dt>当前套餐</dt><dd>{subscription.plan_name || "暂无套餐"}</dd></div><div><dt>有效期</dt><dd>{subscription.expires_at_display || "--"}</dd></div><div><dt>并发</dt><dd>{subscription.concurrency_limit || 0} 路</dd></div></dl></section>
-    <section className="settings-card wallet-recharge-card"><div className="settings-card-head"><div><strong>充值</strong><p>为钱包增加余额。</p></div></div><div className="wallet-recharge-actions"><input aria-label="充值金额" placeholder="充值金额" inputMode="decimal" /><select aria-label="支付方式"><option>微信支付</option><option>支付宝</option></select><button type="button" onClick={openPurchase}>立即充值</button></div><small>支付流程将在 spring-app 中完成。</small></section>
-    <section className="wallet-package-section"><div className="settings-card-head"><div><strong>套餐</strong><p>在线购买或使用兑换码。</p></div><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>输入兑换码</button></div><div className="wallet-package-list"><article><strong>Starter</strong><b>¥29 / 30 天</b><span>余额 ¥30 · 并发 1 路</span><div><button type="button" onClick={openPurchase}>在线购买</button><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>兑换</button></div></article><article className="recommended"><strong>Pro</strong><b>¥99 / 30 天</b><span>余额 ¥120 · 并发 3 路</span><div><button type="button" onClick={openPurchase}>在线购买</button><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>兑换</button></div></article><article><strong>Team</strong><b>¥299 / 30 天</b><span>余额 ¥400 · 并发 10 路</span><div><button type="button" onClick={openPurchase}>在线购买</button><button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>兑换</button></div></article></div></section>
-    <section className="settings-card wallet-redeem-card"><strong>兑换码</strong><p>输入 spring-app 发放的兑换码。</p><div><input id="wallet-redeem-code" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void redeem(); }} placeholder="请输入兑换码" disabled={redeeming} /><button type="button" onClick={() => void redeem()} disabled={redeeming || !code.trim()}>{redeeming ? "处理中…" : "确认兑换"}</button></div>{walletMessage ? <small className="wallet-success">{walletMessage}</small> : null}{walletError ? <small className="wallet-error">{walletError}</small> : null}</section>
-  </div>;
 }
 
 export function SettingsWorkspace(ctx: any) {
@@ -124,7 +44,7 @@ export function SettingsWorkspace(ctx: any) {
     ...(Array.isArray(modelConfig.availableModels) ? modelConfig.availableModels : [])
   ];
   const dictationAvailable = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-  const accountProfileKey = "codecn.accountProfile.v1";
+  const accountProfileKey = "newbrain.accountProfile.v1";
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [accountProfile, setAccountProfile] = useState(() => {
     try { return JSON.parse(localStorage.getItem(accountProfileKey) || "{}"); } catch { return {}; }
@@ -284,11 +204,11 @@ export function SettingsWorkspace(ctx: any) {
   const [mcpEnvPassthrough, setMcpEnvPassthrough] = useState<string[]>([]);
   function readExtendedMcpFields(server: any) {
     const lines = String(server?.env || "").split("\n").filter(Boolean);
-    setMcpWorkingDirectory(lines.find((line) => line.startsWith("CODECN_MCP_CWD="))?.slice(15) || "");
-    setMcpBearerTokenEnv(lines.find((line) => line.startsWith("CODECN_MCP_BEARER_ENV="))?.slice(22) || "");
-    setMcpEnvPassthrough(lines.filter((line) => line.startsWith("CODECN_MCP_ENV_PASS=" )).map((line) => line.slice(20)));
-    setMcpHeaders(lines.filter((line) => line.startsWith("CODECN_MCP_HEADER=")).map((line) => { const value=line.slice(18); const index=value.indexOf(":"); return { key:index < 0 ? value : value.slice(0,index), value:index < 0 ? "" : value.slice(index+1) }; }));
-    setMcpHeaderEnv(lines.filter((line) => line.startsWith("CODECN_MCP_HEADER_ENV=")).map((line) => { const value=line.slice(22); const index=value.indexOf(":"); return { key:index < 0 ? value : value.slice(0,index), value:index < 0 ? "" : value.slice(index+1) }; }));
+    setMcpWorkingDirectory(lines.find((line) => line.startsWith("NEWBRAIN_MCP_CWD="))?.slice(15) || "");
+    setMcpBearerTokenEnv(lines.find((line) => line.startsWith("NEWBRAIN_MCP_BEARER_ENV="))?.slice(22) || "");
+    setMcpEnvPassthrough(lines.filter((line) => line.startsWith("NEWBRAIN_MCP_ENV_PASS=" )).map((line) => line.slice(20)));
+    setMcpHeaders(lines.filter((line) => line.startsWith("NEWBRAIN_MCP_HEADER=")).map((line) => { const value=line.slice(18); const index=value.indexOf(":"); return { key:index < 0 ? value : value.slice(0,index), value:index < 0 ? "" : value.slice(index+1) }; }));
+    setMcpHeaderEnv(lines.filter((line) => line.startsWith("NEWBRAIN_MCP_HEADER_ENV=")).map((line) => { const value=line.slice(22); const index=value.indexOf(":"); return { key:index < 0 ? value : value.slice(0,index), value:index < 0 ? "" : value.slice(index+1) }; }));
   }
 
   function openMcpSettingsEditor(server?: any) {
@@ -330,13 +250,13 @@ export function SettingsWorkspace(ctx: any) {
   }
 
   async function saveMcpSettingsEditor() {
-    const baseEnv = String(mcpDraft.env || "").split("\n").filter((line) => line && !line.startsWith("CODECN_MCP_"));
+    const baseEnv = String(mcpDraft.env || "").split("\n").filter((line) => line && !line.startsWith("NEWBRAIN_MCP_"));
     const extended = [
-      mcpWorkingDirectory && `CODECN_MCP_CWD=${mcpWorkingDirectory}`,
-      mcpBearerTokenEnv && `CODECN_MCP_BEARER_ENV=${mcpBearerTokenEnv}`,
-      ...mcpEnvPassthrough.filter(Boolean).map((value) => `CODECN_MCP_ENV_PASS=${value}`),
-      ...mcpHeaders.filter((row) => row.key).map((row) => `CODECN_MCP_HEADER=${row.key}:${row.value}`),
-      ...mcpHeaderEnv.filter((row) => row.key).map((row) => `CODECN_MCP_HEADER_ENV=${row.key}:${row.value}`)
+      mcpWorkingDirectory && `NEWBRAIN_MCP_CWD=${mcpWorkingDirectory}`,
+      mcpBearerTokenEnv && `NEWBRAIN_MCP_BEARER_ENV=${mcpBearerTokenEnv}`,
+      ...mcpEnvPassthrough.filter(Boolean).map((value) => `NEWBRAIN_MCP_ENV_PASS=${value}`),
+      ...mcpHeaders.filter((row) => row.key).map((row) => `NEWBRAIN_MCP_HEADER=${row.key}:${row.value}`),
+      ...mcpHeaderEnv.filter((row) => row.key).map((row) => `NEWBRAIN_MCP_HEADER_ENV=${row.key}:${row.value}`)
     ].filter(Boolean);
     await handleSaveMcpServer({ ...mcpDraft, env: [...baseEnv, ...extended].join("\n") });
     setMcpSettingsView("list");
@@ -368,11 +288,11 @@ export function SettingsWorkspace(ctx: any) {
     localStorage.setItem(accountProfileKey, JSON.stringify(merged));
     setAccountProfile(merged);
     onAccountProfileChange?.(merged);
-    setChatStatus("头像已保存到 codeCN 本地配置。");
+    setChatStatus("头像已保存到 NewBrain 本地配置。");
   }
 
 function PrototypeBillingSettingsPage() {
-    const billingCacheKey = "codecn.billingSnapshot.v1";
+    const billingCacheKey = "newbrain.billingSnapshot.v1";
     const [billing, setBilling] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState("");
@@ -922,7 +842,7 @@ function renderSettingsWorkspace() {
                       <div className="account-edit-dialog-head">
                         <div>
                           <strong>{accountEdit.type === "email" ? "修改邮箱" : accountEdit.type === "phone" ? "修改手机号" : "修改密码"}</strong>
-                          <span>{accountEdit.type === "password" ? "密码由当前登录认证服务管理" : accountEdit.type === "email" ? "需要通过新邮箱验证码验证后才能修改" : "修改后将保存到本机 codeCN 配置"}</span>
+                          <span>{accountEdit.type === "password" ? "密码由当前登录认证服务管理" : accountEdit.type === "email" ? "需要通过新邮箱验证码验证后才能修改" : "修改后将保存到本机 NewBrain 配置"}</span>
                         </div>
                         <button type="button" aria-label="关闭" onClick={() => {
                           setAccountEdit(null);
@@ -960,7 +880,7 @@ function renderSettingsWorkspace() {
                             }}
                           />
                           {accountEditError ? <p className="account-edit-error">{accountEditError}</p> : null}
-                          <p className="account-password-notice">密码会提交到当前登录认证服务，codeCN 不会在本机保存密码。</p>
+                          <p className="account-password-notice">密码会提交到当前登录认证服务，NewBrain 不会在本机保存密码。</p>
                         </div>
                       ) : accountEdit.type === "email" ? (
                         <div className="account-password-fields">
@@ -1068,7 +988,7 @@ function renderSettingsWorkspace() {
 
                 <section className="codex-settings-section">
                   <h4>工作模式</h4>
-                  <p>选择 codecn 显示多少技术细节</p>
+                  <p>选择 newbrain 显示多少技术细节</p>
                   <div className="codex-mode-grid">
                     <button
                       type="button"
@@ -1116,7 +1036,7 @@ function renderSettingsWorkspace() {
                         permissions: { ...(current.permissions || {}), fullAccess: false }
                       }));
                     }}>
-                      <span><strong>替我审批</strong><em>codecn 可以读取和编辑工作区文件，并自动审核额外访问权限请求。</em></span>
+                      <span><strong>替我审批</strong><em>newbrain 可以读取和编辑工作区文件，并自动审核额外访问权限请求。</em></span>
                       <SettingsSwitch enabled={!desktopPreferences.permissions?.fullAccess} />
                     </button>
                     <button type="button" className="codex-setting-row" aria-pressed={Boolean(desktopPreferences.permissions?.fullAccess)} onClick={() => {
@@ -1128,7 +1048,7 @@ function renderSettingsWorkspace() {
                         permissions: { ...(current.permissions || { fullAccess: false }), fullAccess }
                       }));
                     }}>
-                      <span><strong>完全访问权限</strong><em>当 codecn 以完全访问权限运行时，无需你批准，即可编辑你的电脑上的任何文件并运行联网命令。</em></span>
+                      <span><strong>完全访问权限</strong><em>当 newbrain 以完全访问权限运行时，无需你批准，即可编辑你的电脑上的任何文件并运行联网命令。</em></span>
                       <SettingsSwitch enabled={Boolean(desktopPreferences.permissions?.fullAccess)} />
                     </button>
                   </div>
@@ -1240,7 +1160,7 @@ function renderSettingsWorkspace() {
                       </select>
                     </div>
                     <div className="codex-setting-row">
-                      <span><strong>跟进行为</strong><em>在 codecn 运行时将后续操作加入队列，或引导当前运行。</em></span>
+                      <span><strong>跟进行为</strong><em>在 newbrain 运行时将后续操作加入队列，或引导当前运行。</em></span>
                       <div className="codex-segment">
                         <button
                           type="button"
@@ -1336,7 +1256,7 @@ function renderSettingsWorkspace() {
                       </select>
                     </div>
                     <div className="codex-setting-row">
-                      <span><strong>按住听写快捷键</strong><em>codeCN 窗口处于活动状态时，按住即可在输入框听写</em></span>
+                      <span><strong>按住听写快捷键</strong><em>NewBrain 窗口处于活动状态时，按住即可在输入框听写</em></span>
                       <div className="codex-inline-actions">
                         {renderShortcutRecorder(
                           "dictation-hold",
@@ -1354,7 +1274,7 @@ function renderSettingsWorkspace() {
                       </div>
                     </div>
                     <div className="codex-setting-row">
-                      <span><strong>切换听写快捷键</strong><em>codeCN 窗口处于活动状态时，按一次开始，再按一次停止</em></span>
+                      <span><strong>切换听写快捷键</strong><em>NewBrain 窗口处于活动状态时，按一次开始，再按一次停止</em></span>
                       <div className="codex-inline-actions">
                         {renderShortcutRecorder(
                           "dictation-toggle",
@@ -1427,7 +1347,7 @@ function renderSettingsWorkspace() {
                   <h4>通知</h4>
                   <div className="codex-setting-list">
                     <div className="codex-setting-row">
-                      <span><strong>轮次完成通知</strong><em>设置 codecn 完成任务时的提醒</em></span>
+                      <span><strong>轮次完成通知</strong><em>设置 newbrain 完成任务时的提醒</em></span>
                       <select
                         className="codex-pill-select"
                         value={desktopPreferences.notifications?.turnComplete || "when-unfocused"}
@@ -1500,7 +1420,7 @@ function renderSettingsWorkspace() {
                       <>
                         <label className="codex-mcp-field"><span>启动命令</span><input value={mcpDraft.command} onChange={(event) => setMcpDraft((current: any) => ({ ...current, command: event.target.value }))} placeholder="openai-dev-mcp serve-sqlite" /></label>
                         <div className="codex-mcp-field"><span>参数</span>{String(mcpDraft.args || "").split("\n").map((arg: string, index: number, rows: string[]) => <div className="codex-mcp-pair single" key={`arg-${index}`}><input value={arg} onChange={(event) => { const next=[...rows]; next[index]=event.target.value; setMcpDraft((current:any)=>({...current,args:next.join("\n")})); }} /><button type="button" onClick={() => setMcpDraft((current:any)=>({...current,args:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={() => setMcpDraft((current:any)=>({...current,args:current.args ? `${current.args}\n` : "\n"}))}>＋ 添加参数</button></div>
-                        <div className="codex-mcp-field"><span>环境变量</span>{String(mcpDraft.env || "").split("\n").filter((line:string)=>line && !line.startsWith("CODECN_MCP_")).map((line:string,index:number,rows:string[])=>{const at=line.indexOf("=");const key=at<0?line:line.slice(0,at);const value=at<0?"":line.slice(at+1);return <div className="codex-mcp-pair" key={`env-${index}`}><input placeholder="键" value={key} onChange={(event)=>{const next=[...rows];next[index]=`${event.target.value}=${value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><input placeholder="值" value={value} onChange={(event)=>{const next=[...rows];next[index]=`${key}=${event.target.value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><button type="button" onClick={()=>setMcpDraft((current:any)=>({...current,env:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>})}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpDraft((current:any)=>({...current,env:current.env?`${current.env}\nNEW_KEY=`:"NEW_KEY="}))}>＋ 添加环境变量</button></div>
+                        <div className="codex-mcp-field"><span>环境变量</span>{String(mcpDraft.env || "").split("\n").filter((line:string)=>line && !line.startsWith("NEWBRAIN_MCP_")).map((line:string,index:number,rows:string[])=>{const at=line.indexOf("=");const key=at<0?line:line.slice(0,at);const value=at<0?"":line.slice(at+1);return <div className="codex-mcp-pair" key={`env-${index}`}><input placeholder="键" value={key} onChange={(event)=>{const next=[...rows];next[index]=`${event.target.value}=${value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><input placeholder="值" value={value} onChange={(event)=>{const next=[...rows];next[index]=`${key}=${event.target.value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><button type="button" onClick={()=>setMcpDraft((current:any)=>({...current,env:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>})}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpDraft((current:any)=>({...current,env:current.env?`${current.env}\nNEW_KEY=`:"NEW_KEY="}))}>＋ 添加环境变量</button></div>
                         <div className="codex-mcp-field"><span>环境变量传递</span>{mcpEnvPassthrough.map((value,index)=><div className="codex-mcp-pair single" key={`pass-${index}`}><input value={value} onChange={(event)=>setMcpEnvPassthrough((rows)=>rows.map((row,i)=>i===index?event.target.value:row))}/><button type="button" onClick={()=>setMcpEnvPassthrough((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpEnvPassthrough((rows)=>[...rows,""])}>＋ 添加变量</button></div>
                         <label className="codex-mcp-field"><span>工作目录</span><input value={mcpWorkingDirectory} onChange={(event)=>setMcpWorkingDirectory(event.target.value)} placeholder="~/code" /></label>
                       </>
@@ -1696,19 +1616,19 @@ function renderSettingsWorkspace() {
                 <div className="settings-page-head"><div><h3>Git</h3></div></div>
                 <section className="settings-card git-settings-card">
                   <div className="git-setting-row">
-                    <div><strong>分支前缀</strong><p>在 codeCN 中创建新分支时使用的前缀</p></div>
+                    <div><strong>分支前缀</strong><p>在 NewBrain 中创建新分支时使用的前缀</p></div>
                     <input value={desktopPreferences.git.branchPrefix} onChange={(event) => setDesktopPreferences((current) => ({ ...current, git: { ...current.git, branchPrefix: event.target.value } }))} />
                   </div>
                   <div className="git-setting-row">
-                    <div><strong>拉取请求合并方法</strong><p>选择 codeCN 合并拉取请求的方法</p></div>
+                    <div><strong>拉取请求合并方法</strong><p>选择 NewBrain 合并拉取请求的方法</p></div>
                     <div className="git-merge-method" role="group" aria-label="拉取请求合并方法">
                       <button type="button" className={desktopPreferences.git.pullRequestMergeMethod === "merge" ? "active" : ""} onClick={() => setDesktopPreferences((current) => ({ ...current, git: { ...current.git, pullRequestMergeMethod: "merge" } }))}>合并</button>
                       <button type="button" className={desktopPreferences.git.pullRequestMergeMethod === "squash" ? "active" : ""} onClick={() => setDesktopPreferences((current) => ({ ...current, git: { ...current.git, pullRequestMergeMethod: "squash" } }))}>压缩</button>
                     </div>
                   </div>
                   {([
-                    ["forcePushWithLease", "始终强制推送", "从 codeCN 推送时使用 --force-with-lease 参数"],
-                    ["createDraftPullRequests", "创建草稿拉取请求", "从 codeCN 创建 PR 时默认使用草稿拉取请求"],
+                    ["forcePushWithLease", "始终强制推送", "从 NewBrain 推送时使用 --force-with-lease 参数"],
+                    ["createDraftPullRequests", "创建草稿拉取请求", "从 NewBrain 创建 PR 时默认使用草稿拉取请求"],
                     ["autoDeleteOldWorktrees", "自动删除旧工作树", "推荐大多数用户启用。仅当你需要手动管理工作树和磁盘使用空间时，再关闭此功能。"]
                   ] as Array<["forcePushWithLease" | "createDraftPullRequests" | "autoDeleteOldWorktrees", string, string]>).map(([key, title, description]) => (
                     <button className="git-setting-row git-setting-toggle" type="button" key={key} onClick={() => setDesktopPreferences((current) => ({ ...current, git: { ...current.git, [key]: !current.git[key] } }))}>
@@ -1716,7 +1636,7 @@ function renderSettingsWorkspace() {
                     </button>
                   ))}
                   <div className="git-setting-row">
-                    <div><strong>自动删除限制</strong><p>自动清理较旧工作树前保留的 codeCN 工作树数量。删除前会创建快照，因此被清理的工作树始终可恢复。</p></div>
+                    <div><strong>自动删除限制</strong><p>自动清理较旧工作树前保留的 NewBrain 工作树数量。删除前会创建快照，因此被清理的工作树始终可恢复。</p></div>
                     <input className="git-limit-input" type="number" min="1" max="100" value={desktopPreferences.git.autoDeleteWorktreeLimit} onChange={(event) => setDesktopPreferences((current) => ({ ...current, git: { ...current.git, autoDeleteWorktreeLimit: Math.max(1, Math.min(100, Number(event.target.value) || 1)) } }))} />
                   </div>
                 </section>
@@ -1973,20 +1893,7 @@ function renderSettingsWorkspace() {
                   </div>
                 </section>
               </>
-            ) : (
-              <>
-                <div className="settings-page-head">
-                  <div>
-                    <h3>通用</h3>
-                    <p>管理模型、工作区与桌面端配置</p>
-                  </div>
-                  <button type="button" onClick={() => void runSettingsSave("凭据", saveModelConfig)}>
-                    保存设置
-                  </button>
-                </div>
-                {renderFeaturePanel()}
-              </>
-            )}
+            ) : null}
           </section>
         </div>
       </div>

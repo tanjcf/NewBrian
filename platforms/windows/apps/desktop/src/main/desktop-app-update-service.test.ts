@@ -36,14 +36,14 @@ test("parses and compares app_release offers for click-to-upgrade", () => {
   assert.equal(parseDesktopAppRelease({ latest_version: "0.1.61" }), null);
   const release = parseDesktopAppRelease({
     latest_version: "0.1.61",
-    download_url: "https://example.com/codeCN.msi",
+    download_url: "https://example.com/NewBrain.msi",
     sha256: "ABC",
     notes: "fix fetch",
     mandatory: true
   });
   assert.deepEqual(release, {
     latestVersion: "0.1.61",
-    downloadUrl: "https://example.com/codeCN.msi",
+    downloadUrl: "https://example.com/NewBrain.msi",
     sha256: "abc",
     notes: "fix fetch",
     mandatory: true,
@@ -53,7 +53,7 @@ test("parses and compares app_release offers for click-to-upgrade", () => {
   });
   const offer = {
     latest_version: "0.1.61",
-    download_url: "https://example.com/codeCN.msi",
+    download_url: "https://example.com/NewBrain.msi",
     sha256: "abc",
     notes: "fix fetch",
     mandatory: true
@@ -74,18 +74,18 @@ test("parses and compares app_release offers for click-to-upgrade", () => {
 
 test("builds silent per-user msiexec args matching LocalAppData installs", () => {
   assert.equal(
-    resolveDesktopMsiInstallScope("C:\\Users\\Ada\\AppData\\Local\\.codecn\\codeCN.exe"),
+    resolveDesktopMsiInstallScope("C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe"),
     "per-user"
   );
   assert.equal(
-    resolveDesktopMsiInstallScope("C:\\Program Files\\codeCN\\codeCN.exe"),
+    resolveDesktopMsiInstallScope("C:\\Program Files\\NewBrain\\NewBrain.exe"),
     "per-machine"
   );
   assert.deepEqual(
-    buildSilentDesktopMsiUpgradeArgs("C:\\updates\\codeCN-1.2.1.msi", "per-user"),
+    buildSilentDesktopMsiUpgradeArgs("C:\\updates\\NewBrain-1.2.1.msi", "per-user"),
     [
       "/i",
-      "C:\\updates\\codeCN-1.2.1.msi",
+      "C:\\updates\\NewBrain-1.2.1.msi",
       "/qn",
       "/norestart",
       "REBOOT=ReallySuppress",
@@ -94,17 +94,17 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     ]
   );
   assert.deepEqual(
-    buildSilentDesktopMsiUpgradeArgs("C:\\updates\\codeCN-1.2.1.msi", "per-machine", {
-      applicationFolder: "C:\\Program Files\\codeCN\\"
+    buildSilentDesktopMsiUpgradeArgs("C:\\updates\\NewBrain-1.2.1.msi", "per-machine", {
+      applicationFolder: "C:\\Program Files\\NewBrain\\"
     }),
     [
       "/i",
-      "C:\\updates\\codeCN-1.2.1.msi",
+      "C:\\updates\\NewBrain-1.2.1.msi",
       "/qn",
       "/norestart",
       "REBOOT=ReallySuppress",
       "ALLUSERS=1",
-      "APPLICATIONFOLDER=C:\\Program Files\\codeCN"
+      "APPLICATIONFOLDER=C:\\Program Files\\NewBrain"
     ]
   );
   assert.equal(isSilentDesktopMsiSuccess(0), true);
@@ -114,17 +114,17 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     describeSilentDesktopMsiFailure({ exitCode: 1625, scope: "per-machine" }),
     /管理员权限/
   );
-  assert.equal(quoteCmdArgument("C:\\updates\\codeCN 1.2.1.msi"), "\"C:\\updates\\codeCN 1.2.1.msi\"");
+  assert.equal(quoteCmdArgument("C:\\updates\\NewBrain 1.2.1.msi"), "\"C:\\updates\\NewBrain 1.2.1.msi\"");
   const deferred = buildDeferredSilentMsiexecScript({
-    msiPath: "C:\\updates\\codeCN-1.2.1.msi",
-    args: buildSilentDesktopMsiUpgradeArgs("C:\\updates\\codeCN-1.2.1.msi", "per-user"),
-    processImageName: "codeCN.exe",
+    msiPath: "C:\\updates\\NewBrain-1.2.1.msi",
+    args: buildSilentDesktopMsiUpgradeArgs("C:\\updates\\NewBrain-1.2.1.msi", "per-user"),
+    processImageName: "NewBrain.exe",
     maxWaitSeconds: 30
   });
   assert.match(deferred, /msiexec\.exe \/i .* \/qn \/norestart REBOOT=ReallySuppress MSIINSTALLPERUSER=1 ALLUSERS=/);
   assert.match(deferred, /Get-Process -Name \$name/);
   assert.match(deferred, /WindowStyle Hidden/);
-  assert.match(deferred, /等待 codeCN 退出超时/);
+  assert.match(deferred, /等待 NewBrain 退出超时/);
   assert.doesNotMatch(deferred, /find \/I/i);
   assert.doesNotMatch(deferred, /tasklist/i);
   assert.match(deferred, /if errorlevel 1 \(/);
@@ -141,7 +141,7 @@ test("getStatus refresh surfaces a newly published release without restart", asy
       cached = {
         available: true,
         latest_version: "0.1.65",
-        download_url: "https://example.com/codeCN-0.1.65.msi",
+        download_url: "https://example.com/NewBrain-0.1.65.msi",
         release_id: "rel_65",
         channel: "stable"
       };
@@ -161,7 +161,7 @@ test("getStatus refresh surfaces a newly published release without restart", asy
 test("downloads MSI and runs silent install after the user clicks update", async () => {
   const payload = Buffer.from("msi-bytes");
   const sha256 = createHash("sha256").update(payload).digest("hex");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-update-"));
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-update-"));
   const silentCalls: Array<{ msiPath: string; args: string[]; scope: string }> = [];
   const opened: string[] = [];
   const progress: Array<{ phase: string; detail: string }> = [];
@@ -173,11 +173,11 @@ test("downloads MSI and runs silent install after the user clicks update", async
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("missing port");
-  const downloadUrl = `http://127.0.0.1:${address.port}/codeCN.msi`;
+  const downloadUrl = `http://127.0.0.1:${address.port}/NewBrain.msi`;
   try {
     const service = new DesktopAppUpdateService({
       getCurrentVersion: () => "0.1.60",
-      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.codecn\\codeCN.exe",
+      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe",
       readCachedRelease: async () => ({
         latest_version: "0.1.61",
         download_url: downloadUrl,
@@ -222,7 +222,7 @@ test("downloads MSI and runs silent install after the user clicks update", async
       "/norestart",
       "REBOOT=ReallySuppress",
       "MSIINSTALLPERUSER=1",
-      "APPLICATIONFOLDER=C:\\Users\\Ada\\AppData\\Local\\.codecn",
+      "APPLICATIONFOLDER=C:\\Users\\Ada\\AppData\\Local\\.newbrain",
       "ALLUSERS="
     ]);
     assert.match(result.detail, /即将退出并安装/);
@@ -242,7 +242,7 @@ test("downloads MSI and runs silent install after the user clicks update", async
 test("falls back to opening the MSI wizard when silent install fails", async () => {
   const payload = Buffer.from("msi-fallback");
   const sha256 = createHash("sha256").update(payload).digest("hex");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-update-fb-"));
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-update-fb-"));
   const opened: string[] = [];
   const server = createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "application/octet-stream" });
@@ -251,7 +251,7 @@ test("falls back to opening the MSI wizard when silent install fails", async () 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("missing port");
-  const downloadUrl = `http://127.0.0.1:${address.port}/codeCN.msi`;
+  const downloadUrl = `http://127.0.0.1:${address.port}/NewBrain.msi`;
   try {
     const service = new DesktopAppUpdateService({
       getCurrentVersion: () => "0.1.60",
@@ -282,8 +282,8 @@ test("falls back to opening the MSI wizard when silent install fails", async () 
 test("startUpdate keeps partial on failure and resumes on retry", async () => {
   const payload = Buffer.from("resume-service-bytes-ABCDEFGH");
   const sha256 = createHash("sha256").update(payload).digest("hex");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-update-resume-"));
-  const partialPath = join(dir, "codeCN-1.3.6.msi.partial");
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-update-resume-"));
+  const partialPath = join(dir, "NewBrain-1.3.6.msi.partial");
   await writeFile(partialPath, payload.subarray(0, 12));
   let rangeSeen = false;
   const server = createServer((request, response) => {
@@ -309,12 +309,12 @@ test("startUpdate keeps partial on failure and resumes on retry", async () => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("missing port");
-  const downloadUrl = `http://127.0.0.1:${address.port}/codeCN.msi`;
+  const downloadUrl = `http://127.0.0.1:${address.port}/NewBrain.msi`;
   const progress: string[] = [];
   try {
     const service = new DesktopAppUpdateService({
       getCurrentVersion: () => "1.3.5",
-      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.codecn\\codeCN.exe",
+      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe",
       readCachedRelease: async () => ({
         latest_version: "1.3.6",
         download_url: downloadUrl,
@@ -329,7 +329,7 @@ test("startUpdate keeps partial on failure and resumes on retry", async () => {
     assert.equal(result.ok, true);
     assert.equal(rangeSeen, true);
     assert.ok(progress.some((item) => item.includes("断点续传")));
-    assert.deepEqual(await readFile(join(dir, "codeCN-1.3.6.msi")), payload);
+    assert.deepEqual(await readFile(join(dir, "NewBrain-1.3.6.msi")), payload);
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });
@@ -339,7 +339,7 @@ test("startUpdate keeps partial on failure and resumes on retry", async () => {
 test("startUpdate leaves preparing immediately and handles 1.2.9.ulit patch MSI", async () => {
   const payload = Buffer.from("ulit-msi-bytes");
   const sha256 = createHash("sha256").update(payload).digest("hex");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-update-ulit-"));
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-update-ulit-"));
   const silentCalls: Array<{ msiPath: string }> = [];
   const progress: string[] = [];
   const server = createServer((_request, response) => {
@@ -353,7 +353,7 @@ test("startUpdate leaves preparing immediately and handles 1.2.9.ulit patch MSI"
   try {
     const service = new DesktopAppUpdateService({
       getCurrentVersion: () => "1.2.7",
-      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.codecn\\codeCN.exe",
+      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe",
       readCachedRelease: async () => ({
         latest_version: "1.2.9.ulit",
         download_url: downloadUrl,
@@ -384,7 +384,7 @@ test("startUpdate leaves preparing immediately and handles 1.2.9.ulit patch MSI"
 });
 
 test("startUpdate surfaces download errors without throwing", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "codecn-update-err-"));
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-update-err-"));
   const server = createServer((_request, response) => {
     response.writeHead(500, { "Content-Type": "text/plain" });
     response.end("boom");
@@ -392,7 +392,7 @@ test("startUpdate surfaces download errors without throwing", async () => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("missing port");
-  const downloadUrl = `http://127.0.0.1:${address.port}/codeCN.msi`;
+  const downloadUrl = `http://127.0.0.1:${address.port}/NewBrain.msi`;
   try {
     const service = new DesktopAppUpdateService({
       getCurrentVersion: () => "1.3.5",

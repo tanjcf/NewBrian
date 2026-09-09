@@ -64,7 +64,7 @@ async function copyDirectory(source: string, destination: string) {
     const from = join(source, entry.name);
     const to = join(destination, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === ".clawhub" || entry.name === ".codecn") continue;
+      if (entry.name === ".clawhub" || entry.name === ".newbrain") continue;
       await copyDirectory(from, to);
     } else if (entry.isFile()) {
       await fs.mkdir(dirname(to), { recursive: true });
@@ -118,7 +118,7 @@ function assertManagedTarget(userSkillRoot: string, targetDir: string) {
 }
 
 /**
- * Install an OpenClaw-compatible skill package into codeCN's managed user skill root.
+ * Install an OpenClaw-compatible skill package into NewBrain's managed user skill root.
  * Scripts are copied but never executed.
  */
 export async function installOpenClawSkillPackage(
@@ -255,7 +255,7 @@ export async function collectRelativeFiles(rootDir: string, current = rootDir, c
 }
 
 /**
- * Pack an installed OpenClaw/codeCN skill directory into a portable zip
+ * Pack an installed OpenClaw/NewBrain skill directory into a portable zip
  * containing SKILL.md and sibling assets (references/, agents/, etc.).
  */
 export async function exportOpenClawSkillPackageZip(input: {
@@ -270,7 +270,7 @@ export async function exportOpenClawSkillPackageZip(input: {
   });
   const files = (await collectRelativeFiles(skillDir)).filter((relativePath) => {
     const top = relativePath.split("/")[0]?.toLowerCase() || "";
-    return top !== ".clawhub" && top !== ".codecn" && top !== ".staging";
+    return top !== ".clawhub" && top !== ".newbrain" && top !== ".staging";
   });
   if (!files.some((item) => item.toLowerCase() === "skill.md")) {
     throw new Error(`Skill package is missing SKILL.md: ${skillDir}`);

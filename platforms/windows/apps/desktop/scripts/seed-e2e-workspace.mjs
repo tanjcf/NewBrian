@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9333);
-const testWorkspacePath = resolve(process.cwd(), ".codecn/projects/test");
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9333);
+const testWorkspacePath = resolve(process.cwd(), ".newbrain/projects/test");
 
 const pages = await fetch(`http://127.0.0.1:${debugPort}/json`).then((response) => {
   assert.equal(response.ok, true, `Electron debug endpoint returned HTTP ${response.status}`);
@@ -44,10 +44,10 @@ function evaluate(expression) {
 
 const seeded = await evaluate(`(async () => {
   const workspacePath = ${JSON.stringify(testWorkspacePath)};
-  let catalog = await window.codecn.listWorkspaces();
-  let workspace = catalog.find((item) => String(item.path || "").replace(/\\\\/g, "/").endsWith("/.codecn/projects/test"));
+  let catalog = await window.newbrain.listWorkspaces();
+  let workspace = catalog.find((item) => String(item.path || "").replace(/\\\\/g, "/").endsWith("/.newbrain/projects/test"));
   if (!workspace) {
-    catalog = await window.codecn.addWorkspace({ name: "codeCN File Preview E2E", path: workspacePath });
+    catalog = await window.newbrain.addWorkspace({ name: "NewBrain File Preview E2E", path: workspacePath });
     workspace = catalog.find((item) => item.path === workspacePath);
   }
   return Boolean(workspace);

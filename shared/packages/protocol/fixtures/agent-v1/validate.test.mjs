@@ -21,7 +21,7 @@ function readJson(name) {
   return JSON.parse(fs.readFileSync(path.join(fixturesDir, name), "utf8"));
 }
 
-test("protocol meta declares codecn.agent.v1 hybrid freeze", () => {
+test("protocol meta declares newbrain.agent.v1 hybrid freeze", () => {
   const meta = readJson("protocol-meta.json");
   assert.equal(meta.protocol, AGENT_PROTOCOL_ID);
   assert.equal(meta.runtime_protocol_version, AGENT_RUNTIME_PROTOCOL_VERSION);

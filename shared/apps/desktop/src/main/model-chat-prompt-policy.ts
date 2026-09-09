@@ -37,7 +37,7 @@ export interface ModelChatPromptInput {
   sceneKnowledgeText?: string;
   /** Active BRAIN workspace scene key (routes media tools to scene Tools when set). */
   brainWorkspaceKey?: string;
-  /** Repo-root Project OS (CODECN.md / CLAUDE.md / AGENTS.md). */
+  /** Repo-root Project OS (NEWBRAIN.md / CLAUDE.md / AGENTS.md). */
   projectOs?: LoadedProjectOs | string;
   /** True when the turn uses MODEL_AUTO_ID / Auto routing. */
   autoMode?: boolean;
@@ -86,10 +86,10 @@ export function buildPersonalizationInstruction(
   const lines = [
     "Personalization loop (Hermes/PAHF-style):",
     "1. Pre-Action: if the current request is ambiguous/subjective and injected preferences do not cover it, ask ONE clarifying question BEFORE acting. Do not guess lasting taste.",
-    "2. Grounding: apply injected user-output-rules and repo Project OS (CODECN.md); once a preference exists, act directly and do not re-ask the same topic.",
+    "2. Grounding: apply injected user-output-rules and repo Project OS (NEWBRAIN.md); once a preference exists, act directly and do not re-ask the same topic.",
     "3. Post-Action: when the user corrects you or answers a learning question, treat it as durable preference learning (runtime will distill it).",
     "Ask at most one preference question per turn. Prefer executing when memory already answers the ambiguity.",
-    "Durable architecture belongs in CODECN.md (editable). Do not tool-edit .codecn preference references."
+    "Durable architecture belongs in NEWBRAIN.md (editable). Do not tool-edit .newbrain preference references."
   ];
   if (openQuestions.length) {
     lines.push("Open learning questions for this project (ask before acting if still unresolved):");
@@ -187,7 +187,7 @@ export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
       "- Do not ask style clarifying questions when the user already gave enough detail (e.g. 桌面背景 / 自然风光 / 已有完整歌词); pick a concrete prompt and call the tool immediately.",
       "- Capability questions (能不能/会不会/可不可以生成图片、视频或音乐) must be answered in text only — do NOT call media tools.",
       "- NEVER write '正在生成中...' / `![正在生成中...]` / fake progress markdown and stop. That is a hard failure.",
-      "- After a successful tool result, tell the user the local relative path (`.codecn/generated-media/` or scene `media/stems/` / `media/clips/`). Prefer side-panel / right Tools preview when already opened by the tool.",
+      "- After a successful tool result, tell the user the local relative path (`.newbrain/generated-media/` or scene `media/stems/` / `media/clips/`). Prefer side-panel / right Tools preview when already opened by the tool.",
       "- NEVER curl tokenhub.tencentmaas.com, NEVER search env/files for API keys, NEVER invent wand endpoints.",
       "- Provider credentials and TokenHub wand paths live only in spring-app Admin model config.",
       "- If a media tool fails because no model is available, tell the user to enable the matching model in Admin (混元生图/hy-image-v3 for images, a video model for video, a music-generation model for music) — do not fake media locally.",

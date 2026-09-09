@@ -19,7 +19,7 @@ The runtime supports four provider classes:
 | Provider | Meaning | Default behavior |
 | --- | --- | --- |
 | `instruction` | Skill, knowledge, or workflow guidance | Inject only when relevant |
-| `builtin` | CodeCN-owned deterministic local capability | Auto-use when policy allows |
+| `builtin` | NewBrain-owned deterministic local capability | Auto-use when policy allows |
 | `process` | Local executable or script | Never auto-run without policy/approval |
 | `mcp` | External or local MCP server | Auto-use only after connection and permission |
 

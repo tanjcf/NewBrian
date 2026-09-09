@@ -227,7 +227,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const catalog = await deps.readWorkspaceCatalog();
       const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
       const projectRoots = workspace?.path
-        ? [join(workspace.path, "skills"), join(workspace.path, ".codecn", "skills")]
+        ? [join(workspace.path, "skills"), join(workspace.path, ".newbrain", "skills")]
         : [];
 
       const tryScope = async (
@@ -284,8 +284,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const authState = await deps.readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState as never, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-        bearerToken = "codecn-e2e";
+      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
+        bearerToken = "newbrain-e2e";
       }
       if (!bearerToken && deps.refreshDesktopAccessToken) {
         bearerToken = await deps.refreshDesktopAccessToken().catch(() => "");
@@ -383,7 +383,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
     appendDiagnostics: deps.appendDiagnosticsLog,
     onShadowLearned: async ({ workspace }) => {
       await mirrorProjectRulesToGlobal({
-        userCodecnRoot: deps.userKnowledgeRoot,
+        userNewbrainRoot: deps.userKnowledgeRoot,
         projectWorkspacePath: workspace.path,
         projectKey: workspace.name || workspace.id
       }).catch(() => undefined);
@@ -459,8 +459,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
           const authState = await deps.readDesktopAuthState();
           const authSelection = selectModelRequestAuth(authState as never, "");
           let bearerToken = authSelection.bearerToken;
-          if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-            bearerToken = "codecn-e2e";
+          if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
+            bearerToken = "newbrain-e2e";
           }
           if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
           return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
@@ -517,7 +517,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       return preferences.personalization?.autoSkillEnabled === true;
     },
     loadLocalKnowledgeText: async ({ workspace, projectKey }) => loadLocalKnowledgeForInjection({
-      userCodecnRoot: deps.userKnowledgeRoot,
+      userNewbrainRoot: deps.userKnowledgeRoot,
       projectWorkspacePath: workspace.path,
       projectKey: projectKey || workspace.name || workspace.id
     }),
@@ -540,8 +540,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const authState = await deps.readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState as never, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-        bearerToken = "codecn-e2e";
+      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
+        bearerToken = "newbrain-e2e";
       }
       if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
       if (!bearerToken) {

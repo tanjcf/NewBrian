@@ -66,7 +66,7 @@ export function sortWorkspaceThreads(threads: WorkspaceThreadRecord[]) {
 }
 
 export function removeGeneratedDefaultWorkspace(workspaces: WorkspaceCatalogItem[]) {
-  return workspaces.filter((workspace) => workspace.id !== "workspace-codecn");
+  return workspaces.filter((workspace) => workspace.id !== "workspace-newbrain");
 }
 
 export function normalizeWorkspaceCondaConfig(workspaceId: string, input: Partial<WorkspaceCondaConfig> | undefined, context: Pick<WorkspaceCatalogPolicyContext, "getWorkspaceEnvRoot" | "makeWorkspaceEnvName">): WorkspaceCondaConfig | undefined {

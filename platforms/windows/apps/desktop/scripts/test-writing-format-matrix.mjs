@@ -1,5 +1,5 @@
 /**
- * Multi-genre × multi-format writing delivery matrix for codeCN.
+ * Multi-genre × multi-format writing delivery matrix for NewBrain.
  *
  * Layer A: native artifact.create for speech / case-study / notice / research / briefing / ledger
  *          across pdf / docx / xlsx / pptx with independent parsers.
@@ -180,13 +180,13 @@ function assertSignatures(format, bytes) {
 
 async function runLayerA(caseItem, evidenceDir) {
   const registry = createBuiltinToolRegistry();
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-matrix-a-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-matrix-a-"));
   const targetPath = `outputs/${caseItem.genre}.${caseItem.format}`;
   const content = DRAFTS[caseItem.genre];
   const result = await registry.invoke("artifact.create", {
     targetPath,
     format: caseItem.format,
-    title: `codeCN ${caseItem.genre}`,
+    title: `NewBrain ${caseItem.genre}`,
     content
   }, { workspacePath: root, shellEnv: process.env });
   assert.equal(result.ok, true, result.output);
@@ -202,7 +202,7 @@ async function runLayerA(caseItem, evidenceDir) {
 }
 
 async function runLayerB(caseItem, evidenceDir) {
-  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-matrix-b-"));
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-matrix-b-"));
   const runtime = await createLocalRuntime({
     runtimeId: `matrix-${caseItem.id}`,
     workspacePath,

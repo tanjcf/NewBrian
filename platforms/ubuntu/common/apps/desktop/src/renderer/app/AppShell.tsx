@@ -23,8 +23,8 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       if (command === "expand-sidebar") setSidebarCollapsed(false);
       if (command === "collapse-sidebar") setSidebarCollapsed(true);
     };
-    window.addEventListener("codecn:app-command", onAppCommand as EventListener);
-    return () => window.removeEventListener("codecn:app-command", onAppCommand as EventListener);
+    window.addEventListener("newbrain:app-command", onAppCommand as EventListener);
+    return () => window.removeEventListener("newbrain:app-command", onAppCommand as EventListener);
   }, []);
 
   useEffect(() => {
@@ -62,14 +62,14 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       const target = [...document.querySelectorAll<HTMLElement>(selector)].find((item) => item.innerText.includes(text));
       target?.click();
     };
-    const unsubscribe = window.codecn?.onAppCommand((command) => {
+    const unsubscribe = window.newbrain?.onAppCommand((command) => {
       if (command === "new-chat" || command === "quick-chat") clickSelector(".feature-nav-item.primary");
       if (command === "open-folder") {
         clickSelector('button[aria-label="添加项目"]');
         window.setTimeout(() => clickText(".project-create-menu button", "使用现有文件夹"), 0);
       }
       if (command === "settings") {
-        window.dispatchEvent(new CustomEvent("codecn:open-settings", { detail: { section: "account" } }));
+        window.dispatchEvent(new CustomEvent("newbrain:open-settings", { detail: { section: "account" } }));
       }
       if (command === "logout") {
         clickSelector(".sidebar-account-settings");
@@ -96,19 +96,19 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       if (command === "mcp") clickText(".feature-nav-item", "MCP");
       if (command === "worktrees" || command === "local-environments" || command === "shortcuts") {
         const section = command === "worktrees" ? "worktree" : command === "local-environments" ? "environment" : "shortcuts";
-        window.dispatchEvent(new CustomEvent("codecn:open-settings", { detail: { section } }));
+        window.dispatchEvent(new CustomEvent("newbrain:open-settings", { detail: { section } }));
       }
     });
     return unsubscribe;
   }, [threadHistory, onNavigateThread]);
 
   function controlWindow(action: "minimize" | "maximize" | "close") {
-    void window.codecn?.controlWindow(action);
+    void window.newbrain?.controlWindow(action);
   }
 
   function showMenu(event: MouseEvent<HTMLButtonElement>, menu: "file" | "edit" | "view" | "window" | "help") {
     const rect = event.currentTarget.getBoundingClientRect();
-    void window.codecn?.showAppMenu({
+    void window.newbrain?.showAppMenu({
       menu,
       x: Math.round(rect.left),
       y: Math.round(rect.bottom)

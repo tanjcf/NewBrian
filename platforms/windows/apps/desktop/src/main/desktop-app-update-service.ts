@@ -38,7 +38,7 @@ export function resolveDesktopMsiInstallScope(executablePath: string): DesktopMs
 
 /**
  * Build silent msiexec upgrade args matching the existing install scope.
- * Packaged installs default to LocalAppData/.codecn (per-user).
+ * Packaged installs default to LocalAppData/.newbrain (per-user).
  * Dual-purpose MSIs (WixUI Install Scope) need MSIINSTALLPERUSER=1 + ALLUSERS=
  * so /qn never surfaces the Installation Scope wizard.
  */
@@ -81,9 +81,9 @@ export function quoteCmdArgument(value: string): string {
 }
 
 /**
- * Build a deferred silent-upgrade .cmd that waits for codeCN.exe to exit,
+ * Build a deferred silent-upgrade .cmd that waits for NewBrain.exe to exit,
  * then runs msiexec /qn. On msiexec failure it opens the MSI as a last resort.
- * Quitting the app before msiexec avoids locked-file races with StopRunningCodecn.
+ * Quitting the app before msiexec avoids locked-file races with StopRunningNewbrain.
  * Never uses `tasklist | find /I` (blank console titled find /I).
  */
 export function buildDeferredSilentMsiexecScript(input: {
@@ -101,10 +101,10 @@ export function buildDeferredSilentMsiexecScript(input: {
   return [
     "@echo off",
     "setlocal EnableExtensions",
-    "title codeCN update",
-    "echo codeCN update: waiting for app exit...",
+    "title NewBrain update",
+    "echo NewBrain update: waiting for app exit...",
     waitLine,
-    "title codeCN update: installing",
+    "title NewBrain update: installing",
     msiexecLine,
     `if errorlevel 1 (`,
     `  echo msiexec failed; opening installer as fallback.`,
@@ -587,7 +587,7 @@ export class DesktopAppUpdateService {
       try {
         this.dependencies.afterSilentSuccess?.();
       } catch {
-        // Quit/relaunch is best-effort; MSI LaunchCodecnAfterInstall may restart the app.
+        // Quit/relaunch is best-effort; MSI LaunchNewbrainAfterInstall may restart the app.
       }
       return {
         ok: true,

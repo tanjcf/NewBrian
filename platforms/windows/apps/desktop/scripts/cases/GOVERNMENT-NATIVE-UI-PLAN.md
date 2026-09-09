@@ -2,13 +2,13 @@
 
 ## 目标
 
-用 **Windows UI Automation + user32 真实鼠标键盘** 验证 codeCN 政务写作闭环。  
+用 **Windows UI Automation + user32 真实鼠标键盘** 验证 NewBrain 政务写作闭环。  
 本仓库已有底座：`native-ui-scenario.mjs` + `windows-installed-ui-driver.ps1`（SendInput / mouse_event）。
 
 **禁止**：
 
 - 把云南/江苏/庆阳、煤炭年终总结等业务事实写进 harness
-- 用 `window.codecn` / CDP `Runtime.evaluate` / DOM 点击替代被测用户动作
+- 用 `window.newbrain` / CDP `Runtime.evaluate` / DOM 点击替代被测用户动作
 - 未执行断言却报 PASS；mock 语义冒充真实业务验收
 
 **允许**：

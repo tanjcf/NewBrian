@@ -10,16 +10,16 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const email = process.env.CODECN_E2E_LOGIN_EMAIL?.trim();
-const password = process.env.CODECN_E2E_LOGIN_PASSWORD?.trim();
-assert.ok(email && password, "CODECN_E2E_LOGIN_EMAIL and CODECN_E2E_LOGIN_PASSWORD are required.");
+const email = process.env.NEWBRAIN_E2E_LOGIN_EMAIL?.trim();
+const password = process.env.NEWBRAIN_E2E_LOGIN_PASSWORD?.trim();
+assert.ok(email && password, "NEWBRAIN_E2E_LOGIN_EMAIL and NEWBRAIN_E2E_LOGIN_PASSWORD are required.");
 const visibleStepDelayMs = Math.max(
   0,
-  Number.parseInt(process.env.CODECN_E2E_VISIBLE_STEP_DELAY_MS || "0", 10) || 0
+  Number.parseInt(process.env.NEWBRAIN_E2E_VISIBLE_STEP_DELAY_MS || "0", 10) || 0
 );
 const keepOpenMs = Math.max(
   0,
-  Number.parseInt(process.env.CODECN_E2E_KEEP_OPEN_MS || "0", 10) || 0
+  Number.parseInt(process.env.NEWBRAIN_E2E_KEEP_OPEN_MS || "0", 10) || 0
 );
 
 const desktopRoot = resolve(import.meta.dirname, "..");
@@ -28,7 +28,7 @@ assert.equal(existsSync(electron), true, `Electron executable is missing: ${elec
 
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const projectName = `自动化测试 ${runId.slice(11, 19)}`;
-const profileRoot = mkdtempSync(join(tmpdir(), "codecn-live-guided-"));
+const profileRoot = mkdtempSync(join(tmpdir(), "newbrain-live-guided-"));
 const artifactRoot = resolve(desktopRoot, "../../../integration-artifacts/live-guided-doc-flow", runId);
 mkdirSync(artifactRoot, { recursive: true });
 const debugPort = 19_000 + (process.pid % 10_000);
@@ -36,8 +36,8 @@ const child = spawn(electron, ["."], {
   cwd: desktopRoot,
   env: {
     ...process.env,
-    CODECN_E2E_REMOTE_DEBUG_PORT: String(debugPort),
-    CODECN_WORKSPACE_PATH: profileRoot
+    NEWBRAIN_E2E_REMOTE_DEBUG_PORT: String(debugPort),
+    NEWBRAIN_WORKSPACE_PATH: profileRoot
   },
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: false
@@ -248,7 +248,7 @@ try {
   await visiblePause();
 
   assistantCount = await evaluate(`document.querySelectorAll(".assistant-block").length`);
-  await sendMessage("请在当前项目中输出一个测试 DOCX 文件，文件名为 test.docx，正文写入：codeCN 自动化测试文档。");
+  await sendMessage("请在当前项目中输出一个测试 DOCX 文件，文件名为 test.docx，正文写入：NewBrain 自动化测试文档。");
   await waitFor("document request running", `Boolean(document.querySelector(".composer-busy-note, .conversation-turn.current"))`, 30_000);
   evidence.steps.push("doc-request-running");
 
@@ -275,9 +275,9 @@ try {
   await visiblePause();
 
   const state = await evaluate(`(async () => {
-    const catalog = await window.codecn.listWorkspaces();
+    const catalog = await window.newbrain.listWorkspaces();
     const workspace = catalog.find((item) => item.name === ${JSON.stringify(projectName)});
-    const snapshot = await window.codecn.getSnapshot();
+    const snapshot = await window.newbrain.getSnapshot();
     return {
       workspacePath: workspace?.path || "",
       threadId: workspace?.threads?.at(-1)?.id || "",
@@ -310,7 +310,7 @@ try {
   writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify({ ok: true, artifactRoot, evidencePath, evidence }, null, 2)}\n`);
   if (keepOpenMs > 0) {
-    process.stdout.write(`Keeping the visible codeCN window open for ${keepOpenMs}ms.\n`);
+    process.stdout.write(`Keeping the visible NewBrain window open for ${keepOpenMs}ms.\n`);
     await sleep(keepOpenMs);
   }
 } finally {
@@ -318,7 +318,7 @@ try {
   child.kill();
   await sleep(500);
   if (child.exitCode === null) child.kill("SIGKILL");
-  if (process.env.CODECN_E2E_PRESERVE_PROFILE !== "1") {
+  if (process.env.NEWBRAIN_E2E_PRESERVE_PROFILE !== "1") {
     rmSync(profileRoot, { recursive: true, force: true });
   }
 }

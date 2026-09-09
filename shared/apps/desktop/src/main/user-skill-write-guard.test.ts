@@ -3,24 +3,24 @@ import test from "node:test";
 
 const {
   assertUserSkillWriteAllowed,
-  CODECN_QUANT_MANAGED_BY,
+  NEWBRAIN_QUANT_MANAGED_BY,
   isGlobalSkillRootChild,
   isUserSkillPackagePath
 } = await import(new URL("./user-skill-write-guard.ts", import.meta.url).href);
 
 test("isUserSkillPackagePath recognizes project and global skill packages", () => {
-  assert.equal(isUserSkillPackagePath(".codecn/skills/market-brief/SKILL.md"), true);
-  assert.equal(isUserSkillPackagePath("C:/proj/.codecn/skills/writing-style/skill/SKILL.md"), true);
+  assert.equal(isUserSkillPackagePath(".newbrain/skills/market-brief/SKILL.md"), true);
+  assert.equal(isUserSkillPackagePath("C:/proj/.newbrain/skills/writing-style/skill/SKILL.md"), true);
   assert.equal(isUserSkillPackagePath("outputs/report.pdf"), false);
 });
 
 test("isGlobalSkillRootChild detects direct children of the managed skills root", () => {
   assert.equal(
-    isGlobalSkillRootChild("C:/Users/me/.codecn/skills/my-skill", "C:/Users/me/.codecn/skills"),
+    isGlobalSkillRootChild("C:/Users/me/.newbrain/skills/my-skill", "C:/Users/me/.newbrain/skills"),
     true
   );
   assert.equal(
-    isGlobalSkillRootChild("C:/Users/me/.codecn/skills/my-skill/refs/a.md", "C:/Users/me/.codecn/skills"),
+    isGlobalSkillRootChild("C:/Users/me/.newbrain/skills/my-skill/refs/a.md", "C:/Users/me/.newbrain/skills"),
     false
   );
 });
@@ -42,7 +42,7 @@ test("assertUserSkillWriteAllowed allows idempotent quant-managed packages only"
   assert.doesNotThrow(() => assertUserSkillWriteAllowed({
     targetPath: "sany-trend",
     exists: true,
-    managedBy: CODECN_QUANT_MANAGED_BY,
+    managedBy: NEWBRAIN_QUANT_MANAGED_BY,
     policy: "quant"
   }));
   assert.throws(

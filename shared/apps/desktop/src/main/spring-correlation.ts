@@ -103,8 +103,8 @@ export function withSpringCorrelationHeaders(
   const workspaceId = String(ids.workspaceId || "").trim();
   const threadId = String(ids.threadId || "").trim();
   const requestId = String(ids.requestId || "").trim();
-  if (workspaceId) next["X-CodeCN-Workspace-Id"] = workspaceId;
-  if (threadId) next["X-CodeCN-Thread-Id"] = threadId;
-  if (requestId) next["X-CodeCN-Request-Id"] = requestId;
+  if (workspaceId) next["X-NewBrain-Workspace-Id"] = workspaceId;
+  if (threadId) next["X-NewBrain-Thread-Id"] = threadId;
+  if (requestId) next["X-NewBrain-Request-Id"] = requestId;
   return next;
 }

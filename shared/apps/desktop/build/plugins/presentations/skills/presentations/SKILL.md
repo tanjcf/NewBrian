@@ -52,14 +52,14 @@ Use `layout: "process"` as an alias for `timeline`.
 ## Image / showcase slide (展示图)
 
 1. When a visual helps (产品图、场景图、封面图), call `image_generate` with a concrete prompt.
-2. Pass the downloaded workspace path as `imagePath` (e.g. `.codecn/generated-media/image/xxx.png`).
+2. Pass the downloaded workspace path as `imagePath` (e.g. `.newbrain/generated-media/image/xxx.png`).
 3. If generation is skipped, still add an image slide with `imagePlaceholder` describing the intended visual.
 
 ```json
 {
   "title": "产品场景示意",
   "layout": "image",
-  "imagePath": ".codecn/generated-media/image/scene.png",
+  "imagePath": ".newbrain/generated-media/image/scene.png",
   "caption": "智慧园区巡检场景"
 }
 ```

@@ -170,7 +170,7 @@ export async function readLatestStateSnapshot<TState>(path: string): Promise<TSt
         if (suffix.length > MAX_SNAPSHOT_LINE_BYTES) {
           throw Object.assign(
             new Error(`Rollout state snapshot line exceeds ${MAX_SNAPSHOT_LINE_BYTES} bytes: ${path}`),
-            { code: "CODECN_ROLLOUT_LINE_TOO_LARGE" }
+            { code: "NEWBRAIN_ROLLOUT_LINE_TOO_LARGE" }
           );
         }
       } else {

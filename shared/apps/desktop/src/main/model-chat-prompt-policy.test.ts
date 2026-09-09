@@ -6,7 +6,7 @@ const { buildModelChatSystemPrompt } = await import(
 );
 
 const baseInput = {
-  baseSystemPrompt: "You are codeCN.",
+  baseSystemPrompt: "You are NewBrain.",
   composerModes: [] as const,
   goalSnapshot: null,
   goalRuntimeRequested: false,
@@ -39,7 +39,7 @@ test("buildModelChatSystemPrompt keeps platform layers when a user skill is load
       name: "writing-style",
       description: "仿写规范",
       instructions: "# Writing Style\nFollow the user's tone.",
-      instructionPath: "C:/proj/.codecn/skills/writing-style/SKILL.md",
+      instructionPath: "C:/proj/.newbrain/skills/writing-style/SKILL.md",
       referenceContents: []
     }]
   });

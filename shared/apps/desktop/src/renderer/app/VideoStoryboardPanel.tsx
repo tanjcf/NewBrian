@@ -19,15 +19,15 @@ export function VideoStoryboardPanel(props: { projectId?: string; files?: Array<
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    if (!props.projectId || !window.codecn?.getBrainWorkspaceSection) return;
-    void window.codecn.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "video", sectionKey: "storyboard" })
+    if (!props.projectId || !window.newbrain?.getBrainWorkspaceSection) return;
+    void window.newbrain.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "video", sectionKey: "storyboard" })
       .then((section) => { setRows(parseRows(section.content).length ? parseRows(section.content) : [emptyRow()]); setRevision(section.revision); })
       .catch(() => undefined);
   }, [props.projectId]);
 
   const save = async () => {
-    if (!props.projectId || !window.codecn?.saveBrainWorkspaceSection) return;
-    const section = await window.codecn.saveBrainWorkspaceSection({
+    if (!props.projectId || !window.newbrain?.saveBrainWorkspaceSection) return;
+    const section = await window.newbrain.saveBrainWorkspaceSection({
       projectId: props.projectId, workspaceKey: "video", sectionKey: "storyboard",
       content: JSON.stringify({ rows }, null, 2), expectedRevision: revision
     });
@@ -36,11 +36,11 @@ export function VideoStoryboardPanel(props: { projectId?: string; files?: Array<
   };
 
   const pushToTimeline = async () => {
-    if (!props.projectId || !window.codecn?.addVideoClip) return;
+    if (!props.projectId || !window.newbrain?.addVideoClip) return;
     let startMs = 0;
     for (const row of rows) {
       if (!row.assetFileId) continue;
-      await window.codecn.addVideoClip({
+      await window.newbrain.addVideoClip({
         projectId: props.projectId, trackType: "video", sourceFileId: row.assetFileId,
         startMs, durationMs: row.durationMs, sourceInMs: 0
       });

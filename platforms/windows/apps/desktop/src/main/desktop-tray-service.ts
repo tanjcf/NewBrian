@@ -16,7 +16,7 @@ export class DesktopTrayService {
   create() {
     if (this.tray && !this.tray.isDestroyed()) return this.tray;
     const tray = new Tray(this.dependencies.iconPath);
-    tray.setToolTip("codeCN — 后台运行中");
+    tray.setToolTip("NewBrain — 后台运行中");
     tray.on("double-click", this.dependencies.showWindow);
     tray.on("right-click", () => { void this.buildMenu().then((menu) => tray.popUpContextMenu(menu)); });
     this.tray = tray;
@@ -44,7 +44,7 @@ export class DesktopTrayService {
       { type: "separator" }, { label: "最近任务", enabled: false },
       ...(recent.length ? items(recent) : [{ label: "暂无最近任务", enabled: false }]),
       { type: "separator" }, { label: "新建任务", click: this.dependencies.createTask },
-      { label: "打开 codeCN", click: this.dependencies.showWindow }, { type: "separator" },
+      { label: "打开 NewBrain", click: this.dependencies.showWindow }, { type: "separator" },
       { label: "退出", click: this.dependencies.quit }
     ]);
   }

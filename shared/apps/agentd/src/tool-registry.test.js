@@ -50,7 +50,7 @@ test("registry exposes model-safe descriptors without handlers", () => {
 });
 
 test("shell execution preserves stdout and stderr as structured fields", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-output-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-output-"));
   try {
     const registry = createBuiltinToolRegistry();
     const command = process.platform === "win32"
@@ -87,7 +87,7 @@ test("Windows shell input follows the Codex single-shell contract", async () => 
     'Write-Output "keep && inside"'
   );
   if (process.platform !== "win32") return;
-  const root = mkdtempSync(join(tmpdir(), "codecn-single-shell-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-single-shell-"));
   try {
     const result = await createBuiltinToolRegistry().invoke("shell.exec", {
       command: 'powershell -Command "Write-Output \'single shell\'"'
@@ -101,7 +101,7 @@ test("Windows shell input follows the Codex single-shell contract", async () => 
 });
 
 test("shell execution bounds large visible output with head-tail truncation", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-truncation-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-truncation-"));
   try {
     const registry = createBuiltinToolRegistry();
     const command = process.platform === "win32"
@@ -121,7 +121,7 @@ test("shell execution bounds large visible output with head-tail truncation", as
 });
 
 test("workspace.search ignores venv/node_modules and respects max hits", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-search-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-search-"));
   try {
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src", "app.py"), "def hello():\n    return 'needle-value'\n");
@@ -145,7 +145,7 @@ test("workspace.search ignores venv/node_modules and respects max hits", async (
 });
 
 test("workspace.glob finds files by pattern and namePattern under a subpath", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-search-glob-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-search-glob-"));
   try {
     mkdirSync(join(root, "python-platform", "src", "auth"), { recursive: true });
     mkdirSync(join(root, "python-platform", "src", "billing"), { recursive: true });
@@ -173,7 +173,7 @@ test("workspace.glob finds files by pattern and namePattern under a subpath", as
 });
 
 test("workspace.search treats query with wildcards as filename glob", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-search-wildcard-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-search-wildcard-"));
   try {
     mkdirSync(join(root, "pkg"), { recursive: true });
     writeFileSync(join(root, "pkg", "auth_handler.py"), "pass\n");
@@ -190,7 +190,7 @@ test("workspace.search treats query with wildcards as filename glob", async () =
 });
 
 test("shell.exec allows scoped filtered recursive PowerShell listing", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-allow-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-allow-"));
   try {
     mkdirSync(join(root, "python-platform", "src"), { recursive: true });
     writeFileSync(join(root, "python-platform", "src", "auth.py"), "x\n");
@@ -207,7 +207,7 @@ test("shell.exec allows scoped filtered recursive PowerShell listing", async () 
 });
 
 test("workspace.write_file coerces in-workspace absolute paths and rejects escapes", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-write-abs-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-write-abs-"));
   try {
     const registry = createBuiltinToolRegistry();
     const absoluteInside = join(root, "outputs", "note.html");
@@ -232,7 +232,7 @@ test("workspace.write_file coerces in-workspace absolute paths and rejects escap
 });
 
 test("shell.exec rejects whole-file write fallbacks with next_action", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-write-guard-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-write-guard-"));
   try {
     const registry = createBuiltinToolRegistry();
     const setContent = await registry.invoke("shell.exec", {
@@ -254,7 +254,7 @@ test("shell.exec rejects whole-file write fallbacks with next_action", async () 
 });
 
 test("writes multiline files without shell quoting and inspects real PNG metadata", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-artifacts-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-artifacts-"));
   try {
     const registry = createBuiltinToolRegistry();
     const script = "first line\nsecond 'quoted' line\n";
@@ -287,7 +287,7 @@ test("writes multiline files without shell quoting and inspects real PNG metadat
 });
 
 test("workspace file tools reject traversal outside the attached workspace", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-artifact-boundary-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-artifact-boundary-"));
   try {
     const registry = createBuiltinToolRegistry();
     const result = await registry.invoke("workspace.write_file", {
@@ -310,11 +310,11 @@ test("registry rejects duplicates and normalizes execution failures", async () =
 });
 
 test("workspace scan stays scoped and ignores generated directories", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-tools-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-tools-"));
   try {
     writeFileSync(join(root, "visible.txt"), "ok");
-    mkdirSync(join(root, ".codecn", "skills"), { recursive: true });
-    writeFileSync(join(root, ".codecn", "skills", "internal.md"), "hidden");
+    mkdirSync(join(root, ".newbrain", "skills"), { recursive: true });
+    writeFileSync(join(root, ".newbrain", "skills", "internal.md"), "hidden");
     const registry = createBuiltinToolRegistry();
     const result = await registry.invoke("workspace.scan", {}, { workspacePath: root, shellEnv: {} });
     assert.equal(result.ok, true);
@@ -325,11 +325,11 @@ test("workspace scan stays scoped and ignores generated directories", async () =
 });
 
 test("office artifacts are always written to the project outputs directory", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-tools-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-tools-"));
   try {
     const registry = createBuiltinToolRegistry();
     const result = await registry.invoke("artifact.create", {
-      targetPath: ".codecn/skills/project-manager/report.docx",
+      targetPath: ".newbrain/skills/project-manager/report.docx",
       format: "docx",
       title: "Report",
       content: "Project output"
@@ -337,7 +337,7 @@ test("office artifacts are always written to the project outputs directory", asy
     assert.equal(result.ok, true);
     assert.equal(result.artifact.path, "outputs/report.docx");
     assert.equal(existsSync(join(root, "outputs", "report.docx")), true);
-    assert.equal(existsSync(join(root, ".codecn", "skills", "project-manager", "report.docx")), false);
+    assert.equal(existsSync(join(root, ".newbrain", "skills", "project-manager", "report.docx")), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -29,23 +29,23 @@ export function FlowWorkspace({ projectId }: { projectId?: string }) {
     setRun(null);
     setSchedules([]);
     setStatus(projectId ? "可创建 Flow" : "请选择软件项目");
-    if (!projectId || !window.codecn?.listBrainFlows) return;
+    if (!projectId || !window.newbrain?.listBrainFlows) return;
     let active = true;
     void (async () => {
       try {
-        const flows = await window.codecn.listBrainFlows({ projectId });
+        const flows = await window.newbrain.listBrainFlows({ projectId });
         if (!active || !Array.isArray(flows) || !flows.length) return;
         const latest = flows[0];
         setFlow(latest);
         setName(latest.name);
         setDefinitionText(JSON.stringify(latest.definition, null, 2));
         setStatus("已恢复最近保存的 Flow");
-        if (window.codecn.getLatestBrainFlowRun) {
-          const lastRun = await window.codecn.getLatestBrainFlowRun({ projectId });
+        if (window.newbrain.getLatestBrainFlowRun) {
+          const lastRun = await window.newbrain.getLatestBrainFlowRun({ projectId });
           if (active && lastRun) setRun(lastRun);
         }
-        if (window.codecn.listBrainFlowSchedules) {
-          const items = await window.codecn.listBrainFlowSchedules({ projectId });
+        if (window.newbrain.listBrainFlowSchedules) {
+          const items = await window.newbrain.listBrainFlowSchedules({ projectId });
           if (active) setSchedules(Array.isArray(items) ? items : []);
         }
       } catch {
@@ -56,21 +56,21 @@ export function FlowWorkspace({ projectId }: { projectId?: string }) {
   }, [projectId]);
 
   async function save() {
-    if (!projectId || !window.codecn?.saveBrainFlow) return;
+    if (!projectId || !window.newbrain?.saveBrainFlow) return;
     if (!parsedDefinition) { setStatus("定义 JSON 无法解析"); return; }
     setBusy(true); setStatus("保存中");
     try {
-      const saved = await window.codecn.saveBrainFlow({ projectId, id: flow?.id, name, definition: parsedDefinition });
+      const saved = await window.newbrain.saveBrainFlow({ projectId, id: flow?.id, name, definition: parsedDefinition });
       setFlow(saved); setStatus("已保存");
     } catch (error) { setStatus(error instanceof Error ? error.message : "保存失败"); }
     finally { setBusy(false); }
   }
 
   async function start() {
-    if (!flow || !window.codecn?.startBrainFlow) { setStatus("请先保存 Flow"); return; }
+    if (!flow || !window.newbrain?.startBrainFlow) { setStatus("请先保存 Flow"); return; }
     setBusy(true); setStatus("执行中");
     try {
-      const result = await window.codecn.startBrainFlow({ flowId: flow.id });
+      const result = await window.newbrain.startBrainFlow({ flowId: flow.id });
       setRun(result);
       if (result.status === "SUCCEEDED") setStatus("执行成功");
       else if (result.status === "DECLINED") setStatus("审批已拒绝");
@@ -81,20 +81,20 @@ export function FlowWorkspace({ projectId }: { projectId?: string }) {
   }
 
   async function cancel() {
-    if (!run?.id || !window.codecn?.cancelBrainFlow) return;
-    try { setRun(await window.codecn.cancelBrainFlow({ runId: run.id })); setStatus("已请求取消"); } catch (error) { setStatus(error instanceof Error ? error.message : "取消失败"); }
+    if (!run?.id || !window.newbrain?.cancelBrainFlow) return;
+    try { setRun(await window.newbrain.cancelBrainFlow({ runId: run.id })); setStatus("已请求取消"); } catch (error) { setStatus(error instanceof Error ? error.message : "取消失败"); }
   }
 
   async function refreshRun() {
-    if (!run?.id || !window.codecn?.getBrainFlowRun) return;
-    try { setRun(await window.codecn.getBrainFlowRun({ runId: run.id })); } catch { setStatus("运行记录读取失败"); }
+    if (!run?.id || !window.newbrain?.getBrainFlowRun) return;
+    try { setRun(await window.newbrain.getBrainFlowRun({ runId: run.id })); } catch { setStatus("运行记录读取失败"); }
   }
 
   async function createSchedule() {
-    if (!projectId || !flow || !window.codecn?.createBrainFlowSchedule) { setStatus("请先保存 Flow"); return; }
+    if (!projectId || !flow || !window.newbrain?.createBrainFlowSchedule) { setStatus("请先保存 Flow"); return; }
     try {
-      await window.codecn.createBrainFlowSchedule({ projectId, flowId: flow.id, timezone: "Asia/Shanghai", runAt });
-      if (window.codecn.listBrainFlowSchedules) setSchedules(await window.codecn.listBrainFlowSchedules({ projectId }));
+      await window.newbrain.createBrainFlowSchedule({ projectId, flowId: flow.id, timezone: "Asia/Shanghai", runAt });
+      if (window.newbrain.listBrainFlowSchedules) setSchedules(await window.newbrain.listBrainFlowSchedules({ projectId }));
       setStatus("定时调度已保存");
     } catch (error) { setStatus(error instanceof Error ? error.message : "调度保存失败"); }
   }

@@ -112,7 +112,7 @@ const brainWorkspaceIcon = (workspaceKey: string) =>
   brainWorkspaceModes.find((workspace) => workspace.workspaceKey === workspaceKey)?.icon || "folder";
 
 const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ key: string; label: string }>> = {
-  // 场景学习探索 = codeCN 原生工作台：右侧只保留项目资源（文件/产物/任务），无业务场景专属 Tools 页签。
+  // 场景学习探索 = NewBrain 原生工作台：右侧只保留项目资源（文件/产物/任务），无业务场景专属 Tools 页签。
   explore: [],
   quant: [
     { key: "market", label: "行情" },
@@ -622,11 +622,11 @@ export function WorkspaceModules(ctx: any) {
   const [brainRecentProjects, setBrainRecentProjects] = useState<any[]>([]);
   const [brainConversations, setBrainConversations] = useState<any[]>([]);
   const [brainMessages, setBrainMessages] = useState<any[]>([]);
-  // Each BRAIN conversation owns one native codeCN thread. Keeping this mapping
+  // Each BRAIN conversation owns one native NewBrain thread. Keeping this mapping
   // prevents the Composer from reusing whichever project thread was selected last.
   const [brainConversationThreads, setBrainConversationThreads] = useState<Record<string, string>>(() => {
     try {
-      const raw = localStorage.getItem("codecn.brain.conversation-threads");
+      const raw = localStorage.getItem("newbrain.brain.conversation-threads");
       const parsed = raw ? JSON.parse(raw) : {};
       return parsed && typeof parsed === "object" ? parsed : {};
     } catch { return {}; }
@@ -710,12 +710,12 @@ export function WorkspaceModules(ctx: any) {
     const capabilityTabs = brainWorkspaceCapabilityTabs[selectedBrainWorkspaceKey] || [];
     const firstCapability = capabilityTabs[0]?.key || "files";
     setBrainSceneTab(firstCapability);
-    // 无场景专属 Tools（如场景学习探索）时，右侧回到 codeCN 原生：文件/产物/任务。
+    // 无场景专属 Tools（如场景学习探索）时，右侧回到 NewBrain 原生：文件/产物/任务。
     setBrainResourceTab(!capabilityTabs.length || firstCapability === "files" ? "files" : "scene");
   }, [selectedBrainWorkspaceKey]);
   useEffect(() => {
-    if (!window.codecn?.ensureBrainEnginesForScene) return;
-    void window.codecn.ensureBrainEnginesForScene({ workspaceKey: selectedBrainWorkspaceKey }).catch(() => undefined);
+    if (!window.newbrain?.ensureBrainEnginesForScene) return;
+    void window.newbrain.ensureBrainEnginesForScene({ workspaceKey: selectedBrainWorkspaceKey }).catch(() => undefined);
   }, [selectedBrainWorkspaceKey]);
   useEffect(() => {
     const frame = brainResourcePanelRef.current?.closest<HTMLElement>(".workspace-frame");
@@ -801,7 +801,7 @@ export function WorkspaceModules(ctx: any) {
   }, [activeFeature, selectedBrainProjectId, selectedBrainConversationId, setActiveFeature, setComposerModes, setComposerSkillContext, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedComposerSkill, setSelectedComposerTools, setSelectedThreadId, setSelectedWorkspaceId, visibleWorkspaceCatalog]);
   useEffect(() => {
     // Standalone / INTERNAL_CHAT drafts must not be stolen back into the scene
-    // project (codeCN keeps them on workspace:internal-chat).
+    // project (NewBrain keeps them on workspace:internal-chat).
     if (selectedWorkspace?.id === INTERNAL_CHAT_WORKSPACE_ID) return;
     if (isComposingNewThread && newThreadScope === "chat" && !chatUsesProject) return;
     const sceneProjects = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
@@ -821,10 +821,10 @@ export function WorkspaceModules(ctx: any) {
     setIsComposingNewThread(!threadId);
   }, [selectedBrainWorkspaceKey, visibleWorkspaceCatalog, selectedWorkspace, selectedBrainConversationId, isComposingNewThread, newThreadScope, chatUsesProject, setSelectedWorkspaceId, setSelectedThreadId, setIsComposingNewThread]);
   const refreshBrainProjects = useCallback(async (workspaceKey = selectedBrainWorkspaceKey) => {
-    if (!window.codecn?.listBrainProjects) return [];
+    if (!window.newbrain?.listBrainProjects) return [];
     const [projects, recents] = await Promise.all([
-      window.codecn.listBrainProjects({ workspaceKey, includeArchived: false }),
-      window.codecn.listBrainProjects({ includeArchived: false })
+      window.newbrain.listBrainProjects({ workspaceKey, includeArchived: false }),
+      window.newbrain.listBrainProjects({ includeArchived: false })
     ]);
     const nextProjects = Array.isArray(projects) ? projects : [];
     setBrainProjects(nextProjects);
@@ -833,15 +833,15 @@ export function WorkspaceModules(ctx: any) {
     return nextProjects;
   }, [selectedBrainWorkspaceKey]);
   const refreshBrainConversations = useCallback(async (projectId = selectedBrainProjectId) => {
-    if (!projectId || !window.codecn?.listBrainConversations) {
+    if (!projectId || !window.newbrain?.listBrainConversations) {
       setBrainConversations([]);
       setSelectedBrainConversationId("");
       return;
     }
-    const allProjects = await window.codecn.listBrainProjects({});
+    const allProjects = await window.newbrain.listBrainProjects({});
     const project = (Array.isArray(allProjects) ? allProjects : []).find((item) => item.id === projectId);
     const workspaceKey = project?.primaryWorkspaceKey || selectedBrainWorkspaceKey;
-    let conversations = await window.codecn.listBrainConversations({
+    let conversations = await window.newbrain.listBrainConversations({
       projectId,
       workspaceKey,
       includeArchived: false
@@ -849,12 +849,12 @@ export function WorkspaceModules(ctx: any) {
     let nextConversations = Array.isArray(conversations) ? conversations : [];
     if (
       !nextConversations.length
-      && window.codecn.createBrainConversation
+      && window.newbrain.createBrainConversation
       && !isComposingNewThread
       && !String(selectedSidebarRow || "").startsWith("project:")
     ) {
       try {
-        const created = await window.codecn.createBrainConversation({
+        const created = await window.newbrain.createBrainConversation({
           projectId,
           workspaceKey,
           title: "新对话"
@@ -937,12 +937,12 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     let disposed = false;
     void (async () => {
-      if (!window.codecn?.listBrainWorkspaces) {
+      if (!window.newbrain?.listBrainWorkspaces) {
         setBrainWorkspaceAvailability("unavailable");
         return;
       }
       try {
-        const workspaces = await window.codecn.listBrainWorkspaces();
+        const workspaces = await window.newbrain.listBrainWorkspaces();
         if (disposed) return;
         const enabled = (Array.isArray(workspaces) ? workspaces : []).filter((item) => item?.enabled);
         setBrainWorkspaces(enabled);
@@ -979,7 +979,7 @@ export function WorkspaceModules(ctx: any) {
     }));
   }, [selectedBrainProjectId, selectedBrainConversationId]);
   useEffect(() => {
-    try { localStorage.setItem("codecn.brain.conversation-threads", JSON.stringify(brainConversationThreads)); } catch { /* best effort */ }
+    try { localStorage.setItem("newbrain.brain.conversation-threads", JSON.stringify(brainConversationThreads)); } catch { /* best effort */ }
   }, [brainConversationThreads]);
   useEffect(() => {
     void refreshBrainConversations(selectedBrainProjectId)
@@ -1180,14 +1180,14 @@ export function WorkspaceModules(ctx: any) {
   }, [selectedBrainConversationId, selectedThreadId, isComposingNewThread]);
   useEffect(() => {
     let disposed = false;
-    if (!selectedBrainConversationId || !window.codecn?.listBrainMessages) {
+    if (!selectedBrainConversationId || !window.newbrain?.listBrainMessages) {
       setBrainMessages([]);
       setBrainDraft("");
       return () => { disposed = true; };
     }
     void Promise.all([
-      window.codecn.listBrainMessages({ conversationId: selectedBrainConversationId }),
-      window.codecn.getBrainDraft?.({ conversationId: selectedBrainConversationId }) ?? Promise.resolve(null)
+      window.newbrain.listBrainMessages({ conversationId: selectedBrainConversationId }),
+      window.newbrain.getBrainDraft?.({ conversationId: selectedBrainConversationId }) ?? Promise.resolve(null)
     ]).then(([messages, draft]) => {
       if (disposed) return;
       setBrainMessages(Array.isArray(messages) ? messages : []);
@@ -1200,9 +1200,9 @@ export function WorkspaceModules(ctx: any) {
     return () => { disposed = true; };
   }, [selectedBrainConversationId]);
   useEffect(() => {
-    if (!selectedBrainConversationId || !selectedBrainProjectId || !window.codecn?.saveBrainDraft) return;
+    if (!selectedBrainConversationId || !selectedBrainProjectId || !window.newbrain?.saveBrainDraft) return;
     const timer = window.setTimeout(() => {
-      void window.codecn?.saveBrainDraft({
+      void window.newbrain?.saveBrainDraft({
         projectId: selectedBrainProjectId,
         conversationId: selectedBrainConversationId,
         content: brainDraft
@@ -1218,11 +1218,11 @@ export function WorkspaceModules(ctx: any) {
       return () => { disposed = true; };
     }
     void Promise.all([
-      window.codecn?.listBrainFiles?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
-      window.codecn?.listBrainTasks?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
-      window.codecn?.listBrainArtifacts?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
-      window.codecn?.listBrainAnnotations?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
-      window.codecn?.listBrainChangeSets?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
+      window.newbrain?.listBrainFiles?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.newbrain?.listBrainTasks?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.newbrain?.listBrainArtifacts?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.newbrain?.listBrainAnnotations?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([]),
+      window.newbrain?.listBrainChangeSets?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
     ]).then(([files, tasks, artifacts, annotations, changeSets]) => {
       if (disposed) return;
       setBrainFiles(Array.isArray(files) ? files : []);
@@ -1237,8 +1237,8 @@ export function WorkspaceModules(ctx: any) {
     return () => { disposed = true; };
   }, [selectedBrainProjectId, selectedBrainConversationId, dataWorkspaceRefreshToken]);
   useEffect(() => {
-    if (!window.codecn?.onDataWorkspaceUpdated) return;
-    return window.codecn.onDataWorkspaceUpdated((payload: { projectId?: string; reason?: string }) => {
+    if (!window.newbrain?.onDataWorkspaceUpdated) return;
+    return window.newbrain.onDataWorkspaceUpdated((payload: { projectId?: string; reason?: string }) => {
       const projectId = String(payload?.projectId || "").trim();
       if (projectId && selectedBrainProjectId && projectId !== selectedBrainProjectId) return;
       if (projectId && !selectedBrainProjectId) {
@@ -1289,7 +1289,7 @@ export function WorkspaceModules(ctx: any) {
   const renameThread = ctx.renameThread;
   const [pinnedWorkspaceIds, setPinnedWorkspaceIds] = useState<Set<string>>(() => {
     try {
-      const parsed = JSON.parse(localStorage.getItem("codecn.pinnedWorkspaceIds.v1") || "[]");
+      const parsed = JSON.parse(localStorage.getItem("newbrain.pinnedWorkspaceIds.v1") || "[]");
       return new Set<string>(Array.isArray(parsed) ? parsed.filter((item: unknown) => typeof item === "string") : []);
     } catch {
       return new Set<string>();
@@ -1297,7 +1297,7 @@ export function WorkspaceModules(ctx: any) {
   });
   useEffect(() => {
     try {
-      localStorage.setItem("codecn.pinnedWorkspaceIds.v1", JSON.stringify([...pinnedWorkspaceIds]));
+      localStorage.setItem("newbrain.pinnedWorkspaceIds.v1", JSON.stringify([...pinnedWorkspaceIds]));
     } catch {
       // 忽略持久化失败
     }
@@ -1334,10 +1334,10 @@ export function WorkspaceModules(ctx: any) {
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
   const [chatsCollapsed, setChatsCollapsed] = useState(false);
   const [sidebarOrganizeMode, setSidebarOrganizeMode] = useState<"project" | "list">(() => {
-    try { return localStorage.getItem("codecn.sidebar.organize.v1") === "list" ? "list" : "project"; } catch { return "project"; }
+    try { return localStorage.getItem("newbrain.sidebar.organize.v1") === "list" ? "list" : "project"; } catch { return "project"; }
   });
   const [sidebarSortMode, setSidebarSortMode] = useState<CodexSidebarSortMode>(() => {
-    try { return localStorage.getItem("codecn.sidebar.sort.v1") === "updated" ? "updated" : "priority"; } catch { return "priority"; }
+    try { return localStorage.getItem("newbrain.sidebar.sort.v1") === "updated" ? "updated" : "priority"; } catch { return "priority"; }
   });
   const [sidebarOptionsOpen, setSidebarOptionsOpen] = useState(false);
   const [sidebarTasksExpanded, setSidebarTasksExpanded] = useState(false);
@@ -1354,8 +1354,8 @@ export function WorkspaceModules(ctx: any) {
   }, [sidebarOptionsOpen]);
   useEffect(() => {
     try {
-      localStorage.setItem("codecn.sidebar.organize.v1", sidebarOrganizeMode);
-      localStorage.setItem("codecn.sidebar.sort.v1", sidebarSortMode);
+      localStorage.setItem("newbrain.sidebar.organize.v1", sidebarOrganizeMode);
+      localStorage.setItem("newbrain.sidebar.sort.v1", sidebarSortMode);
     } catch {
       // View preferences remain usable for the current session.
     }
@@ -1384,11 +1384,11 @@ export function WorkspaceModules(ctx: any) {
   useEffect(() => {
     let cancelled = false;
     const threadId = String(selectedThread?.id || "").trim();
-    if (!threadId || !window.codecn?.getExpertSummon) {
+    if (!threadId || !window.newbrain?.getExpertSummon) {
       setSummonedExpert(null);
       return;
     }
-    void window.codecn.getExpertSummon({ threadId }).then((result) => {
+    void window.newbrain.getExpertSummon({ threadId }).then((result) => {
       if (cancelled) return;
       if (!result || typeof result !== "object") {
         setSummonedExpert(null);
@@ -1423,7 +1423,7 @@ export function WorkspaceModules(ctx: any) {
   // point instead of repeatedly offering a control that cannot work.
   const [voiceBackendUnavailable, setVoiceBackendUnavailable] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("codecn.voiceBackendUnavailable.v1") === "1";
+      return localStorage.getItem("newbrain.voiceBackendUnavailable.v1") === "1";
     } catch {
       return false;
     }
@@ -1431,7 +1431,7 @@ export function WorkspaceModules(ctx: any) {
   const markVoiceBackendUnavailable = () => {
     setVoiceBackendUnavailable(true);
     try {
-      localStorage.setItem("codecn.voiceBackendUnavailable.v1", "1");
+      localStorage.setItem("newbrain.voiceBackendUnavailable.v1", "1");
     } catch {
       // Ignore persistence failures; the in-memory flag still hides the entry.
     }
@@ -2673,7 +2673,7 @@ export function WorkspaceModules(ctx: any) {
         setSearchFilePreview(replacement || null);
         if (!replacement) {
           // BRAIN project panel is the home surface for explore/scene files — restore it
-          // instead of falling back to the generic codeCN files side browser.
+          // instead of falling back to the generic NewBrain files side browser.
           if (brainResourcePlacement !== "hidden") {
             setPreviewMode("empty");
             setPreviewPlacement("hidden");
@@ -2704,7 +2704,7 @@ export function WorkspaceModules(ctx: any) {
   }, [openLocalFilePreview]);
   const openE2EFilePreview = () => {
     const testWorkspace = normalizeWorkspaceCatalog(workspaceCatalog).find((workspace: any) =>
-      String(workspace.path || "").replace(/\\/g, "/").endsWith("/.codecn/projects/test")
+      String(workspace.path || "").replace(/\\/g, "/").endsWith("/.newbrain/projects/test")
     );
     if (!api || !testWorkspace) return;
     setSelectedWorkspaceId(testWorkspace.id);
@@ -3212,7 +3212,7 @@ export function WorkspaceModules(ctx: any) {
     try {
       await recordAssistantFeedback(messageId, rating);
       // 目前仅记录反馈；接入评测系统后此处改为弹出原因填写（参考 codex 的反馈流程）。
-      setChatStatus(rating === "helpful" ? "感谢您的支持" : "您的反馈已收到，codeCN会再接再历");
+      setChatStatus(rating === "helpful" ? "感谢您的支持" : "您的反馈已收到，NewBrain会再接再历");
     } catch (error) {
       setChatStatus(`反馈提交失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -3349,7 +3349,7 @@ export function WorkspaceModules(ctx: any) {
       stream.getTracks().forEach((track) => track.stop());
       return true;
     } catch {
-      setChatStatus("无法访问麦克风，请在系统或浏览器权限中允许 codeCN 使用麦克风。");
+      setChatStatus("无法访问麦克风，请在系统或浏览器权限中允许 NewBrain 使用麦克风。");
       return false;
     }
   };
@@ -3598,7 +3598,7 @@ export function WorkspaceModules(ctx: any) {
       permissions: ["repo:read", "issues:write"],
       token: "",
       baseUrl: "https://api.github.com",
-      project: "codeCN"
+      project: "NewBrain"
     },
     {
       id: "jira",
@@ -3609,7 +3609,7 @@ export function WorkspaceModules(ctx: any) {
       permissions: ["project:read", "issues:write"],
       token: "",
       baseUrl: "https://your-company.atlassian.net",
-      project: "CODECN"
+      project: "NEWBRAIN"
     },
     {
       id: "slack",
@@ -3620,7 +3620,7 @@ export function WorkspaceModules(ctx: any) {
       permissions: ["channels:read", "chat:write"],
       token: "",
       baseUrl: "https://slack.com/api",
-      project: "#codecn"
+      project: "#newbrain"
     }
   ];
   const [extensions, setExtensions] = useState(() =>
@@ -4015,7 +4015,7 @@ function startNewChat() {
     resetFeatureDraft?.("automations");
     setSearchFilePreview(null);
     setActiveFeature("new-chat");
-    // Match codeCN: sidebar chat "+" / 新对话 = standalone chat (INTERNAL_CHAT).
+    // Match NewBrain: sidebar chat "+" / 新对话 = standalone chat (INTERNAL_CHAT).
     // Project-scoped drafts use the per-project "新建线程" control instead.
     setNewThreadScope("chat");
     setChatUsesProject?.(false);
@@ -4980,7 +4980,7 @@ function renderSidebarModule() {
     const content = String(draft?.question ?? question).trim();
     const hasAttachments = (draft?.images?.length ?? composerImages.length) > 0;
     if ((!content && !hasAttachments) || brainMessageBusy || !selectedBrainConversationId || !selectedBrainProjectId) return;
-    if (!window.codecn?.appendBrainMessage) return;
+    if (!window.newbrain?.appendBrainMessage) return;
     const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
     const executionWorkspace = resolveSceneExecutionWorkspace(
       catalog,
@@ -5001,7 +5001,7 @@ function renderSidebarModule() {
       const attachmentNote = hasAttachments
         ? `\n\n[附件：${(draft?.images ?? composerImages).map((item: any) => item.name).join("、")}]`
         : "";
-      // The native codeCN Thread is the execution source of truth.  Do not
+      // The native NewBrain Thread is the execution source of truth.  Do not
       // persist the user turn into the separate BRAIN conversation before
       // sending it, otherwise one turn is written to two message stores.
       // Keep an optimistic projection for the BRAIN panel only; the durable
@@ -5020,7 +5020,7 @@ function renderSidebarModule() {
       setBrainDraft("");
       setQuestion("");
       setComposerImages([]);
-      await window.codecn.saveBrainDraft?.({
+      await window.newbrain.saveBrainDraft?.({
         projectId: selectedBrainProjectId,
         conversationId: selectedBrainConversationId,
         content: ""
@@ -5055,7 +5055,7 @@ function renderSidebarModule() {
       }
       setChatStatus("BRAIN 正在处理…");
       const requestId = `brain-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-      const rustConversation = (window.codecn as any)?.rustConversation as undefined | ((input: any) => Promise<any>);
+      const rustConversation = (window.newbrain as any)?.rustConversation as undefined | ((input: any) => Promise<any>);
       if (rustConversation) {
         const rustBase = { projectId: executionWorkspaceId, workspaceType: "chat" };
         const rustThread = await rustConversation({ ...rustBase, operation: "conversation.thread.get", payload: { thread_id: executionThreadId } }).catch(() => null);
@@ -5086,7 +5086,7 @@ function renderSidebarModule() {
             ? [selectedComposerSkill.name]
             : [],
         composerModes: draft?.modes ?? [...composerModes],
-        // The active codeCN Thread already owns prior turns. Send only the
+        // The active NewBrain Thread already owns prior turns. Send only the
         // new turn here; replaying BRAIN history caused duplicate messages.
         messages: [{
           id: userMessage.id,
@@ -5100,7 +5100,7 @@ function renderSidebarModule() {
         await rustConversation({ projectId: executionWorkspaceId, workspaceType: "chat", operation: "conversation.turn.append_message", payload: { thread_id: executionThreadId, role: "assistant", content: finalContent } }).catch(() => undefined);
         await rustConversation({ projectId: executionWorkspaceId, workspaceType: "chat", operation: "conversation.turn.finish", payload: { thread_id: executionThreadId } }).catch(() => undefined);
       }
-      const assistantMessage = await window.codecn.appendBrainMessage({
+      const assistantMessage = await window.newbrain.appendBrainMessage({
         conversationId: selectedBrainConversationId,
         role: "assistant",
         content: finalContent,
@@ -5113,8 +5113,8 @@ function renderSidebarModule() {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setErrorMessage(detail);
-      if (window.codecn?.appendBrainMessage && selectedBrainConversationId) {
-        const failureMessage = await window.codecn.appendBrainMessage({
+      if (window.newbrain?.appendBrainMessage && selectedBrainConversationId) {
+        const failureMessage = await window.newbrain.appendBrainMessage({
           conversationId: selectedBrainConversationId,
           role: "assistant",
           content: `请求未能完成：${detail}`
@@ -5142,7 +5142,7 @@ function renderSidebarModule() {
     const sidebarRow = String(selectedSidebarRow || "");
     const inProjectConversationContext = isBrainConversationSelection
       || sidebarRow.startsWith("project-thread:");
-    // Match codeCN: sidebar "新对话 / 聊天 +" stays on INTERNAL_CHAT and must
+    // Match NewBrain: sidebar "新对话 / 聊天 +" stays on INTERNAL_CHAT and must
     // never be redirected into the scene's project thread on send.
     const wantsStandaloneChat = !inProjectConversationContext
       && newThreadScope === "chat"
@@ -5290,7 +5290,7 @@ function renderSidebarModule() {
         if (current === "center") {
           // Second click: restore nav + chat + side Tools. Force left nav visible even if
           // Ctrl+B had collapsed it before/during expand (CSS hide does not sync that flag).
-          window.dispatchEvent(new CustomEvent("codecn:app-command", { detail: { command: "expand-sidebar" } }));
+          window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "expand-sidebar" } }));
           return "side";
         }
         return "center";
@@ -5329,8 +5329,8 @@ function renderSidebarModule() {
         });
       }
       setBrainDocumentAnchors([]);
-      if (selectedBrainProjectId && window.codecn?.ingestBrainFile && !isBrainAudioFile(file)) {
-        void window.codecn.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: file.id })
+      if (selectedBrainProjectId && window.newbrain?.ingestBrainFile && !isBrainAudioFile(file)) {
+        void window.newbrain.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: file.id })
           .then((result) => { setBrainDocumentAnchors(result.anchors || []); if (result.warnings?.length) setChatStatus(result.warnings.join(" ")); })
           .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解析失败"));
       }
@@ -5374,7 +5374,7 @@ function renderSidebarModule() {
       if (selectedBrainWorkspaceKey === "quant") {
         return <QuantWorkspace projectId={resourceBrainProject?.id} workspaceId={resourceBrainProject?.localWorkspaceId || selectedWorkspace?.id} compact activeView={brainSceneTab as "market" | "portfolio" | "strategy" | "radar" | "research"} />;
       }
-      // 场景学习探索无业务专属 Tools 页；右侧仅展示 codeCN 原生文件/产物/任务。
+      // 场景学习探索无业务专属 Tools 页；右侧仅展示 NewBrain 原生文件/产物/任务。
       if (selectedBrainWorkspaceKey === "explore") {
         return null;
       }
@@ -6504,7 +6504,7 @@ function renderChatModule() {
             <div className="composer-heading">
               <span>{isBrainConversationSelection
                 ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息`
-                : "向 codeCN 描述你要继续完成的工作"}</span>
+                : "向 NewBrain 描述你要继续完成的工作"}</span>
             </div>
             {showDelegatedAgentStrip ? (
               <button
@@ -6658,7 +6658,7 @@ function renderChatModule() {
                   : isBrainConversationSelection
                     ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息。输入 @ 使用插件或提及文件`
                   : isNewChatMode
-                    ? "可向 codeCN 询问任何事。输入 @ 使用插件或提及文件"
+                    ? "可向 NewBrain 询问任何事。输入 @ 使用插件或提及文件"
                     : "要求后续变更"
               }
               onDraftChange={handleComposerDraftChange}
@@ -6733,7 +6733,7 @@ function renderChatModule() {
                   <button type="button" data-testid="composer-permission-button" data-permission-mode={composerPermission} className={`composer-permission-button permission-${composerPermission}`} onClick={() => setComposerMenu((current) => current === "permission" ? null : "permission")}><SidebarIcon name={permissionOption(composerPermission).icon} /><span>{permissionOption(composerPermission).name}</span><SidebarIcon name="chevron-down" /></button>
                   {composerMenu === "permission" ? (
                     <div className="composer-picker-menu composer-permission-menu">
-                      <span className="composer-menu-label">应如何批准 codeCN 操作？</span>
+                      <span className="composer-menu-label">应如何批准 NewBrain 操作？</span>
                       {COMPOSER_PERMISSION_OPTIONS.map((option) => (
                         <button key={option.id} type="button" data-testid={`permission-option-${option.id}`} data-permission-option={option.id} className={composerPermission === option.id ? "active" : ""} aria-pressed={composerPermission === option.id} onClick={() => { setComposerPermission(option.id); setComposerMenu(null); }}><span className="permission-option-icon" aria-hidden="true"><SidebarIcon name={option.icon} /></span><span className="permission-option-copy"><strong>{option.name}</strong><small>{option.detail}</small></span><span className="permission-option-check" aria-hidden="true">{composerPermission === option.id ? "✓" : ""}</span></button>
                       ))}
@@ -6761,8 +6761,8 @@ function renderChatModule() {
                       title="取消当前对话的专家召唤"
                       onClick={() => {
                         const threadId = String(selectedThread?.id || "").trim();
-                        if (!threadId || !window.codecn?.clearExpertSummon) return;
-                        void window.codecn.clearExpertSummon({ threadId }).then(() => setSummonedExpert(null));
+                        if (!threadId || !window.newbrain?.clearExpertSummon) return;
+                        void window.newbrain.clearExpertSummon({ threadId }).then(() => setSummonedExpert(null));
                       }}
                     >
                       <span>取消</span>
@@ -7083,13 +7083,13 @@ function renderChatModule() {
     return null;
   })();
   useEffect(() => {
-    if (!activeBrainFile?.id || !selectedBrainProjectId || !window.codecn?.ingestBrainFile) return;
+    if (!activeBrainFile?.id || !selectedBrainProjectId || !window.newbrain?.ingestBrainFile) return;
     const previewKind = searchFilePreview?.kind;
     const markable = previewKind === "pdf" || previewKind === "docx" || previewKind === "pptx" || previewKind === "spreadsheet" || activeTextAnnotationFormat;
     if (!markable) return;
     const ingestFormat = previewKind === "spreadsheet" ? "xlsx" : (activeTextAnnotationFormat || previewKind);
     if (brainDocumentAnchors.length && !documentAnchorsNeedChunkRefresh(ingestFormat, brainDocumentAnchors)) return;
-    void window.codecn.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: activeBrainFile.id })
+    void window.newbrain.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: activeBrainFile.id })
       .then((result) => {
         setBrainDocumentAnchors(result.anchors || []);
         if (result.warnings?.length) setChatStatus(result.warnings.join(" "));
@@ -7098,7 +7098,7 @@ function renderChatModule() {
   }, [activeBrainFile?.id, selectedBrainProjectId, searchFilePreview?.kind, activeTextAnnotationFormat]);
   const saveDocumentAnnotation = async () => {
     if (!activeBrainFile || !selectedBrainProjectId || !documentAnnotationCandidate || !documentAnnotationInstruction.trim()) return;
-    if (!window.codecn?.createBrainAnnotation) return;
+    if (!window.newbrain?.createBrainAnnotation) return;
     setDocumentAnnotationBusy(true);
     try {
       let snapshotGeometry: { snapshotPath?: string; snapshotUrl?: string } = {};
@@ -7110,7 +7110,7 @@ function renderChatModule() {
         });
         snapshotGeometry = { snapshotPath: saved.path, snapshotUrl: saved.url };
       }
-      const annotation = await window.codecn.createBrainAnnotation({
+      const annotation = await window.newbrain.createBrainAnnotation({
         projectId: selectedBrainProjectId,
         fileId: activeBrainFile.id,
         fileVersion: activeBrainFile.versionNo,
@@ -7287,10 +7287,10 @@ function renderChatModule() {
       : `标注 ${annotation.geometry?.displayIndex || annotation.id} 已加入对话输入框，发送后 Agent 将按标记位置处理。`);
   };
   const previewDocumentChangeSet = async (changeSet: any) => {
-    if (!selectedBrainProjectId || !window.codecn?.previewBrainChangeSet) return;
+    if (!selectedBrainProjectId || !window.newbrain?.previewBrainChangeSet) return;
     setDocumentAnnotationBusy(true);
     try {
-      setBrainChangeSetPreview(await window.codecn.previewBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id }));
+      setBrainChangeSetPreview(await window.newbrain.previewBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -7298,17 +7298,17 @@ function renderChatModule() {
     }
   };
   const reviewDocumentChangeSet = async (changeSet: any, status: "ACCEPTED" | "REJECTED") => {
-    if (!selectedBrainProjectId || !window.codecn?.updateBrainChangeSet) return;
+    if (!selectedBrainProjectId || !window.newbrain?.updateBrainChangeSet) return;
     setDocumentAnnotationBusy(true);
     try {
-      const updated = await window.codecn.updateBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id, status });
+      const updated = await window.newbrain.updateBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id, status });
       setBrainChangeSets((current) => current.map((item) => item.id === updated.id ? updated : item));
-      if (window.codecn?.listBrainTasks) {
-        const tasks = await window.codecn.listBrainTasks({ projectId: selectedBrainProjectId });
+      if (window.newbrain?.listBrainTasks) {
+        const tasks = await window.newbrain.listBrainTasks({ projectId: selectedBrainProjectId });
         setBrainTasks(Array.isArray(tasks) ? tasks : []);
       }
-      if (status === "REJECTED" && window.codecn?.listBrainAnnotations) {
-        const annotations = await window.codecn.listBrainAnnotations({ projectId: selectedBrainProjectId });
+      if (status === "REJECTED" && window.newbrain?.listBrainAnnotations) {
+        const annotations = await window.newbrain.listBrainAnnotations({ projectId: selectedBrainProjectId });
         setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
       }
       setChatStatus(status === "ACCEPTED" ? "修改方案已接受，可导出为新版本。" : "修改方案已拒绝，原文件未改变。");
@@ -7319,18 +7319,18 @@ function renderChatModule() {
     }
   };
   const exportDocumentChangeSet = async (changeSet: any) => {
-    if (!selectedBrainProjectId || !window.codecn?.exportBrainChangeSet) return;
+    if (!selectedBrainProjectId || !window.newbrain?.exportBrainChangeSet) return;
     setDocumentAnnotationBusy(true);
     try {
-      const result = await window.codecn.exportBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id });
+      const result = await window.newbrain.exportBrainChangeSet({ projectId: selectedBrainProjectId, changeSetId: changeSet.id });
       setBrainChangeSets((current) => current.map((item) => item.id === result.changeSet.id ? result.changeSet : item));
       setBrainFiles((current) => [result.file, ...current.filter((item) => item.id !== result.file.id)]);
-      if (window.codecn?.listBrainTasks) {
-        const tasks = await window.codecn.listBrainTasks({ projectId: selectedBrainProjectId });
+      if (window.newbrain?.listBrainTasks) {
+        const tasks = await window.newbrain.listBrainTasks({ projectId: selectedBrainProjectId });
         setBrainTasks(Array.isArray(tasks) ? tasks : []);
       }
-      if (window.codecn?.listBrainAnnotations) {
-        const annotations = await window.codecn.listBrainAnnotations({ projectId: selectedBrainProjectId });
+      if (window.newbrain?.listBrainAnnotations) {
+        const annotations = await window.newbrain.listBrainAnnotations({ projectId: selectedBrainProjectId });
         setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
       }
       setChatStatus(`新版本已导出：${result.relativePath}`);
@@ -7813,7 +7813,7 @@ function renderExtensionsModule() {
                 </label>
                 <label>
                   <span>作用域 / Project</span>
-                  <input value={selectedExtension.project} onChange={(event) => updateSelectedExtension({ project: event.target.value })} placeholder="CODECN 或 #channel" />
+                  <input value={selectedExtension.project} onChange={(event) => updateSelectedExtension({ project: event.target.value })} placeholder="NEWBRAIN 或 #channel" />
                 </label>
               </div>
               <label>
@@ -8031,7 +8031,7 @@ function renderSkillsModule() {
           <section className="skills-create-panel">
             <div className="skills-detail-head">
               <button type="button" onClick={() => setSkillsView("list")}>返回</button>
-              <div><h2>新建技能</h2><p>填写基础信息后保存，codeCN 会把它加入技能列表。</p></div>
+              <div><h2>新建技能</h2><p>填写基础信息后保存，NewBrain 会把它加入技能列表。</p></div>
             </div>
             <div className="skills-detail-form">
               <label><span>名称</span><input value={skillDraft.name} onChange={(event) => setSkillDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="技能名称" /></label>
@@ -8157,7 +8157,7 @@ function renderSkillsModule() {
     return (
       <section className="skills-page skills-market-page">
         <header className="skills-page-toolbar">
-          <div className="skills-page-title"><h1>技能</h1><p>赋予 codeCN 更强大的能力。</p></div>
+          <div className="skills-page-title"><h1>技能</h1><p>赋予 NewBrain 更强大的能力。</p></div>
           <div className="skills-toolbar-actions">
             <button
               type="button"
@@ -8202,9 +8202,9 @@ function renderSkillsModule() {
   }
 function renderPluginsModule() {
     const pluginCatalog = [
-      { id: "plugin-git-console", name: "Git Console", summary: "内置 Git 工作区助手，用于查看状态、分支和仓库操作。", version: "内置", source: "codeCN", capabilities: ["git", "workspace"], category: "精选", color: "emerald", bundled: true },
-      { id: "plugin-shell-runner", name: "Shell Runner", summary: "内置命令执行器，支持审批模式下运行 shell 命令。", version: "内置", source: "codeCN", capabilities: ["shell", "approval"], category: "精选", color: "orange", bundled: true },
-      ...builtinPluginCatalog.map((plugin) => ({ ...plugin, version: "1.0.0", source: "codeCN", bundled: true })),
+      { id: "plugin-git-console", name: "Git Console", summary: "内置 Git 工作区助手，用于查看状态、分支和仓库操作。", version: "内置", source: "NewBrain", capabilities: ["git", "workspace"], category: "精选", color: "emerald", bundled: true },
+      { id: "plugin-shell-runner", name: "Shell Runner", summary: "内置命令执行器，支持审批模式下运行 shell 命令。", version: "内置", source: "NewBrain", capabilities: ["shell", "approval"], category: "精选", color: "orange", bundled: true },
+      ...builtinPluginCatalog.map((plugin) => ({ ...plugin, version: "1.0.0", source: "NewBrain", bundled: true })),
       ...repositoryPlugins
     ];
     const installedIds = new Set((featureConfig.plugins ?? []).map((plugin: any) => plugin.id));
@@ -8303,7 +8303,7 @@ function renderPluginsModule() {
       return (
         <section className="plugins-page prototype">
           <header className="plugins-page-toolbar">
-            <div className="plugins-page-title"><h1>新插件</h1><p>登记一个本地 codeCN 插件 manifest。</p></div>
+            <div className="plugins-page-title"><h1>新插件</h1><p>登记一个本地 NewBrain 插件 manifest。</p></div>
             <div className="plugins-toolbar-actions"><button type="button" onClick={() => setPluginMarketTab("all")}>返回</button></div>
           </header>
           <div className="plugins-detail-pane single-pane">
@@ -8324,7 +8324,7 @@ function renderPluginsModule() {
     return (
       <section className="ui-logo-feature-page plugins-ui-logo-page">
         <header className="ui-logo-page-head">
-          <div><h1>插件</h1><p>codeCN 已内置能力，以及可与 Codex 工作流对应的工具模块。</p></div>
+          <div><h1>插件</h1><p>NewBrain 已内置能力，以及可与 Codex 工作流对应的工具模块。</p></div>
           <button className="ui-logo-primary-action" type="button" onClick={startNewPlugin}>+ 新插件</button>
         </header>
         <div className="ui-logo-tabs">
@@ -8574,7 +8574,7 @@ function renderAutomationModule() {
           <header className="automation-head">
             <div>
               <h1>自动化</h1>
-              <p>把重复的项目扫描、状态检查和线程跟进交给 codeCN 定时执行。</p>
+              <p>把重复的项目扫描、状态检查和线程跟进交给 NewBrain 定时执行。</p>
             </div>
             <button type="button" onClick={() => resetFeatureDraft("automations")}>
               + 新自动化
@@ -9011,12 +9011,12 @@ function renderMobileModule() {
         <section className="mobile-connect-copy">
           <div className="mobile-connect-copy-inner">
             <h1>{isConnected ? "手机已连接到这台电脑" : "将你的手机连接到这台电脑"}</h1>
-            <p>{isConnected ? "项目与聊天状态正在通过局域网实时同步" : "通过手机或其他设备继续与 codeCN 协作"}</p>
+            <p>{isConnected ? "项目与聊天状态正在通过局域网实时同步" : "通过手机或其他设备继续与 NewBrain 协作"}</p>
 
             {!isWaiting && !isConnected ? (
               <>
                 <div className="mobile-benefits">
-                  <div><SidebarIcon name="mobile" /><span><strong>继续上次未完成的任务</strong><small>在桌面端继续执行任何 codeCN 聊天或项目</small></span></div>
+                  <div><SidebarIcon name="mobile" /><span><strong>继续上次未完成的任务</strong><small>在桌面端继续执行任何 NewBrain 聊天或项目</small></span></div>
                   <div><SidebarIcon name="chat" /><span><strong>实时掌握动态</strong><small>任务完成或需要您关注时及时查看状态</small></span></div>
                   <div><SidebarIcon name="automation" /><span><strong>开启新体验</strong><small>从手机访问当前项目和聊天进度</small></span></div>
                 </div>
@@ -9058,7 +9058,7 @@ function renderMobileModule() {
             )}
 
             <p className="mobile-security-note">
-              codeCN 仅在当前局域网中共享项目和聊天状态。请仅连接您拥有且信任的设备，临时令牌到期后会自动失效。
+              NewBrain 仅在当前局域网中共享项目和聊天状态。请仅连接您拥有且信任的设备，临时令牌到期后会自动失效。
             </p>
           </div>
         </section>
@@ -9071,7 +9071,7 @@ function renderMobileModule() {
                 <button type="button" onClick={() => void api.getMobilePairingStatus()}>☰</button>
                 <button type="button" onClick={() => void api.getMobilePairingStatus()}>•••</button>
               </div>
-              <h2>codeCN</h2>
+              <h2>NewBrain</h2>
               <div className="mobile-desktop-status"><i />{isConnected ? "已连接此电脑" : "等待连接"}</div>
               <h3>项目</h3>
               <div className="mobile-project-list">
@@ -9252,10 +9252,10 @@ function renderWorkspaceModules() {
                   : appUpdateProgress.phase === "done"
                     ? (appUpdateProgress.detail
                       || (appUpdateProgress.installMode === "wizard"
-                        ? "请按安装向导完成升级；完成后 codeCN 将重启。聊天记录、项目与本地历史不会删除。"
+                        ? "请按安装向导完成升级；完成后 NewBrain 将重启。聊天记录、项目与本地历史不会删除。"
                         : "安装完成即将重启。聊天记录、项目与本地历史会保留。"))
                     : (appUpdateProgress.detail
-                      || "安装完成后，codeCN 将重新启动。聊天记录、项目与本地历史会保留。")}
+                      || "安装完成后，NewBrain 将重新启动。聊天记录、项目与本地历史会保留。")}
               </p>
               {appUpdateProgress.phase !== "error" ? (
                 <div className="app-update-progress-row">

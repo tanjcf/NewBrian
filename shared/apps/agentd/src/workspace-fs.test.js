@@ -13,7 +13,7 @@ import {
 import { createBuiltinToolRegistry } from "./tool-registry.js";
 
 function withTempWorkspace(run) {
-  const root = mkdtempSync(join(tmpdir(), "codecn-workspace-fs-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-workspace-fs-"));
   return Promise.resolve()
     .then(() => run(root))
     .finally(() => rmSync(root, { recursive: true, force: true }));
@@ -127,26 +127,26 @@ test("workspace.apply_patch supports Add+Update and rejects bad hunks", async ()
 
 test("tool registry aliases invoke canonical file tools", async () => {
   await withTempWorkspace(async (root) => {
-    mkdirSync(join(root, ".codecn", "skills", "demo"), { recursive: true });
+    mkdirSync(join(root, ".newbrain", "skills", "demo"), { recursive: true });
     writeFileSync(
-      join(root, ".codecn", "skills", "demo", "SKILL.md"),
+      join(root, ".newbrain", "skills", "demo", "SKILL.md"),
       "---\nname: demo\ndescription: demo skill\n---\n\n# Demo Skill\n",
       "utf8"
     );
     const registry = createBuiltinToolRegistry();
     const viaAlias = await registry.invoke("read", {
-      path: ".codecn/skills/demo/SKILL.md",
+      path: ".newbrain/skills/demo/SKILL.md",
       limit: 20
     }, { workspacePath: root, shellEnv: process.env });
     assert.equal(viaAlias.ok, true);
     assert.match(viaAlias.content, /Demo Skill/);
 
     const edited = await registry.invoke("edit", {
-      path: ".codecn/skills/demo/SKILL.md",
+      path: ".newbrain/skills/demo/SKILL.md",
       edits: [{ oldText: "# Demo Skill", newText: "# Demo Skill Updated" }]
     }, { workspacePath: root, shellEnv: process.env });
     assert.equal(edited.ok, true);
-    assert.match(readFileSync(join(root, ".codecn", "skills", "demo", "SKILL.md"), "utf8"), /Updated/);
+    assert.match(readFileSync(join(root, ".newbrain", "skills", "demo", "SKILL.md"), "utf8"), /Updated/);
 
     const names = registry.list().map((tool) => tool.name);
     assert.ok(names.includes("workspace.read"));
@@ -155,6 +155,6 @@ test("tool registry aliases invoke canonical file tools", async () => {
     assert.ok(names.includes("read"));
     assert.ok(names.includes("edit"));
     assert.ok(names.includes("apply_patch"));
-    assert.ok(existsSync(join(root, ".codecn", "skills", "demo", "SKILL.md")));
+    assert.ok(existsSync(join(root, ".newbrain", "skills", "demo", "SKILL.md")));
   });
 });

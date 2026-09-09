@@ -4,19 +4,19 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9350);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9350);
 const evidenceDir = join(process.cwd(), "..", "..", "integration-artifacts", "holon-ui-demo", String(Date.now()));
 mkdirSync(evidenceDir, { recursive: true });
 const modelPort = 22_000 + (process.pid % 5_000);
-const modelServer = spawn(process.execPath, [new URL("./holon-contract-model-server.mjs", import.meta.url).pathname.slice(1)], { env: { ...process.env, CODECN_HOLON_TEST_PORT: String(modelPort), CODECN_HOLON_GAME_MODE: "1" }, windowsHide: true, stdio: ["ignore", "pipe", "inherit"] });
+const modelServer = spawn(process.execPath, [new URL("./holon-contract-model-server.mjs", import.meta.url).pathname.slice(1)], { env: { ...process.env, NEWBRAIN_HOLON_TEST_PORT: String(modelPort), NEWBRAIN_HOLON_GAME_MODE: "1" }, windowsHide: true, stdio: ["ignore", "pipe", "inherit"] });
 await new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error("Holon model server did not start")), 10_000);
   modelServer.stdout.on("data", (chunk) => { if (String(chunk).includes("READY")) { clearTimeout(timer); resolve(); } });
   modelServer.once("exit", (code) => reject(new Error(`Holon model server exited: ${code}`)));
 });
-process.env.CODECN_MODEL_BASE_URL = `http://127.0.0.1:${modelPort}/v1`;
-process.env.CODECN_E2E_MODEL_ID = "codecn-e2e-model";
-process.env.CODECN_E2E_AUTH_BYPASS = "1";
+process.env.NEWBRAIN_MODEL_BASE_URL = `http://127.0.0.1:${modelPort}/v1`;
+process.env.NEWBRAIN_E2E_MODEL_ID = "newbrain-e2e-model";
+process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
 let session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
 assert.ok(page, "No visible Electron renderer page found.");
@@ -94,8 +94,8 @@ async function waitForDebugPortDown(port) {
 }
 
 try {
-  await waitFor("Boolean(window.codecn?.listWorkspaces)");
-  const workspacePath = await evaluate(`(async () => { let items = await window.codecn.listWorkspaces(); if (!items.length) items = await window.codecn.createBlankWorkspace({ name: "Holon UI Demo" }); const workspace = items[0]; if (!workspace.threads?.length) items = await window.codecn.addWorkspaceThread({ workspaceId: workspace.id, title: "Holon UI Demo", summary: "", scope: "project" }); const active = items.find((item) => item.id === workspace.id) || items[0]; await window.codecn.activateWorkspaceThread({ workspaceId: active.id, threadId: active.threads[0].id }); setTimeout(() => location.reload(), 0); return active.path; })()`);
+  await waitFor("Boolean(window.newbrain?.listWorkspaces)");
+  const workspacePath = await evaluate(`(async () => { let items = await window.newbrain.listWorkspaces(); if (!items.length) items = await window.newbrain.createBlankWorkspace({ name: "Holon UI Demo" }); const workspace = items[0]; if (!workspace.threads?.length) items = await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Holon UI Demo", summary: "", scope: "project" }); const active = items.find((item) => item.id === workspace.id) || items[0]; await window.newbrain.activateWorkspaceThread({ workspaceId: active.id, threadId: active.threads[0].id }); setTimeout(() => location.reload(), 0); return active.path; })()`);
   assert.ok(workspacePath, "The test workspace did not expose its canonical path.");
   await waitFor(`[...document.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Holon')`);
   await screenshot("01-before-holon");
@@ -137,24 +137,24 @@ try {
   assert.notEqual(game.exitCode, null, "Holon Snake did not close after Alt+F4.");
   await screenshot("07-holon-completed");
   const stateRoot = session.workspacePath;
-  assert.ok(stateRoot, "The isolated codeCN state root is unavailable for restart proof.");
+  assert.ok(stateRoot, "The isolated NewBrain state root is unavailable for restart proof.");
   socket.close();
   session.close({ preserveWorkspace: true });
   await waitForDebugPortDown(debugPort);
-  process.env.CODECN_E2E_USE_LIVE_WORKSPACE = "1";
-  process.env.CODECN_E2E_MODEL_CONFIG_PATH = join(stateRoot, "codecn.config.json");
-  process.env.CODECN_WORKSPACE_PATH = stateRoot;
+  process.env.NEWBRAIN_E2E_USE_LIVE_WORKSPACE = "1";
+  process.env.NEWBRAIN_E2E_MODEL_CONFIG_PATH = join(stateRoot, "newbrain.config.json");
+  process.env.NEWBRAIN_WORKSPACE_PATH = stateRoot;
   const restartPort = debugPort + 1;
   session = await ensureElectronE2ESession(restartPort);
   const restartedPage = session.pages.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
   assert.ok(restartedPage, "Restarted Electron renderer page was not found.");
   socket = new WebSocket(restartedPage.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.addEventListener("open", resolve, { once: true }); socket.addEventListener("error", reject, { once: true }); });
-  await waitFor("Boolean(window.codecn?.listWorkspaces)");
-  await waitFor(`window.codecn.listWorkspaces().then((items) => items.some((item) => item.name === 'Holon UI Demo' && item.threads?.length > 0))`);
-  assert.equal(existsSync(gamePath), true, "Desktop game artifact disappeared after codeCN restart.");
-  await screenshot("08-after-codecn-restart");
-  const result = { status: "PASS", evidenceDir, completed: ["visible Holon navigation", "mouse task claim", "mouse execution confirmation", "visible approval", "mouse approval", "desktop game launch", "keyboard movement", "keyboard pause", "keyboard restart", "desktop game close", "codeCN restart", "workspace and artifact recovery"], artifacts: [gamePath, join(workspacePath, "outputs", "holon-snake", "README.txt")] };
+  await waitFor("Boolean(window.newbrain?.listWorkspaces)");
+  await waitFor(`window.newbrain.listWorkspaces().then((items) => items.some((item) => item.name === 'Holon UI Demo' && item.threads?.length > 0))`);
+  assert.equal(existsSync(gamePath), true, "Desktop game artifact disappeared after NewBrain restart.");
+  await screenshot("08-after-newbrain-restart");
+  const result = { status: "PASS", evidenceDir, completed: ["visible Holon navigation", "mouse task claim", "mouse execution confirmation", "visible approval", "mouse approval", "desktop game launch", "keyboard movement", "keyboard pause", "keyboard restart", "desktop game close", "NewBrain restart", "workspace and artifact recovery"], artifacts: [gamePath, join(workspacePath, "outputs", "holon-snake", "README.txt")] };
   writeFileSync(join(evidenceDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify(result));
 } catch (error) {

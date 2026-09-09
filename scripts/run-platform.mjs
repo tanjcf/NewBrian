@@ -26,6 +26,6 @@ const child = spawn(command, ["run", script, ...extra], {
   cwd: path.join(root, ".materialized", platform === "macos" ? (process.arch === "x64" ? "macos-x64" : "macos-arm64") : platform),
   stdio: "inherit",
   shell: process.platform === "win32",
-  env: { ...process.env, CODECN_SOURCE_ROOT: root }
+  env: { ...process.env, NEWBRAIN_SOURCE_ROOT: root }
 });
 child.on("close", (code) => process.exit(code ?? 1));

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 
 const generatedRoot = resolve(import.meta.dirname, "..");
-const sourceRoot = resolve(process.env.CODECN_SOURCE_ROOT || generatedRoot);
+const sourceRoot = resolve(process.env.NEWBRAIN_SOURCE_ROOT || generatedRoot);
 const manifestPath = join(sourceRoot, "rust", "brain-core", "Cargo.toml");
 try {
   if (!(await stat(manifestPath)).isFile()) throw new Error();

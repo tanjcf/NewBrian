@@ -58,7 +58,7 @@ test("parseSkillRoutingJson accepts routing.json body", () => {
 });
 
 test("readSkillRoutingHintFromDir loads routing.json then falls back", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-skill-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-skill-"));
   const skillDir = join(root, "demo-skill");
   await mkdir(skillDir);
   await writeFile(join(skillDir, "routing.json"), JSON.stringify({

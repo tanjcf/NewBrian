@@ -1,0 +1,74 @@
+软件全称：BRAIN智能工作台
+版本号：V1.0
+
+一、项目概述
+本软件是一个本地优先的桌面式智能工作台，代码仓库采用 shared/ + platforms/<os>/ 的分层方式组织，Windows 端以 Electron + React + TypeScript 为主，配合本地 agentd 运行时、共享协议层和多工作区界面，为用户提供对话、文件、工具、审批、模型调用和行业工作区的一体化操作环境。
+
+二、项目实际情况
+1. 仓库结构以桌面端为核心，主要代码分布在：
+   - shared/apps/desktop/src：前端界面、工作区、文件预览、文档修订、视频/音乐/数据/量化/软件等页面
+   - shared/packages/protocol/src：共享协议、工作区类型、会话/任务/文档/量化等数据结构
+   - shared/packages/ui/src：可复用 UI 组件
+   - platforms/windows/apps/desktop/src：Windows 主进程、IPC、存储、运行时、更新、权限与工具服务
+   - platforms/windows/apps/agentd/src：本地代理运行时、任务图、工具执行、工作区搜索与记忆索引
+   - platforms/windows/packages/protocol/src：Windows 侧协议入口
+2. 仓库中未发现 pom.xml、Dockerfile 或 docker-compose 配置，因此本软件不按 Java/Maven、Docker、Compose 环境描述。
+
+三、登记信息
+【开发的硬件环境】
+普通 x64 架构个人计算机，满足 Node.js、Electron 与本地构建/打包需要。
+
+【运行的硬件环境】
+x64 架构个人计算机或笔记本电脑，具备桌面图形环境、磁盘空间和本地文件读写能力。
+
+【开发该软件的操作系统】
+Windows 10/11 64 位桌面操作系统。
+
+【软件开发环境/开发工具】
+Node.js 22+、pnpm 10.0.0、TypeScript 5.8、React 19、Electron 35、electron-vite 3.0、Vite 6.0、electron-builder 25.1.8、Node 内置测试运行器。
+
+【该软件的运行平台/操作系统】
+Windows 10/11 64 位桌面环境；仓库同时保留 macOS、Ubuntu 的共通层和平台层代码，但本次登记说明以 Windows 桌面运行为主。
+
+【软件运行支撑环境/支持软件】
+Electron 35 运行时、Chromium、Node.js 运行时、本地文件系统、Git、本地安全存储机制（safeStorage/DPAPI）、Node 内置 sqlite 接口（node:sqlite）、本地文档与媒体解析库。
+不包含 Docker、Docker Compose、Nginx、Redis、MySQL、Maven 等未在项目中实际使用的组件。
+
+【编程语言】
+TypeScript、JavaScript、TSX；配置文件使用 JSON，样式使用 CSS。
+
+【源程序量】
+104109 行非空源程序行。
+统计范围：shared/apps/desktop/src、shared/packages/protocol/src、shared/packages/ui/src、platforms/windows/apps/desktop/src、platforms/windows/apps/agentd/src、platforms/windows/packages/protocol/src。
+不计入 tests、tmp、build、release、docs、临时文件和打包产物。
+
+【开发目的】
+构建一个本地优先的桌面智能工作台，用于统一承载对话式操作、项目文件管理、工具调用、审批流、模型接入和多业务工作区，提升软件开发、文档处理、数据分析、量化研究和内容生产效率。
+
+【面向领域/行业】
+面向智能办公、软件开发、文档处理、数据分析、量化交易、游戏制作、视频制作和音乐制作等场景。
+
+【软件的主要功能】
+1. 统一会话与 Composer 操作：支持登录、会话管理、消息发送、附件处理、模型配置、技能选择、审批与恢复。
+2. 项目与文件管理：支持工作区切换、项目目录浏览、本地文件预览、文件链接、资源选择和侧边栏组织。
+3. 文档处理与修订：支持 DOCX、PDF、XLSX、PPTX、TXT/Markdown 等文档预览、标注、修订、导出和锚点定位。
+4. 多业务工作区：支持量化交易、数据分析、软件开发、游戏制作、视频制作、音乐制作、流程编排、专家市场等工作区。
+5. 本地运行时与工具执行：支持主进程 IPC、agentd 本地运行时、工具调用、任务图、工作树、插件安装、MCP 调用、记忆与自动化。
+6. Windows 构建与更新：支持 Windows MSI 打包、版本输出、应用更新、设备标识与安全存储。
+
+【技术特点】
+1. Electron 主进程作为可信控制面，前端 React 作为展示层，协议层和运行时层通过类型化接口通信。
+2. 采用 shared/ 与 platforms/<os>/ 的跨平台分层结构，公共能力复用，平台差异独立维护。
+3. 采用本地优先设计，结合本地存储、SQLite、文件系统、审批与安全策略，减少对外部服务的硬依赖。
+4. 支持多工作区、多模块页面和统一侧边栏切换，功能覆盖面广，但模块边界清晰。
+5. 支持文档、媒体、数据和量化等不同类型内容的预览、分析、标注与处理。
+6. 使用 Electron Builder 完成 Windows MSI 打包，支持正式/测试发布流程。
+
+【技术特点分类】
+桌面端客户端架构、跨平台分层架构、本地优先架构、模块化工作区架构、权限审批与安全控制架构、文档/媒体/数据处理架构、持久化与恢复架构。
+
+【软件分类】
+应用软件（桌面端智能工作台类工具软件）。
+
+四、补充说明
+本软件名称在仓库中同时出现 “BRAIN” 与 “NewBrain” 两种标识，其中 “NewBrain” 主要用于工程/包名/构建标识，“BRAIN智能工作台”作为登记说明名称使用；二者对应同一套代码，不是两个独立项目。

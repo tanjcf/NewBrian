@@ -128,14 +128,14 @@ export function WorkspaceArtifactViewerHost(props: { preview: WorkspaceArtifactP
   const resource = useMemo<ArtifactResource | null>(() => {
     if (props.preview.kind === "pptx") {
       return {
-        resourceUri: `codecn-resource://${crypto.randomUUID()}`,
+        resourceUri: `newbrain-resource://${crypto.randomUUID()}`,
         artifactType: "slides",
         preview: props.preview
       };
     }
     if (props.preview.kind === "audio") {
       return {
-        resourceUri: `codecn-resource://${crypto.randomUUID()}`,
+        resourceUri: `newbrain-resource://${crypto.randomUUID()}`,
         artifactType: "music",
         preview: props.preview
       };

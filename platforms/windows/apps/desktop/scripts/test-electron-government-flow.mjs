@@ -30,12 +30,12 @@ function addLargePngMetadata(png) {
   return Buffer.concat([png.subarray(0, -12), chunk, png.subarray(-12)]);
 }
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9333);
-process.env.CODECN_E2E_MODEL_CONFIG_PATH ||= join(homedir(), ".codecn", "codecn.config.json");
-const modelServer = process.env.CODECN_E2E_USE_REMOTE_MODEL === "1"
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9333);
+process.env.NEWBRAIN_E2E_MODEL_CONFIG_PATH ||= join(homedir(), ".newbrain", "newbrain.config.json");
+const modelServer = process.env.NEWBRAIN_E2E_USE_REMOTE_MODEL === "1"
   ? null
   : await startGovernmentE2EModelServer();
-if (modelServer) process.env.CODECN_MODEL_BASE_URL = modelServer.baseUrl;
+if (modelServer) process.env.NEWBRAIN_MODEL_BASE_URL = modelServer.baseUrl;
 const session = await ensureElectronE2ESession(debugPort);
 console.log("[government-e2e] Electron session ready");
 const pages = session.pages;
@@ -98,8 +98,8 @@ async function waitFor(label, predicateExpression, timeoutMs) {
       renderedContentLength: element.getAttribute('data-rendered-content-length')
     })),
     localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((element) => element.getAttribute('data-local-file-path')),
-    goal: await window.codecn?.getGoalExecution?.().catch(() => null),
-    snapshotStatus: (await window.codecn?.getSnapshot?.())?.chatStatus,
+    goal: await window.newbrain?.getGoalExecution?.().catch(() => null),
+    snapshotStatus: (await window.newbrain?.getSnapshot?.())?.chatStatus,
     body: document.body?.innerText?.slice(-1200) || ''
   }))()`).catch(() => "");
   throw new Error(`Timed out waiting for ${label}. Diagnostics: ${diagnostics}. Process: ${JSON.stringify(session.readProcessOutput?.() || {})}`);
@@ -140,21 +140,21 @@ function listFilesRecursively(root) {
 
 await waitFor("renderer bootstrap", `Boolean(document.querySelector('[data-testid="new-chat-button"], [data-testid="composer-input"], [data-testid="project-new-thread-button"]'))`, 30_000);
 const ensuredWorkspace = JSON.parse(await evaluate(`(async () => {
-  const root = ${JSON.stringify(session.workspacePath || join(homedir(), ".codecn", "e2e-workspace"))};
-  let catalog = await window.codecn.listWorkspaces();
+  const root = ${JSON.stringify(session.workspacePath || join(homedir(), ".newbrain", "e2e-workspace"))};
+  let catalog = await window.newbrain.listWorkspaces();
   let workspace = catalog.find((item) => item.name === 'workspace');
   if (!workspace) {
-    catalog = await window.codecn.addWorkspace({ name: 'workspace', path: root });
+    catalog = await window.newbrain.addWorkspace({ name: 'workspace', path: root });
     workspace = catalog.find((item) => item.name === 'workspace' || item.path === root);
   }
   if (!workspace) throw new Error('Unable to ensure the government E2E workspace catalog entry.');
-  localStorage.setItem('codecn.lastSelectedWorkspaceId.v1', workspace.id);
-  localStorage.removeItem('codecn.lastSelectedThreadId.v1');
+  localStorage.setItem('newbrain.lastSelectedWorkspaceId.v1', workspace.id);
+  localStorage.removeItem('newbrain.lastSelectedThreadId.v1');
   return JSON.stringify({ id: workspace.id, path: workspace.path, name: workspace.name, threads: workspace.threads.length });
 })()`));
 session.workspacePath = ensuredWorkspace.path;
 const targetWorkspacePath = ensuredWorkspace.path;
-assert.ok(targetWorkspacePath, "The visible workspace project was not found in the real codeCN catalog.");
+assert.ok(targetWorkspacePath, "The visible workspace project was not found in the real NewBrain catalog.");
 await command("Page.reload", { ignoreCache: true });
 await waitFor("reloaded renderer after workspace ensure", `Boolean(document.querySelector('[data-testid="new-chat-button"], [data-testid="composer-input"], [data-testid="project-new-thread-button"]'))`, 30_000);
 const baselinePdfState = new Map(
@@ -167,7 +167,7 @@ await waitFor("workspace project new-thread entry", `Boolean(document.querySelec
 const sidebarCountsBefore = JSON.parse(await evaluate(`(async () => JSON.stringify({
   project: document.querySelectorAll('[data-testid="sidebar-project-task-row"]').length,
   task: document.querySelectorAll('[data-testid="sidebar-task-row"]').length,
-  catalogThreads: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0
+  catalogThreads: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0
 }))()`));
 const projectNewThreadClicked = await evaluate(`(() => {
   const projectButton = document.querySelector('[data-testid="project-new-thread-button"][data-workspace-name="workspace"]');
@@ -200,9 +200,9 @@ await waitFor("full-access option", `Boolean(document.querySelector('[data-testi
 await click("permission-option-full");
 assert.equal(await evaluate(`document.querySelector('[data-testid="composer-permission-button"]')?.getAttribute('data-permission-mode')`), "full");
 
-const attachmentMode = process.env.CODECN_E2E_GOVERNMENT_ATTACHMENTS === "1";
-const caseStudyMode = process.env.CODECN_E2E_GOVERNMENT_CASE_STUDY === "1";
-const exactObjectiveMode = process.env.CODECN_E2E_EXACT_OBJECTIVE === "1";
+const attachmentMode = process.env.NEWBRAIN_E2E_GOVERNMENT_ATTACHMENTS === "1";
+const caseStudyMode = process.env.NEWBRAIN_E2E_GOVERNMENT_CASE_STUDY === "1";
+const exactObjectiveMode = process.env.NEWBRAIN_E2E_EXACT_OBJECTIVE === "1";
 // Case-study mode uses the natural-language request only. The verification docx is a
 // result oracle checked after generation, not an uploaded attachment.
 if (!caseStudyMode && attachmentMode) {
@@ -232,7 +232,7 @@ if (!caseStudyMode && attachmentMode) {
 }
 
 const request = caseStudyMode
-  ? process.env.CODECN_E2E_EXACT_OBJECTIVE === "1"
+  ? process.env.NEWBRAIN_E2E_EXACT_OBJECTIVE === "1"
     ? "请你撰写一篇关于“因地制宜发展新质生产力”的典型案例研究文章。采用政务写作技能。"
     : `请你撰写一篇关于“因地制宜发展新质生产力”的典型案例研究文章。采用政务写作技能。
 
@@ -303,12 +303,12 @@ assert.equal(visibleSendClicked, true, "Could not click a visible composer send 
 console.log("[government-e2e] Request submitted");
 await sleep(2_500);
 const postSendState = JSON.parse(await evaluate(`(async () => JSON.stringify({
-  chatStatus: (await window.codecn?.getSnapshot?.())?.chatStatus || '',
+  chatStatus: (await window.newbrain?.getSnapshot?.())?.chatStatus || '',
   errorText: document.querySelector('.error-banner, .model-error-banner, [data-testid="error-message"]')?.textContent?.trim() || '',
   bodyError: [...document.querySelectorAll('main, .codex-shell')].map((element) => element.innerText).join('\\n').match(/失败|错误|Error|required|无法/)?.[0] || '',
   busy: Boolean(document.querySelector('.composer-card.busy')),
   bubbles: [...document.querySelectorAll('.request-bubble')].map((element) => element.innerText.trim().slice(0, 80)),
-  threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
+  threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
   composer: document.querySelector('[data-testid="composer-input"]')?.value?.slice(0, 80) || ''
 }))()`));
 console.log(`[government-e2e] Post-send state: ${JSON.stringify(postSendState)}`);
@@ -337,12 +337,12 @@ if (!postSendState.busy && postSendState.composer) {
   }
 }
 await waitFor("request accepted into an active project thread", `(async () => {
-  const workspace = (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace');
+  const workspace = (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace');
   const threads = workspace?.threads || [];
   if (threads.length <= ${sidebarCountsBefore.catalogThreads}) return '';
   const latest = [...threads].sort((left, right) => String(right.updatedAt || right.createdAt || '').localeCompare(String(left.updatedAt || left.createdAt || '')))[0];
   if (!latest?.id || !workspace?.id) return '';
-  await window.codecn.activateWorkspaceThread({ workspaceId: workspace.id, threadId: latest.id });
+  await window.newbrain.activateWorkspaceThread({ workspaceId: workspace.id, threadId: latest.id });
   const busy = Boolean(document.querySelector('.composer-card.busy'));
   const hasBubble = [...document.querySelectorAll('.request-bubble')].some((element) => {
     const text = element.innerText || '';
@@ -352,7 +352,7 @@ await waitFor("request accepted into an active project thread", `(async () => {
   return busy || hasBubble || hasAssistant ? 'ready' : '';
 })()`, 60_000);
 await waitFor("new workspace project thread without a task-row side effect", `(async () => {
-  const catalogThreads = (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0;
+  const catalogThreads = (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0;
   const task = document.querySelectorAll('[data-testid="sidebar-task-row"]').length;
   return catalogThreads > ${sidebarCountsBefore.catalogThreads} && task === ${sidebarCountsBefore.task};
 })()`, 20_000);
@@ -374,7 +374,7 @@ if (liveReasoning !== "__completed_without_reasoning_summary__") {
 await waitFor("visible or durably accepted user request", `(async () => {
   if ([...document.querySelectorAll('.request-bubble')].at(-1)?.innerText?.trim()) return true;
   if (!${JSON.stringify(exactObjectiveMode)}) return false;
-  const goal = await window.codecn?.getGoalExecution?.();
+  const goal = await window.newbrain?.getGoalExecution?.();
   return goal?.goal?.status === 'active' && goal.goal.objective === ${JSON.stringify(request)};
 })()`, 30_000);
 await evaluate(`(() => {
@@ -428,7 +428,7 @@ if (runningUserPrompt.exists && !runningUserPrompt.inViewport) {
 }
 
 const initialGoal = JSON.parse(await waitFor("native government goal", `(async () => {
-  const goal = await window.codecn?.getGoalExecution?.();
+  const goal = await window.newbrain?.getGoalExecution?.();
   return goal?.goal?.status === 'active' && goal?.plan?.length === 9 ? JSON.stringify(goal) : '';
 })()`, 30_000));
 console.log("[government-e2e] Government goal active");
@@ -458,10 +458,10 @@ while (Date.now() < decisionDeadline) {
 }
 if (!decisionReady) {
   const diagnostics = await evaluate(`(async () => JSON.stringify({
-    goal: await window.codecn?.getGoalExecution?.(),
-    spec: await window.codecn?.getGovernmentWritingSpecification?.({
-      threadId: (await window.codecn?.getGoalExecution?.())?.goal?.threadId,
-      goalId: (await window.codecn?.getGoalExecution?.())?.goal?.goalId
+    goal: await window.newbrain?.getGoalExecution?.(),
+    spec: await window.newbrain?.getGovernmentWritingSpecification?.({
+      threadId: (await window.newbrain?.getGoalExecution?.())?.goal?.threadId,
+      goalId: (await window.newbrain?.getGoalExecution?.())?.goal?.goalId
     }).catch((error) => String(error)),
     latestAssistant: ([...document.querySelectorAll('.assistant-block')].at(-1)?.innerText || '').slice(0, 1200)
   }))()`);
@@ -469,11 +469,11 @@ if (!decisionReady) {
 }
 assert.equal(decisionReady, true, "The government writing specification UI did not appear.");
 console.log("[government-e2e] Writing specification visible");
-const workspaceThreadCountAfterDecision = await evaluate(`window.codecn.listWorkspaces().then((items) => items.find((item) => item.name === 'workspace')?.threads.length || 0)`);
+const workspaceThreadCountAfterDecision = await evaluate(`window.newbrain.listWorkspaces().then((items) => items.find((item) => item.name === 'workspace')?.threads.length || 0)`);
 assert.equal(workspaceThreadCountAfterDecision, sidebarCountsBefore.catalogThreads + 1,
   "The first government-writing round created delegated child threads instead of remaining in the one requested project conversation.");
 assert.equal(await evaluate(`Boolean(document.querySelector('[data-testid="government-writing-specification"] button.primary'))`), true, "The specification UI does not expose confirm-and-write.");
-if (process.env.CODECN_E2E_GOVERNMENT_FIRST_ROUND_ONLY === "1") {
+if (process.env.NEWBRAIN_E2E_GOVERNMENT_FIRST_ROUND_ONLY === "1") {
   await waitFor("persisted first-round assistant details", `(() => {
     const toggle = [...document.querySelectorAll('[data-testid="assistant-details-toggle"]')].at(-1);
     const assistant = [...document.querySelectorAll('.assistant-block')].at(-1);
@@ -570,7 +570,7 @@ assert.equal(confirmClicked, true, "Could not confirm the writing specification.
 await waitFor("writing specification marked confirmed", `(async () => {
   const panel = document.querySelector('[data-testid="government-writing-specification"]');
   const confirmedLabel = panel?.innerText?.includes('已确认');
-  const goal = await window.codecn?.getGoalExecution?.();
+  const goal = await window.newbrain?.getGoalExecution?.();
   const confirmation = goal?.plan?.find((step) => step.stepId === 'specification-confirmation');
   const draftStarted = goal?.plan?.some((step) => /draft/i.test(step.stepId) && step.status !== 'pending');
   const errorText = document.querySelector('.error-banner, .model-error-banner, [data-testid="error-message"]')?.textContent?.trim() || '';
@@ -584,7 +584,7 @@ if (exactObjectiveMode) {
     const question = Boolean(document.querySelector('[data-testid="goal-question-card"]'));
     const answers = [...document.querySelectorAll('.assistant-block')];
     const content = answers.at(-1)?.innerText?.trim() || '';
-    const goal = await window.codecn?.getGoalExecution?.();
+    const goal = await window.newbrain?.getGoalExecution?.();
     if (!busy && !question && content.replace(/\\s+/g, '').length >= 1000 && goal?.goal?.status === 'complete') return JSON.stringify({ content, goal });
     return '';
   })()`, 420_000));
@@ -641,7 +641,7 @@ const finalState = JSON.parse(await waitFor("completed substantive government dr
   const question = Boolean(document.querySelector('[data-testid="goal-question-card"]'));
   const answers = [...document.querySelectorAll('.assistant-block')];
   const content = answers.at(-1)?.innerText?.trim() || '';
-  const goal = await window.codecn?.getGoalExecution?.();
+  const goal = await window.newbrain?.getGoalExecution?.();
   const pdfPath = [
     ...document.querySelectorAll('.assistant-file-link'),
     ...document.querySelectorAll('[data-local-file-path$=".pdf" i]')
@@ -712,7 +712,7 @@ if (caseStudyMode) {
 }
 const retainedPdfDirectory = resolve(process.cwd(), "..", "..", "tmp", "pdfs", "government-e2e");
 mkdirSync(retainedPdfDirectory, { recursive: true });
-copyFileSync(verifiedPdfPath, join(retainedPdfDirectory, "codecn-output.pdf"));
+copyFileSync(verifiedPdfPath, join(retainedPdfDirectory, "newbrain-output.pdf"));
 
 assert.equal(await evaluate(`Boolean(document.querySelector('[data-testid="reasoning-summary"]'))`), false, "Completed reasoning should be collapsed by default.");
 const expandedReasoning = await evaluate(`(() => {
@@ -739,7 +739,7 @@ assert.ok(persistenceThreadId, "Completed goal did not expose a threadId for rel
 await command("Page.reload", { ignoreCache: true });
 await waitFor("reloaded renderer shell", `Boolean(document.querySelector('[data-testid="composer-input"], [data-testid="new-chat-button"], [data-testid="project-new-thread-button"]'))`, 30_000);
 await waitFor("reactivated thread after reload", `(async () => {
-  const workspace = (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace');
+  const workspace = (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace');
   if (!workspace?.id) return '';
   const project = document.querySelector('[data-testid="project-new-thread-button"][data-workspace-id="' + workspace.id + '"]')?.closest('.project-group');
   const projectButton = project?.querySelector('.project-header-main');
@@ -774,7 +774,7 @@ if (!attachmentMode) {
 }
 
 let multiTurnResult = null;
-if (process.env.CODECN_E2E_GOVERNMENT_MULTITURN === "1") {
+if (process.env.NEWBRAIN_E2E_GOVERNMENT_MULTITURN === "1") {
   const originalPdfHash = createHash("sha256").update(readFileSync(verifiedPdfPath)).digest("hex");
   const followUp = "把第二部分改成领导讲话口吻，增加对一线职工的感谢。保留原PDF，再输出一个Word版本，不得覆盖原文件。";
   const followUpFilled = await evaluate(`(() => {
@@ -796,7 +796,7 @@ if (process.env.CODECN_E2E_GOVERNMENT_MULTITURN === "1") {
   const secondDecision = await waitFor("second outline decision or direct completion", `(async () => {
     if (document.querySelector('[data-testid="goal-question-card"]')) return 'decision';
     const links = [...document.querySelectorAll('[data-local-file-path]')].map((element) => element.getAttribute('data-local-file-path') || '');
-    const goal = await window.codecn?.getGoalExecution?.();
+    const goal = await window.newbrain?.getGoalExecution?.();
     return goal?.goal?.status === 'complete' && links.some((value) => /\.docx$/i.test(value)) ? 'complete' : '';
   })()`, 120_000);
   if (secondDecision === "decision") {
@@ -808,7 +808,7 @@ if (process.env.CODECN_E2E_GOVERNMENT_MULTITURN === "1") {
   const docxState = JSON.parse(await waitFor("completed DOCX revision", `(async () => {
     const busy = Boolean(document.querySelector('.composer-card.busy'));
     const question = Boolean(document.querySelector('[data-testid="goal-question-card"]'));
-    const goal = await window.codecn?.getGoalExecution?.();
+    const goal = await window.newbrain?.getGoalExecution?.();
     const docxPath = [...document.querySelectorAll('[data-local-file-path]')]
       .map((element) => element.getAttribute('data-local-file-path') || '')
       .find((value) => /\.docx$/i.test(value)) || '';
@@ -825,7 +825,7 @@ if (process.env.CODECN_E2E_GOVERNMENT_MULTITURN === "1") {
   await command("Page.reload", { ignoreCache: true });
   await waitFor("multi-turn renderer after reload", `Boolean(document.querySelector('[data-testid="composer-input"], [data-testid="new-chat-button"], [data-testid="project-new-thread-button"]'))`, 30_000);
   await waitFor("reactivated multi-turn thread after reload", `(async () => {
-    const workspace = (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace');
+    const workspace = (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace');
     if (!workspace?.id) return '';
     const project = document.querySelector('[data-testid="project-new-thread-button"][data-workspace-id="' + workspace.id + '"]')?.closest('.project-group');
     const projectButton = project?.querySelector('.project-header-main');
@@ -834,7 +834,7 @@ if (process.env.CODECN_E2E_GOVERNMENT_MULTITURN === "1") {
     if (row instanceof HTMLButtonElement && !row.classList.contains('active')) row.click();
     return Boolean(document.querySelector('[data-testid="composer-input"]')) ? 'ready' : '';
   })()`, 60_000);
-  const reloadedSnapshotMessages = JSON.parse(await evaluate(`window.codecn.getSnapshot().then((snapshot) => JSON.stringify(snapshot.messages || []))`));
+  const reloadedSnapshotMessages = JSON.parse(await evaluate(`window.newbrain.getSnapshot().then((snapshot) => JSON.stringify(snapshot.messages || []))`));
   console.log("[government-e2e] Reloaded roles", reloadedSnapshotMessages.map((message) => `${message.role}:${String(message.content || "").slice(0, 30)}`));
   await waitFor("multi-turn history after reload", `(() => {
     const bubbles = [...document.querySelectorAll('.request-bubble')].map((element) => element.innerText.trim());

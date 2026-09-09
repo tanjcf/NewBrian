@@ -24,12 +24,12 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $templateRoot = Join-Path $scriptRoot "ulit-patch"
 $toolsRoot = Join-Path $templateRoot "tools"
 # bsdiff/bspatch executables do not reliably handle non-ASCII Windows paths.
-$workRoot = Join-Path $env:TEMP ("codecn-ulit-patch-build-{0}" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$workRoot = Join-Path $env:TEMP ("newbrain-ulit-patch-build-{0}" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 function Resolve-DefaultMsi([string]$version) {
   $candidates = @(
-    (Join-Path $releaseRoot ("codeCN {0}-unsigned.msi" -f $version)),
-    (Join-Path $releaseRoot ("codeCN {0}.msi" -f $version))
+    (Join-Path $releaseRoot ("NewBrain {0}-unsigned.msi" -f $version)),
+    (Join-Path $releaseRoot ("NewBrain {0}.msi" -f $version))
   )
   foreach ($c in $candidates) {
     if (Test-Path -LiteralPath $c) { return $c }
@@ -168,10 +168,10 @@ function Assert-AsarRuntimeDeps([string]$asarPath, [string]$label) {
 
   # Fail closed on the exact post-install crash: main process Cannot find module 'jszip'.
   $probeExeCandidates = @(
-    (Join-Path $desktopRoot "release\win-unpacked\codeCN.exe"),
-    (Join-Path $desktopRoot "release\win-unpacked\codecn.exe"),
-    (Join-Path $env:ProgramFiles "codeCN\codeCN.exe"),
-    (Join-Path $env:LOCALAPPDATA ".codecn\codeCN.exe")
+    (Join-Path $desktopRoot "release\win-unpacked\NewBrain.exe"),
+    (Join-Path $desktopRoot "release\win-unpacked\newbrain.exe"),
+    (Join-Path $env:ProgramFiles "NewBrain\NewBrain.exe"),
+    (Join-Path $env:LOCALAPPDATA ".newbrain\NewBrain.exe")
   )
   $probeExe = $probeExeCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
   if (-not [string]::IsNullOrWhiteSpace($probeExe)) {
@@ -202,7 +202,7 @@ try {
       }
     }
   } else {
-    Write-Host "Skipped Electron require probe (no codeCN.exe available); asar entry checks still passed." -ForegroundColor Yellow
+    Write-Host "Skipped Electron require probe (no NewBrain.exe available); asar entry checks still passed." -ForegroundColor Yellow
   }
   Write-Host ("Verified {0} asar runtime deps (exceljs + jszip)." -f $label) -ForegroundColor DarkGray
 }
@@ -288,7 +288,7 @@ Copy-Item -LiteralPath (Join-Path $templateRoot "show-ulit-failure.ps1") -Destin
 Copy-Item -LiteralPath (Join-Path $templateRoot "run-ulit-bootstrap.ps1") -Destination (Join-Path $stage "run-ulit-bootstrap.ps1") -Force
 
 $manifest = [ordered]@{
-  format           = "codecn-ulit-patch-v1"
+  format           = "newbrain-ulit-patch-v1"
   packageKind      = "patch"
   patchMethod      = "bsdiff-asar"
   baseVersion      = $BaseVersion
@@ -319,8 +319,8 @@ if (-not $SkipMsiApplicator) {
   $msiBuilder = Join-Path $scriptRoot "build-ulit-msi-applicator.py"
   $msiOut = Join-Path $releaseRoot ("{0}ulit.msi" -f $TargetVersion)
   # msilib breaks on non-ASCII output paths; build under %TEMP% then copy.
-  $asciiMsi = Join-Path $env:TEMP ("codecn-{0}ulit.msi" -f $TargetVersion)
-  $asciiStage = Join-Path $env:TEMP ("codecn-ulit-stage-{0}" -f $TargetVersion)
+  $asciiMsi = Join-Path $env:TEMP ("newbrain-{0}ulit.msi" -f $TargetVersion)
+  $asciiStage = Join-Path $env:TEMP ("newbrain-ulit-stage-{0}" -f $TargetVersion)
   $asciiBuilder = Join-Path $env:TEMP "build-ulit-msi-applicator.py"
   if (Test-Path -LiteralPath $asciiMsi) { Remove-Item -LiteralPath $asciiMsi -Force }
   if (Test-Path -LiteralPath $asciiStage) { Remove-Item -LiteralPath $asciiStage -Recurse -Force }
@@ -342,11 +342,11 @@ if (-not $SkipMsiApplicator) {
   $installLines = @(
     "@echo off",
     "setlocal EnableExtensions",
-    "title codeCN ulit install",
+    "title NewBrain ulit install",
     "set `"HERE=%~dp0`"",
     "if `"%HERE:~-1%`"==`"\`" set `"HERE=%HERE:~0,-1%`"",
     "set `"MSI=%HERE%\{0}`"" -f $msiLeaf,
-    "set `"LOG=%TEMP%\codecn-ulit-msi.log`"",
+    "set `"LOG=%TEMP%\newbrain-ulit-msi.log`"",
     "if not exist `"%MSI%`" (",
     "  echo ERROR: missing %MSI%",
     "  pause",
@@ -354,14 +354,14 @@ if (-not $SkipMsiApplicator) {
     ")",
     "echo Installing %MSI%",
     "echo Log: %LOG%",
-    "echo Please quit codeCN (tray included) before continuing.",
+    "echo Please quit NewBrain (tray included) before continuing.",
     "msiexec /i `"%MSI%`" /qb! /l*v `"%LOG%`"",
     "set `"ERR=%ERRORLEVEL%`"",
     "if not `"%ERR%`"==`"0`" (",
     "  echo.",
     "  echo Install failed exit=%ERR%",
     "  echo See %LOG%",
-    "  echo See %TEMP%\codecn-ulit-patch.log",
+    "  echo See %TEMP%\newbrain-ulit-patch.log",
     "  pause",
     "  exit /B %ERR%",
     ")",

@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "创建、编辑、渲染并校验 Word 文档。",
   "author": {
-    "name": "codeCN"
+    "name": "NewBrain"
   },
   "interface": {
     "displayName": "Documents",
     "shortDescription": "创建、编辑、渲染并校验 Word 文档。",
     "longDescription": "创建、编辑、渲染并校验 Word 文档。",
-    "developerName": "codeCN",
+    "developerName": "NewBrain",
     "category": "Productivity",
     "capabilities": [
       "Interactive"

@@ -70,7 +70,7 @@ test("classifies soft IPC preview failures without aborting retryable reasons", 
 test("detects artifact preview paths from storage key or display name", () => {
   assert.equal(isWorkspaceArtifactPreviewPath("files/import-1"), false);
   assert.equal(isWorkspaceArtifactPreviewPath("files/import-1", "song.mp3"), true);
-  assert.equal(isWorkspaceArtifactPreviewPath(".codecn/generated-media/music/123-abc.mp3"), true);
+  assert.equal(isWorkspaceArtifactPreviewPath(".newbrain/generated-media/music/123-abc.mp3"), true);
   assert.equal(isAudioPreviewFileName("用户上传歌曲", "media/imports/song.mp3"), true);
   assert.equal(isAudioPreviewFileName("notes.md", "files/readme.md"), false);
 });
@@ -84,7 +84,7 @@ test("detects empty artifact payloads", () => {
     sheets: [{ name: "Sheet1", headers: ["A"], rows: [["1"]], truncated: false, totalRows: 1 }]
   }), { ok: true });
   assert.equal(classifyArtifactPreviewPayload({ kind: "audio", previewUrl: "" }).reason, "empty_artifact");
-  assert.deepEqual(classifyArtifactPreviewPayload({ kind: "audio", previewUrl: "codecn-artifact://preview/w1/track.mp3" }), { ok: true });
+  assert.deepEqual(classifyArtifactPreviewPayload({ kind: "audio", previewUrl: "newbrain-artifact://preview/w1/track.mp3" }), { ok: true });
 });
 
 test("builds user-visible status and durable diagnostic context", () => {

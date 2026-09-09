@@ -25,9 +25,9 @@
 | test | `http://120.48.151.202:8790/v1` | `http://120.48.151.202:3000` | `.materialized/windows/apps/desktop/release/test/` |
 | production | `https://api.sinnauze.cn/v1` | `https://api.sinnauze.cn` | `.materialized/windows/apps/desktop/release/production/` |
 
-test 产物：`codeCN <版本号>-test-unsigned.msi`（默认不签名）。
+test 产物：`NewBrain <版本号>-test-unsigned.msi`（默认不签名）。
 production 有签名证书时产出已签名 MSI；本机未配置 `CSC_LINK` / `WINDOWS_CSC_LINK` 时自动打未签名包：
-`codeCN <版本号>-production-unsigned.msi`。正式发布仍需配置 Authenticode。
+`NewBrain <版本号>-production-unsigned.msi`。正式发布仍需配置 Authenticode。
 production 还要求干净 Git 工作区。
 
 此入口会覆盖本次打包进程继承的对应环境地址变量，退出后恢复。
@@ -46,8 +46,8 @@ Electron 的本地 IPC、文件预览等本机机制不属于 Spring 接口。
 
 MSI 使用固定的 UpgradeCode，恢复 MajorUpgrade，并允许相同版本的重新打包覆盖升级。
 旧产品在新文件写入前由 Windows Installer 移除注册，保留事务回滚；不再先手动删除安装目录。
-默认从当前用户的 CODECN_HOME 注册表记录继承原安装路径，避免安装目录内的聊天产物被切换到新目录。
-用户目录下的 `.codecn`、桌面登录配置和项目数据不作为升级清理对象。
+默认从当前用户的 NEWBRAIN_HOME 注册表记录继承原安装路径，避免安装目录内的聊天产物被切换到新目录。
+用户目录下的 `.newbrain`、桌面登录配置和项目数据不作为升级清理对象。
 历史安装包通过 `UPGRADINGPRODUCTCODE` 区分升级卸载和普通卸载，因此不要先手动卸载旧版本。
 
 源代码回归测试：`node --test platforms/windows/apps/desktop/build/msi-project-created.test.cjs`。
@@ -65,7 +65,7 @@ MSI 使用固定的 UpgradeCode，恢复 MajorUpgrade，并允许相同版本的
 3. 保持当前安装目录和范围，运行 MSI 并记录安装日志。
 4. 仅将 0 / 3010 视为成功，记录结果后重新启动应用；失败提示包含备份路径。
 
-备份保存在 `%APPDATA%/codecn-update-backups/<本次更新编号>/`，不自动删除。
+备份保存在 `%APPDATA%/newbrain-update-backups/<本次更新编号>/`，不自动删除。
 更新下载目录不参与备份。结果在桌面用户配置目录的 `updates/last-msi-update.json`，
 详细安装日志在备份目录的 `install.log`。
 应用退出前显示的是“即将退出并更新”，不再把后台进程启动当作安装完成。

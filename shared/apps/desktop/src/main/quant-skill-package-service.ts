@@ -12,7 +12,7 @@ export type QuantSkillPackageInput = {
 
 type QuantSkillAsset = QuantSkillPackageInput & {
   schemaVersion: 1;
-  managedBy: "codecn.quant";
+  managedBy: "newbrain.quant";
   createdAt: string;
 };
 
@@ -34,7 +34,7 @@ export class QuantSkillPackageService {
     const resolved = resolve(workspacePath);
     if (!resolved) throw new TypeError("workspacePath is required");
     this.workspacePath = resolved;
-    this.skillsRoot = join(resolved, ".codecn", "skills");
+    this.skillsRoot = join(resolved, ".newbrain", "skills");
   }
 
   private target(skillId: string): string {
@@ -53,7 +53,7 @@ export class QuantSkillPackageService {
     if (!/^[0-9A-Za-z._-]{1,32}$/.test(symbol)) throw new TypeError("symbol is invalid");
     if (input.strategyId !== "trend-following" && input.strategyId !== "mean-reversion") throw new TypeError("strategyId is invalid");
     const target = this.target(skillId);
-    const relativePath = `.codecn/skills/${skillId}`;
+    const relativePath = `.newbrain/skills/${skillId}`;
     try {
       const current = JSON.parse(await readFile(join(target, "asset.json"), "utf8")) as Partial<QuantSkillAsset>;
       assertUserSkillWriteAllowed({
@@ -69,7 +69,7 @@ export class QuantSkillPackageService {
 
     await mkdir(this.skillsRoot, { recursive: true });
     const staging = join(this.skillsRoot, `.tmp-${skillId}-${randomUUID()}`);
-    const asset: QuantSkillAsset = { ...input, skillId, title, symbol, schemaVersion: 1, managedBy: "codecn.quant", createdAt: new Date().toISOString() };
+    const asset: QuantSkillAsset = { ...input, skillId, title, symbol, schemaVersion: 1, managedBy: "newbrain.quant", createdAt: new Date().toISOString() };
     const markdown = [
       "---",
       `name: ${skillId}`,
@@ -112,7 +112,7 @@ export class QuantSkillPackageService {
   async remove(skillId: string): Promise<{ removed: boolean; relativePath: string }> {
     const id = skillId.trim();
     const target = this.target(id);
-    const relativePath = `.codecn/skills/${id}`;
+    const relativePath = `.newbrain/skills/${id}`;
     let asset: Record<string, unknown>;
     try {
       asset = JSON.parse(await readFile(join(target, "asset.json"), "utf8")) as Record<string, unknown>;
@@ -120,7 +120,7 @@ export class QuantSkillPackageService {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return { removed: false, relativePath };
       throw error;
     }
-    const managed = asset.managedBy === "codecn.quant";
+    const managed = asset.managedBy === "newbrain.quant";
     const migratableLegacy = asset.name === id && asset.type === "quant" && asset.simulationOnly === true;
     // Older/model-edited tool assets can lose only the ownership marker while
     // retaining the full quantitative identity. Never migrate an explicit

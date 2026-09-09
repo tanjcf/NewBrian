@@ -5,7 +5,7 @@
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
-$codecnLocalDevEnv = Join-Path (Split-Path $repoRoot -Parent) "spring-app\scripts\codecn-local-dev.ps1"
+$codecnLocalDevEnv = Join-Path (Split-Path $repoRoot -Parent) "spring-app\scripts\newbrain-local-dev.ps1"
 if (Test-Path -LiteralPath $codecnLocalDevEnv) {
   . $codecnLocalDevEnv
 }
@@ -20,8 +20,8 @@ if (-not (Test-Path -LiteralPath $electron)) {
   throw "Electron runtime is missing under .materialized/windows. Run pnpm install in .materialized/windows."
 }
 
-if (-not $WorkspacePath) { $WorkspacePath = Join-Path $env:USERPROFILE ".codecn" }
-$env:CODECN_WORKSPACE_PATH = $WorkspacePath
-$env:CODECN_E2E_REMOTE_DEBUG_PORT = [string]$DebugPort
+if (-not $WorkspacePath) { $WorkspacePath = Join-Path $env:USERPROFILE ".newbrain" }
+$env:NEWBRAIN_WORKSPACE_PATH = $WorkspacePath
+$env:NEWBRAIN_E2E_REMOTE_DEBUG_PORT = [string]$DebugPort
 Start-Process -FilePath $electron -ArgumentList "." -WorkingDirectory $appRoot -WindowStyle Normal
 Write-Output (ConvertTo-Json @{ appRoot = $appRoot; workspacePath = $WorkspacePath; debugPort = $DebugPort })

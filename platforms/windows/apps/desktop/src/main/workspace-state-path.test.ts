@@ -13,15 +13,15 @@ const {
 
 test("maps the internal chat workspace ID to a Windows-safe state directory", () => {
   assert.equal(
-    getWorkspaceStateDirectory("C:\\Users\\me\\.codecn", INTERNAL_CHAT_WORKSPACE_ID),
-    join("C:\\Users\\me\\.codecn", "workspaces", "workspace-internal-chat")
+    getWorkspaceStateDirectory("C:\\Users\\me\\.newbrain", INTERNAL_CHAT_WORKSPACE_ID),
+    join("C:\\Users\\me\\.newbrain", "workspaces", "workspace-internal-chat")
   );
 });
 
 test("preserves existing project workspace directory names", () => {
   assert.equal(
-    getWorkspaceStateDirectory("C:\\Users\\me\\.codecn", "workspace-123"),
-    join("C:\\Users\\me\\.codecn", "workspaces", "workspace-123")
+    getWorkspaceStateDirectory("C:\\Users\\me\\.newbrain", "workspace-123"),
+    join("C:\\Users\\me\\.newbrain", "workspaces", "workspace-123")
   );
 });
 

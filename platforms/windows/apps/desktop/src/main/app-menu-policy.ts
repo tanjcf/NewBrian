@@ -85,7 +85,7 @@ export function createAppMenuTemplate(
       { label: "关闭", click: () => actions.controlWindow("close") }
     ],
     help: [
-      { label: "codeCN 文档", click: () => actions.openExternal("https://developers.openai.com/codex/") },
+      { label: "NewBrain 文档", click: () => actions.openExternal("https://developers.openai.com/codex/") },
       { label: "新增功能", click: () => actions.openExternal("https://developers.openai.com/codex/changelog/") },
       separator,
       command("自动化", "automations"),
@@ -98,7 +98,7 @@ export function createAppMenuTemplate(
       { label: "发送反馈", click: () => actions.openExternal("https://github.com/openai/codex/issues") },
       command("键盘快捷键", "shortcuts", "Ctrl+Shift+/"),
       separator,
-      { label: "关于 codeCN", click: actions.showAbout }
+      { label: "关于 NewBrain", click: actions.showAbout }
     ]
   };
   return templates[menu];

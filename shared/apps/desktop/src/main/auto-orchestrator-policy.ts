@@ -34,7 +34,7 @@ export function buildAutoModeLightCompanionInstruction(): string {
   return [
     "Auto mode (companion): handle this turn directly in concise Chinese.",
     "Do not delegate to child agents, do not spawn tools, and do not run project learning writes for greetings or short casual chat.",
-    "codeCN knowledge learning runs separately via project-manager shadow on substantive tasks."
+    "NewBrain knowledge learning runs separately via project-manager shadow on substantive tasks."
   ].join(" ");
 }
 

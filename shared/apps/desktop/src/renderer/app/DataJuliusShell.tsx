@@ -29,7 +29,7 @@ export function DataJuliusShell({ projectId, files = [], refreshToken = 0 }: { p
   const [status, setStatus] = useState("Julius 数据分析 · 等待数据集");
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.listDataDatasets) {
+    if (!projectId || !window.newbrain?.listDataDatasets) {
       setStatus("Julius 数据分析 · 未绑定工程");
       return;
     }
@@ -38,7 +38,7 @@ export function DataJuliusShell({ projectId, files = [], refreshToken = 0 }: { p
       setAnalyzing(true);
       setStatus("正在加载真实数据集…");
       try {
-        const datasets = await window.codecn.listDataDatasets({ projectId });
+        const datasets = await window.newbrain.listDataDatasets({ projectId });
         const latest = Array.isArray(datasets) ? datasets[0] : null;
         if (!latest) {
           if (!canceled) {
@@ -51,16 +51,16 @@ export function DataJuliusShell({ projectId, files = [], refreshToken = 0 }: { p
           }
           return;
         }
-        const datasetRows = window.codecn.readDataRows
-          ? await window.codecn.readDataRows({ projectId, datasetId: latest.id })
+        const datasetRows = window.newbrain.readDataRows
+          ? await window.newbrain.readDataRows({ projectId, datasetId: latest.id })
           : [];
         const columnKeys = latest.columns.map((column: { key: string }) => column.key);
         const revenueKey = columnKeys.find((key) => /revenue|收入|amount|value|profit|利润/iu.test(key)) || columnKeys.find((key) => latest.columns.find((column: { key: string; type: string }) => column.key === key)?.type === "number");
         const regionKey = columnKeys.find((key) => /region|区域|area|city|城市/iu.test(key));
         const periodKey = columnKeys.find((key) => /quarter|month|date|period|季度|月份|日期/iu.test(key));
         let nextRegionRows: BrainDataRegionRow[] = [];
-        if (revenueKey && regionKey && periodKey && window.codecn.aggregateData) {
-          const saved = await window.codecn.aggregateData({
+        if (revenueKey && regionKey && periodKey && window.newbrain.aggregateData) {
+          const saved = await window.newbrain.aggregateData({
             projectId,
             datasetId: latest.id,
             groupBy: [regionKey],
@@ -73,8 +73,8 @@ export function DataJuliusShell({ projectId, files = [], refreshToken = 0 }: { p
           const comparisons = saved?.result?.periodComparison || [];
           nextRegionRows = buildRegionRows(comparisons);
         }
-        if (!nextRegionRows.length && window.codecn.listDataAnalyses) {
-          const analyses = await window.codecn.listDataAnalyses({ projectId, datasetId: latest.id });
+        if (!nextRegionRows.length && window.newbrain.listDataAnalyses) {
+          const analyses = await window.newbrain.listDataAnalyses({ projectId, datasetId: latest.id });
           const aggregate = Array.isArray(analyses) ? analyses.find((item) => item?.result?.operation === "aggregate") : null;
           if (aggregate?.result?.periodComparison?.length) nextRegionRows = buildRegionRows(aggregate.result.periodComparison);
         }
@@ -98,14 +98,14 @@ export function DataJuliusShell({ projectId, files = [], refreshToken = 0 }: { p
   }, [projectId, files, refreshToken]);
 
   const persistAnalysis = async (nextAnalyzing = analyzing, cook = false) => {
-    if (!projectId || !window.codecn?.saveBrainDataAnalysis) {
+    if (!projectId || !window.newbrain?.saveBrainDataAnalysis) {
       setStatus(cook ? "分析摘要已保存到本地草稿" : "状态已保存在本地");
       return;
     }
     const state: BrainDataAnalysisState = { fileName, rows, insight, regionRows, analyzing: nextAnalyzing };
     try {
-      await window.codecn.saveBrainDataAnalysis({ projectId, state });
-      if (cook && window.codecn.cookBrainDataAnalysis) await window.codecn.cookBrainDataAnalysis({ projectId });
+      await window.newbrain.saveBrainDataAnalysis({ projectId, state });
+      if (cook && window.newbrain.cookBrainDataAnalysis) await window.newbrain.cookBrainDataAnalysis({ projectId });
       setStatus(cook ? "已保存并生成分析产物" : "分析状态已保存");
     } catch (error) {
       setStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);

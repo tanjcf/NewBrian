@@ -11,15 +11,15 @@ test("runner parses on Windows and backs up before installing without interpolat
   try {
     const script = buildMsiUpdateRunner({
       msiPath: "C:\\updates\\a & '$test.msi", args: ["/i", "a & '$test.msi", "ALLUSERS="],
-      executablePath: "C:\\Program Files\\codeCN\\codeCN.exe", processId: 123,
-      dataRoot: "C:\\Users\\test\\.codecn", chatRoot: "C:\\app\\tmp", downloadDir: "C:\\updates",
+      executablePath: "C:\\Program Files\\NewBrain\\NewBrain.exe", processId: 123,
+      dataRoot: "C:\\Users\\test\\.newbrain", chatRoot: "C:\\app\\tmp", downloadDir: "C:\\updates",
       backupRoot: "C:\\backup", resultPath: "C:\\updates\\result.json"
     });
     assert.ok(script.indexOf("WaitForExit") < script.indexOf("robocopy.exe"));
     assert.ok(script.indexOf("robocopy.exe") < script.indexOf("& msiexec.exe"));
     assert.match(script, /\$LASTEXITCODE -ge 8/);
     assert.match(script, /\$LASTEXITCODE -notin @\(0, 3010\)/);
-    assert.match(script, /CODECN_UPDATE_RUNNER=1/);
+    assert.match(script, /NEWBRAIN_UPDATE_RUNNER=1/);
     assert.doesNotMatch(script, /rmdir|Remove-Item|a & '\$test/);
     const file = join(root, "runner.ps1");
     await writeFile(file, script);
@@ -43,7 +43,7 @@ test("runner really copies user and chat files before calling the installer boun
     await writeFile(join(dataRoot, "history.json"), '{"threads":["retained-thread"]}');
     await writeFile(join(chatRoot, "artifact.txt"), "retained artifact");
     await writeFile(join(downloadDir, "package.msi"), "excluded download");
-    const script = buildMsiUpdateRunner({ msiPath: process.env.CODECN_TEST_MSI || "unused.msi", fullMsi: Boolean(process.env.CODECN_TEST_MSI), expectedVersion: "1.4.5", args: [], executablePath: join(root, "absent.exe"), processId: 2147483647, dataRoot, chatRoot, downloadDir, backupRoot, resultPath });
+    const script = buildMsiUpdateRunner({ msiPath: process.env.NEWBRAIN_TEST_MSI || "unused.msi", fullMsi: Boolean(process.env.NEWBRAIN_TEST_MSI), expectedVersion: "1.4.5", args: [], executablePath: join(root, "absent.exe"), processId: 2147483647, dataRoot, chatRoot, downloadDir, backupRoot, resultPath });
     // Only the installer is substituted; PowerShell, robocopy and disk I/O are real.
     const fixture = `function msiexec.exe { if (-not (Test-Path -LiteralPath (Join-Path $config.backupRoot 'user-data/history.json'))) { throw 'backup missing before install' }; $global:LASTEXITCODE = 0 }\n${script}`;
     const path = join(root, "verify.ps1");

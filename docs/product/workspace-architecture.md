@@ -46,7 +46,7 @@
 
 - 工作台切换器固定在左侧最上方，采用与 Codex 全局上下文切换相同的层级。
 - 点击后打开七个工作台的卡片式选择面板。
-- 左侧项目主目录沿用 Claude Code / codeCN 本地文件夹目录（`WorkspaceCatalogItem.path` + 线程），七场景通过 `brainWorkspaceKey` 过滤；无键历史默认归入文档创作。`brain_project` 只作场景工具元数据桥接，不替代左侧主目录。
+- 左侧项目主目录沿用 Claude Code / NewBrain 本地文件夹目录（`WorkspaceCatalogItem.path` + 线程），七场景通过 `brainWorkspaceKey` 过滤；无键历史默认归入文档创作。`brain_project` 只作场景工具元数据桥接，不替代左侧主目录。
 - 切换工作台后，左侧项目/聊天列表和右侧专业工具同步更新。
 - 当前对话不能因为误触工作台而立即丢失；未发送输入必须保留。
 - “最近”区域提供跨工作台返回入口。

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Connect the codeCN plugin marketplace to the Spring plugin repository and prove secure install, update, reconciliation, and reporting without requiring a live MySQL server.
+**Goal:** Connect the NewBrain plugin marketplace to the Spring plugin repository and prove secure install, update, reconciliation, and reporting without requiring a live MySQL server.
 
 **Architecture:** Typed protocol and preload methods expose narrow plugin operations. Electron main owns authenticated HTTP, external-payload validation, Ed25519/ZIP verification, atomic local state, and recovery; the existing renderer consumes normalized snapshots only.
 
@@ -81,21 +81,21 @@
 - [ ] Wire buttons only to typed preload operations and refresh normalized snapshots after mutations.
 - [ ] Run renderer test, desktop check and production build.
 
-### Task 7: Spring-codeCN contract fixtures
+### Task 7: Spring-NewBrain contract fixtures
 
 **Files:**
-- Create: `src/test/java/com/demo/tokensystem/controller/DesktopPluginCodecnContractTest.java` in the Spring plugin worktree
+- Create: `src/test/java/com/demo/tokensystem/controller/DesktopPluginNewbrainContractTest.java` in the Spring plugin worktree
 - Create: `apps/desktop/scripts/plugin-repository-contract-server.mjs`
 - Create: `apps/desktop/src/main/plugin-repository-contract.test.ts`
 
 - [ ] Add Spring MockMvc assertions for catalog keys, manifest keys, ZIP headers and report payload acceptance.
 - [ ] Add a Node contract server that emits only those fields, dynamically signs a real package and records report calls.
-- [ ] Run a codeCN end-to-end test for list -> install -> report -> update -> revoked reconciliation using temporary storage.
-- [ ] Run Spring focused tests and codeCN contract test.
+- [ ] Run a NewBrain end-to-end test for list -> install -> report -> update -> revoked reconciliation using temporary storage.
+- [ ] Run Spring focused tests and NewBrain contract test.
 
 ### Task 8: Full quality gates
 
-- [ ] Run codeCN focused plugin tests, `pnpm check`, desktop production build and architecture check.
+- [ ] Run NewBrain focused plugin tests, `pnpm check`, desktop production build and architecture check.
 - [ ] Run Spring plugin tests, full `mvnw test`, package and Javadoc using the configured JDK.
 - [ ] Run `git diff --check`, inspect stats, scan UTF-8 replacement characters and obvious secrets in both worktrees.
 - [ ] Compare every design acceptance item with test evidence; record live MySQL/UI gates separately if unavailable.

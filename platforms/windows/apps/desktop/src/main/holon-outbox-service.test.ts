@@ -18,7 +18,7 @@ function cleanup(root: string) {
 
 test("persists a remote WorkItem and allocates monotonic event sequences", async () => {
   const { CodexStorage } = await storageModule;
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-storage-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-storage-"));
   const storage = new CodexStorage(root);
   try {
     storage.upsertRemoteWorkItem({
@@ -65,7 +65,7 @@ test("persists a remote WorkItem and allocates monotonic event sequences", async
 
 test("acknowledged events are not replayed after restart", async () => {
   const { CodexStorage } = await storageModule;
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-ack-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-ack-"));
   try {
     let storage = new CodexStorage(root);
     storage.upsertRemoteWorkItem({
@@ -93,7 +93,7 @@ test("acknowledged events are not replayed after restart", async () => {
 
 test("recovers sending rows for retry without duplicating their identity", async () => {
   const { CodexStorage } = await storageModule;
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-retry-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-retry-"));
   const storage = new CodexStorage(root);
   try {
     storage.appendRemoteEvent({
@@ -118,7 +118,7 @@ test("uploads a bounded batch and acknowledges accepted or duplicate events", as
       typeof import("./holon-outbox-service.js")
     >
   ]);
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-send-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-send-"));
   const storage = new CodexStorage(root);
   try {
     for (let index = 0; index < 3; index += 1) {
@@ -167,7 +167,7 @@ test("returns failed sends to pending with bounded backoff", async () => {
       typeof import("./holon-outbox-service.js")
     >
   ]);
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-send-fail-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-send-fail-"));
   const storage = new CodexStorage(root);
   try {
     storage.appendRemoteEvent({
@@ -193,7 +193,7 @@ test("returns failed sends to pending with bounded backoff", async () => {
 
 test("reports aggregate sync state without exposing event payloads", async () => {
   const { CodexStorage } = await storageModule;
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-sync-state-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-sync-state-"));
   const storage = new CodexStorage(root);
   try {
     storage.appendRemoteEvent({
@@ -227,7 +227,7 @@ test("quarantines a conflicting batch instead of retrying it forever", async () 
     storageModule,
     import(new URL("./holon-outbox-service.ts", import.meta.url).href) as Promise<typeof import("./holon-outbox-service.js")>
   ]);
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-conflict-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-conflict-"));
   const storage = new CodexStorage(root);
   try {
     storage.appendRemoteEvent({

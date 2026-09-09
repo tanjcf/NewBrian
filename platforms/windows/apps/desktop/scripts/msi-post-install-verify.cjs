@@ -11,18 +11,18 @@ function ps(script) {
   return run("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script]);
 }
 
-const evidencePath = path.join(os.tmpdir(), "codecn-msi-smoke", "post-install-evidence.json");
-const asar = String.raw`C:\Program Files\codeCN\resources\app.asar`;
-const unpackedMain = String.raw`C:\Program Files\codeCN\resources\app.asar.unpacked`;
+const evidencePath = path.join(os.tmpdir(), "newbrain-msi-smoke", "post-install-evidence.json");
+const asar = String.raw`C:\Program Files\NewBrain\resources\app.asar`;
+const unpackedMain = String.raw`C:\Program Files\NewBrain\resources\app.asar.unpacked`;
 
 const registry = ps(
-  "$p = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'codeCN' } | Select-Object -First 1 DisplayName,DisplayVersion,Publisher,InstallLocation,InstallDate,EstimatedSize; if ($p) { $p | ConvertTo-Json -Compress }"
+  "$p = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'NewBrain' } | Select-Object -First 1 DisplayName,DisplayVersion,Publisher,InstallLocation,InstallDate,EstimatedSize; if ($p) { $p | ConvertTo-Json -Compress }"
 ).trim();
 
 let asarCli = null;
 const roots = [
-  String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\node_modules\@electron\asar\bin\asar.js`,
-  String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\node_modules\@electron\asar\bin\asar.js`
+  String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\node_modules\@electron\asar\bin\asar.js`,
+  String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\node_modules\@electron\asar\bin\asar.js`
 ];
 for (const root of roots) {
   if (fs.existsSync(root)) {
@@ -31,7 +31,7 @@ for (const root of roots) {
   }
 }
 if (!asarCli) {
-  const pnpm = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\node_modules\.pnpm`;
+  const pnpm = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\node_modules\.pnpm`;
   if (fs.existsSync(pnpm)) {
     for (const d of fs.readdirSync(pnpm)) {
       if (!d.startsWith("@electron+asar@")) continue;
@@ -44,7 +44,7 @@ if (!asarCli) {
   }
 }
 
-const extractDir = path.join(os.tmpdir(), "codecn-msi-smoke", "asar-extract");
+const extractDir = path.join(os.tmpdir(), "newbrain-msi-smoke", "asar-extract");
 fs.rmSync(extractDir, { recursive: true, force: true });
 fs.mkdirSync(extractDir, { recursive: true });
 
@@ -82,12 +82,12 @@ if (asarCli && checks.asarExists) {
 
 const procs = JSON.parse(
   ps(
-    "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(codeCN|codecn)\\.exe$' } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(NewBrain|newbrain)\\.exe$' } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
   ).trim() || "[]"
 );
 
 checks.runningInstalled = (Array.isArray(procs) ? procs : [procs]).filter((p) =>
-  String(p.ExecutablePath || "").toLowerCase() === String.raw`c:\program files\codecn\codecn.exe`.toLowerCase()
+  String(p.ExecutablePath || "").toLowerCase() === String.raw`c:\program files\newbrain\newbrain.exe`.toLowerCase()
 );
 checks.stillRunning = checks.runningInstalled.length > 0;
 checks.observedAt = new Date().toISOString();

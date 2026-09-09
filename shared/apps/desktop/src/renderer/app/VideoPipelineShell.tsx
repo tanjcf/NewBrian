@@ -418,7 +418,7 @@ function resolveClipFileId(files: ProjectFileOption[], clip: string): string | u
 }
 
 async function pollVideoRender(renderId: string, onTick: (status: string) => void) {
-  const getStatus = window.codecn?.getVideoRenderStatus;
+  const getStatus = window.newbrain?.getVideoRenderStatus;
   if (!getStatus) throw new Error("当前构建未接入渲染状态查询");
   for (;;) {
     const state = await getStatus({ renderId });
@@ -675,9 +675,9 @@ export function VideoPipelineShell({
   }, []);
 
   const persistSpeechToProject = useCallback(async (shotId: string, result: { ok?: boolean; audioBase64?: string; mimeType?: string; durationMs?: number }) => {
-    if (!projectId || !result?.ok || !result.audioBase64 || !window.codecn?.importBrainMedia) return null;
+    if (!projectId || !result?.ok || !result.audioBase64 || !window.newbrain?.importBrainMedia) return null;
     try {
-      const imported = await window.codecn.importBrainMedia({
+      const imported = await window.newbrain.importBrainMedia({
         projectId,
         fileName: narrationFileNameForSpeech(shotId, result.mimeType),
         mimeType: result.mimeType || "audio/mpeg",
@@ -959,7 +959,7 @@ export function VideoPipelineShell({
 
   // Resolve project narration files into preview URLs when blob cache misses
   useEffect(() => {
-    if (!projectId || !window.codecn?.getBrainFilePreviewUrl) return;
+    if (!projectId || !window.newbrain?.getBrainFilePreviewUrl) return;
     let cancelled = false;
     void (async () => {
       for (const item of shots) {
@@ -967,7 +967,7 @@ export function VideoPipelineShell({
         const fileId = resolveAudioFileId(files, item.id, item.audio);
         if (!fileId) continue;
         try {
-          const url = await window.codecn!.getBrainFilePreviewUrl!({ projectId, fileId });
+          const url = await window.newbrain!.getBrainFilePreviewUrl!({ projectId, fileId });
           if (!cancelled && url) rememberShotAudio(item.id, url);
         } catch {
           // skip missing
@@ -979,7 +979,7 @@ export function VideoPipelineShell({
 
   // Resolve audio clip paths into preview URLs for multi-track mix (A1旁白 + A2原声).
   useEffect(() => {
-    if (!projectId || !window.codecn?.getBrainFilePreviewUrl) return;
+    if (!projectId || !window.newbrain?.getBrainFilePreviewUrl) return;
     let cancelled = false;
     void (async () => {
       const paths = new Set<string>();
@@ -1005,7 +1005,7 @@ export function VideoPipelineShell({
         const fileId = resolveClipFileId(files, path);
         if (!fileId) continue;
         try {
-          const url = await window.codecn!.getBrainFilePreviewUrl!({ projectId, fileId });
+          const url = await window.newbrain!.getBrainFilePreviewUrl!({ projectId, fileId });
           if (!cancelled && url) {
             setPathAudioUrls((current) => current[path] ? current : { ...current, [path]: url });
           }
@@ -1050,7 +1050,7 @@ export function VideoPipelineShell({
   // Auto-peel muxed shot clips → silent V + embedded audio on A2 (Premiere unlink).
   // Skip when already video-only or peel soundtrack exists (never reshuffle user layout).
   useEffect(() => {
-    if (!projectId || !window.codecn?.peelBrainMedia) return;
+    if (!projectId || !window.newbrain?.peelBrainMedia) return;
     let cancelled = false;
     void (async () => {
       for (const item of shots) {
@@ -1326,18 +1326,18 @@ export function VideoPipelineShell({
   const pipelineState = (): BrainVideoPipelineState => buildPipelineState();
 
   const reloadPipeline = useCallback(async (source = "已从工程重新加载") => {
-    if (!projectId || !window.codecn?.getBrainVideoPipeline) return;
-    const result = await window.codecn.getBrainVideoPipeline({ projectId }) as { state?: BrainVideoPipelineState };
+    if (!projectId || !window.newbrain?.getBrainVideoPipeline) return;
+    const result = await window.newbrain.getBrainVideoPipeline({ projectId }) as { state?: BrainVideoPipelineState };
     if (!result.state) return;
     applyLoadedState(result.state, source);
   }, [applyLoadedState, projectId]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.getBrainVideoPipeline) {
+    if (!projectId || !window.newbrain?.getBrainVideoPipeline) {
       setStatus(projectId ? "当前构建未接入视频 pipeline" : "请先选择视频工程");
       return;
     }
-    void window.codecn.getBrainVideoPipeline({ projectId }).then((result: { state?: BrainVideoPipelineState; persisted?: boolean }) => {
+    void window.newbrain.getBrainVideoPipeline({ projectId }).then((result: { state?: BrainVideoPipelineState; persisted?: boolean }) => {
       if (!result.state) {
         setStatus("工程无分镜状态");
         return;
@@ -1350,21 +1350,21 @@ export function VideoPipelineShell({
     const videoFiles = files.filter((file) => String(file.mimeType || "").startsWith("video/"));
     const output = videoFiles.find((file) => /(?:^|\/)exports?\//iu.test(String(file.relativePath || file.storageKey || "")))
       ?? videoFiles.find((file) => /pipeline-/iu.test(String(file.logicalName || file.storageKey || "")));
-    if (!projectId || !output?.id || !window.codecn?.getBrainFilePreviewUrl) { setExportPreviewUrl(""); return; }
-    void window.codecn.getBrainFilePreviewUrl({ projectId, fileId: output.id }).then(setExportPreviewUrl).catch(() => setExportPreviewUrl(""));
+    if (!projectId || !output?.id || !window.newbrain?.getBrainFilePreviewUrl) { setExportPreviewUrl(""); return; }
+    void window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: output.id }).then(setExportPreviewUrl).catch(() => setExportPreviewUrl(""));
   }, [projectId, files]);
 
   useEffect(() => {
     const fileId = resolveClipFileId(files, shot.clip);
-    if (!projectId || !fileId || !window.codecn?.getBrainFilePreviewUrl) {
+    if (!projectId || !fileId || !window.newbrain?.getBrainFilePreviewUrl) {
       setShotPreviewUrl("");
       return;
     }
-    void window.codecn.getBrainFilePreviewUrl({ projectId, fileId }).then(setShotPreviewUrl).catch(() => setShotPreviewUrl(""));
+    void window.newbrain.getBrainFilePreviewUrl({ projectId, fileId }).then(setShotPreviewUrl).catch(() => setShotPreviewUrl(""));
   }, [projectId, files, shot.clip, shot.id]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.getBrainFilePreviewUrl) {
+    if (!projectId || !window.newbrain?.getBrainFilePreviewUrl) {
       setSequenceUrls([]);
       return;
     }
@@ -1376,7 +1376,7 @@ export function VideoPipelineShell({
         const fileId = resolveClipFileId(files, item.clip);
         if (!fileId) return;
         try {
-          urls[index] = await window.codecn!.getBrainFilePreviewUrl!({ projectId, fileId });
+          urls[index] = await window.newbrain!.getBrainFilePreviewUrl!({ projectId, fileId });
         } catch {
           // leave empty
         }
@@ -1403,15 +1403,15 @@ export function VideoPipelineShell({
       setStatus("请先绑定视频工程后再保存");
       return false;
     }
-    if (!window.codecn?.saveBrainVideoPipeline) {
+    if (!window.newbrain?.saveBrainVideoPipeline) {
       setStatus("当前构建未接入 pipeline 保存");
       return false;
     }
-    await window.codecn.saveBrainVideoPipeline({ projectId, state: buildPipelineState() });
+    await window.newbrain.saveBrainVideoPipeline({ projectId, state: buildPipelineState() });
     pipelineDirtyRef.current = false;
-    if (window.codecn.saveVideoTimeline) {
+    if (window.newbrain.saveVideoTimeline) {
       try {
-        await window.codecn.saveVideoTimeline({
+        await window.newbrain.saveVideoTimeline({
           projectId,
           title: "视频工程时间线",
           width: canvas.width,
@@ -1489,7 +1489,7 @@ export function VideoPipelineShell({
       setStatus("请先绑定视频工程后再添加参考图");
       return;
     }
-    if (!window.codecn?.importBrainMedia) {
+    if (!window.newbrain?.importBrainMedia) {
       setStatus("当前构建未接入媒体导入");
       return;
     }
@@ -1502,12 +1502,12 @@ export function VideoPipelineShell({
     }
     setBusyAction(`frame:${slot}:${shotId}`);
     try {
-      const pathFromOs = typeof window.codecn.getPathForFile === "function"
-        ? String(window.codecn.getPathForFile(file) || "").trim()
+      const pathFromOs = typeof window.newbrain.getPathForFile === "function"
+        ? String(window.newbrain.getPathForFile(file) || "").trim()
         : "";
       let imported: { relativePath?: string; file?: { id?: string } } | null = null;
       if (pathFromOs) {
-        imported = await window.codecn.importBrainMedia({
+        imported = await window.newbrain.importBrainMedia({
           projectId,
           sourcePath: pathFromOs,
           fileName: name,
@@ -1522,7 +1522,7 @@ export function VideoPipelineShell({
         for (let i = 0; i < bytes.length; i += chunk) {
           binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
         }
-        imported = await window.codecn.importBrainMedia({
+        imported = await window.newbrain.importBrainMedia({
           projectId,
           fileName: name,
           mimeType: mime || "image/png",
@@ -1550,9 +1550,9 @@ export function VideoPipelineShell({
       if (!norm) return "";
       if (/^https?:\/\//i.test(norm) || /^data:image\//i.test(norm)) return norm;
       const fileId = resolveClipFileId(files, norm);
-      if (!projectId || !fileId || !window.codecn?.getBrainFilePreviewUrl) return "";
+      if (!projectId || !fileId || !window.newbrain?.getBrainFilePreviewUrl) return "";
       try {
-        return await window.codecn.getBrainFilePreviewUrl({ projectId, fileId });
+        return await window.newbrain.getBrainFilePreviewUrl({ projectId, fileId });
       } catch {
         return "";
       }
@@ -1582,7 +1582,7 @@ export function VideoPipelineShell({
    * Soundtrack is a secondary A clip (A2); shot.audio stays reserved for旁白 TTS.
    */
   const peelShotClipIfNeeded = async (shotId: string, clipRelativePath: string): Promise<boolean> => {
-    if (!projectId || !window.codecn?.peelBrainMedia) return false;
+    if (!projectId || !window.newbrain?.peelBrainMedia) return false;
     const clip = String(clipRelativePath || "").replaceAll("\\", "/").trim();
     if (!clip || isPeeledVideoOnlyPath(clip)) return false;
     // Already peeled this shot — never reshuffle startSec/trackId on reload.
@@ -1591,7 +1591,7 @@ export function VideoPipelineShell({
     if (peelAttemptedRef.current[attemptKey]) return false;
     peelAttemptedRef.current[attemptKey] = true;
     try {
-      const probe = await window.codecn.peelBrainMedia({
+      const probe = await window.newbrain.peelBrainMedia({
         projectId,
         relativePath: clip,
         mode: "probe"
@@ -1599,7 +1599,7 @@ export function VideoPipelineShell({
       if (!probe?.ok || !probe.hasAudio) return false;
 
       setStatus(`正在解链本镜原声 · ${clip}…`);
-      const result = await window.codecn.peelBrainMedia({
+      const result = await window.newbrain.peelBrainMedia({
         projectId,
         relativePath: clip,
         mode: "unlink"
@@ -1685,8 +1685,8 @@ export function VideoPipelineShell({
       const audioFileId = String(result.audio.file?.id || "");
       let audioPreview = "";
       try {
-        if (audioFileId && window.codecn.getBrainFilePreviewUrl) {
-          audioPreview = await window.codecn.getBrainFilePreviewUrl({ projectId, fileId: audioFileId }) || "";
+        if (audioFileId && window.newbrain.getBrainFilePreviewUrl) {
+          audioPreview = await window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: audioFileId }) || "";
         }
       } catch { /* optional */ }
 
@@ -1755,7 +1755,7 @@ export function VideoPipelineShell({
    * 需要 AI 模型的是「单镜生成」；本步骤只 mux 本地 clips。
    */
   const muxAndExport = async (label: string) => {
-    if (!projectId || !window.codecn?.startVideoRender) {
+    if (!projectId || !window.newbrain?.startVideoRender) {
       setStatus(`${label}失败：无渲染 IPC（FFmpeg）`);
       return;
     }
@@ -1768,7 +1768,7 @@ export function VideoPipelineShell({
     try {
       if (!await savePipeline(`${label}前已保存分镜`)) return;
       setStatus(`正在启动全片${label}…`);
-      const started = await window.codecn.startVideoRender({
+      const started = await window.newbrain.startVideoRender({
         projectId,
         outputRelativePath: `exports/pipeline-${Date.now()}.mp4`,
         source: "pipeline"
@@ -1863,7 +1863,7 @@ export function VideoPipelineShell({
       return false;
     }
     // Instruction-like prompts (rewrite / write-then-TTS / etc.) must go through chat Auto.
-    if (looksLikeAiInstructionPrompt(promptText) || !window.codecn?.generateBrainSceneMedia) {
+    if (looksLikeAiInstructionPrompt(promptText) || !window.newbrain?.generateBrainSceneMedia) {
       return handoffToBrainAi({
         kind: "video",
         shotId: id,
@@ -1882,7 +1882,7 @@ export function VideoPipelineShell({
       const resolvedModel = String(videoModel || "").trim();
       const firstFrame = String(target.image || "").trim();
       const lastFrame = String(target.lastImage || "").trim();
-      const result = await window.codecn.generateBrainSceneMedia({
+      const result = await window.newbrain.generateBrainSceneMedia({
         projectId,
         kind: "video",
         prompt: promptText,
@@ -1914,11 +1914,11 @@ export function VideoPipelineShell({
       const peeled = await peelShotClipIfNeeded(target.id, clipPath || resolvedClip);
       const line = String(target.line || "").trim();
       // Only auto-TTS when peel did not already put embedded audio on A (avoid overwriting 原声).
-      if (!voiceCasting && !peeled && looksLikeLiteralDialogueLine(line) && window.codecn?.synthesizeNovelSpeech) {
+      if (!voiceCasting && !peeled && looksLikeLiteralDialogueLine(line) && window.newbrain?.synthesizeNovelSpeech) {
         try {
           setStatus(`镜 ${index + 1} 视频就绪，正在生成旁白 TTS…`);
           const narrationVoice = resolveMinimaxNarrationVoice(narrationVoiceId);
-          const speech = await window.codecn.synthesizeNovelSpeech({
+          const speech = await window.newbrain.synthesizeNovelSpeech({
             text: line,
             voiceId: narrationVoice.id,
             voiceLabel: narrationVoice.label,
@@ -2064,7 +2064,7 @@ export function VideoPipelineShell({
       });
       return;
     }
-    if (!window.codecn?.synthesizeNovelSpeech) {
+    if (!window.newbrain?.synthesizeNovelSpeech) {
       if (onAskBrain) {
         await handoffToBrainAi({
           kind: "narration",
@@ -2085,7 +2085,7 @@ export function VideoPipelineShell({
         updateShot(shotId, { line: textOverride });
       }
       const narrationVoice = resolveMinimaxNarrationVoice(narrationVoiceId);
-      const result = await window.codecn.synthesizeNovelSpeech({
+      const result = await window.newbrain.synthesizeNovelSpeech({
         text: line,
         voiceId: narrationVoice.id,
         voiceLabel: narrationVoice.label,
@@ -2177,7 +2177,7 @@ export function VideoPipelineShell({
       autoTtsAttemptedRef.current[target.id] = true;
       return;
     }
-    if (!window.codecn?.synthesizeNovelSpeech) {
+    if (!window.newbrain?.synthesizeNovelSpeech) {
       setStatus(`镜 ${shotIndex + 1} 无旁白文件（仅有文案）。当前构建未接入 TTS，请先生成旁白。`);
       autoTtsAttemptedRef.current[target.id] = true;
       return;
@@ -3288,7 +3288,7 @@ export function VideoPipelineShell({
     item: MediaBinItem,
     opts?: { placeAligned?: boolean; atSec?: number; videoLaneId?: string; sourceRelativePath?: string }
   ) => {
-    if (!projectId || !window.codecn?.peelBrainMedia) {
+    if (!projectId || !window.newbrain?.peelBrainMedia) {
       setStatus("当前构建未接入解链抽音");
       return false;
     }
@@ -3300,7 +3300,7 @@ export function VideoPipelineShell({
     setBusyAction(`peel:${item.id}`);
     setStatus(`正在解链抽音 · ${item.name}…`);
     try {
-      const result = await window.codecn.peelBrainMedia({
+      const result = await window.newbrain.peelBrainMedia({
         projectId,
         relativePath: peelRelativePath,
         fileId: opts?.sourceRelativePath ? undefined : item.fileId,
@@ -3331,10 +3331,10 @@ export function VideoPipelineShell({
       let audioPreview = "";
       try {
         if (result.video?.file?.id) {
-          videoPreview = await window.codecn.getBrainFilePreviewUrl!({ projectId, fileId: videoFileId }) || videoPreview;
+          videoPreview = await window.newbrain.getBrainFilePreviewUrl!({ projectId, fileId: videoFileId }) || videoPreview;
         }
         if (audioFileId) {
-          audioPreview = await window.codecn.getBrainFilePreviewUrl!({ projectId, fileId: audioFileId }) || "";
+          audioPreview = await window.newbrain.getBrainFilePreviewUrl!({ projectId, fileId: audioFileId }) || "";
         }
       } catch { /* optional */ }
       const videoItem: MediaBinItem = {
@@ -3538,7 +3538,7 @@ export function VideoPipelineShell({
       }
 
       // 3) Composite AV still muxed — FFmpeg peel then place V+A2.
-      if (item.hasEmbeddedAudio && projectId && window.codecn?.peelBrainMedia) {
+      if (item.hasEmbeddedAudio && projectId && window.newbrain?.peelBrainMedia) {
         const peeled = await unlinkMediaBinItem(item, {
           placeAligned: true,
           atSec: startSec,
@@ -3548,13 +3548,13 @@ export function VideoPipelineShell({
       }
 
       // 4) Silent picture without sibling — re-peel from original muxed source if findable.
-      if (isPeeledVideoOnlyPath(item.relativePath) && projectId && window.codecn?.peelBrainMedia) {
+      if (isPeeledVideoOnlyPath(item.relativePath) && projectId && window.newbrain?.peelBrainMedia) {
         const originals = peeledVideoOriginalMuxCandidates(item.relativePath);
         const knownOriginal = pickFirstExistingMediaPath(originals, knownPaths);
         const tryPaths = knownOriginal ? [knownOriginal, ...originals.filter((p) => p !== knownOriginal)] : originals;
         for (const sourcePath of tryPaths) {
           try {
-            const probe = await window.codecn.peelBrainMedia({
+            const probe = await window.newbrain.peelBrainMedia({
               projectId,
               relativePath: sourcePath,
               mode: "probe"
@@ -3572,9 +3572,9 @@ export function VideoPipelineShell({
       }
 
       // 5) Probe any unmarked video — if it still has audio, peel on drop.
-      if (!isPeeledVideoOnlyPath(item.relativePath) && projectId && window.codecn?.peelBrainMedia) {
+      if (!isPeeledVideoOnlyPath(item.relativePath) && projectId && window.newbrain?.peelBrainMedia) {
         try {
-          const probe = await window.codecn.peelBrainMedia({
+          const probe = await window.newbrain.peelBrainMedia({
             projectId,
             relativePath: item.relativePath,
             fileId: item.fileId,
@@ -3658,9 +3658,9 @@ export function VideoPipelineShell({
       label: item.name
     }));
     if (item.previewUrl) rememberShotAudio(targetId, item.previewUrl);
-    else if (projectId && item.fileId && window.codecn?.getBrainFilePreviewUrl) {
+    else if (projectId && item.fileId && window.newbrain?.getBrainFilePreviewUrl) {
       try {
-        const url = await window.codecn.getBrainFilePreviewUrl({ projectId, fileId: item.fileId });
+        const url = await window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: item.fileId });
         if (url) rememberShotAudio(targetId, url);
       } catch { /* ignore */ }
     }
@@ -3687,7 +3687,7 @@ export function VideoPipelineShell({
       setStatus("请先绑定视频工程后再导入");
       return;
     }
-    if (!window.codecn?.importBrainMedia) {
+    if (!window.newbrain?.importBrainMedia) {
       setStatus("当前构建未接入媒体导入");
       return;
     }
@@ -3705,12 +3705,12 @@ export function VideoPipelineShell({
           setStatus(`跳过不支持的文件：${name}`);
           continue;
         }
-        const pathFromOs = typeof window.codecn.getPathForFile === "function"
-          ? String(window.codecn.getPathForFile(file) || "").trim()
+        const pathFromOs = typeof window.newbrain.getPathForFile === "function"
+          ? String(window.newbrain.getPathForFile(file) || "").trim()
           : "";
         let imported: { relativePath?: string; file?: { id?: string; logicalName?: string }; kind?: string } | null = null;
         if (pathFromOs) {
-          imported = await window.codecn.importBrainMedia({
+          imported = await window.newbrain.importBrainMedia({
             projectId,
             sourcePath: pathFromOs,
             fileName: name,
@@ -3725,7 +3725,7 @@ export function VideoPipelineShell({
           for (let i = 0; i < bytes.length; i += chunk) {
             binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
           }
-          imported = await window.codecn.importBrainMedia({
+          imported = await window.newbrain.importBrainMedia({
             projectId,
             fileName: name,
             mimeType: mime || (isVideo ? "video/mp4" : "audio/mpeg"),
@@ -3738,13 +3738,13 @@ export function VideoPipelineShell({
         if (!relativePath || !fileId) continue;
         let previewUrl = "";
         try {
-          previewUrl = await window.codecn.getBrainFilePreviewUrl!({ projectId, fileId });
+          previewUrl = await window.newbrain.getBrainFilePreviewUrl!({ projectId, fileId });
         } catch { /* optional */ }
         let hasEmbeddedAudio = false;
         let durationSec: number | undefined;
-        if (isVideo && window.codecn.peelBrainMedia) {
+        if (isVideo && window.newbrain.peelBrainMedia) {
           try {
-            const probe = await window.codecn.peelBrainMedia({
+            const probe = await window.newbrain.peelBrainMedia({
               projectId,
               relativePath,
               fileId,
@@ -3765,9 +3765,9 @@ export function VideoPipelineShell({
           durationSec
         });
         // Auto-peel muxed imports into silent picture + audio bin items (Premiere unlink).
-        if (isVideo && hasEmbeddedAudio && window.codecn.peelBrainMedia) {
+        if (isVideo && hasEmbeddedAudio && window.newbrain.peelBrainMedia) {
           try {
-            const peeled = await window.codecn.peelBrainMedia({
+            const peeled = await window.newbrain.peelBrainMedia({
               projectId,
               relativePath,
               fileId,
@@ -3786,11 +3786,11 @@ export function VideoPipelineShell({
               let vPreview = previewUrl;
               let aPreview = "";
               try {
-                if (vId && window.codecn.getBrainFilePreviewUrl) {
-                  vPreview = await window.codecn.getBrainFilePreviewUrl({ projectId, fileId: vId }) || vPreview;
+                if (vId && window.newbrain.getBrainFilePreviewUrl) {
+                  vPreview = await window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: vId }) || vPreview;
                 }
-                if (aId && window.codecn.getBrainFilePreviewUrl) {
-                  aPreview = await window.codecn.getBrainFilePreviewUrl({ projectId, fileId: aId }) || "";
+                if (aId && window.newbrain.getBrainFilePreviewUrl) {
+                  aPreview = await window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: aId }) || "";
                 }
               } catch { /* optional */ }
               added.pop();

@@ -139,7 +139,7 @@ async function encodeWav(audio: any): Promise<Buffer> {
 
 async function loadKokoro() {
   const moduleRoots = [
-    process.env.CODECN_KOKORO_MODULE_ROOT || "",
+    process.env.NEWBRAIN_KOKORO_MODULE_ROOT || "",
     process.cwd(),
     typeof process.resourcesPath === "string"
       ? path.join(process.resourcesPath, "app.asar.unpacked")
@@ -247,7 +247,7 @@ async function synthesize(request: SynthRequest): Promise<SynthResponse> {
     if (wav.length < 44 || wav.subarray(0, 4).toString("ascii") !== "RIFF") {
       return { type: "result", requestId, ok: false, detail: "Kokoro 返回了无效 WAV。" };
     }
-    const dir = path.dirname(request.outPath || path.join(os.tmpdir(), "codecn-novel-tts", "x.wav"));
+    const dir = path.dirname(request.outPath || path.join(os.tmpdir(), "newbrain-novel-tts", "x.wav"));
     mkdirSync(dir, { recursive: true });
     const audioPath = request.outPath || path.join(dir, `${randomUUID()}.wav`);
     writeFileSync(audioPath, wav);

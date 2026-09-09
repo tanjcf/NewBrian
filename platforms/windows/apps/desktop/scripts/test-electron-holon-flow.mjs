@@ -9,17 +9,17 @@ import { ensureHolonWorkspace } from "./holon-e2e-workspace.mjs";
 
 const port = 22_000 + (process.pid % 5_000);
 const server = spawn(process.execPath, [new URL("./holon-contract-model-server.mjs", import.meta.url).pathname.slice(1)], {
-  env: { ...process.env, CODECN_HOLON_TEST_PORT: String(port) }, windowsHide: true, stdio: ["ignore", "pipe", "inherit"]
+  env: { ...process.env, NEWBRAIN_HOLON_TEST_PORT: String(port) }, windowsHide: true, stdio: ["ignore", "pipe", "inherit"]
 });
 await new Promise((resolve, reject) => {
   const timeout = setTimeout(() => reject(new Error("Holon test server did not start.")), 10_000);
   server.stdout.on("data", (chunk) => { if (String(chunk).includes("READY")) { clearTimeout(timeout); resolve(); } });
   server.once("exit", (code) => reject(new Error(`Holon test server exited: ${code}`)));
 });
-process.env.CODECN_MODEL_BASE_URL = `http://127.0.0.1:${port}/v1`;
-process.env.CODECN_E2E_MODEL_ID = "codecn-e2e-model";
-process.env.CODECN_E2E_AUTH_BYPASS = "1";
-const session = await ensureElectronE2ESession(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9341));
+process.env.NEWBRAIN_MODEL_BASE_URL = `http://127.0.0.1:${port}/v1`;
+process.env.NEWBRAIN_E2E_MODEL_ID = "newbrain-e2e-model";
+process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
+const session = await ensureElectronE2ESession(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9341));
 let cdp;
 try {
   const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -96,10 +96,10 @@ try {
   const cancellationState = await waitRemote("durable cancellation", (value) =>
     value.cancelRequests.includes("wi_e2e_002")
       && value.events.some((event) => event.work_item_id === "wi_e2e_002" && event.event_type === "work_item.cancelled"), 30_000);
-  const previousPreferences = await evaluate(`window.codecn.getDesktopPreferences()`);
+  const previousPreferences = await evaluate(`window.newbrain.getDesktopPreferences()`);
   await evaluate(`(async () => {
-    const preferences = await window.codecn.getDesktopPreferences();
-    await window.codecn.saveDesktopPreferences({
+    const preferences = await window.newbrain.getDesktopPreferences();
+    await window.newbrain.saveDesktopPreferences({
       ...preferences,
       configuration: { ...preferences.configuration, requireApprovalForShell: true }
     });
@@ -117,14 +117,14 @@ try {
     value.events.some((event) => event.work_item_id === "wi_e2e_003" && event.event_type === "approval.requested")
       && value.events.some((event) => event.work_item_id === "wi_e2e_003" && event.event_type === "approval.resolved")
       && value.events.some((event) => event.work_item_id === "wi_e2e_003" && event.event_type === "work_item.completed"), 30_000);
-  const executionWorkspacePath = await evaluate(`window.codecn.getSnapshot().then((snapshot) => snapshot.session?.workspacePath || "")`);
+  const executionWorkspacePath = await evaluate(`window.newbrain.getSnapshot().then((snapshot) => snapshot.session?.workspacePath || "")`);
   assert.ok(executionWorkspacePath);
   assert.ok(executionWorkspacePath.toLowerCase().startsWith(session.workspacePath.toLowerCase()));
   const approvalArtifact = join(executionWorkspacePath, "holon-remote-approval.txt");
   assert.equal(existsSync(approvalArtifact), true);
   assert.match(readFileSync(approvalArtifact, "utf8"), /HOLON_REMOTE_APPROVAL_OK/);
   unlinkSync(approvalArtifact);
-  await evaluate(`window.codecn.saveDesktopPreferences(${JSON.stringify(previousPreferences)})`);
+  await evaluate(`window.newbrain.saveDesktopPreferences(${JSON.stringify(previousPreferences)})`);
   assert.ok(remoteState.events.some((event) => event.event_type === "work_item.started"));
   assert.ok(remoteState.events.some((event) => event.event_type === "work_item.completed"));
   assert.ok(remoteState.eventAttempts >= 2);
@@ -135,7 +135,7 @@ try {
   assert.equal(cancellationState.cancelRequests.filter((id) => id === "wi_e2e_002").length, 1);
   assert.doesNotMatch(JSON.stringify(approvalState.events), /owner_user_id|ownerUserId|HOLON_E2E_COMPLETED|HOLON_REMOTE_APPROVAL_OK|Set-Content/);
   const evidence = { ok: true, input: cdp.inputEvidence(), eventCount: approvalState.events.length, eventAttempts: approvalState.eventAttempts, snapshot: true, candidate: true, search: true, governance: true, feedback: true, cancellation: true, approval: true };
-  const evidencePath = fileURLToPath(new URL("../../../integration-artifacts/holon-codecn/deterministic-electron.json", import.meta.url));
+  const evidencePath = fileURLToPath(new URL("../../../integration-artifacts/holon-newbrain/deterministic-electron.json", import.meta.url));
   mkdirSync(dirname(evidencePath), { recursive: true });
   writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(evidence)}\n`);

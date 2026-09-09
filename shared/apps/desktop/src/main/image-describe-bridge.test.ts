@@ -37,7 +37,7 @@ test("bridge prefers remote vision then falls back to local", async () => {
   const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-vision-"));
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-vision-"));
   const filePath = join(dir, "x.png");
   await writeFile(filePath, Buffer.from("png"));
   try {
@@ -89,7 +89,7 @@ test("bridge fails closed when remote and local are both unavailable", async () 
       },
       local: {
         enabled: false,
-        environment: { CODECN_VISION_BRIDGE_LOCAL: "0" }
+        environment: { NEWBRAIN_VISION_BRIDGE_LOCAL: "0" }
       }
     }),
     /没有可用的远程视觉模型|本地识图桥接已关闭/
@@ -97,6 +97,6 @@ test("bridge fails closed when remote and local are both unavailable", async () 
 });
 
 test("local vision bridge can be disabled via env", () => {
-  assert.equal(isLocalVisionBridgeDisabled({ CODECN_VISION_BRIDGE_LOCAL: "0" }), true);
+  assert.equal(isLocalVisionBridgeDisabled({ NEWBRAIN_VISION_BRIDGE_LOCAL: "0" }), true);
   assert.equal(isLocalVisionBridgeDisabled({}), false);
 });

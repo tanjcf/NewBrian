@@ -51,6 +51,6 @@ test("withSpringCorrelationBody and headers attach ids without dropping payload"
     requestId: "req-1"
   });
   assert.equal(headers.Accept, "application/json");
-  assert.equal(headers["X-CodeCN-Thread-Id"], "thread-a");
-  assert.equal(headers["X-CodeCN-Request-Id"], "req-1");
+  assert.equal(headers["X-NewBrain-Thread-Id"], "thread-a");
+  assert.equal(headers["X-NewBrain-Request-Id"], "req-1");
 });

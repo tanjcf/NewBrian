@@ -8,7 +8,7 @@ const context = {
   makeId: (prefix: string) => `${prefix}-fixed`,
   nowIso: () => "2026-07-17T00:00:00.000Z",
   getWorkspaceEnvRoot: (id: string) => resolve("envs", id),
-  makeWorkspaceEnvName: (id: string) => `codecn-${id}`
+  makeWorkspaceEnvName: (id: string) => `newbrain-${id}`
 };
 
 test("repairs persisted thread text and applies bounded defaults", () => {
@@ -56,7 +56,7 @@ test("normalizes workspace identity, thread order, and Conda defaults", () => {
     source: "system",
     condaPath: "C:/conda.exe",
     envPath: resolve("envs", "workspace-1"),
-    envName: "codecn-workspace-1",
+    envName: "newbrain-workspace-1",
     pythonVersion: "3.11",
     lastCheckedAt: undefined,
     lastProvisionedAt: undefined
@@ -71,7 +71,7 @@ test("removes only the generated default workspace and preserves user projects",
   assert.equal(typeof policy.removeGeneratedDefaultWorkspace, "function");
   const userWorkspace = { id: "workspace-user", name: "workspace", path: resolve("user-workspace"), threads: [] };
   assert.deepEqual(policy.removeGeneratedDefaultWorkspace([
-    { id: "workspace-codecn", name: "workspace", path: resolve("generated-workspace"), threads: [] },
+    { id: "workspace-newbrain", name: "workspace", path: resolve("generated-workspace"), threads: [] },
     userWorkspace
   ]), [userWorkspace]);
   assert.deepEqual(policy.removeGeneratedDefaultWorkspace([]), []);

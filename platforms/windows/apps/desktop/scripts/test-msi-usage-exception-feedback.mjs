@@ -15,7 +15,7 @@ await mkdir(evidenceDir, { recursive: true });
 const msiPath = await resolveMsiPath();
 const hash = createHash("sha256").update(await readFile(msiPath)).digest("hex");
 const signatureStatus = await readSignatureStatus(msiPath);
-const installRoot = join(tmpdir(), `codecn-msi-usage-${process.pid}`);
+const installRoot = join(tmpdir(), `newbrain-msi-usage-${process.pid}`);
 await mkdir(installRoot, { recursive: true });
 await extractMsi(msiPath, installRoot);
 const exePath = await findExecutable(installRoot);
@@ -23,16 +23,16 @@ assert.ok(exePath, `Installed executable missing under ${installRoot}`);
 
 const port = 19_500 + (process.pid % 1_500);
 const debugPort = 26_000 + (process.pid % 1_500);
-const workspace = await mkdtemp(join(tmpdir(), "codecn-msi-usage-ws-"));
-const stateRoot = join(workspace, ".codecn");
+const workspace = await mkdtemp(join(tmpdir(), "newbrain-msi-usage-ws-"));
+const stateRoot = join(workspace, ".newbrain");
 await mkdir(stateRoot, { recursive: true });
-await writeFile(join(workspace, "codecn.config.json"), `${JSON.stringify({ llm: {
-  provider: "codecn", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "codecn-e2e",
-  wireApi: "responses", model: "codecn-e2e-model", reviewModel: "codecn-e2e-model",
+await writeFile(join(workspace, "newbrain.config.json"), `${JSON.stringify({ llm: {
+  provider: "newbrain", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "newbrain-e2e",
+  wireApi: "responses", model: "newbrain-e2e-model", reviewModel: "newbrain-e2e-model",
   reasoningEffort: "medium", disableResponseStorage: true
 } }, null, 2)}\n`);
 await writeFile(join(stateRoot, "authorized-models.json"), `${JSON.stringify([{
-  id: "codecn-e2e-model", model: "codecn-e2e-model", label: "E2E", provider: "codecn"
+  id: "newbrain-e2e-model", model: "newbrain-e2e-model", label: "E2E", provider: "newbrain"
 }], null, 2)}\n`);
 await writeFile(join(stateRoot, "desktop-auth.json"), `${JSON.stringify({
   mode: "desktop_token", access_token: `plain:${Buffer.from("msi-usage-user").toString("base64")}`,
@@ -40,7 +40,7 @@ await writeFile(join(stateRoot, "desktop-auth.json"), `${JSON.stringify({
 }, null, 2)}\n`);
 
 const server = spawn(process.execPath, [fileURLToPath(new URL("./usage-exception-feedback-mock-server.mjs", import.meta.url))], {
-  env: { ...process.env, CODECN_USAGE_FEEDBACK_PORT: String(port) }, windowsHide: true,
+  env: { ...process.env, NEWBRAIN_USAGE_FEEDBACK_PORT: String(port) }, windowsHide: true,
   stdio: ["ignore", "pipe", "inherit"]
 });
 await ready(server);
@@ -49,11 +49,11 @@ const child = spawn(exePath, [], {
   cwd: dirname(exePath),
   env: {
     ...process.env,
-    CODECN_E2E_REMOTE_DEBUG_PORT: String(debugPort),
-    CODECN_E2E_AUTH_BYPASS: "1",
-    CODECN_WORKSPACE_PATH: workspace,
-    CODECN_MODEL_BASE_URL: `http://127.0.0.1:${port}/v1`,
-    CODECN_E2E_MODEL_ID: "codecn-e2e-model"
+    NEWBRAIN_E2E_REMOTE_DEBUG_PORT: String(debugPort),
+    NEWBRAIN_E2E_AUTH_BYPASS: "1",
+    NEWBRAIN_WORKSPACE_PATH: workspace,
+    NEWBRAIN_MODEL_BASE_URL: `http://127.0.0.1:${port}/v1`,
+    NEWBRAIN_E2E_MODEL_ID: "newbrain-e2e-model"
   },
   stdio: "ignore",
   windowsHide: false
@@ -66,16 +66,16 @@ try {
   const projectPath = join(workspace, "project");
   await mkdir(projectPath, { recursive: true });
   await cdp.evaluate(`(async () => {
-    let catalog = await window.codecn.listWorkspaces();
+    let catalog = await window.newbrain.listWorkspaces();
     if (!catalog.some((item) => item.path === ${JSON.stringify(projectPath)})) {
-      catalog = await window.codecn.addWorkspace({ name: "MSI Usage Feedback", path: ${JSON.stringify(projectPath)} });
+      catalog = await window.newbrain.addWorkspace({ name: "MSI Usage Feedback", path: ${JSON.stringify(projectPath)} });
     }
     let workspaceItem = catalog.find((item) => item.path === ${JSON.stringify(projectPath)});
     if (!(workspaceItem?.threads || []).length) {
-      catalog = await window.codecn.addWorkspaceThread({ workspaceId: workspaceItem.id, title: "Usage Feedback", summary: "MSI", scope: "chat" });
+      catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspaceItem.id, title: "Usage Feedback", summary: "MSI", scope: "chat" });
       workspaceItem = catalog.find((item) => item.id === workspaceItem.id);
     }
-    await window.codecn.activateWorkspaceThread({ workspaceId: workspaceItem.id, threadId: workspaceItem.threads[0].id });
+    await window.newbrain.activateWorkspaceThread({ workspaceId: workspaceItem.id, threadId: workspaceItem.threads[0].id });
     return true;
   })()`);
   await cdp.reload();
@@ -83,7 +83,7 @@ try {
   await cdp.evaluate(`document.querySelector('[data-testid="sidebar-task-row"]')?.click()`);
   await cdp.waitFor("composer", `Boolean(document.querySelector('.task-column:not(.new-chat-task) [data-testid="composer-input"]'))`);
 
-  await submitCommand(cdp, "codecn使用异常：生成文档后一直没有完成 password=secret");
+  await submitCommand(cdp, "newbrain使用异常：生成文档后一直没有完成 password=secret");
   await cdp.waitFor("preview", `Boolean(document.querySelector('[data-testid="usage-exception-feedback-dialog"]'))`, 30_000);
   const preview = await cdp.evaluate(`(() => {
     const dialog = document.querySelector('[data-testid="usage-exception-feedback-dialog"]');
@@ -100,7 +100,7 @@ try {
   await cdp.waitFor("cancelled", `!document.querySelector('[data-testid="usage-exception-feedback-dialog"]')`);
   assert.equal((await remoteState(port)).uploads.length, 0);
 
-  await submitCommand(cdp, "codecn使用异常：生成文档后一直没有完成 password=secret");
+  await submitCommand(cdp, "newbrain使用异常：生成文档后一直没有完成 password=secret");
   await cdp.waitFor("confirm preview", `Boolean(document.querySelector('[data-testid="usage-exception-feedback-dialog"]'))`, 30_000);
   await cdp.clickText("确认提交");
   await cdp.waitFor("submitted", `document.body.innerText.includes('异常已提交，编号') || document.body.innerText.includes('异常已保存，编号')`, 20_000);
@@ -130,7 +130,7 @@ try {
 }
 
 async function resolveMsiPath() {
-  const preferred = process.env.CODECN_USAGE_FEEDBACK_MSI_PATH?.trim();
+  const preferred = process.env.NEWBRAIN_USAGE_FEEDBACK_MSI_PATH?.trim();
   if (preferred) {
     await access(preferred);
     return preferred;
@@ -162,7 +162,7 @@ async function findExecutable(root) {
     for (const entry of entries) {
       const full = join(current, entry.name);
       if (entry.isDirectory()) queue.push(full);
-      else if (/^codecn\.exe$/i.test(entry.name) || /^codeCN\.exe$/i.test(entry.name)) return full;
+      else if (/^newbrain\.exe$/i.test(entry.name) || /^NewBrain\.exe$/i.test(entry.name)) return full;
     }
   }
   return null;

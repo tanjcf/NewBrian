@@ -14,8 +14,8 @@ test("workspace catalog uses transient-safe reads, atomic writes, and crash side
 });
 
 test("Electron E2E sessions cannot reuse the production workspace store", () => {
-  assert.match(e2eSource, /mkdtempSync\(join\(tmpdir\(\), "codecn-e2e-"\)\)/);
-  assert.match(e2eSource, /CODECN_WORKSPACE_PATH: isolatedWorkspacePath/);
+  assert.match(e2eSource, /mkdtempSync\(join\(tmpdir\(\), "newbrain-e2e-"\)\)/);
+  assert.match(e2eSource, /NEWBRAIN_WORKSPACE_PATH: isolatedWorkspacePath/);
   assert.match(e2eSource, /child\.once\("exit", removeIsolatedWorkspace\)/);
 });
 

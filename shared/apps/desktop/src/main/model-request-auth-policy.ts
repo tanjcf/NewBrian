@@ -11,14 +11,14 @@ export type ModelRequestAuthSource =
   | "none";
 
 export function resolveDevE2eBearerToken(): string {
-  const bypassEnabled = process.env.CODECN_E2E_AUTH_BYPASS === "1";
+  const bypassEnabled = process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1";
   const gatewayConfigured = Boolean(
-    process.env.CODECN_MODEL_BASE_URL?.trim() || process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim()
+    process.env.NEWBRAIN_MODEL_BASE_URL?.trim() || process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim()
   );
   if (!bypassEnabled || !gatewayConfigured) {
     return "";
   }
-  return process.env.CODECN_E2E_AUTH_TOKEN?.trim() || "codecn-e2e";
+  return process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e";
 }
 
 export function selectModelRequestAuth(

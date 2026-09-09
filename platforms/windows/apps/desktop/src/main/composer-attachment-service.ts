@@ -46,11 +46,11 @@ function formatSelectionDetail(
 
 /** Builds a stable custom-protocol URL that Chromium will not rewrite as a hostname-only URL. */
 export function buildManagedAttachmentUrl(filePath: string) {
-  return `codecn-attachment://${ATTACHMENT_PROTOCOL_HOST}/${encodeURIComponent(basename(filePath))}`;
+  return `newbrain-attachment://${ATTACHMENT_PROTOCOL_HOST}/${encodeURIComponent(basename(filePath))}`;
 }
 
 /**
- * Chromium may rewrite `codecn-attachment:///file.png` into `codecn-attachment://file.png/`.
+ * Chromium may rewrite `newbrain-attachment:///file.png` into `newbrain-attachment://file.png/`.
  * Accept both the stable host form and legacy triple-slash / hostname-as-filename forms.
  */
 export function resolveManagedAttachmentFileName(requestUrl: string) {

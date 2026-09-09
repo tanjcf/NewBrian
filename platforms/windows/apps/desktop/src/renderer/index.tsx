@@ -11,16 +11,16 @@ function renderFatal(message: string, kind: "renderer_error" | "renderer_unhandl
   main.style.cssText = "padding:24px;font-family:Segoe UI,sans-serif;color:#7f1d1d;background:#fef2f2;min-height:100vh;";
   const title = document.createElement("h1");
   title.style.cssText = "margin:0 0 12px;";
-  title.textContent = "codeCN 正在从界面异常中恢复";
+  title.textContent = "NewBrain 正在从界面异常中恢复";
   const detail = document.createElement("pre");
   detail.style.cssText = "white-space:pre-wrap;background:#fff;padding:16px;border:1px solid #fecaca;border-radius:12px;";
-  detail.textContent = `${message}\n\n异常已写入本地文件，codeCN 将自动重启并在重启后上报。`;
+  detail.textContent = `${message}\n\n异常已写入本地文件，NewBrain 将自动重启并在重启后上报。`;
   main.append(title, detail);
   document.body.replaceChildren(main);
   if (fatalReported) return;
   fatalReported = true;
   const error = message.slice(0, 24_000);
-  void window.codecn?.reportRendererFailure({
+  void window.newbrain?.reportRendererFailure({
     kind,
     message: error.split("\n")[0] || "Renderer failure",
     stackTrace: error,

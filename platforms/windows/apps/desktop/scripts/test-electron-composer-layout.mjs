@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9333);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9333);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");

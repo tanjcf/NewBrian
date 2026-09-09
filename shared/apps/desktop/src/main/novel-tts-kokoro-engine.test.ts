@@ -52,7 +52,7 @@ test("Kokoro engine and service enforce offline-first lifecycle contracts", () =
   assert.match(engine, /fork\(/);
   assert.match(engine, /isolated Node child/);
   assert.match(engine, /resolveWorkerCwd/);
-  assert.match(engine, /CODECN_KOKORO_MODULE_ROOT/);
+  assert.match(engine, /NEWBRAIN_KOKORO_MODULE_ROOT/);
   assert.doesNotMatch(
     engine,
     /cwd:\s*path\.resolve\(path\.dirname\(workerPath\),\s*"\.\.",\s*"\.\."\)/
@@ -67,7 +67,7 @@ test("Kokoro engine and service enforce offline-first lifecycle contracts", () =
   assert.match(worker, /q4f16/);
   assert.match(worker, /isRecoverableAudioError/);
   assert.match(worker, /@uzen\/kokoro-js/);
-  assert.match(worker, /CODECN_KOKORO_MODULE_ROOT/);
+  assert.match(worker, /NEWBRAIN_KOKORO_MODULE_ROOT/);
   assert.match(worker, /audioPath/);
   assert.match(worker, /Number\.isFinite/);
   assert.match(worker, /pcm16Peak/);

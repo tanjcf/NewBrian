@@ -99,7 +99,7 @@ export function defaultResearchWritingSession(): ResearchWritingSession {
 }
 
 export function researchWritingStorageKey(workspaceId?: string, threadId?: string): string {
-  return `codecn.research-writing.v2:${workspaceId || "global"}:${threadId || "draft"}`;
+  return `newbrain.research-writing.v2:${workspaceId || "global"}:${threadId || "draft"}`;
 }
 
 export function buildResearchWritingSkillInvocation(session: ResearchWritingSession, userText = ""): string {

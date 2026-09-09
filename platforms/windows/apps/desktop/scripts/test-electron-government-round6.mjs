@@ -29,13 +29,13 @@ if (process.argv.includes("--prepare")) {
 }
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 let page = null;
 for (let attempt = 0; attempt < 45 && !page; attempt += 1) {
   try { page = (await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json())).find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl); } catch {}
   if (!page) await new Promise((ok) => setTimeout(ok, 1_000));
 }
-assert.ok(page, "No visible codeCN renderer became available after restart.");
+assert.ok(page, "No visible NewBrain renderer became available after restart.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((ok, fail) => { socket.addEventListener("open", ok, { once: true }); socket.addEventListener("error", fail, { once: true }); });
 let nextId = 0;
@@ -57,7 +57,7 @@ for (let attempt = 0; attempt < 45 && !activated; attempt += 1) {
 assert.equal(activated, true, "Workspace thread was not found after restart."); await sleep(2_000);
 let state = null;
 for (let attempt = 0; attempt < 45; attempt += 1) {
-  state = await evaluate(`(async () => ({ messages: (await window.codecn.getSnapshot()).messages || [], goal: await window.codecn.getGoalExecution(), localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '')), body: document.body.innerText, reasoningCount: [...document.querySelectorAll('[data-testid*="reasoning"], .reasoning-summary')].length, activityCount: [...document.querySelectorAll('[data-testid*="activity"], [data-testid*="step"], [data-testid*="tool"]')].length, composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true }))()`);
+  state = await evaluate(`(async () => ({ messages: (await window.newbrain.getSnapshot()).messages || [], goal: await window.newbrain.getGoalExecution(), localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '')), body: document.body.innerText, reasoningCount: [...document.querySelectorAll('[data-testid*="reasoning"], .reasoning-summary')].length, activityCount: [...document.querySelectorAll('[data-testid*="activity"], [data-testid*="step"], [data-testid*="tool"]')].length, composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true }))()`);
   if (state.messages.filter((message) => message.role === "user").length >= manifest.expectedUsers.length && state.body.includes("本轮使用 Skill：政务写作")) break;
   await sleep(1_000);
 }
@@ -75,7 +75,7 @@ for (const file of manifest.files) {
 }
 const clicks = await evaluate(`(() => { const names = ${JSON.stringify(manifest.files.map((file) => file.path.split(/[\/\\]/).at(-1)))}; return names.map((name) => { const element = [...document.querySelectorAll('[data-local-file-path]')].find((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '').endsWith(name)); if (!(element instanceof HTMLElement)) return false; element.click(); return true; }); })()`);
 assert.deepEqual(clicks, [true, true, true], "Not all three recovered artifact links were clickable."); await sleep(1_000);
-state = await evaluate(`(async () => ({ body: document.body.innerText, goal: await window.codecn.getGoalExecution(), messages: (await window.codecn.getSnapshot()).messages || [] }))()`);
+state = await evaluate(`(async () => ({ body: document.body.innerText, goal: await window.newbrain.getGoalExecution(), messages: (await window.newbrain.getSnapshot()).messages || [] }))()`);
 assert.doesNotMatch(state.body, /Workspace thread was not found|Renderer failed to start/u);
 writeFileSync(resolve(evidenceDirectory, "round-6.json"), `${JSON.stringify({ status: "PASS", manifest, state, clicks }, null, 2)}\n`);
 console.log(JSON.stringify({ caseId: "GOV-UI-MULTI-001", round: 6, status: "PASS", evidenceDirectory, files: manifest.files }, null, 2));

@@ -1,5 +1,5 @@
 {
-  "protocol": "codecn.agent.v1",
+  "protocol": "newbrain.agent.v1",
   "runtime_protocol_version": 1,
   "transport": {
     "control_plane": "https-json",

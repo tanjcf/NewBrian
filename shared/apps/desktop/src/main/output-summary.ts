@@ -58,7 +58,7 @@ export function linkWrittenArtifactMentions(content: string, workspacePath: stri
     labels.forEach((label, labelIndex) => {
       if (!label) return;
       const link = `[${label}](<${absolutePath}>)`;
-      const token = `\u0000CODECN_ARTIFACT_${artifactIndex}_${labelIndex}\u0000`;
+      const token = `\u0000NEWBRAIN_ARTIFACT_${artifactIndex}_${labelIndex}\u0000`;
       output = output.split(link).join(token);
       const escaped = escapeRegExp(label);
       output = output

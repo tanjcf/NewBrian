@@ -206,7 +206,7 @@ export interface ModelChatServiceDependencies {
     projectKey?: string;
   }) => Promise<string> | string;
   loadSceneKnowledgeText?: (input: { workspace: WorkspaceCatalogItem; query: string }) => Promise<string> | string;
-  /** Load repo-root Project OS (CODECN.md / CLAUDE.md / AGENTS.md). */
+  /** Load repo-root Project OS (NEWBRAIN.md / CLAUDE.md / AGENTS.md). */
   loadProjectOs?: (input: {
     workspace: WorkspaceCatalogItem;
   }) => Promise<{ sourceFile: string | null; text: string } | string> | { sourceFile: string | null; text: string } | string;

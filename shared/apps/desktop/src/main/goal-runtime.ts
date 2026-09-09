@@ -108,11 +108,11 @@ export function buildGoalRuntimeInstruction(snapshot: PersistedGoalSnapshot | nu
     pendingQuestion: snapshot.pendingQuestion
   }) : "none";
   return [
-    "You are operating with the durable CodeCN goal runtime.",
+    "You are operating with the durable NewBrain goal runtime.",
     "For Chinese user requests, every user-visible objective, plan-step title, description, result, progress summary, and decision option must be written in Simplified Chinese.",
     "Goal state is thread-scoped and persisted by native tools; never simulate goal or plan state in prose.",
     snapshot ? "Continue the existing active goal. Do not create a duplicate goal." : "The user selected goal mode. Call goal.create before substantive execution, using a concrete objective with verification evidence.",
-    "Do not invent a token or time budget. Runtime accounting is managed by CodeCN unless the product supplies an explicit user-defined budget.",
+    "Do not invent a token or time budget. Runtime accounting is managed by NewBrain unless the product supplies an explicit user-defined budget.",
     "Call goal.update_plan when the execution plan is first known and whenever real progress changes step status or results.",
     "Call goal.request_user_input only when a missing user decision materially changes the outcome. After calling it, stop substantive work and briefly tell the user a decision is required.",
     "Continue autonomously while safe in-scope work remains. Do not finish merely because one response is ending.",

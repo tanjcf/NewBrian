@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 
 test("creates Codex-style WAL databases and persists each core domain", async () => {
   const { CodexStorage } = await import(new URL("./codex-storage.ts", import.meta.url).href) as typeof import("./codex-storage.js");
-  const root = mkdtempSync(join(tmpdir(), "codecn-storage-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-storage-"));
   try {
     const storage = new CodexStorage(root);
     storage.upsertThread({

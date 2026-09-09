@@ -80,9 +80,9 @@ export function parseSelectedSkillNames(content: string, allowedNames: Iterable<
 export function formatSkillDisclosure(skills: SkillDescriptor[]) {
   const chineseNames: Record<string, string> = {
     "government-research-writing": "政务研究写作",
-    "codecn-agent-runtime-rules": "codeCN Agent 运行时规则",
-    "codecn-architecture-guard": "codeCN 架构约束",
-    "codecn-quality-gate": "codeCN 质量门禁",
+    "newbrain-agent-runtime-rules": "NewBrain Agent 运行时规则",
+    "newbrain-architecture-guard": "NewBrain 架构约束",
+    "newbrain-quality-gate": "NewBrain 质量门禁",
     "programming-skill": "编程安全规范"
   };
   return skills.map((skill) => {

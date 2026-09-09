@@ -9,9 +9,9 @@ import { activateProviderManifest } from "./provider-activation.js";
 import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime } from "./tool-registry.js";
 
 export function defaultCapabilityDataRoot(platform = process.platform) {
-  if (platform === "win32") return path.join(process.env.LOCALAPPDATA || os.homedir(), "codeCN", "capabilities");
-  if (platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "codeCN", "capabilities");
-  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "codecn", "capabilities");
+  if (platform === "win32") return path.join(process.env.LOCALAPPDATA || os.homedir(), "NewBrain", "capabilities");
+  if (platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "NewBrain", "capabilities");
+  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "newbrain", "capabilities");
 }
 
 export function createCapabilitySystem({ toolRegistry, providerHandler, catalog, dataRoot, platform, onEvent }) {

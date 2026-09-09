@@ -14,7 +14,7 @@ test("parses quoted skill frontmatter", () => {
 });
 
 test("discovers metadata first and loads instructions on demand", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-skills-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-skills-"));
   try {
     const skillPath = join(root, "review");
     mkdirSync(join(skillPath, "references"), { recursive: true });
@@ -35,7 +35,7 @@ test("discovers metadata first and loads instructions on demand", async () => {
 });
 
 test("disabled skills are not discovered or matched", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-skills-disabled-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-skills-disabled-"));
   try {
     const skillPath = join(root, "review");
     mkdirSync(skillPath, { recursive: true });
@@ -50,7 +50,7 @@ test("disabled skills are not discovered or matched", async () => {
 });
 
 test("loads only the most recent bounded session digest context", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-skills-digest-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-skills-digest-"));
   try {
     const skillPath = join(root, "review");
     mkdirSync(join(skillPath, "references"), { recursive: true });

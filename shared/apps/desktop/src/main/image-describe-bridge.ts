@@ -104,12 +104,12 @@ export async function describeImageWithLocalVision(
   const environment = input.environment ?? process.env;
   const baseUrl = (
     input.baseUrl?.trim()
-    || environment.CODECN_VISION_BASE_URL?.trim()
+    || environment.NEWBRAIN_VISION_BASE_URL?.trim()
     || "http://127.0.0.1:11434"
   ).replace(/\/+$/, "");
   const visionModel =
     input.visionModel?.trim()
-    || environment.CODECN_VISION_MODEL?.trim()
+    || environment.NEWBRAIN_VISION_MODEL?.trim()
     || "qwen3.5:latest";
   const image = (await fs.readFile(input.filePath)).toString("base64");
   const fetchImpl = input.fetchImpl ?? fetch;
@@ -147,7 +147,7 @@ export async function describeImageWithLocalVision(
 }
 
 export function isLocalVisionBridgeDisabled(environment: NodeJS.ProcessEnv = process.env): boolean {
-  const flag = String(environment.CODECN_VISION_BRIDGE_LOCAL || "").trim().toLowerCase();
+  const flag = String(environment.NEWBRAIN_VISION_BRIDGE_LOCAL || "").trim().toLowerCase();
   return flag === "0" || flag === "false" || flag === "off";
 }
 

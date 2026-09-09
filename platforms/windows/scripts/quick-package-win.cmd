@@ -15,15 +15,15 @@ pushd "%~dp0.."
 
 where pnpm >nul 2>nul
 if %errorlevel%==0 (
-  echo [CodeCN] Using pnpm from PATH...
+  echo [NewBrain] Using pnpm from PATH...
   pnpm install --force --node-linker=hoisted || exit /b 1
   pnpm --filter @codex-forge/desktop build || exit /b 1
   pnpm --filter @codex-forge/desktop package:win || exit /b 1
 ) else (
-  echo [CodeCN] pnpm not found. Using npm exec pnpm@10.0.0...
+  echo [NewBrain] pnpm not found. Using npm exec pnpm@10.0.0...
   where npm >nul 2>nul
   if not %errorlevel%==0 (
-    echo [CodeCN] ERROR: npm not found in PATH.
+    echo [NewBrain] ERROR: npm not found in PATH.
     exit /b 1
   )
   npm exec --yes pnpm@10.0.0 -- pnpm install --force --node-linker=hoisted --reporter=append-only || exit /b 1
@@ -31,9 +31,9 @@ if %errorlevel%==0 (
   npm exec --yes pnpm@10.0.0 -- pnpm --filter @codex-forge/desktop package:win || exit /b 1
 )
 
-echo [CodeCN] Done. Outputs:
-echo   %cd%\\apps\\desktop\\release\\CodeCN Installer.exe
-echo   %cd%\\apps\\desktop\\release\\CodeCN Portable.exe
+echo [NewBrain] Done. Outputs:
+echo   %cd%\\apps\\desktop\\release\\NewBrain Installer.exe
+echo   %cd%\\apps\\desktop\\release\\NewBrain Portable.exe
 
 popd
 endlocal

@@ -1,6 +1,6 @@
 import type { PhaseOneSnapshot } from "@codex-forge/protocol";
 
-export const LEGACY_SIDEBAR_ROW_STORAGE_KEY = "codecn.lastSelectedSidebarRow.v1";
+export const LEGACY_SIDEBAR_ROW_STORAGE_KEY = "newbrain.lastSelectedSidebarRow.v1";
 
 export type LegacySidebarRowKind = "chat" | "project-thread" | "brain-conversation" | "other";
 

@@ -183,7 +183,7 @@ export class OfficialGovernmentWebService {
       signal,
       headers: {
         "accept-language": "zh-CN,zh;q=0.9",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36 codeCN/0.1",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36 NewBrain/0.1",
         ...(init.headers ?? {}),
       },
     });

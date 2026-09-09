@@ -1,16 +1,16 @@
-# Spring 插件仓库与 codeCN 联调设计
+# Spring 插件仓库与 NewBrain 联调设计
 
 ## 背景与目标
 
-`spring-app` 已提供 Codex 兼容插件目录、签名发布包和按用户/设备记录的安装状态。codeCN 当前只有内置插件和手工登记的本地 manifest；本设计把现有插件页接入 Spring，并在 Electron 主进程实现可信下载、验证、原子安装、状态回报与恢复。
+`spring-app` 已提供 Codex 兼容插件目录、签名发布包和按用户/设备记录的安装状态。NewBrain 当前只有内置插件和手工登记的本地 manifest；本设计把现有插件页接入 Spring，并在 Electron 主进程实现可信下载、验证、原子安装、状态回报与恢复。
 
-首要验收方式是不依赖远程 MySQL 的确定性测试：codeCN 测试启动实现 Spring 真实 HTTP 契约的本地服务器，使用真实 ZIP、Ed25519 和临时文件系统验证完整链路。远程环境在数据库凭据恢复后作为额外运行验收。
+首要验收方式是不依赖远程 MySQL 的确定性测试：NewBrain 测试启动实现 Spring 真实 HTTP 契约的本地服务器，使用真实 ZIP、Ed25519 和临时文件系统验证完整链路。远程环境在数据库凭据恢复后作为额外运行验收。
 
 ## 范围
 
 范围内：公开/个人目录、分类和搜索；详情、manifest、下载和设备对账；SHA-256/Ed25519、ZIP 安全、原子安装升级、启停卸载；typed protocol、窄 preload IPC 和现有插件页面；Spring 契约夹具以及成功、失败、重试、撤销测试。
 
-范围外：codeCN 发布 Spring 插件；renderer 直接访问网络、令牌或文件系统；默认写入用户 `~/.codex/plugins`；首版二进制差分更新。
+范围外：NewBrain 发布 Spring 插件；renderer 直接访问网络、令牌或文件系统；默认写入用户 `~/.codex/plugins`；首版二进制差分更新。
 
 ## 分层与依赖
 
@@ -19,7 +19,7 @@
 - `packages/protocol` 定义插件目录、清单、安装状态、操作结果、查询输入及 IPC channel，跨边界只传数据。
 - `plugin-repository-client.ts` 复用现有认证头，只访问配置的 gateway origin 和固定 API 路径。
 - `plugin-package-verifier.ts` 验证响应哈希、Ed25519、manifest 和 ZIP 清单，拒绝绝对路径、`..`、重复路径和超限归档。
-- `plugin-installation-service.ts` 串行化同一插件操作，在 codeCN 用户数据目录暂存并原子激活，维护版本化本地状态。
+- `plugin-installation-service.ts` 串行化同一插件操作，在 NewBrain 用户数据目录暂存并原子激活，维护版本化本地状态。
 - preload 只暴露 `list/get/install/setEnabled/remove/reconcile`，不暴露原始 IPC、URL 或路径。
 - renderer 复用现有插件页面，数据改为 Spring 返回的公开/个人、分类和安装状态；内置插件作为不可卸载来源合并。
 
@@ -56,11 +56,11 @@
 
 ## 测试与验收
 
-codeCN 测试覆盖：认证头、查询编码、非 2xx、无效 JSON、跨 origin、超时/取消；正确签名、哈希/签名错误、路径穿越、重复路径、压缩炸弹和 manifest 缺失；首次/重复安装、升级回滚、启停卸载、状态损坏、恢复与回报重试；IPC 未知输入和 renderer 的公开/个人、分类、搜索、空/错状态。
+NewBrain 测试覆盖：认证头、查询编码、非 2xx、无效 JSON、跨 origin、超时/取消；正确签名、哈希/签名错误、路径穿越、重复路径、压缩炸弹和 manifest 缺失；首次/重复安装、升级回滚、启停卸载、状态损坏、恢复与回报重试；IPC 未知输入和 renderer 的公开/个人、分类、搜索、空/错状态。
 
 契约联调启动本地 Node HTTP 服务器，返回由 Spring Controller 契约固定的 JSON，动态生成 Ed25519 与真实 Codex ZIP，记录请求头和状态回报，完整执行查询、安装、升级和撤销。Spring 增加 JSON/头部契约测试，防止 mock 漂移。
 
-质量门禁：codeCN 相关 Node tests、protocol/desktop typecheck、architecture check 和 production build；Spring 插件专项、完整 Maven、package、Javadoc 和 diff 检查；双方执行 UTF-8、秘密和差异范围检查。真实 MySQL/UI 验收未运行时必须明确报告。
+质量门禁：NewBrain 相关 Node tests、protocol/desktop typecheck、architecture check 和 production build；Spring 插件专项、完整 Maven、package、Javadoc 和 diff 检查；双方执行 UTF-8、秘密和差异范围检查。真实 MySQL/UI 验收未运行时必须明确报告。
 
 ## 实施顺序
 
@@ -73,4 +73,4 @@ codeCN 测试覆盖：认证头、查询编码、非 2xx、无效 JSON、跨 ori
 
 ## 关键决策
 
-采用真实文件与密码学测试而非只 mock 内部函数；不引入 H2 以避免 MySQL 方言造成错误信心；下载、文件和密钥验证只在 Electron main；使用 codeCN 独立插件目录；激活成功但回报失败时保留本地事实并重试。
+采用真实文件与密码学测试而非只 mock 内部函数；不引入 H2 以避免 MySQL 方言造成错误信心；下载、文件和密钥验证只在 Electron main；使用 NewBrain 独立插件目录；激活成功但回报失败时保留本地事实并重试。

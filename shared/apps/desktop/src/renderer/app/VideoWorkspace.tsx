@@ -28,10 +28,10 @@ export function VideoWorkspace({
   };
 
   const load = () => {
-    if (!projectId || !window.codecn?.getVideoTimeline) { setStatus("请选择视频项目"); return; }
+    if (!projectId || !window.newbrain?.getVideoTimeline) { setStatus("请选择视频项目"); return; }
     const generation = ++loadGeneration.current;
     setStatus("正在加载时间线");
-    void window.codecn.getVideoTimeline({ projectId }).then((value: any) => {
+    void window.newbrain.getVideoTimeline({ projectId }).then((value: any) => {
       if (generation !== loadGeneration.current) return;
       setTimeline(value);
       setStatus("时间线已保存");
@@ -47,8 +47,8 @@ export function VideoWorkspace({
     if (!localFileId && files[0]?.id) setLocalFileId(files[0].id);
   }, [files, localFileId, onSelectFile]);
   useEffect(() => {
-    if (!render?.renderId || !window.codecn?.getVideoRenderStatus || ["SUCCEEDED", "FAILED", "CANCELLED"].includes(render.status)) return;
-    const timer = window.setInterval(() => void window.codecn?.getVideoRenderStatus?.({ renderId: render.renderId }).then((value: any) => {
+    if (!render?.renderId || !window.newbrain?.getVideoRenderStatus || ["SUCCEEDED", "FAILED", "CANCELLED"].includes(render.status)) return;
+    const timer = window.setInterval(() => void window.newbrain?.getVideoRenderStatus?.({ renderId: render.renderId }).then((value: any) => {
       setRender(value);
       if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(value.status)) setStatus(`视频渲染${value.status === "SUCCEEDED" ? "完成" : `结束：${value.status}`}`);
     }), 1000);
@@ -58,21 +58,21 @@ export function VideoWorkspace({
   const clips: Clip[] = timeline?.clips || [];
   const duration = Math.max(Number(timeline?.durationMs || 0), 10_000);
   const addClip = () => {
-    if (!projectId || !selectedFile || !window.codecn?.addVideoClip) { setStatus("请先选择项目文件"); return; }
+    if (!projectId || !selectedFile || !window.newbrain?.addVideoClip) { setStatus("请先选择项目文件"); return; }
     loadGeneration.current += 1;
     setStatus("正在加入片段");
-    void window.codecn.addVideoClip({ projectId, trackType: "video", sourceFileId: selectedFile, startMs: Number(timeline?.durationMs || 0), durationMs: 5_000, sourceInMs: 0 })
+    void window.newbrain.addVideoClip({ projectId, trackType: "video", sourceFileId: selectedFile, startMs: Number(timeline?.durationMs || 0), durationMs: 5_000, sourceInMs: 0 })
       .then((value: any) => { setTimeline(value); setStatus("片段已加入时间线"); })
       .catch((error: unknown) => setStatus(error instanceof Error ? error.message : "片段添加失败"));
   };
   const startRender = async () => {
-    if (!projectId || !window.codecn?.startVideoRender) return;
-    try { const value = await window.codecn.startVideoRender({ projectId, outputRelativePath: "renders/output.mp4" }); setRender(value); setStatus("视频渲染中"); }
+    if (!projectId || !window.newbrain?.startVideoRender) return;
+    try { const value = await window.newbrain.startVideoRender({ projectId, outputRelativePath: "renders/output.mp4" }); setRender(value); setStatus("视频渲染中"); }
     catch (error) { setStatus(error instanceof Error ? error.message : "视频渲染失败"); }
   };
   const cancelRender = async () => {
-    if (!render?.renderId || !window.codecn?.cancelVideoRender) return;
-    try { const value = await window.codecn.cancelVideoRender({ renderId: render.renderId }); setRender(value); setStatus("视频渲染已取消"); }
+    if (!render?.renderId || !window.newbrain?.cancelVideoRender) return;
+    try { const value = await window.newbrain.cancelVideoRender({ renderId: render.renderId }); setRender(value); setStatus("视频渲染已取消"); }
     catch (error) { setStatus(error instanceof Error ? error.message : "取消渲染失败"); }
   };
   const grouped = useMemo(() => (["video", "audio", "subtitle"] as const).map((trackType) => ({ trackType, clips: clips.filter((clip) => clip.trackType === trackType) })), [clips]);

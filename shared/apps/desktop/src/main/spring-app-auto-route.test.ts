@@ -44,8 +44,8 @@ test("fetchSpringAppAutoRoute posts to /v1/auto/route and maps chat decision wit
   assert.equal(calls[0].init.signal, undefined);
   const headers = calls[0].init.headers as Record<string, string>;
   assert.equal(headers.Authorization, "Bearer tok");
-  assert.equal(headers["X-CodeCN-Thread-Id"], "thread-a");
-  assert.equal(headers["X-CodeCN-Request-Id"], "req-1");
+  assert.equal(headers["X-NewBrain-Thread-Id"], "thread-a");
+  assert.equal(headers["X-NewBrain-Request-Id"], "req-1");
   const body = JSON.parse(String(calls[0].init.body || "{}"));
   assert.equal(body.thread_id, "thread-a");
   assert.equal(body.request_id, "req-1");

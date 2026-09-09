@@ -111,7 +111,7 @@ test("retries empty assistant responses when the gateway error is marked retryab
           citations: []
         };
       }
-      return { content: "你好，我是 codeCN。", toolCalls: [], webSearchCalls: [], citations: [] };
+      return { content: "你好，我是 NewBrain。", toolCalls: [], webSearchCalls: [], citations: [] };
     },
     isRetryableError: (error) => error instanceof Error
       && /did not include assistant content or tool calls/i.test(error.message),
@@ -122,7 +122,7 @@ test("retries empty assistant responses when the gateway error is marked retryab
   const execution = baseExecution();
   const result = await service.execute(execution.input);
   assert.equal(calls, 2);
-  assert.equal(result.content, "你好，我是 codeCN。");
+  assert.equal(result.content, "你好，我是 NewBrain。");
   assert.deepEqual(execution.retries, ["request-1"]);
 });
 

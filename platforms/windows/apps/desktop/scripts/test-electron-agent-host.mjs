@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9367);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9367);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
@@ -34,17 +34,17 @@ function evaluate(expression, timeoutMs = 15_000) {
 }
 
 try {
-  const started = await evaluate(`window.codecn.getTerminalSession()`);
+  const started = await evaluate(`window.newbrain.getTerminalSession()`);
   assert.equal(started.isRunning, true, "Agent-host terminal did not start.");
-  await evaluate(`window.codecn.writeTerminalInput(${JSON.stringify("Write-Output CODECN_AGENT_HOST_E2E\r\n")})`);
+  await evaluate(`window.newbrain.writeTerminalInput(${JSON.stringify("Write-Output NEWBRAIN_AGENT_HOST_E2E\r\n")})`);
   const deadline = Date.now() + 10_000;
   let snapshot;
   while (Date.now() < deadline) {
-    snapshot = await evaluate(`window.codecn.getTerminalSession()`);
-    if (snapshot.lines?.some((line) => line.includes("CODECN_AGENT_HOST_E2E"))) break;
+    snapshot = await evaluate(`window.newbrain.getTerminalSession()`);
+    if (snapshot.lines?.some((line) => line.includes("NEWBRAIN_AGENT_HOST_E2E"))) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  assert.ok(snapshot.lines.some((line) => line.includes("CODECN_AGENT_HOST_E2E")), "Terminal output did not cross the agent-host boundary.");
+  assert.ok(snapshot.lines.some((line) => line.includes("NEWBRAIN_AGENT_HOST_E2E")), "Terminal output did not cross the agent-host boundary.");
   console.log(`electron agent host passed: shell=${snapshot.shell}, lines=${snapshot.lines.length}`);
 } finally {
   socket.close();

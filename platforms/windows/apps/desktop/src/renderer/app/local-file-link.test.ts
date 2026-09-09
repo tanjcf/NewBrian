@@ -21,7 +21,7 @@ test("recognizes generated document paths without turning ordinary inline code i
 test("routes local-file clicks directly without a duplicate global event bus", () => {
   const ui = readFileSync(new URL("../ui.tsx", import.meta.url), "utf8");
   const workspace = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
-  const registrations = `${ui}\n${workspace}`.match(/addEventListener\("codecn:open-local-file"/g) ?? [];
+  const registrations = `${ui}\n${workspace}`.match(/addEventListener\("newbrain:open-local-file"/g) ?? [];
   assert.equal(registrations.length, 0);
   assert.match(workspace, /const openLocalFilePreview[\s\S]*setPreviewPlacement\("side"\)[\s\S]*api\.readWorkspaceFile/);
   assert.match(workspace, /reportRendererDiagnostic/);

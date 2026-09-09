@@ -54,7 +54,7 @@ await mkdir(outputRoot, { recursive: true });
 await rm(temporary, { recursive: true, force: true });
 await cp(shared, temporary, { recursive: true, force: true, filter: includeManagedSource });
 await cp(rust, path.join(temporary, "rust"), { recursive: true, force: true, filter: includeManagedSource });
-for (const configName of ["codecn.bootstrap.json", "codecn.config.json", "codecn.features.json", "codecn.workspaces.json"]) {
+for (const configName of ["newbrain.bootstrap.json", "newbrain.config.json", "newbrain.features.json", "newbrain.workspaces.json"]) {
   const candidates = [path.join(root, configName), path.join(shared, configName)];
   const source = candidates.find((candidate) => existsSync(candidate));
   if (source) await cp(source, path.join(temporary, configName), { force: true });
@@ -70,7 +70,7 @@ const metadata = {
   generatedAt: new Date().toISOString(),
   sourceLayers: ["shared", ...targetLayers[target]]
 };
-await writeFile(path.join(temporary, ".codecn-source.json"), `${JSON.stringify(metadata, null, 2)}\n`);
+await writeFile(path.join(temporary, ".newbrain-source.json"), `${JSON.stringify(metadata, null, 2)}\n`);
 
 async function publishMaterializedTree() {
   // A Windows materialized workspace normally contains installed dependencies

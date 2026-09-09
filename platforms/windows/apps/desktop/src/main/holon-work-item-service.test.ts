@@ -32,7 +32,7 @@ async function fixture(execute: (input: any) => Promise<void>) {
       typeof import("./holon-runtime-projector.js")
     >
   ]);
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-work-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-work-"));
   const storage = new CodexStorage(root);
   const intervalCallbacks: Array<() => void> = [];
   const intervalDelays: number[] = [];

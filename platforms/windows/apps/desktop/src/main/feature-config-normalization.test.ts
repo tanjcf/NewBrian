@@ -42,14 +42,14 @@ test("keeps packaged builtin plugin contribution paths", () => {
   assert.equal(result.plugins[0]?.source, "builtin:pdf");
 });
 
-test("removes legacy Codex error-remediation features from codeCN configuration", () => {
+test("removes legacy Codex error-remediation features from NewBrain configuration", () => {
   const result = normalizeFeatureConfig({
     skills: [
       { id: "skill-error-auto-remediation", name: "error-auto-remediation", status: "enabled" },
       { id: "skill-keep", name: "Keep", status: "enabled" }
     ],
     automations: [
-      { id: "automation-error-remediation", title: "codeCN 每日异常自动修复", status: "scheduled", trigger: "daily" },
+      { id: "automation-error-remediation", title: "NewBrain 每日异常自动修复", status: "scheduled", trigger: "daily" },
       { id: "automation-keep", title: "Keep", status: "idle", trigger: "manual" }
     ]
   }, context);

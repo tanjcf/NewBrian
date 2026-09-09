@@ -36,15 +36,15 @@ async function waitFor(expression) {
   }
   throw new Error(`Not ready: ${expression}`);
 }
-const output = resolve(process.env.CODECN_LAYOUT_EVIDENCE || "../../../../evidence/video-layout-n1");
+const output = resolve(process.env.NEWBRAIN_LAYOUT_EVIDENCE || "../../../../evidence/video-layout-n1");
 await mkdir(output, { recursive: true });
 try {
-  await waitFor("Boolean(window.codecn && document.querySelector('.task-column'))");
+  await waitFor("Boolean(window.newbrain && document.querySelector('.task-column'))");
   const root = await mkdtemp(join(tmpdir(), "brain-layout-project-"));
   const projectId = await evaluate(`(async () => {
-    const catalog = await window.codecn.addWorkspace({ name: '视频创作', path: ${JSON.stringify(root)} });
+    const catalog = await window.newbrain.addWorkspace({ name: '视频创作', path: ${JSON.stringify(root)} });
     const local = catalog.find(item => item.path === ${JSON.stringify(root)});
-    const project = await window.codecn.createBrainProject({ name: '城市印象短片', primaryWorkspaceKey: 'video', localWorkspaceId: local.id });
+    const project = await window.newbrain.createBrainProject({ name: '城市印象短片', primaryWorkspaceKey: 'video', localWorkspaceId: local.id });
     localStorage.setItem('brain.resource-panel-width', '480');
     localStorage.setItem('brain.workspaceSelection.v2', JSON.stringify({ version: 2, selectedWorkspaceKey: 'video', catalogs: { video: { projectId: project.id, conversationId: '' } } }));
     return project.id;
@@ -85,8 +85,8 @@ try {
   const restored = await evaluate("document.querySelector('.brain-resource-panel').getBoundingClientRect().width");
   assert.ok(Math.abs(restored - savedWidth) < 2, "Tools width must survive reload");
   await evaluate(`(async () => {
-    const local = (await window.codecn.listWorkspaces()).find(item => item.path === ${JSON.stringify(root)});
-    await window.codecn.addWorkspaceThread({ workspaceId: local.id, title: '布局校验对话', summary: '', scope: 'chat', brainWorkspaceKey: 'video' });
+    const local = (await window.newbrain.listWorkspaces()).find(item => item.path === ${JSON.stringify(root)});
+    await window.newbrain.addWorkspaceThread({ workspaceId: local.id, title: '布局校验对话', summary: '', scope: 'chat', brainWorkspaceKey: 'video' });
   })()`);
   await command("Page.reload");
   await waitFor("[...document.querySelectorAll('.thread-row')].some(el => el.textContent.includes('布局校验对话'))");

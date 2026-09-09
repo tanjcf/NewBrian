@@ -1,8 +1,8 @@
 {
-  "name": "codecn-brain",
+  "name": "newbrain",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-platform source workspace for codeCN",
+  "description": "Cross-platform source workspace for NewBrain",
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {

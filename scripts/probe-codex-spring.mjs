@@ -9,10 +9,10 @@ const args = Object.fromEntries(process.argv.slice(2).map(arg => { const offset 
 const cli = args["--cli"] || "codex";
 const version = execFileSync(cli, ["--version"], { encoding: "utf8", windowsHide: true }).trim();
 const gateway = new URL(args["--gateway"] || "http://120.48.151.202:8790/v1");
-let apiKey = process.env.CODECN_CODEX_API_KEY || "";
+let apiKey = process.env.NEWBRAIN_CODEX_API_KEY || "";
 if (!apiKey && args["--auth-file"]) apiKey = JSON.parse(await readFile(args["--auth-file"], "utf8")).access_token || "";
 if (!apiKey) {
-  console.log(JSON.stringify({ cli: version, compatible: false, status: "NOT_VERIFIED", reason: "CODECN_CODEX_API_KEY_REQUIRED" }));
+  console.log(JSON.stringify({ cli: version, compatible: false, status: "NOT_VERIFIED", reason: "NEWBRAIN_CODEX_API_KEY_REQUIRED" }));
   process.exitCode = 2;
 } else {
   const source = args["--sdk-source"];

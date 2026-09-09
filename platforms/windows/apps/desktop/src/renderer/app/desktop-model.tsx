@@ -271,7 +271,7 @@ export type SettingsNavIconName =
 
 declare global {
   interface Window {
-    codecn?: {
+    newbrain?: {
       listBrainWorkspaces: () => Promise<BrainWorkspaceDto[]>;
       listBrainProjects: (input?: BrainProjectListInput) => Promise<BrainProjectDto[]>;
       createBrainProject: (input: BrainProjectCreateInput) => Promise<BrainProjectDto>;
@@ -366,7 +366,19 @@ declare global {
       confirmGovernmentWritingSpecification: (input: { threadId?: string; goalId: string; versionId: string }) => Promise<any>;
       getAuthStatus: () => Promise<DesktopAuthStatusState>;
   getBillingSubscription: () => Promise<Record<string, unknown>>;
+  getSubscriptionCatalog: () => Promise<unknown>;
+  rechargeWallet: (input: { amount: number; payment_method?: string }) => Promise<Record<string, unknown>>;
+  purchasePlan: (input: { plan_id: number; payment_method?: string }) => Promise<Record<string, unknown>>;
+  setWalletOverageEnabled: (input: { enabled: boolean }) => Promise<Record<string, unknown>>;
   redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
+  listWalletInvoiceRecords: (input?: { limit?: number }) => Promise<unknown>;
+  listWalletInvoiceRequests: (input?: { limit?: number }) => Promise<unknown>;
+  createWalletInvoiceRequest: (input: {
+    invoice_title: string;
+    tax_no?: string;
+    contact_email?: string;
+    redeem_log_ids: number[];
+  }) => Promise<Record<string, unknown>>;
       listRepositoryPlugins: (input?: PluginCatalogQuery) => Promise<PluginCatalogSnapshot>;
       getRepositoryPlugin: (input: PluginKeyInput) => Promise<Record<string, unknown>>;
       installRepositoryPlugin: (input: PluginInstallInput) => Promise<PluginOperationResult>;
@@ -830,7 +842,7 @@ export const initialModelConfig: ModelConfigState = {
   reviewModel: "",
   reasoningEffort: "low",
   disableResponseStorage: true,
-  systemPrompt: "You are a helpful coding assistant for the codeCN desktop workspace.",
+  systemPrompt: "You are a helpful coding assistant for the NewBrain desktop workspace.",
   optimizeFor: "balanced",
   availableModels: []
 };
@@ -921,7 +933,7 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
   worktree: {
     defaultIsolated: true,
     keepArchived: false,
-    rootDir: ".codecn/worktrees"
+    rootDir: ".newbrain/worktrees"
   },
   browser: {
     autoOpenPreview: false,

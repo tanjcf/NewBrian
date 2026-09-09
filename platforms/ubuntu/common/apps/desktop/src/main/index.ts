@@ -100,11 +100,11 @@ const documentWorkerProcess = new DocumentWorkerProcess({
   acquireRustCore: (binding) => getRustCoreService().acquire(binding)
 });
 protocol.registerSchemesAsPrivileged([
-  { scheme: "codecn-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+  { scheme: "newbrain-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ]);
 
 function getPackagedUserDataPath() {
-  return join(os.homedir(), ".codecn");
+  return join(os.homedir(), ".newbrain");
 }
 
 if (app.isPackaged) {
@@ -112,14 +112,14 @@ if (app.isPackaged) {
 }
 
 function resolveWorkspacePath() {
-  const configured = process.env.CODECN_WORKSPACE_PATH?.trim();
+  const configured = process.env.NEWBRAIN_WORKSPACE_PATH?.trim();
   if (configured) {
     return resolve(configured);
   }
 
-  const userCodecnPath = getPackagedUserDataPath();
-  if (existsSync(join(userCodecnPath, "codecn.config.json"))) {
-    return userCodecnPath;
+  const userNewbrainPath = getPackagedUserDataPath();
+  if (existsSync(join(userNewbrainPath, "newbrain.config.json"))) {
+    return userNewbrainPath;
   }
 
   if (app.isPackaged) {
@@ -131,7 +131,7 @@ function resolveWorkspacePath() {
     let current = resolve(start);
     while (!seen.has(current)) {
       seen.add(current);
-      if (existsSync(join(current, "codecn.config.json"))) {
+      if (existsSync(join(current, "newbrain.config.json"))) {
         return current;
       }
       const parent = dirname(current);
@@ -144,7 +144,7 @@ function resolveWorkspacePath() {
 
   for (const candidate of [join(appDirectory, "..", "..", "..", "..")]) {
     const resolved = resolve(candidate);
-    if (existsSync(join(resolved, "codecn.config.json"))) {
+    if (existsSync(join(resolved, "newbrain.config.json"))) {
       return resolved;
     }
   }
@@ -153,14 +153,14 @@ function resolveWorkspacePath() {
 
 const workspacePath = resolveWorkspacePath();
 const desktopDebugLogPath = join(workspacePath, "tmp-desktop-debug.log");
-const modelConfigPath = join(workspacePath, "codecn.config.json");
-const workspaceCatalogPath = join(workspacePath, "codecn.workspaces.json");
-const featureConfigPath = join(workspacePath, "codecn.features.json");
+const modelConfigPath = join(workspacePath, "newbrain.config.json");
+const workspaceCatalogPath = join(workspacePath, "newbrain.workspaces.json");
+const featureConfigPath = join(workspacePath, "newbrain.features.json");
 const builtinPluginsRoot = app.isPackaged
   ? join(process.resourcesPath, "plugins")
   : join(app.getAppPath(), "build", "plugins");
-const bootstrapConfigPath = join(workspacePath, "codecn.bootstrap.json");
-const workspaceStateRoot = join(workspacePath, ".codecn");
+const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
+const workspaceStateRoot = join(workspacePath, ".newbrain");
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(
   privateModelCredentialPath,
@@ -182,13 +182,13 @@ let cachedAuthorizedModels: AuthorizedModel[] = [];
 const userSkillRoot = join(workspaceStateRoot, "skills");
 const userKnowledgeRoot = join(workspaceStateRoot, "user-knowledge");
 const authAuditLogPath = join(workspacePath, "tmp-auth-session.log");
-const bundledModelConfigPath = join(process.resourcesPath, "codecn.config.json");
-const bundledFeatureConfigPath = join(process.resourcesPath, "codecn.features.json");
-const bundledBootstrapConfigPath = join(process.resourcesPath, "codecn.bootstrap.json");
+const bundledModelConfigPath = join(process.resourcesPath, "newbrain.config.json");
+const bundledFeatureConfigPath = join(process.resourcesPath, "newbrain.features.json");
+const bundledBootstrapConfigPath = join(process.resourcesPath, "newbrain.bootstrap.json");
 const shellLabel = process.platform === "win32" ? "PowerShell" : process.platform === "linux" ? "bash" : "zsh";
 const platformLabel = process.platform === "win32" ? "Windows" : process.platform === "linux" ? "Ubuntu Linux" : "macOS";
 const automationTickMs = 60_000;
-const configuredGatewayBaseUrlEnv = process.env.CODECN_MODEL_BASE_URL?.trim() || "";
+const configuredGatewayBaseUrlEnv = process.env.NEWBRAIN_MODEL_BASE_URL?.trim() || "";
 const productionGatewayBaseUrl = "http://120.48.151.202:8790/v1";
 const defaultGatewayBaseUrl = app.isPackaged
   ? productionGatewayBaseUrl
@@ -239,7 +239,7 @@ let flowSchedulerTimer: NodeJS.Timeout | null = null;
 if (process.platform === "win32") {
   // Ensure taskbar grouping + icon resolution uses the packaged AppUserModelID.
   // Must be set before creating any windows.
-  app.setAppUserModelId("cn.codecn.desktop");
+  app.setAppUserModelId("cn.newbrain.desktop");
 }
 
 let runtime: Awaited<ReturnType<typeof createLocalRuntime>>;
@@ -615,7 +615,7 @@ async function reportRendererFailure(input: RendererFailureInput) {
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
-  if (!rendererFailureRestartScheduled && process.env.CODECN_DISABLE_CRASH_RESTART !== "1") {
+  if (!rendererFailureRestartScheduled && process.env.NEWBRAIN_DISABLE_CRASH_RESTART !== "1") {
     rendererFailureRestartScheduled = true;
     setTimeout(() => {
       explicitQuitRequested = true;
@@ -989,7 +989,7 @@ function createDesktopAuthHeaders(input: {
         : "windows";
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "X-Desktop-Client": "codecn",
+    "X-Desktop-Client": "newbrain",
     "X-Request-Id": randomUUID(),
     "X-Desktop-Device-Id": input.device.device_id,
     "X-Desktop-Device-Name": input.device.device_name,
@@ -1721,7 +1721,7 @@ async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
       })
     });
   } catch (error) {
-    const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
+    const message = `无法连接登录服务 ${gatewayOrigin}，请确认 newbrain.config.json 的 llm.baseUrl 可访问。`;
     await appendDesktopDebugLog(
       `desktop send login code fetch failed: ${error instanceof Error ? error.message : String(error)}`
     );
@@ -2116,7 +2116,7 @@ async function resolvePluginManifest(input: FeatureItemInput) {
   const candidates = stat.isDirectory()
     ? [
         join(absoluteSource, ".codex-plugin", "plugin.json"),
-        join(absoluteSource, ".codecn-plugin", "plugin.json"),
+        join(absoluteSource, ".newbrain-plugin", "plugin.json"),
         join(absoluteSource, "plugin.json"),
         join(absoluteSource, "package.json")
       ]
@@ -2421,7 +2421,7 @@ const defaultModelConfig: ModelConfig = {
   reviewModel: "gpt-5.4-mini",
   reasoningEffort: "medium",
   disableResponseStorage: true,
-  systemPrompt: "You are a helpful coding assistant for the codeCN desktop workspace."
+  systemPrompt: "You are a helpful coding assistant for the NewBrain desktop workspace."
 };
 
 const defaultDesktopPreferences: DesktopPreferences = {
@@ -2550,7 +2550,7 @@ function createBuiltinPluginSpecs(): PluginSpec[] {
     status: "enabled",
     source: builtinPluginUri(plugin.packageName),
     manifestPath: `${builtinPluginUri(plugin.packageName)}/.codex-plugin/plugin.json`,
-    publisher: "codeCN",
+    publisher: "NewBrain",
     capabilities: [...plugin.capabilities]
   }));
 }
@@ -2689,7 +2689,7 @@ function nowIso() {
 
 function makeWorkspaceEnvName(workspaceId: string) {
   const normalized = workspaceId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 32) || "workspace";
-  return `codecn-${normalized}`;
+  return `newbrain-${normalized}`;
 }
 
 function getManagedCondaRoot() {
@@ -2913,7 +2913,7 @@ function getCondaManualInstallMessage(
     ? `${environmentSummary.installerSpec.platformLabel}: ${environmentSummary.installerSpec.downloadUrl}`
     : "当前系统暂未配置自动下载的 Miniconda 安装包。";
   return [
-    `codeCN 没有检测到可复用的 conda，且暂时不能自动安装。`,
+    `NewBrain 没有检测到可复用的 conda，且暂时不能自动安装。`,
     "",
     `原因：${reason}`,
     `系统环境：${systemLabel}`,
@@ -2982,7 +2982,7 @@ function buildCondaShellEnv(condaPath: string, envPath: string) {
   nextEnv.CONDA_EXE = condaPath;
   nextEnv.CONDA_PREFIX = envPath;
   nextEnv.CONDA_DEFAULT_ENV = envPath;
-  nextEnv.CODECN_CONDA_ENV = envPath;
+  nextEnv.NEWBRAIN_CONDA_ENV = envPath;
   nextEnv.PYTHONNOUSERSITE = "1";
   return nextEnv;
 }
@@ -3361,7 +3361,7 @@ function createDefaultWorkspaceCatalog(): WorkspaceCatalogFile {
   return {
     workspaces: [
       normalizeWorkspace({
-        id: "workspace-codecn",
+        id: "workspace-newbrain",
         name: basename(defaultWorkspacePath),
         path: defaultWorkspacePath,
         threads: [
@@ -3996,7 +3996,7 @@ async function inspectStdioMcpServer(server: McpServerConfig): Promise<McpServer
           protocolVersion: "2024-11-05",
           capabilities: {},
           clientInfo: {
-            name: "codeCN desktop",
+            name: "NewBrain desktop",
             version: "0.1.0"
           }
         }
@@ -4229,7 +4229,7 @@ async function callStdioMcpTool(
           protocolVersion: "2024-11-05",
           capabilities: {},
           clientInfo: {
-            name: "codeCN desktop",
+            name: "NewBrain desktop",
             version: "0.1.0"
           }
         }
@@ -4590,17 +4590,17 @@ async function createPluginScaffold(input: FeatureItemInput) {
     throw new Error(`插件目录已经存在：${pluginRoot}`);
   }
 
-  const summary = input.summary?.trim() || `${pluginName} plugin for codeCN.`;
+  const summary = input.summary?.trim() || `${pluginName} plugin for NewBrain.`;
   const manifest = {
     name: pluginName,
     version,
     description: summary,
-    author: { name: "codeCN" },
+    author: { name: "NewBrain" },
     interface: {
       displayName: input.name?.trim() || pluginName,
       shortDescription: summary.slice(0, 120),
       longDescription: summary,
-      developerName: "codeCN",
+      developerName: "NewBrain",
       category: "Productivity",
       capabilities: ["Interactive"]
     }
@@ -4845,7 +4845,7 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
   }
 
   if (kind === "plugins") {
-    if (!input.manifestPath?.trim() && (input.source === "Codex" || input.source === "codeCN")) {
+    if (!input.manifestPath?.trim() && (input.source === "Codex" || input.source === "NewBrain")) {
       const nextPlugin: PluginSpec = {
         id: input.id?.trim() || makeId("plugin"),
         name: input.name?.trim() || "Unnamed plugin",
@@ -6427,7 +6427,7 @@ async function ensurePreviewWindow(targetUrl: string) {
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: "codeCN 浏览器预览",
+    title: "NewBrain 浏览器预览",
     show: false,
     webPreferences: {
       sandbox: true,
@@ -6460,7 +6460,7 @@ function registerBrowserAgentTools() {
   runtime.registerExternalTool({
     name: "browser.open",
     title: "打开网页",
-    description: "Open an HTTP or HTTPS URL in the codeCN browser.",
+    description: "Open an HTTP or HTTPS URL in the NewBrain browser.",
     kind: "read",
     risk: "low",
     requiresApproval: false,
@@ -6574,7 +6574,7 @@ function registerBrowserAgentTools() {
   runtime.registerExternalTool({
     name: "browser.screenshot",
     title: "网页截图",
-    description: "Capture the current codeCN browser page and return the PNG path.",
+    description: "Capture the current NewBrain browser page and return the PNG path.",
     kind: "read",
     risk: "low",
     requiresApproval: false,
@@ -7493,7 +7493,7 @@ async function storeComposerAttachment(sourcePath: string, originalName: string)
 }
 
 function makeComposerAttachmentUrl(filePath: string) {
-  return `codecn-attachment:///${encodeURIComponent(basename(filePath))}`;
+  return `newbrain-attachment:///${encodeURIComponent(basename(filePath))}`;
 }
 
 function getImageMimeType(filePath: string) {
@@ -8343,7 +8343,7 @@ function buildSnapshotWithTimeline(snapshot: ReturnType<typeof runtime.getSnapsh
 async function searchWorkspaceFiles(keyword: string) {
   const catalog = await readWorkspaceCatalog();
   const results: SearchResultSpec[] = [];
-  const skippedDirectories = new Set([".git", "node_modules", ".codecn", ".desktop-profile", "out", "dist", "build", "target"]);
+  const skippedDirectories = new Set([".git", "node_modules", ".newbrain", ".desktop-profile", "out", "dist", "build", "target"]);
 
   for (const workspace of catalog.workspaces) {
     const pending = [workspace.path];
@@ -8478,7 +8478,7 @@ function getLocalIpv4Address() {
 function mobilePageHtml(token: string) {
   return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>codeCN Mobile</title><style>
+<title>NewBrain Mobile</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:#17191d;font:15px system-ui,-apple-system,sans-serif}
 main{max-width:520px;margin:auto;padding:24px 20px 100px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}
 h1{margin:0;font-size:29px}small{color:#6f7782}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#20b15a;margin-right:6px}
@@ -8487,7 +8487,7 @@ h1{margin:0;font-size:29px}small{color:#6f7782}.dot{display:inline-block;width:8
   footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e5e7eb;padding:14px 20px}
   footer div{max-width:480px;margin:auto;display:flex;gap:10px}input{flex:1;height:44px;border:1px solid #dfe3e8;border-radius:22px;padding:0 16px}
   footer button{border:0;border-radius:22px;background:#0787f8;color:#fff;padding:0 20px;font-weight:650}
-</style></head><body><main><header><div><h1>codeCN</h1><small><span class="dot"></span>已连接桌面端</small></div><b>•••</b></header>
+</style></head><body><main><header><div><h1>NewBrain</h1><small><span class="dot"></span>已连接桌面端</small></div><b>•••</b></header>
 <section id="content">正在同步项目...</section></main><footer><div><input placeholder="搜索聊天"><button>聊天</button></div></footer>
 <script>
 const token=${JSON.stringify(token)};
@@ -9247,7 +9247,7 @@ function createMainWindow() {
   const minimumWidth = Math.max(560, Math.min(980, workAreaSize.width - 24));
   const minimumHeight = Math.max(420, Math.min(700, workAreaSize.height - 24));
 
-  const packagedIconPath = join(process.resourcesPath, "codecn.ico");
+  const packagedIconPath = join(process.resourcesPath, "newbrain.ico");
   const devIconPath = join(appDirectory, "..", "..", "build", "icon.ico");
   const legacyDevIconPath = join(workspacePath, "apps/desktop/build/icon.ico");
   const iconPath = app.isPackaged ? packagedIconPath : devIconPath;
@@ -9264,7 +9264,7 @@ function createMainWindow() {
           titleBarStyle: "hidden" as const
         }
       : {}),
-    title: "codeCN",
+    title: "NewBrain",
     backgroundColor: "#efe7d8",
     icon: resolvedIconPath,
     frame: false,
@@ -9402,7 +9402,7 @@ function createMainWindow() {
 
   const shouldOpenDevTools =
     process.argv.includes("--open-devtools") ||
-    process.env.CODECN_OPEN_DEVTOOLS === "1";
+    process.env.NEWBRAIN_OPEN_DEVTOOLS === "1";
 
   if (shouldOpenDevTools) {
     window.webContents.openDevTools({ mode: "detach" });
@@ -9441,7 +9441,7 @@ async function scheduleAutomaticUserKnowledgeSync(input?: {
     scheduleUserKnowledgeSync({
       auth: { gatewayBaseUrl, bearerToken },
       paths: {
-        userCodecnRoot: userKnowledgeRoot,
+        userNewbrainRoot: userKnowledgeRoot,
         projectWorkspacePath: input?.projectWorkspacePath,
         projectKey: input?.projectKey
       },
@@ -9488,8 +9488,8 @@ const readAuthorizedDesktopModelConfig = createReadAuthorizedDesktopModelConfig(
 function createAgentTurnControlPlane() {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.CODECN_E2E_AUTH_TOKEN?.trim() || "codecn-e2e"
+    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
+      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
       : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("AGENT_TURN_AUTH_REQUIRED");
@@ -9650,7 +9650,7 @@ function registerIpc() {
         ],
         help: [
           {
-            label: "codeCN 文档",
+            label: "NewBrain 文档",
             click: () => void electronShell.openExternal("https://developers.openai.com/codex/")
           },
           {
@@ -9675,11 +9675,11 @@ function registerIpc() {
           command("键盘快捷键", "shortcuts", "Ctrl+Shift+/"),
           separator,
           {
-            label: "关于 codeCN",
+            label: "关于 NewBrain",
             click: () => void dialog.showMessageBox(window, {
               type: "info",
-              title: "关于 codeCN",
-              message: "codeCN",
+              title: "关于 NewBrain",
+              message: "NewBrain",
               detail: `版本 ${app.getVersion()}\n面向 Windows 的智能编程协作桌面应用。`
             })
           }
@@ -9721,7 +9721,7 @@ function registerIpc() {
 
   ipcMain.handle("phase1:bootstrap", async () => {
     return {
-      appName: "codeCN",
+      appName: "NewBrain",
       platform: platformLabel,
       phase: "phase-1",
       shell: shellLabel,
@@ -10592,7 +10592,7 @@ function setupAppMenu(window: BrowserWindow) {
     },
     {
       label: "帮助",
-      submenu: [{ role: "about", label: "关于 codeCN" }]
+      submenu: [{ role: "about", label: "关于 NewBrain" }]
     }
   ];
 
@@ -10631,7 +10631,7 @@ const processQuitCoordinator = createAgentHostQuitCoordinator({
 app.on("before-quit", (event) => processQuitCoordinator.beforeQuit(event));
 
 app.whenReady().then(async () => {
-  protocol.handle("codecn-attachment", async (request) => {
+  protocol.handle("newbrain-attachment", async (request) => {
     const attachmentRoot = resolve(workspaceStateRoot, "attachments");
     const fileName = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, "");
     const filePath = resolve(attachmentRoot, fileName);

@@ -51,7 +51,7 @@ export class WorktreeManager {
   async create(input) {
     const repositoryRoot = await this.repositoryRoot();
     const taskId = safeSegment(input.taskId);
-    const baseRoot = this.storageRoot ?? path.join(path.dirname(repositoryRoot), ".codecn-worktrees", path.basename(repositoryRoot));
+    const baseRoot = this.storageRoot ?? path.join(path.dirname(repositoryRoot), ".newbrain-worktrees", path.basename(repositoryRoot));
     const worktreePath = path.resolve(baseRoot, taskId);
     if (worktreePath !== baseRoot && !worktreePath.startsWith(`${path.resolve(baseRoot)}${path.sep}`)) {
       throw new Error("Worktree path escaped its managed root.");

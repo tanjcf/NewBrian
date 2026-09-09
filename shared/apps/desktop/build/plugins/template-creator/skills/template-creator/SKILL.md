@@ -1,6 +1,6 @@
 ---
 name: template-creator
-description: Turn an existing DOCX, PPTX, or XLSX artifact into a reusable codeCN workspace template.
+description: Turn an existing DOCX, PPTX, or XLSX artifact into a reusable NewBrain workspace template.
 ---
 # Template Creator
 

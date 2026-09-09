@@ -1,17 +1,17 @@
 ---
 name: figma
-description: Use when the user wants Figma/FigJam work in codeCN — generate UI designs, flowcharts, architecture diagrams, design-to-code, or design-system updates that should appear in a Figma file. Also use when a Figma URL is pasted. Without Figma auth, guide the user to connect MCP/token or fall back to Mermaid/Visualize for local diagrams.
+description: Use when the user wants Figma/FigJam work in NewBrain — generate UI designs, flowcharts, architecture diagrams, design-to-code, or design-system updates that should appear in a Figma file. Also use when a Figma URL is pasted. Without Figma auth, guide the user to connect MCP/token or fall back to Mermaid/Visualize for local diagrams.
 metadata:
   short-description: Figma designs and FigJam diagrams
 ---
 
-# Figma (codeCN builtin)
+# Figma (NewBrain builtin)
 
-Use this router skill for any Figma-related request in codeCN.
+Use this router skill for any Figma-related request in NewBrain.
 
 ## Auth gate (required for “appear in Figma”)
 
-To **create or edit nodes inside the user’s Figma/FigJam cloud file**, codeCN must have Figma tools available:
+To **create or edit nodes inside the user’s Figma/FigJam cloud file**, NewBrain must have Figma tools available:
 
 1. Prefer **Figma Desktop MCP** (`http://127.0.0.1:3845/mcp`) via **设置 → MCP → ＋ Figma Desktop MCP** (enable desktop MCP in Figma Dev Mode first), **or**
 2. Another connected **Figma MCP** (e.g. remote `https://mcp.figma.com/mcp` if OAuth works), **or**

@@ -278,7 +278,7 @@ async function handleThreadMenuAction(action: string, workspace: WorkspaceCatalo
       writeClipboard(thread.id);
       return;
     case "copy-link":
-      writeClipboard(`codecn://workspace/${workspace.id}/thread/${thread.id}`);
+      writeClipboard(`newbrain://workspace/${workspace.id}/thread/${thread.id}`);
       return;
     case "fork-local":
       await forkThreadFromMenu(workspace, thread, false);
@@ -550,12 +550,12 @@ useEffect(() => {
 }, [showAccountMenu]);
 
 useEffect(() => {
-  if (!window.codecn) {
+  if (!window.newbrain) {
     setBootstrapState("未检测到 Electron preload API，当前只显示静态界面。");
     return;
   }
 
-  const codecnApi = window.codecn;
+  const codecnApi = window.newbrain;
   let mounted = true;
 
   async function load() {
@@ -624,8 +624,8 @@ useEffect(() => {
         let lastWorkspaceId = "";
         let lastThreadId = "";
         try {
-          lastWorkspaceId = localStorage.getItem("codecn.lastSelectedWorkspaceId.v1") || "";
-          lastThreadId = localStorage.getItem("codecn.lastSelectedThreadId.v1") || "";
+          lastWorkspaceId = localStorage.getItem("newbrain.lastSelectedWorkspaceId.v1") || "";
+          lastThreadId = localStorage.getItem("newbrain.lastSelectedThreadId.v1") || "";
         } catch {
           // 忽略读取失败
         }
@@ -652,7 +652,7 @@ useEffect(() => {
               setIsComposingNewThread(true);
               syncSnapshot(nextSnapshot);
               try {
-                localStorage.removeItem("codecn.lastSelectedThreadId.v1");
+                localStorage.removeItem("newbrain.lastSelectedThreadId.v1");
               } catch {
                 // Local storage recovery is best-effort; the in-memory selection is already valid.
               }
@@ -950,7 +950,7 @@ useEffect(() => {
           setIsComposingNewThread(true);
         }
         try {
-          localStorage.removeItem("codecn.lastSelectedThreadId.v1");
+          localStorage.removeItem("newbrain.lastSelectedThreadId.v1");
         } catch {
           // Local storage recovery is best-effort; the in-memory selection is already valid.
         }

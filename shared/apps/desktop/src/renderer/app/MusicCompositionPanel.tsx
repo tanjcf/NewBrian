@@ -10,10 +10,10 @@ export function MusicCompositionPanel(props: { projectId?: string; onMetadataSav
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    if (!props.projectId || !window.codecn?.getBrainWorkspaceSection) return;
+    if (!props.projectId || !window.newbrain?.getBrainWorkspaceSection) return;
     void Promise.all([
-      window.codecn.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "music", sectionKey: "lyrics" }),
-      window.codecn.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "music", sectionKey: "arrangement" })
+      window.newbrain.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "music", sectionKey: "lyrics" }),
+      window.newbrain.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "music", sectionKey: "arrangement" })
     ]).then(([lyrics, arrangement]) => {
       let meta = defaults;
       try { meta = { ...defaults, ...JSON.parse(arrangement.content) }; } catch { /* keep defaults */ }
@@ -23,13 +23,13 @@ export function MusicCompositionPanel(props: { projectId?: string; onMetadataSav
   }, [props.projectId]);
 
   const save = async () => {
-    if (!props.projectId || !window.codecn?.saveBrainWorkspaceSection) return;
+    if (!props.projectId || !window.newbrain?.saveBrainWorkspaceSection) return;
     const { lyrics, arrangement, ...meta } = value;
-    await window.codecn.saveBrainWorkspaceSection({
+    await window.newbrain.saveBrainWorkspaceSection({
       projectId: props.projectId, workspaceKey: "music", sectionKey: "lyrics",
       content: lyrics, expectedRevision: revision
     });
-    const saved = await window.codecn.saveBrainWorkspaceSection({
+    const saved = await window.newbrain.saveBrainWorkspaceSection({
       projectId: props.projectId, workspaceKey: "music", sectionKey: "arrangement",
       content: JSON.stringify({ theme: meta.theme, bpm: meta.bpm, keySignature: meta.keySignature, arrangement }, null, 2),
       expectedRevision: revision

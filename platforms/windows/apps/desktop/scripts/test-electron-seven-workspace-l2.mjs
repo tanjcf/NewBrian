@@ -33,7 +33,7 @@ for (const suite of suites) {
   const scriptPath = join(scriptDir, suite.script);
   const startedAt = Date.now();
   const child = spawnSync(process.execPath, [scriptPath], {
-    env: { ...process.env, CODECN_E2E_REMOTE_DEBUG_PORT: String(suite.port), CODECN_E2E_FORCE_FRESH: "1" },
+    env: { ...process.env, NEWBRAIN_E2E_REMOTE_DEBUG_PORT: String(suite.port), NEWBRAIN_E2E_FORCE_FRESH: "1" },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
   });

@@ -197,7 +197,7 @@ test("autoSkill can revive persisted and heuristic government specialty", () => 
 });
 
 test("project local skills can auto-wake even when Skill 自动唤醒 is off", () => {
-  const projectSkill = { name: "market-brief", description: "市场简报", path: "C:/proj/.codecn/skills/market-brief" };
+  const projectSkill = { name: "market-brief", description: "市场简报", path: "C:/proj/.newbrain/skills/market-brief" };
   const selection = selectModelChatSkills({
     requestedSkillNames: [],
     persistedSkillNames: [],

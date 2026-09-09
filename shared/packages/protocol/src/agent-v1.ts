@@ -1,10 +1,10 @@
 /**
- * codeCN ↔ spring-app agent runtime protocol v1 (`codecn.agent.v1`).
+ * NewBrain ↔ spring-app agent runtime protocol v1 (`newbrain.agent.v1`).
  * Phase 0 freeze: types + enums shared with spring-app DTOs / JSON fixtures.
  * Hybrid authority (Mode A): local checkpoint + spring policy/skills/cancel.
  */
 
-export const AGENT_PROTOCOL_ID = "codecn.agent.v1" as const;
+export const AGENT_PROTOCOL_ID = "newbrain.agent.v1" as const;
 export const AGENT_RUNTIME_PROTOCOL_VERSION = 1 as const;
 
 /** Preference / fleet flag: when false, desktop must not call ClawHub directly. */

@@ -42,7 +42,7 @@ function createStoredZip(entries) {
 }
 
 test("creates and validates code and web artifacts through the Tool Host", async () => {
-  const workspacePath = await mkdtemp(path.join(tmpdir(), "codecn-artifact-"));
+  const workspacePath = await mkdtemp(path.join(tmpdir(), "newbrain-artifact-"));
   try {
     const host = new ToolHostClient({ timeoutMs: 10_000 });
     const service = new ArtifactService({ workspacePath, invokeTool: (name, input) => host.invoke(name, input, { workspacePath, shellEnv: {} }) });
@@ -57,7 +57,7 @@ test("creates and validates code and web artifacts through the Tool Host", async
 });
 
 test("rejects a fake Office artifact", async () => {
-  const workspacePath = await mkdtemp(path.join(tmpdir(), "codecn-artifact-office-"));
+  const workspacePath = await mkdtemp(path.join(tmpdir(), "newbrain-artifact-office-"));
   try {
     const host = new ToolHostClient({ timeoutMs: 10_000 });
     const service = new ArtifactService({ workspacePath, invokeTool: (name, input) => host.invoke(name, input, { workspacePath, shellEnv: {} }) });
@@ -70,7 +70,7 @@ test("rejects a fake Office artifact", async () => {
 });
 
 test("parses OOXML structure and visible presentation content", async () => {
-  const workspacePath = await mkdtemp(path.join(tmpdir(), "codecn-artifact-pptx-"));
+  const workspacePath = await mkdtemp(path.join(tmpdir(), "newbrain-artifact-pptx-"));
   try {
     const host = new ToolHostClient({ timeoutMs: 10_000 });
     const service = new ArtifactService({ workspacePath, invokeTool: (name, input) => host.invoke(name, input, { workspacePath, shellEnv: {} }) });

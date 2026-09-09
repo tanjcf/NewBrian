@@ -14,7 +14,7 @@ export function registerGoalRuntimeTools(
 ) {
   const register = (definition: Record<string, unknown>, execute: (input: Record<string, unknown>) => Promise<unknown> | unknown) =>
     targetRuntime.registerExternalTool({
-      namespace: "codecn-goal",
+      namespace: "newbrain-goal",
       requiresApproval: false,
       risk: "low",
       ...definition

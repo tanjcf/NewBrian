@@ -1418,7 +1418,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       input.publishActivity({
         type: "run",
         title: "目标仍在执行，正在自动续接",
-        detail: `当前目标尚未完成，CodeCN 正在开始第 ${continuation + 1} 个连续执行轮次。`
+        detail: `当前目标尚未完成，NewBrain 正在开始第 ${continuation + 1} 个连续执行轮次。`
       }, input.modelInput.requestId);
       const continuationMessages: AgentMessage[] = [
         ...loopSnapshot.messages,
@@ -1564,7 +1564,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
     ) {
       const title = governmentWorkflowEnabled
         ? "政务写作交付文档"
-        : input.latestUserRequest.replace(/\s+/g, " ").replace(/\.(?:pdf|docx|xlsx|pptx)\b/ig, "").trim().slice(0, 80) || "CodeCN output";
+        : input.latestUserRequest.replace(/\s+/g, " ").replace(/\.(?:pdf|docx|xlsx|pptx)\b/ig, "").trim().slice(0, 80) || "NewBrain output";
       const artifactContent = governmentWorkflowEnabled
         ? prepareGovernmentPdfContent(
             generatedContent,

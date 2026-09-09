@@ -10,17 +10,17 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const port = 19_000 + (process.pid % 2_000);
 const debugPort = 24_000 + (process.pid % 2_000);
 const evidenceDir = fileURLToPath(new URL("../../../../integration-artifacts/usage-exception-feedback/", import.meta.url));
-const root = await mkdtemp(join(tmpdir(), "codecn-usage-feedback-e2e-"));
-const stateRoot = join(root, ".codecn");
+const root = await mkdtemp(join(tmpdir(), "newbrain-usage-feedback-e2e-"));
+const stateRoot = join(root, ".newbrain");
 await mkdir(stateRoot, { recursive: true });
 await mkdir(evidenceDir, { recursive: true });
-await writeFile(join(root, "codecn.config.json"), `${JSON.stringify({ llm: {
-  provider: "codecn", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "codecn-e2e",
-  wireApi: "responses", model: "codecn-e2e-model", reviewModel: "codecn-e2e-model",
+await writeFile(join(root, "newbrain.config.json"), `${JSON.stringify({ llm: {
+  provider: "newbrain", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "newbrain-e2e",
+  wireApi: "responses", model: "newbrain-e2e-model", reviewModel: "newbrain-e2e-model",
   reasoningEffort: "medium", disableResponseStorage: true
 } }, null, 2)}\n`);
 await writeFile(join(stateRoot, "authorized-models.json"), `${JSON.stringify([{
-  id: "codecn-e2e-model", model: "codecn-e2e-model", label: "E2E", provider: "codecn"
+  id: "newbrain-e2e-model", model: "newbrain-e2e-model", label: "E2E", provider: "newbrain"
 }], null, 2)}\n`);
 await writeFile(join(stateRoot, "desktop-auth.json"), `${JSON.stringify({
   mode: "desktop_token", access_token: `plain:${Buffer.from("usage-feedback-user").toString("base64")}`,
@@ -28,7 +28,7 @@ await writeFile(join(stateRoot, "desktop-auth.json"), `${JSON.stringify({
 }, null, 2)}\n`);
 
 const server = spawn(process.execPath, [fileURLToPath(new URL("./usage-exception-feedback-mock-server.mjs", import.meta.url))], {
-  env: { ...process.env, CODECN_USAGE_FEEDBACK_PORT: String(port) }, windowsHide: true,
+  env: { ...process.env, NEWBRAIN_USAGE_FEEDBACK_PORT: String(port) }, windowsHide: true,
   stdio: ["ignore", "pipe", "inherit"]
 });
 await new Promise((resolve, reject) => {
@@ -38,9 +38,9 @@ await new Promise((resolve, reject) => {
 });
 
 Object.assign(process.env, {
-  CODECN_E2E_FORCE_FRESH: "1", CODECN_E2E_USE_LIVE_WORKSPACE: "1",
-  CODECN_E2E_MODEL_CONFIG_PATH: join(root, "codecn.config.json"), CODECN_MODEL_BASE_URL: `http://127.0.0.1:${port}/v1`,
-  CODECN_E2E_MODEL_ID: "codecn-e2e-model", CODECN_E2E_AUTH_BYPASS: "1"
+  NEWBRAIN_E2E_FORCE_FRESH: "1", NEWBRAIN_E2E_USE_LIVE_WORKSPACE: "1",
+  NEWBRAIN_E2E_MODEL_CONFIG_PATH: join(root, "newbrain.config.json"), NEWBRAIN_MODEL_BASE_URL: `http://127.0.0.1:${port}/v1`,
+  NEWBRAIN_E2E_MODEL_ID: "newbrain-e2e-model", NEWBRAIN_E2E_AUTH_BYPASS: "1"
 });
 
 let session;
@@ -51,17 +51,17 @@ try {
   const workspacePath = join(root, "project");
   await mkdir(workspacePath, { recursive: true });
   const target = await cdp.evaluate(`(async () => {
-    let catalog = await window.codecn.listWorkspaces();
+    let catalog = await window.newbrain.listWorkspaces();
     if (!catalog.some((item) => item.path === ${JSON.stringify(workspacePath)})) {
-      catalog = await window.codecn.addWorkspace({ name: "Usage Feedback E2E", path: ${JSON.stringify(workspacePath)} });
+      catalog = await window.newbrain.addWorkspace({ name: "Usage Feedback E2E", path: ${JSON.stringify(workspacePath)} });
     }
     let workspace = catalog.find((item) => item.path === ${JSON.stringify(workspacePath)});
     if (!(workspace?.threads || []).length) {
-      catalog = await window.codecn.addWorkspaceThread({ workspaceId: workspace.id, title: "Usage Feedback", summary: "E2E", scope: "chat" });
+      catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Usage Feedback", summary: "E2E", scope: "chat" });
       workspace = catalog.find((item) => item.id === workspace.id);
     }
     const thread = workspace.threads[0];
-    await window.codecn.activateWorkspaceThread({ workspaceId: workspace.id, threadId: thread.id });
+    await window.newbrain.activateWorkspaceThread({ workspaceId: workspace.id, threadId: thread.id });
     return { workspaceId: workspace.id, threadId: thread.id };
   })()`);
   assert.ok(target.workspaceId && target.threadId);
@@ -70,7 +70,7 @@ try {
   await cdp.evaluate(`document.querySelector('[data-testid="sidebar-task-row"]')?.click()`);
   await cdp.waitFor("existing thread composer", `Boolean(document.querySelector('.task-column:not(.new-chat-task) [data-testid="composer-input"]'))`);
 
-  await submitCommand(cdp, "codecn使用异常：生成文档后一直没有完成 password=secret");
+  await submitCommand(cdp, "newbrain使用异常：生成文档后一直没有完成 password=secret");
   await cdp.waitFor("feedback preview", `Boolean(document.querySelector('[data-testid="usage-exception-feedback-dialog"]'))`, 30_000);
   const preview = await cdp.evaluate(`(() => { const dialog = document.querySelector('[data-testid="usage-exception-feedback-dialog"]'); return {
     title: dialog?.querySelector('h2')?.textContent, editable: dialog?.querySelectorAll('input, textarea, [contenteditable="true"]').length,
@@ -86,10 +86,10 @@ try {
   await cdp.clickText("取消");
   await cdp.waitFor("cancelled preview", `!document.querySelector('[data-testid="usage-exception-feedback-dialog"]')`);
   assert.equal((await remoteState()).uploads.length, 0);
-  assert.match(await cdp.evaluate(`document.querySelector('.task-column:not(.new-chat-task) [data-testid="composer-input"]')?.value || ''`), /^codecn使用异常/);
+  assert.match(await cdp.evaluate(`document.querySelector('.task-column:not(.new-chat-task) [data-testid="composer-input"]')?.value || ''`), /^newbrain使用异常/);
   await cdp.screenshot(join(evidenceDir, "cancel.png"));
 
-  await submitCommand(cdp, "codecn使用异常：生成文档后一直没有完成 password=secret");
+  await submitCommand(cdp, "newbrain使用异常：生成文档后一直没有完成 password=secret");
   await cdp.waitFor("online preview", `Boolean(document.querySelector('[data-testid="usage-exception-feedback-dialog"]'))`, 30_000);
   await cdp.clickText("确认提交");
   await cdp.waitFor("online submitted status", `document.body.innerText.includes('异常已提交，编号')`, 20_000);
@@ -99,7 +99,7 @@ try {
   assert.doesNotMatch(JSON.stringify((await remoteState()).uploads[0].body), /password=secret/);
   await cdp.screenshot(join(evidenceDir, "confirmed-id.png"));
 
-  await submitCommand(cdp, "codecn使用异常：生成文档后一直没有完成 password=secret");
+  await submitCommand(cdp, "newbrain使用异常：生成文档后一直没有完成 password=secret");
   await cdp.waitFor("offline preview", `Boolean(document.querySelector('[data-testid="usage-exception-feedback-dialog"]'))`, 30_000);
   await fetch(`http://127.0.0.1:${port}/__offline`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offline: true }) });
   await cdp.clickText("确认提交");

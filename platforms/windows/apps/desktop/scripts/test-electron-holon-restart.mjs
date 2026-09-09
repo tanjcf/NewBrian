@@ -12,8 +12,8 @@ const debugPort = 9342;
 const server = spawn(process.execPath, [fileURLToPath(new URL("./holon-contract-model-server.mjs", import.meta.url))], {
   env: {
     ...process.env,
-    CODECN_HOLON_TEST_PORT: String(port),
-    CODECN_HOLON_RESTART_MODE: "1"
+    NEWBRAIN_HOLON_TEST_PORT: String(port),
+    NEWBRAIN_HOLON_RESTART_MODE: "1"
   },
   windowsHide: true,
   stdio: ["ignore", "pipe", "inherit"]
@@ -26,9 +26,9 @@ await new Promise((resolve, reject) => {
   server.once("exit", (code) => reject(new Error(`Holon restart server exited: ${code}`)));
 });
 
-process.env.CODECN_MODEL_BASE_URL = `http://127.0.0.1:${port}/v1`;
-process.env.CODECN_E2E_MODEL_ID = "codecn-e2e-model";
-process.env.CODECN_E2E_AUTH_BYPASS = "1";
+process.env.NEWBRAIN_MODEL_BASE_URL = `http://127.0.0.1:${port}/v1`;
+process.env.NEWBRAIN_E2E_MODEL_ID = "newbrain-e2e-model";
+process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
 let workspacePath = "";
 let firstSession;
 let restartedSession;
@@ -52,9 +52,9 @@ try {
   firstSession.close({ preserveWorkspace: true });
   await waitForDebugPortDown(debugPort);
 
-  process.env.CODECN_E2E_USE_LIVE_WORKSPACE = "1";
-  process.env.CODECN_E2E_MODEL_CONFIG_PATH = join(workspacePath, "codecn.config.json");
-  process.env.CODECN_WORKSPACE_PATH = workspacePath;
+  process.env.NEWBRAIN_E2E_USE_LIVE_WORKSPACE = "1";
+  process.env.NEWBRAIN_E2E_MODEL_CONFIG_PATH = join(workspacePath, "newbrain.config.json");
+  process.env.NEWBRAIN_WORKSPACE_PATH = workspacePath;
   restartedSession = await ensureElectronE2ESession(debugPort);
   cdp = await connectElectronInput(restartedSession.pages, restartedSession.processId);
   await openHolon(cdp);
@@ -68,7 +68,7 @@ try {
     && state.events.some((event) => event.work_item_id === "wi_e2e_restart" && event.event_type === "work_item.cancelled"), 30_000);
   assert.equal(finalState.responseCount, 1);
   const evidence = { ok: true, input: { driver: "windows-user32-sendinput", nativeEventCount: nativeEventCount + cdp.inputEvidence().nativeEventCount }, interrupted: true, explicitDiscard: true, duplicateExecutions: 0 };
-  const evidencePath = fileURLToPath(new URL("../../../integration-artifacts/holon-codecn/restart-recovery.json", import.meta.url));
+  const evidencePath = fileURLToPath(new URL("../../../integration-artifacts/holon-newbrain/restart-recovery.json", import.meta.url));
   mkdirSync(dirname(evidencePath), { recursive: true });
   writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(evidence)}\n`);

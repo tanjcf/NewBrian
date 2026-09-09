@@ -34,10 +34,10 @@ test("selects model credentials with explicit secure precedence", () => {
     source: "desktop_access_token", bearerToken: "access", useGatewayBaseUrl: true
   });
 
-  const previousBypass = process.env.CODECN_E2E_AUTH_BYPASS;
-  const previousBaseUrl = process.env.CODECN_MODEL_BASE_URL;
-  process.env.CODECN_E2E_AUTH_BYPASS = "1";
-  process.env.CODECN_MODEL_BASE_URL = "http://127.0.0.1:8790/v1";
+  const previousBypass = process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+  const previousBaseUrl = process.env.NEWBRAIN_MODEL_BASE_URL;
+  process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
+  process.env.NEWBRAIN_MODEL_BASE_URL = "http://127.0.0.1:8790/v1";
   try {
     assert.deepEqual(authPolicy.selectModelRequestAuth({
       mode: "desktop_token", access_token: " live-user-token "
@@ -47,13 +47,13 @@ test("selects model credentials with explicit secure precedence", () => {
     assert.deepEqual(authPolicy.selectModelRequestAuth({
       mode: "desktop_token", access_token: ""
     }, ""), {
-      source: "dev_e2e_bypass", bearerToken: "codecn-e2e", useGatewayBaseUrl: true
+      source: "dev_e2e_bypass", bearerToken: "newbrain-e2e", useGatewayBaseUrl: true
     });
   } finally {
-    if (previousBypass === undefined) delete process.env.CODECN_E2E_AUTH_BYPASS;
-    else process.env.CODECN_E2E_AUTH_BYPASS = previousBypass;
-    if (previousBaseUrl === undefined) delete process.env.CODECN_MODEL_BASE_URL;
-    else process.env.CODECN_MODEL_BASE_URL = previousBaseUrl;
+    if (previousBypass === undefined) delete process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+    else process.env.NEWBRAIN_E2E_AUTH_BYPASS = previousBypass;
+    if (previousBaseUrl === undefined) delete process.env.NEWBRAIN_MODEL_BASE_URL;
+    else process.env.NEWBRAIN_MODEL_BASE_URL = previousBaseUrl;
   }
 
   assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, " configured ").source, "configured_api_key");

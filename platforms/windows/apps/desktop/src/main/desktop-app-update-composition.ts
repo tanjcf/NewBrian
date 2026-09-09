@@ -39,7 +39,7 @@ function broadcastAppUpdateProgress(progress: DesktopAppUpdateProgress) {
 }
 
 /**
- * Schedule silent msiexec after the app exits so LocalAppData/.codecn files unlock.
+ * Schedule silent msiexec after the app exits so LocalAppData/.newbrain files unlock.
  * Returns immediately so the UI can show「安装完成即将重启」and quit.
  */
 async function scheduleDeferredSilentMsiexec(input: {
@@ -62,7 +62,7 @@ async function scheduleDeferredSilentMsiexec(input: {
     dataRoot: dirname(app.getPath("userData")),
     chatRoot: join(dirname(executablePath), "tmp"),
     downloadDir: input.downloadDir,
-    backupRoot: join(app.getPath("appData"), "codecn-update-backups", runId),
+    backupRoot: join(app.getPath("appData"), "newbrain-update-backups", runId),
     resultPath: join(input.downloadDir, "last-msi-update.json")
   });
   try {
@@ -93,7 +93,7 @@ async function scheduleDeferredUlitZipApply(input: {
     zipPath: input.zipPath,
     installRoot: input.installRoot,
     stagingDir,
-    processImageName: "codeCN.exe",
+    processImageName: "NewBrain.exe",
     maxWaitSeconds: 90
   });
   try {
@@ -185,7 +185,7 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
       return error || "";
     },
     afterSilentSuccess: () => {
-      // Detached msiexec waits for exit; quit so files unlock and LaunchCodecnAfterInstall can relaunch.
+      // Detached msiexec waits for exit; quit so files unlock and LaunchNewbrainAfterInstall can relaunch.
       setTimeout(() => {
         try {
           app.quit();

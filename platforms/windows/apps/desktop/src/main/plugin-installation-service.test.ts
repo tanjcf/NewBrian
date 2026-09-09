@@ -32,7 +32,7 @@ async function release(version: string) {
 }
 
 test("installs, disables, enables and removes a signed plugin atomically", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-plugins-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-plugins-"));
   const value = await release("1.0.0");
   const reports: unknown[] = [];
   const client = {
@@ -50,7 +50,7 @@ test("installs, disables, enables and removes a signed plugin atomically", async
 });
 
 test("a failed upgrade preserves the installed version", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-plugins-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-plugins-"));
   let value = await release("1.0.0");
   const client = {
     manifest: async () => value.manifest,
@@ -68,7 +68,7 @@ test("a failed upgrade preserves the installed version", async () => {
 });
 
 test("upgrades on top of the previous version and preserves user-owned data", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-plugins-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-plugins-"));
   let value = await release("1.0.0");
   const client = {
     manifest: async () => value.manifest,

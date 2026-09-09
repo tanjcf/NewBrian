@@ -15,9 +15,9 @@ const server = createServer((req, res) => {
   });
 });
 await new Promise(r => server.listen(0, "127.0.0.1", r));
-const live = process.env.CODECN_VOICE_LIVE === "1";
-if (!live) process.env.CODECN_MODEL_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
-process.env.CODECN_E2E_FORCE_FRESH = "1";
+const live = process.env.NEWBRAIN_VOICE_LIVE === "1";
+if (!live) process.env.NEWBRAIN_MODEL_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+process.env.NEWBRAIN_E2E_FORCE_FRESH = "1";
 const reservation = createServer(); await new Promise(r => reservation.listen(0, "127.0.0.1", r));
 const port = reservation.address().port; await new Promise(r => reservation.close(r));
 let client;
@@ -26,17 +26,17 @@ await mkdir(output, { recursive: true });
 try {
   client = await createSceneTestCdpClient(port);
   await client.waitForAppReady();
-  const value = await client.evaluate(`window.codecn.analyzeVideoVoices(${JSON.stringify({ script: "纪录片", shots: [{ id: "s1", title: "山川", line: "山川壮丽。" }] })})`);
+  const value = await client.evaluate(`window.newbrain.analyzeVideoVoices(${JSON.stringify({ script: "纪录片", shots: [{ id: "s1", title: "山川", line: "山川壮丽。" }] })})`);
   assert.equal(value.roles[0].confirmed, false);
   assert.ok(value.roles[0].voiceId);
   if (!live) assert.ok(calls > 0);
   if (live) {
-    const speech = await client.evaluate(`window.codecn.synthesizeNovelSpeech({text:"山川壮丽。",voiceId:${JSON.stringify(value.roles[0].voiceId)},playback:false})`);
+    const speech = await client.evaluate(`window.newbrain.synthesizeNovelSpeech({text:"山川壮丽。",voiceId:${JSON.stringify(value.roles[0].voiceId)},playback:false})`);
     assert.equal(speech.ok, true, speech.detail);
     assert.ok(speech.audioBase64);
     await writeFile(resolve(output, speech.mimeType?.includes("wav") ? "sample.wav" : "sample.mp3"), Buffer.from(speech.audioBase64, "base64"));
   }
-  const invalid = await client.evaluate(`window.codecn.analyzeVideoVoices({script:42,shots:[]}).then(()=>false,()=>true)`);
+  const invalid = await client.evaluate(`window.newbrain.analyzeVideoVoices({script:42,shots:[]}).then(()=>false,()=>true)`);
   assert.equal(invalid, true);
   const screenshot = await client.command("Page.captureScreenshot", { format: "png" });
   await writeFile(resolve(output, "desktop.png"), Buffer.from(screenshot.data, "base64"));

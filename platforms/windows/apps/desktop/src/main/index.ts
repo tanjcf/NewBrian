@@ -492,23 +492,23 @@ const documentWorkerProcess = new DocumentWorkerProcess({
   acquireRustCore: (binding) => getRustCoreService().acquire(binding)
 });
 protocol.registerSchemesAsPrivileged([
-  { scheme: "codecn-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
-  { scheme: "codecn-artifact", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
+  { scheme: "newbrain-attachment", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+  { scheme: "newbrain-artifact", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
 ]);
 function getPackagedUserDataPath() {
-  return join(os.homedir(), ".codecn");
+  return join(os.homedir(), ".newbrain");
 }
 if (app.isPackaged) {
   app.setPath("userData", getPackagedUserDataPath());
 }
 function resolveWorkspacePath() {
-  const configured = process.env.CODECN_WORKSPACE_PATH?.trim();
+  const configured = process.env.NEWBRAIN_WORKSPACE_PATH?.trim();
   if (configured) {
     return resolve(configured);
   }
-  const userCodecnPath = getPackagedUserDataPath();
-  if (existsSync(join(userCodecnPath, "codecn.config.json"))) {
-    return userCodecnPath;
+  const userNewbrainPath = getPackagedUserDataPath();
+  if (existsSync(join(userNewbrainPath, "newbrain.config.json"))) {
+    return userNewbrainPath;
   }
   if (app.isPackaged) {
     return app.getPath("userData");
@@ -518,7 +518,7 @@ function resolveWorkspacePath() {
     let current = resolve(start);
     while (!seen.has(current)) {
       seen.add(current);
-      if (existsSync(join(current, "codecn.config.json"))) {
+      if (existsSync(join(current, "newbrain.config.json"))) {
         return current;
       }
       const parent = dirname(current);
@@ -530,7 +530,7 @@ function resolveWorkspacePath() {
   }
   for (const candidate of [join(appDirectory, "..", "..", "..", "..")]) {
     const resolved = resolve(candidate);
-    if (existsSync(join(resolved, "codecn.config.json"))) {
+    if (existsSync(join(resolved, "newbrain.config.json"))) {
       return resolved;
     }
   }
@@ -543,9 +543,9 @@ const internalChatPath = resolveInternalChatPath({
   workspacePath
 });
 const desktopDebugLogPath = join(workspacePath, "tmp-desktop-debug.log");
-const modelConfigPath = join(workspacePath, "codecn.config.json");
-const workspaceCatalogPath = join(workspacePath, "codecn.workspaces.json");
-const featureConfigPath = join(workspacePath, "codecn.features.json");
+const modelConfigPath = join(workspacePath, "newbrain.config.json");
+const workspaceCatalogPath = join(workspacePath, "newbrain.workspaces.json");
+const featureConfigPath = join(workspacePath, "newbrain.features.json");
 const builtinPluginsRoot = app.isPackaged
   ? join(process.resourcesPath, "plugins")
   : join(app.getAppPath(), "build", "plugins");
@@ -627,9 +627,9 @@ async function listExpertsForRuntime() {
 function collectSkillRootsForExpertBridge(workspacePathValue?: string) {
   const roots = [userSkillRoot];
   if (workspacePathValue) {
-    roots.push(join(workspacePathValue, "skills"), join(workspacePathValue, ".codecn", "skills"));
+    roots.push(join(workspacePathValue, "skills"), join(workspacePathValue, ".newbrain", "skills"));
   }
-  roots.push(join(workspacePath, "skills"), join(workspacePath, ".codecn", "skills"));
+  roots.push(join(workspacePath, "skills"), join(workspacePath, ".newbrain", "skills"));
   return [...new Set(roots.filter(Boolean))];
 }
 async function resolveExpertBindingForSkills(skillNames: string[], workspacePathValue?: string) {
@@ -663,8 +663,8 @@ async function ensureExpertSummonedFromSkills(input: {
   });
   return hit;
 }
-const bootstrapConfigPath = join(workspacePath, "codecn.bootstrap.json");
-const workspaceStateRoot = join(workspacePath, ".codecn");
+const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
+const workspaceStateRoot = join(workspacePath, ".newbrain");
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
@@ -695,9 +695,9 @@ const userSkillRoot = join(workspaceStateRoot, "skills");
 const pluginRepositoryRoot = join(app.getPath("userData"), "plugins");
 const userKnowledgeRoot = workspaceStateRoot;
 const authAuditLogPath = join(workspacePath, "tmp-auth-session.log");
-const bundledModelConfigPath = join(process.resourcesPath, "codecn.config.json");
-const bundledFeatureConfigPath = join(process.resourcesPath, "codecn.features.json");
-const bundledBootstrapConfigPath = join(process.resourcesPath, "codecn.bootstrap.json");
+const bundledModelConfigPath = join(process.resourcesPath, "newbrain.config.json");
+const bundledFeatureConfigPath = join(process.resourcesPath, "newbrain.features.json");
+const bundledBootstrapConfigPath = join(process.resourcesPath, "newbrain.bootstrap.json");
 const shellLabel = process.platform === "win32" ? "PowerShell" : "zsh";
 
 /**
@@ -737,7 +737,7 @@ async function runManualUserKnowledgeSync(input?: {
     const result = await syncUserKnowledgeOnce({
       auth: { gatewayBaseUrl, bearerToken },
       paths: {
-        userCodecnRoot: userKnowledgeRoot,
+        userNewbrainRoot: userKnowledgeRoot,
         projectWorkspacePath,
         projectKey
       },
@@ -763,9 +763,9 @@ async function runManualUserKnowledgeSync(input?: {
 }
 const platformLabel = process.platform === "win32" ? "Windows" : process.platform;
 const automationTickMs = 60_000;
-const configuredGatewayBaseUrlEnv = process.env.CODECN_MODEL_BASE_URL?.trim() || "";
+const configuredGatewayBaseUrlEnv = process.env.NEWBRAIN_MODEL_BASE_URL?.trim() || "";
 // Development defaults to the local Spring gateway. Packaged MSI must use the
-// production endpoint from build/package-resources/codecn.config.json.
+// production endpoint from build/package-resources/newbrain.config.json.
 const productionGatewayBaseUrl = "https://api.sinnauze.cn/v1";
 const defaultGatewayBaseUrl = app.isPackaged
   ? productionGatewayBaseUrl
@@ -773,7 +773,7 @@ const defaultGatewayBaseUrl = app.isPackaged
 const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
 // Acquire process ownership before opening or migrating any shared SQLite database.
-const singleInstanceLockAcquired = process.env.CODECN_E2E_REMOTE_DEBUG_PORT
+const singleInstanceLockAcquired = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT
   ? true
   : app.requestSingleInstanceLock();
 if (!singleInstanceLockAcquired) {
@@ -1027,10 +1027,10 @@ const workspaceFileService = new WorkspaceFileService({
 });
 if (process.platform === "win32") {
   // Keep the Windows process title aligned with the packaged executable name.
-  process.title = "codecn";
-  // Ensure taskbar grouping + icon resolution uses the codeCN AppUserModelID.
+  process.title = "newbrain";
+  // Ensure taskbar grouping + icon resolution uses the NewBrain AppUserModelID.
   // Must be set before creating any windows.
-  app.setAppUserModelId("cn.codecn.desktop");
+  app.setAppUserModelId("cn.newbrain.desktop");
 }
 let runtime: Awaited<ReturnType<typeof createLocalRuntime>>;
 const officialGovernmentWebService = new OfficialGovernmentWebService();
@@ -1106,7 +1106,7 @@ let mainWindowRef: BrowserWindow | null = null;
 let trayService: DesktopTrayService | null = null;
 let explicitQuitRequested = false;
 function resolveDesktopIconPath() {
-  const packagedIconPath = join(process.resourcesPath, "codecn.ico");
+  const packagedIconPath = join(process.resourcesPath, "newbrain.ico");
   const devIconPath = join(appDirectory, "..", "..", "build", "icon.ico");
   const legacyDevIconPath = join(workspacePath, "apps/desktop/build/icon.ico");
   const preferredPath = app.isPackaged ? packagedIconPath : devIconPath;
@@ -1294,17 +1294,17 @@ app.commandLine.appendSwitch("disable-gpu");
 // Windows can incorrectly classify the visible Electron window as occluded and stop
 // compositing its renderer; disabling that heuristic prevents a background-only window.
 app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
-const e2eRemoteDebugPort = process.env.CODECN_E2E_REMOTE_DEBUG_PORT?.trim();
+const e2eRemoteDebugPort = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT?.trim();
 function isE2eEmailCaptchaBypassEnabled(): boolean {
-  return !app.isPackaged && Boolean(e2eRemoteDebugPort) && process.env.CODECN_E2E_SKIP_EMAIL_CAPTCHA === "1";
+  return !app.isPackaged && Boolean(e2eRemoteDebugPort) && process.env.NEWBRAIN_E2E_SKIP_EMAIL_CAPTCHA === "1";
 }
 if (e2eRemoteDebugPort && /^\d{2,5}$/.test(e2eRemoteDebugPort)) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", e2eRemoteDebugPort);
 }
 crashReporter.start({
-  companyName: "codeCN",
-  productName: "codeCN",
+  companyName: "NewBrain",
+  productName: "NewBrain",
   uploadToServer: false
 });
 app.on("child-process-gone", (_event, details) => {
@@ -1358,7 +1358,7 @@ async function reportRendererFailure(input: RendererFailureInput) {
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
-  if (!rendererFailureRestartScheduled && process.env.CODECN_DISABLE_CRASH_RESTART !== "1") {
+  if (!rendererFailureRestartScheduled && process.env.NEWBRAIN_DISABLE_CRASH_RESTART !== "1") {
     rendererFailureRestartScheduled = true;
     setTimeout(() => {
       explicitQuitRequested = true;
@@ -1785,8 +1785,8 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
       value: accessTokenCredential,
       headers: createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
     } : null,
-    process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? { value: "codecn-e2e", headers: { Authorization: "Bearer codecn-e2e" } }
+    process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
+      ? { value: "newbrain-e2e", headers: { Authorization: "Bearer newbrain-e2e" } }
       : null,
     apiKeyCredential ? { value: apiKeyCredential, headers: { Authorization: `Bearer ${apiKeyCredential}` } } : null
   ].filter((item): item is { value: string; headers: Record<string, string> } => Boolean(item));
@@ -2012,14 +2012,157 @@ async function fetchJsonWithDesktopAuth(path: string, authState: PersistedDeskto
       : "";
   throw new Error(message || `OmniRoute request failed: HTTP ${lastStatus || "unknown"} ${path}`);
 }
+
+async function postJsonWithDesktopAuth(
+  path: string,
+  authState: PersistedDesktopAuthState,
+  device: DesktopDeviceFingerprint,
+  body: Record<string, unknown>
+) {
+  const gatewayOrigin = await readGatewayOrigin();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
+  };
+  if (authState.session_cookie?.trim()) headers.Cookie = authState.session_cookie.trim();
+  const response = await fetch(`${gatewayOrigin}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body || {})
+  });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 501) {
+      throw new Error("该接口处于开发中，暂时无法使用。");
+    }
+    const message =
+      payload && typeof payload === "object"
+        ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "")
+        : "";
+    throw new Error(message || `OmniRoute request failed: HTTP ${response.status} ${path}`);
+  }
+  return payload;
+}
+
+async function fetchDesktopSubscriptionCatalog() {
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再查看套餐。");
+  const device = collectDesktopDeviceFingerprint();
+  return fetchJsonWithDesktopAuth("/api/subscription-plans/catalog", authState, device);
+}
+
+async function rechargeDesktopWallet(_input: { amount: number; payment_method?: string }) {
+  throw new Error("充值支付尚未开通，暂不支持在线充值。请使用兑换码获取权益。");
+}
+
+async function purchaseDesktopPlan(_input: { plan_id: number; payment_method?: string }) {
+  throw new Error("套餐购买尚未开通，暂不支持在线购买。请使用兑换码获取权益。");
+}
+
+async function setDesktopWalletOverageEnabled(input: { enabled: boolean }) {
+  const enabled = Boolean(input?.enabled);
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再设置钱包扣款开关。");
+  const device = collectDesktopDeviceFingerprint();
+  // 必须调用 spring-app；禁止本地假成功。
+  const payload = await postJsonWithDesktopAuth("/api/wallet/overage-enabled", authState, device, {
+    enabled,
+    wallet_overage_enabled: enabled
+  });
+  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const nested =
+    record.result && typeof record.result === "object"
+      ? (record.result as Record<string, unknown>)
+      : record.data && typeof record.data === "object"
+        ? (record.data as Record<string, unknown>)
+        : record;
+  const summary =
+    nested.summary && typeof nested.summary === "object"
+      ? (nested.summary as Record<string, unknown>)
+      : nested;
+  const confirmedRaw =
+    summary.wallet_overage_enabled ??
+    summary.walletOverageEnabled ??
+    nested.wallet_overage_enabled ??
+    nested.walletOverageEnabled;
+  if (confirmedRaw === undefined || confirmedRaw === null) {
+    throw new Error("spring-app 未返回钱包超额扣款开关状态，设置失败。");
+  }
+  const confirmed = Boolean(confirmedRaw);
+  if (confirmed !== enabled) {
+    throw new Error("spring-app 未确认钱包超额扣款开关变更，设置失败。");
+  }
+  return {
+    ...nested,
+    summary: { ...summary, wallet_overage_enabled: confirmed, walletOverageEnabled: confirmed },
+    wallet_overage_enabled: confirmed,
+    walletOverageEnabled: confirmed,
+    ok: true
+  };
+}
+
+function unwrapDesktopListPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.items)) return record.items;
+    if (Array.isArray(record.data)) return record.data;
+    if (Array.isArray(record.records)) return record.records;
+    if (Array.isArray(record.result)) return record.result;
+  }
+  return [];
+}
+
+async function listDesktopWalletInvoiceRecords(input?: { limit?: number }) {
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再查看可开票记录。");
+  const device = collectDesktopDeviceFingerprint();
+  const limit = Math.max(1, Math.min(Number(input?.limit || 50) || 50, 50));
+  const payload = await fetchJsonWithDesktopAuth(`/api/wallet/invoice-records?limit=${limit}`, authState, device);
+  return unwrapDesktopListPayload(payload);
+}
+
+async function listDesktopWalletInvoiceRequests(input?: { limit?: number }) {
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再查看开票申请。");
+  const device = collectDesktopDeviceFingerprint();
+  const limit = Math.max(1, Math.min(Number(input?.limit || 20) || 20, 50));
+  const payload = await fetchJsonWithDesktopAuth(`/api/wallet/invoice-requests?limit=${limit}`, authState, device);
+  return unwrapDesktopListPayload(payload);
+}
+
+async function createDesktopWalletInvoiceRequest(input: {
+  invoice_title: string;
+  tax_no?: string;
+  contact_email?: string;
+  redeem_log_ids: number[];
+}) {
+  const title = String(input?.invoice_title || "").trim();
+  if (!title) throw new Error("请填写发票抬头。");
+  const redeemLogIds = Array.isArray(input?.redeem_log_ids)
+    ? input.redeem_log_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+    : [];
+  if (!redeemLogIds.length) throw new Error("请选择至少一条可开票记录。");
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再申请开票。");
+  const device = collectDesktopDeviceFingerprint();
+  return postJsonWithDesktopAuth("/api/wallet/invoice-requests", authState, device, {
+    invoice_title: title,
+    tax_no: String(input?.tax_no || "").trim() || undefined,
+    contact_email: String(input?.contact_email || "").trim() || undefined,
+    redeem_log_ids: redeemLogIds
+  });
+}
+
 async function fetchDesktopBillingSubscription() {
   const authState = await readDesktopAuthState();
   if (!authState) {
-    if (!app.isPackaged && e2eRemoteDebugPort && process.env.CODECN_E2E_AUTH_BYPASS === "1") {
+    if (!app.isPackaged && e2eRemoteDebugPort && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
       return normalizeDesktopBillingPayload({
         subscription: {
           status: "active",
-          plan_name: "codeCN E2E",
+          plan_name: "NewBrain E2E",
           expires_at: "2099-12-31T23:59:59Z"
         },
         usage: { items: [] }
@@ -2160,7 +2303,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
     !persisted?.access_token?.trim()
     && !app.isPackaged
     && e2eRemoteDebugPort
-    && process.env.CODECN_E2E_AUTH_BYPASS === "1"
+    && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1"
   ) {
     return {
       authenticated: true,
@@ -2170,9 +2313,9 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       agreement,
       last_checked_at: checkedAt,
       user: {
-        id: "codecn-e2e-user",
-        email: "e2e@codecn.local",
-        display_name: "codeCN E2E",
+        id: "newbrain-e2e-user",
+        email: "e2e@newbrain.local",
+        display_name: "NewBrain E2E",
         idp: "e2e",
         amr: ["test"],
         acr: "test",
@@ -2455,7 +2598,7 @@ async function attemptDesktopAuthLogin(input: {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       ...createDesktopAuthHeaders({ device: input.device }),
-      ...(isE2eEmailCaptchaBypassEnabled() ? { "X-CodeCN-E2E-Skip-Email-Code": "1" } : {})
+      ...(isE2eEmailCaptchaBypassEnabled() ? { "X-NewBrain-E2E-Skip-Email-Code": "1" } : {})
     },
     body: JSON.stringify({
       identifier: input.email,
@@ -2554,7 +2697,7 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
   const gatewayOrigin = await readGatewayOrigin();
   const loginFlags = await fetchDesktopAuthLoginFlags();
   if (isE2eEmailCaptchaBypassEnabled() && !captcha) {
-    captcha = process.env.CODECN_E2E_LOGIN_CAPTCHA?.trim() || "";
+    captcha = process.env.NEWBRAIN_E2E_LOGIN_CAPTCHA?.trim() || "";
   }
   if (!email || (!password && !captcha)) {
     await appendAuthAuditLog("login_rejected", "missing_credentials");
@@ -2613,7 +2756,7 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
           `登录请求头包含非法字符（常见于中文电脑名），请升级客户端或将电脑名改为英文后重试。原始错误：${detail}`
         );
       }
-      const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
+      const message = `无法连接登录服务 ${gatewayOrigin}，请确认 newbrain.config.json 的 llm.baseUrl 可访问。`;
       await appendAuthAuditLog("login_failed", `${maskEmail(email)} ${message}`);
       throw new Error(message);
     }
@@ -2668,7 +2811,7 @@ async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
         `发送验证码失败：请求头包含非法字符（常见于中文电脑名），请升级客户端或将电脑名改为英文后重试。原始错误：${detail}`
       );
     }
-    const message = `无法连接登录服务 ${gatewayOrigin}，请确认 codecn.config.json 的 llm.baseUrl 可访问。`;
+    const message = `无法连接登录服务 ${gatewayOrigin}，请确认 newbrain.config.json 的 llm.baseUrl 可访问。`;
     throw new Error(message);
   }
   const payload = await readJsonResponse(response);
@@ -3019,7 +3162,7 @@ function createBuiltinPluginSpecs(): PluginSpec[] {
     status: "enabled",
     source: builtinPluginUri(plugin.packageName),
     manifestPath: `${builtinPluginUri(plugin.packageName)}/.codex-plugin/plugin.json`,
-    publisher: "codeCN",
+    publisher: "NewBrain",
     capabilities: [...plugin.capabilities],
     builtinToolNames: [...plugin.builtinToolNames],
     executionKind: plugin.executionKind,
@@ -3060,17 +3203,17 @@ async function createPluginScaffold(input: FeatureItemInput) {
   if (existsSync(pluginRoot)) {
     throw new Error(`插件目录已经存在：${pluginRoot}`);
   }
-  const summary = input.summary?.trim() || `${pluginName} plugin for codeCN.`;
+  const summary = input.summary?.trim() || `${pluginName} plugin for NewBrain.`;
   const manifest = {
     name: pluginName,
     version,
     description: summary,
-    author: { name: "codeCN" },
+    author: { name: "NewBrain" },
     interface: {
       displayName: input.name?.trim() || pluginName,
       shortDescription: summary.slice(0, 120),
       longDescription: summary,
-      developerName: "codeCN",
+      developerName: "NewBrain",
       category: "Productivity",
       capabilities: ["Interactive"]
     }
@@ -3100,7 +3243,7 @@ async function resolvePluginManifest(input: FeatureItemInput) {
   const candidates = stat.isDirectory()
     ? [
         join(absoluteSource, ".codex-plugin", "plugin.json"),
-        join(absoluteSource, ".codecn-plugin", "plugin.json"),
+        join(absoluteSource, ".newbrain-plugin", "plugin.json"),
         join(absoluteSource, "plugin.json"),
         join(absoluteSource, "package.json")
       ]
@@ -3332,7 +3475,7 @@ const defaultModelConfig: ModelConfig = {
   reviewModel: "deepseek-v4-pro",
   reasoningEffort: "medium",
   disableResponseStorage: true,
-  systemPrompt: "You are a helpful coding assistant for the codeCN desktop workspace.",
+  systemPrompt: "You are a helpful coding assistant for the NewBrain desktop workspace.",
   optimizeFor: "balanced"
 };
 const defaultDesktopPreferences = createDefaultDesktopPreferences(workspaceStateRoot);
@@ -3397,7 +3540,7 @@ function nowIso() {
 }
 function makeWorkspaceEnvName(workspaceId: string) {
   const normalized = workspaceId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 32) || "workspace";
-  return `codecn-${normalized}`;
+  return `newbrain-${normalized}`;
 }
 function getWorkspaceEnvRoot(workspaceId: string) {
   return join(getWorkspaceStateDir(workspaceId), "conda-env");
@@ -3457,7 +3600,7 @@ function getCondaManualInstallMessage(
     ? `${environmentSummary.installerSpec.platformLabel}: ${environmentSummary.installerSpec.downloadUrl}`
     : "当前系统暂未配置自动下载的 Miniconda 安装包。";
   return [
-    `codeCN 没有检测到可复用的 conda，且暂时不能自动安装。`,
+    `NewBrain 没有检测到可复用的 conda，且暂时不能自动安装。`,
     "",
     `原因：${reason}`,
     `系统环境：${systemLabel}`,
@@ -3521,7 +3664,7 @@ function buildCondaShellEnv(condaPath: string, envPath: string) {
   nextEnv.CONDA_EXE = condaPath;
   nextEnv.CONDA_PREFIX = envPath;
   nextEnv.CONDA_DEFAULT_ENV = envPath;
-  nextEnv.CODECN_CONDA_ENV = envPath;
+  nextEnv.NEWBRAIN_CONDA_ENV = envPath;
   nextEnv.PYTHONNOUSERSITE = "1";
   return nextEnv;
 }
@@ -3552,7 +3695,7 @@ async function applyApplicationSkillPolicy(targetRuntime: Awaited<ReturnType<typ
   const catalog = await readWorkspaceCatalog();
   const workspace = catalog.workspaces.find((item) => item.id === activeWorkspaceId);
   const projectRoots = workspace?.path
-    ? [join(workspace.path, ".codecn", "skills"), join(workspace.path, "skills")]
+    ? [join(workspace.path, ".newbrain", "skills"), join(workspace.path, "skills")]
     : [];
   const experts = await listExpertsForRuntime();
   for (const expert of experts.filter(item => item.installed)) projectRoots.push(join(expert.rootPath, "skills"));
@@ -3577,7 +3720,7 @@ function registerGoalRuntimeTools(
 ) {
   const register = (definition: any, execute: (input: any) => Promise<any> | any) =>
     targetRuntime.registerExternalTool({
-      namespace: "codecn-goal",
+      namespace: "newbrain-goal",
       requiresApproval: false,
       risk: "low",
       ...definition
@@ -3880,7 +4023,7 @@ function registerQuantRuntimeTools(
   targetRuntime.registerExternalTool({
     name: "quant.portfolio.create",
     title: "创建量化 Skill 与模拟组合",
-    description: "在当前项目 .codecn/skills 中真实创建量化 Skill 包，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
+    description: "在当前项目 .newbrain/skills 中真实创建量化 Skill 包，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
     namespace: "quant", kind: "write", risk: "low", requiresApproval: false,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "Skill 的稳定英文标识" },
@@ -3909,7 +4052,7 @@ function registerQuantRuntimeTools(
   targetRuntime.registerExternalTool({
     name: "quant.portfolio.delete",
     title: "删除 Skill 模拟组合",
-    description: "删除当前量化项目中指定 Skill 的模拟组合及其持久化交易账本，并同步移除右侧组合卡片。不连接真实券商。若用户要求删除整个 Skill，还必须同时删除工作区内对应的 .codecn/skills Skill 包。",
+    description: "删除当前量化项目中指定 Skill 的模拟组合及其持久化交易账本，并同步移除右侧组合卡片。不连接真实券商。若用户要求删除整个 Skill，还必须同时删除工作区内对应的 .newbrain/skills Skill 包。",
     namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "要删除的 Skill 稳定英文标识" }
@@ -4452,7 +4595,7 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
     });
   }
   if (kind === "plugins") {
-    if (!input.manifestPath?.trim() && (input.source === "Codex" || input.source === "codeCN")) {
+    if (!input.manifestPath?.trim() && (input.source === "Codex" || input.source === "NewBrain")) {
       const nextPlugin: PluginSpec = {
         id: input.id?.trim() || makeId("plugin"),
         name: input.name?.trim() || "Unnamed plugin",
@@ -5087,7 +5230,7 @@ async function ensureDesktopNodeInitialized() {
       node: {
         status: "manual_required",
         updatedAt: nowIso(),
-        reason: "未检测到系统 Node.js，请先安装 Node 18+，或确认已加入 PATH 后重启 codeCN。"
+        reason: "未检测到系统 Node.js，请先安装 Node 18+，或确认已加入 PATH 后重启 NewBrain。"
       }
     });
   }
@@ -5788,13 +5931,13 @@ async function ensurePreviewWindow(targetUrl: string) {
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: "codeCN 浏览器预览",
+    title: "NewBrain 浏览器预览",
     show: false,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      partition: "codecn-browser-preview"
+      partition: "newbrain-browser-preview"
     }
   });
   previewWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -5823,7 +5966,7 @@ function registerBrowserAgentTools() {
   runtime.registerExternalTool({
     name: "browser.open",
     title: "打开网页",
-    description: "Open an HTTP or HTTPS URL in the codeCN browser.",
+    description: "Open an HTTP or HTTPS URL in the NewBrain browser.",
     kind: "read",
     risk: "low",
     requiresApproval: true,
@@ -5937,7 +6080,7 @@ function registerBrowserAgentTools() {
   runtime.registerExternalTool({
     name: "browser.screenshot",
     title: "网页截图",
-    description: "Capture the current codeCN browser page and return the PNG path.",
+    description: "Capture the current NewBrain browser page and return the PNG path.",
     kind: "read",
     risk: "low",
     requiresApproval: false,
@@ -6037,7 +6180,7 @@ function registerWorkspaceMediaAgentTools(
     name: "workspace.open_image",
     title: "打开图片预览",
     description:
-      "Open a workspace image (png/jpg/gif/webp/svg/…) in the codeCN side-panel viewer via codecn-artifact://. Prefer this over shell/OS open for images.",
+      "Open a workspace image (png/jpg/gif/webp/svg/…) in the NewBrain side-panel viewer via newbrain-artifact://. Prefer this over shell/OS open for images.",
     kind: "read",
     risk: "low",
     requiresApproval: false,
@@ -6058,7 +6201,7 @@ function registerWorkspaceMediaAgentTools(
     name: "workspace.open_video",
     title: "打开视频预览",
     description:
-      "Open a workspace video (mp4/webm/mov/…) in the codeCN side-panel player via codecn-artifact://. Prefer this over shell/OS open for videos.",
+      "Open a workspace video (mp4/webm/mov/…) in the NewBrain side-panel player via newbrain-artifact://. Prefer this over shell/OS open for videos.",
     kind: "read",
     risk: "low",
     requiresApproval: false,
@@ -6594,7 +6737,7 @@ function registerAgentCollaborationTools(
     workspace: workspace.path,
     workspaceKey: parentThread.brainWorkspaceKey || workspace.brainWorkspaceKey || "unknown",
     resources: app.isPackaged ? join(process.resourcesPath, "garden") : resolve(appDirectory, "../../resources/garden"),
-    python: process.env.CODECN_REACH_PYTHON || "python",
+    python: process.env.NEWBRAIN_REACH_PYTHON || "python",
     submitCandidate: async input => {
       if (!gardenControlPlane) throw new Error("SPRING_CONTROL_PLANE_NOT_READY");
       return gardenControlPlane.submitCandidate(input);
@@ -7884,8 +8027,8 @@ async function callModelApi(input: {
   const authState = await readDesktopAuthState();
   const authSelection = selectModelRequestAuth(authState, input.apiKey);
   bearerToken = authSelection.bearerToken;
-  if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-    bearerToken = "codecn-e2e";
+  if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+    bearerToken = "newbrain-e2e";
   }
   if (authSelection.useGatewayBaseUrl) baseUrl = await readGatewayBaseUrl();
   if (!baseUrl) {
@@ -8193,7 +8336,7 @@ function createMainWindow() {
           titleBarStyle: "hidden" as const
         }
       : {}),
-    title: "codeCN",
+    title: "NewBrain",
     backgroundColor: "#efe7d8",
     icon: resolvedIconPath,
     frame: false,
@@ -8317,7 +8460,7 @@ function createMainWindow() {
   });
   const shouldOpenDevTools =
     process.argv.includes("--open-devtools") ||
-    process.env.CODECN_OPEN_DEVTOOLS === "1";
+    process.env.NEWBRAIN_OPEN_DEVTOOLS === "1";
   if (shouldOpenDevTools) {
     window.webContents.openDevTools({ mode: "detach" });
   }
@@ -8348,8 +8491,8 @@ function createMainWindow() {
 function registerHolonRuntime(runtimeCommandService: RuntimeCommandService, modelChatService: ModelChatService) {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.CODECN_E2E_AUTH_TOKEN?.trim() || "codecn-e2e"
+    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
+      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
       : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("HOLON_AUTH_REQUIRED");
@@ -8493,8 +8636,8 @@ function registerPluginRepositoryHandlers() {
 function createAgentTurnControlPlane() {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.CODECN_E2E_AUTH_TOKEN?.trim() || "codecn-e2e"
+    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
+      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
       : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("AGENT_TURN_AUTH_REQUIRED");
@@ -8574,7 +8717,7 @@ function registerIpc() {
         summary: `${script.label} · ${script.executable} ${script.args.join(" ")}`
       }),
     confirmFlowApproval: async ({ projectId, nodeId }) => {
-      if (!app.isPackaged && process.env.CODECN_E2E_AUTH_BYPASS === "1") return false;
+      if (!app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") return false;
       const result = await dialog.showMessageBox(mainWindowRef ?? undefined, {
         type: "warning", title: "Flow 人工审批", message: `允许项目 ${projectId} 的 Flow 继续执行吗？`,
         detail: `审批节点：${nodeId}\n\n批准后仅会执行主进程注册的受限工具。`,
@@ -8591,13 +8734,13 @@ function registerIpc() {
       // Media tools must use the same local Spring instance as the visible
       // development desktop. The control-plane model origin may point at a
       // remote/older gateway that does not expose auto media routes.
-      const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+      const forcedMediaBase = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim();
       let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "codecn-e2e";
+      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+        bearerToken = "newbrain-e2e";
       }
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
       if (!bearerToken) throw new Error("媒体生成需要已登录的网关凭证。");
@@ -8705,7 +8848,7 @@ function registerIpc() {
     getPreferences: getActiveDesktopPreferences
   });
   const { runtimeCommandService } = registerDesktopSessionRuntimeComposition({
-    appName: "codeCN",
+    appName: "NewBrain",
     platformLabel,
     shellLabel,
     processUuid,
@@ -8820,7 +8963,14 @@ function registerIpc() {
         throw error;
       }
     },
+    getSubscriptionCatalog: fetchDesktopSubscriptionCatalog,
+    rechargeWallet: rechargeDesktopWallet,
+    purchasePlan: purchaseDesktopPlan,
+    setWalletOverageEnabled: setDesktopWalletOverageEnabled,
     redeemCode: redeemDesktopCode,
+    listWalletInvoiceRecords: listDesktopWalletInvoiceRecords,
+    listWalletInvoiceRequests: listDesktopWalletInvoiceRequests,
+    createWalletInvoiceRequest: createDesktopWalletInvoiceRequest,
     sendLoginCode: sendDesktopLoginCode,
     login: loginDesktopAuth,
     changePassword: changeDesktopAuthPassword,
@@ -8834,11 +8984,11 @@ function registerIpc() {
     addSkillRoots: (roots) => runtime.addSkillRoots(roots),
     deleteSkill: (id) => deleteFeatureItem("skills", id),
     isDirectClawhubAllowed: async () => {
-      // Local preference controls desktop direct ClawHub. Env CODECN_MARKET_DIRECT_CLAWHUB=1
+      // Local preference controls desktop direct ClawHub. Env NEWBRAIN_MARKET_DIRECT_CLAWHUB=1
       // is a developer force-on override. Fleet metadata may still publish
       // market.direct_clawhub_allowed=false but does not override local preference here.
       const { resolveDirectClawhubAllowed } = await import("./market-clawhub-policy.js");
-      if (process.env.CODECN_MARKET_DIRECT_CLAWHUB === "1") return true;
+      if (process.env.NEWBRAIN_MARKET_DIRECT_CLAWHUB === "1") return true;
       const preferences = await getActiveDesktopPreferences().catch(() => defaultDesktopPreferences);
       return resolveDirectClawhubAllowed({
         preferenceAllowed: preferences.market?.directClawhubAllowed === true
@@ -9242,7 +9392,7 @@ function registerIpc() {
       const catalog = await readWorkspaceCatalog();
       const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
       const projectRoots = workspace?.path
-        ? [join(workspace.path, "skills"), join(workspace.path, ".codecn", "skills")]
+        ? [join(workspace.path, "skills"), join(workspace.path, ".newbrain", "skills")]
         : [];
 
       const tryScope = async (
@@ -9298,8 +9448,8 @@ function registerIpc() {
       const authState = await readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "codecn-e2e";
+      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+        bearerToken = "newbrain-e2e";
       }
       if (!bearerToken) {
         bearerToken = await refreshDesktopAccessTokenForGateway().catch(() => "");
@@ -9393,7 +9543,7 @@ function registerIpc() {
     appendDiagnostics: appendDiagnosticsLog,
     onShadowLearned: async ({ workspace }) => {
       await mirrorProjectRulesToGlobal({
-        userCodecnRoot: userKnowledgeRoot,
+        userNewbrainRoot: userKnowledgeRoot,
         projectWorkspacePath: workspace.path,
         projectKey: workspace.name || workspace.id
       }).catch(() => undefined);
@@ -9486,13 +9636,13 @@ function registerIpc() {
           return undefined;
         },
         resolveGateway: async () => {
-          const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+          const forcedMediaBase = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim();
           let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
           const authState = await readDesktopAuthState();
           const authSelection = selectModelRequestAuth(authState, "");
           let bearerToken = authSelection.bearerToken;
-          if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-            bearerToken = "codecn-e2e";
+          if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+            bearerToken = "newbrain-e2e";
           }
           if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
             baseUrl = await readGatewayBaseUrl();
@@ -9519,13 +9669,13 @@ function registerIpc() {
             timeline: videoTimelineService,
             render: videoRenderService,
             generateVideo: async ({ prompt, model, size }) => {
-              const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+              const forcedMediaBase = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim();
               let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-                bearerToken = "codecn-e2e";
+              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+                bearerToken = "newbrain-e2e";
               }
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
                 baseUrl = await readGatewayBaseUrl();
@@ -9566,12 +9716,12 @@ function registerIpc() {
               return { url, providerResult: { job: result.job, via: result.via, size: size || "" } };
             },
             generateSpeech: async ({ text, model, voice }) => {
-              const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+              const forcedMediaBase = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim();
               let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) bearerToken = "codecn-e2e";
+              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) bearerToken = "newbrain-e2e";
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
               if (!bearerToken) throw new Error("配音生成需要已登录的网关凭证。");
               const { synthesizeMinimaxSyncTts, resolveMinimaxNarrationVoice, MINIMAX_DEFAULT_VOICE_ID } = await import("./minimax-tts-gateway.js");
@@ -9645,13 +9795,13 @@ function registerIpc() {
               mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
             },
             generateMusic: async ({ prompt, model }) => {
-              const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+              const forcedMediaBase = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim();
               let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-                bearerToken = "codecn-e2e";
+              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+                bearerToken = "newbrain-e2e";
               }
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
                 baseUrl = await readGatewayBaseUrl();
@@ -9826,7 +9976,7 @@ function registerIpc() {
       return preferences.personalization?.autoSkillEnabled === true;
     },
     loadLocalKnowledgeText: async ({ workspace, projectKey }) => loadLocalKnowledgeForInjection({
-      userCodecnRoot: userKnowledgeRoot,
+      userNewbrainRoot: userKnowledgeRoot,
       projectWorkspacePath: workspace.path,
       projectKey: projectKey || workspace.name || workspace.id
     }),
@@ -9894,13 +10044,13 @@ function registerIpc() {
       // Keep chat-triggered media generation on the same development Spring
       // instance as scene-triggered generation. Otherwise the model path can
       // reach a remote/older gateway and incorrectly fall back to /videos.
-      const forcedMediaBase = process.env.CODECN_MEDIA_GATEWAY_BASE_URL?.trim();
+      const forcedMediaBase = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim();
       let baseUrl = forcedMediaBase || await readGatewayBaseUrl();
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.CODECN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "codecn-e2e";
+      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
+        bearerToken = "newbrain-e2e";
       }
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
         baseUrl = await readGatewayBaseUrl();
@@ -10099,7 +10249,7 @@ app.whenReady().then(async () => {
     `desktop error outbox startup upload failed: ${error instanceof Error ? error.message : String(error)}`
   ));
   desktopErrorCollector.start();
-  protocol.handle("codecn-attachment", async (request) => {
+  protocol.handle("newbrain-attachment", async (request) => {
     const attachmentRoot = resolve(workspaceStateRoot, "attachments");
     const filePath = resolveManagedAttachmentPath(request.url, attachmentRoot);
     if (!filePath) {
@@ -10119,7 +10269,7 @@ app.whenReady().then(async () => {
       return new Response("Attachment not found", { status: 404 });
     }
   });
-  protocol.handle("codecn-artifact", async (request) => {
+  protocol.handle("newbrain-artifact", async (request) => {
     const parsed = parseWorkspaceArtifactPreviewUrl(request.url);
     if (!parsed) {
       return new Response("Artifact not found", { status: 404 });

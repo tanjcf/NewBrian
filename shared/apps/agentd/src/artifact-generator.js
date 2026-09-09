@@ -288,7 +288,7 @@ async function generateHtml(input, target) {
 
 async function generateXlsx(input, target) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "codeCN";
+  workbook.creator = "NewBrain";
   const sources = Array.isArray(input.sheets) && input.sheets.length ? input.sheets : [{ name: "Sheet1", rows: input.rows }];
   for (const [index, source] of sources.entries()) {
     const requestedName = text(source?.name, `Sheet${index + 1}`).replace(/[\\/*?:[\]]/g, "_").slice(0, 31) || `Sheet${index + 1}`;
@@ -328,7 +328,7 @@ async function generateDocx(input, target) {
     if (section.body) appendDocxBody(children, section.body);
     for (const bullet of section.bullets) children.push(new Paragraph({ text: bullet, bullet: { level: 0 } }));
   }
-  const document = new Document({ creator: "codeCN", title: text(input.title, "Document"), sections: [{ properties: {}, children }] });
+  const document = new Document({ creator: "NewBrain", title: text(input.title, "Document"), sections: [{ properties: {}, children }] });
   await fs.writeFile(target, await Packer.toBuffer(document));
 }
 
@@ -435,11 +435,11 @@ export function looksLikeHtmlDocumentDump(value) {
 }
 
 function defaultArtifactTargetPath(title, format) {
-  const slug = (title || "codecn-output")
+  const slug = (title || "newbrain-output")
     .replace(/[\\/:*?"<>|]+/g, "-")
     .replace(/\s+/g, "")
     .replace(/\.+$/g, "")
-    .slice(0, 60) || "codecn-output";
+    .slice(0, 60) || "newbrain-output";
   return `outputs/${slug}.${format}`;
 }
 

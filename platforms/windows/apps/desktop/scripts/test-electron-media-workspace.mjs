@@ -11,7 +11,7 @@ import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 const execFileAsync = promisify(execFile);
 const ffmpeg = process.env.BRAIN_FFMPEG_BINARY || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 const ffprobe = process.env.BRAIN_FFPROBE_BINARY || (process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9335);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9335);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
@@ -91,21 +91,21 @@ async function seedBrainProject(kind, fixture) {
   return evaluate(`(async () => {
     const path = ${JSON.stringify(fixture.root)};
     const workspaceKey = ${JSON.stringify(kind)};
-    let catalog = await window.codecn.listWorkspaces();
-    if (!catalog.some((item) => item.path === path)) catalog = await window.codecn.addWorkspace({ name: ${JSON.stringify(projectName)}, path });
+    let catalog = await window.newbrain.listWorkspaces();
+    if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: ${JSON.stringify(projectName)}, path });
     const local = catalog.find((item) => item.path === path);
     if (!local) return { ok: false, reason: "workspace-missing" };
-    let projects = await window.codecn.listBrainProjects({ workspaceKey });
+    let projects = await window.newbrain.listBrainProjects({ workspaceKey });
     let project = projects.find((item) => item.name === ${JSON.stringify(projectName)});
-    if (!project) project = await window.codecn.createBrainProject({ name: ${JSON.stringify(projectName)}, primaryWorkspaceKey: workspaceKey, localWorkspaceId: local.id });
-    else project = await window.codecn.updateBrainProject({ projectId: project.id, localWorkspaceId: local.id });
-    let conversations = await window.codecn.listBrainConversations({ projectId: project.id, workspaceKey });
+    if (!project) project = await window.newbrain.createBrainProject({ name: ${JSON.stringify(projectName)}, primaryWorkspaceKey: workspaceKey, localWorkspaceId: local.id });
+    else project = await window.newbrain.updateBrainProject({ projectId: project.id, localWorkspaceId: local.id });
+    let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey });
     let conversation = conversations[0];
-    if (!conversation) conversation = await window.codecn.createBrainConversation({ projectId: project.id, workspaceKey, title: ${JSON.stringify(title)} });
-    const files = await window.codecn.listBrainFiles({ projectId: project.id });
+    if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey, title: ${JSON.stringify(title)} });
+    const files = await window.newbrain.listBrainFiles({ projectId: project.id });
     let file = files.find((item) => item.storageKey === ${JSON.stringify(fixture.storageKey)});
     if (!file) {
-      file = await window.codecn.registerBrainFile({
+      file = await window.newbrain.registerBrainFile({
         projectId: project.id,
         logicalName: ${JSON.stringify(fixture.logicalName)},
         mimeType: ${JSON.stringify(fixture.mimeType)},
@@ -115,9 +115,9 @@ async function seedBrainProject(kind, fixture) {
       });
     }
     if (workspaceKey === "video") {
-      await window.codecn.saveVideoTimeline({ projectId: project.id, title: "E2E Timeline", width: 160, height: 90, fps: 10 });
+      await window.newbrain.saveVideoTimeline({ projectId: project.id, title: "E2E Timeline", width: 160, height: 90, fps: 10 });
     } else {
-      await window.codecn.saveMusicTimeline({ projectId: project.id, title: "E2E Mix", sampleRate: 48000, channels: 2 });
+      await window.newbrain.saveMusicTimeline({ projectId: project.id, title: "E2E Mix", sampleRate: 48000, channels: 2 });
     }
     localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({
       version: 2,
@@ -364,8 +364,8 @@ async function runMusicFlow() {
     const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}');
     const projectId = selection.catalogs?.music?.projectId;
     const fileId = document.querySelector('[data-testid="brain-music-output-file-id"]')?.textContent?.trim();
-    if (!projectId || !fileId || !window.codecn?.inspectMusicMedia) return null;
-    return window.codecn.inspectMusicMedia({ projectId, sourceFileId: fileId });
+    if (!projectId || !fileId || !window.newbrain?.inspectMusicMedia) return null;
+    return window.newbrain.inspectMusicMedia({ projectId, sourceFileId: fileId });
   })()`);
   assert.ok(mediaInspect?.durationMs > 0, JSON.stringify(mediaInspect));
   assert.ok(mediaInspect?.sampleRate > 0, JSON.stringify(mediaInspect));

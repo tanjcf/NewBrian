@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const pages = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
 const page = pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-if (!page) throw new Error("No visible codeCN renderer is available.");
+if (!page) throw new Error("No visible NewBrain renderer is available.");
 
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolveOpen, reject) => {
@@ -35,10 +35,10 @@ function command(method, params = {}) {
 
 const evaluated = await command("Runtime.evaluate", {
   expression: `(async () => {
-    const catalog = await window.codecn.listWorkspaces();
+    const catalog = await window.newbrain.listWorkspaces();
     const workspace = catalog.find((item) => item.name === "workspace");
-    const snapshot = await window.codecn.getSnapshot();
-    const goal = await window.codecn.getGoalExecution();
+    const snapshot = await window.newbrain.getSnapshot();
+    const goal = await window.newbrain.getGoalExecution();
     const activeProjectRows = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')]
       .map((element) => ({ text: element.innerText.trim(), active: element.classList.contains("active") }));
     return {

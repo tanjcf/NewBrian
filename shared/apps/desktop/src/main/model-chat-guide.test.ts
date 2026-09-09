@@ -19,7 +19,7 @@ test("normalizes attachments and delivery modes", () => {
   assert.deepEqual(normalizeGuideRequest({
     message: "看附件",
     attachments: [
-      { name: "a.png", path: "C:/a.png", url: "codecn://a" },
+      { name: "a.png", path: "C:/a.png", url: "newbrain://a" },
       { path: "" },
       { path: "C:/b.docx" }
     ],
@@ -27,7 +27,7 @@ test("normalizes attachments and delivery modes", () => {
   }), {
     message: "看附件",
     attachments: [
-      { name: "a.png", path: "C:/a.png", url: "codecn://a" },
+      { name: "a.png", path: "C:/a.png", url: "newbrain://a" },
       { name: "b.docx", path: "C:/b.docx" }
     ],
     delivery: "followup"

@@ -10,7 +10,7 @@ import type {
 type HolonTab = "tasks" | "snapshot" | "candidates" | "knowledge" | "sync";
 
 export function HolonWorkspace({ threadId }: { threadId?: string }) {
-  const api = window.codecn;
+  const api = window.newbrain;
   const [tab, setTab] = useState<HolonTab>("tasks");
   const [workItem, setWorkItem] = useState<HolonWorkItemView | null>(null);
   const [confirming, setConfirming] = useState(false);

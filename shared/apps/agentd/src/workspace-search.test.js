@@ -7,7 +7,7 @@ import { globWorkspaceFiles, grepWorkspaceFiles } from "./workspace-search.js";
 import { createBuiltinToolRegistry } from "./tool-registry.js";
 
 test("workspace.glob finds **/*.py under a subdir with namePattern and ignores venv", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-glob-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-glob-"));
   try {
     mkdirSync(join(root, "python-platform", "src", "auth"), { recursive: true });
     mkdirSync(join(root, "python-platform", "src", "billing"), { recursive: true });
@@ -33,7 +33,7 @@ test("workspace.glob finds **/*.py under a subdir with namePattern and ignores v
 });
 
 test("workspace.grep finds content with glob filter and ignores node_modules", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-grep-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-grep-"));
   try {
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src", "app.py"), "def authenticate():\n    return True\n");
@@ -53,7 +53,7 @@ test("workspace.grep finds content with glob filter and ignores node_modules", a
 });
 
 test("registry exposes workspace.glob and workspace.grep tools", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-tools-glob-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-tools-glob-"));
   try {
     mkdirSync(join(root, "pkg"), { recursive: true });
     writeFileSync(join(root, "pkg", "auth.py"), "token = 1\n");

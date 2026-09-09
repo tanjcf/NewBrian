@@ -35,13 +35,13 @@ function copyMissing(srcDir, destDir) {
 }
 
 const expected = "b06c20c7e21fb117a8147bda5a6f1f15206ac93793308fc00b7a117d5a5fb126";
-const unpacked = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release\_p\12108-1\win-unpacked`;
-const installDir = path.join(process.env.LOCALAPPDATA, ".codecn");
+const unpacked = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release\_p\12108-1\win-unpacked`;
+const installDir = path.join(process.env.LOCALAPPDATA, ".newbrain");
 const asarPath = path.join(installDir, "resources", "app.asar");
-const exePath = path.join(installDir, "codecn.exe");
+const exePath = path.join(installDir, "newbrain.exe");
 
 try {
-  execFileSync("taskkill.exe", ["/IM", "codecn.exe", "/F"], { stdio: "ignore" });
+  execFileSync("taskkill.exe", ["/IM", "newbrain.exe", "/F"], { stdio: "ignore" });
 } catch {}
 
 if (!fs.existsSync(unpacked)) throw new Error("missing unpacked build: " + unpacked);
@@ -59,14 +59,14 @@ const procs = execFileSync(
   [
     "-NoProfile",
     "-Command",
-    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'codecn.exe' } | Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress"
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'newbrain.exe' } | Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress"
   ],
   { encoding: "utf8" }
 ).trim();
 console.log("running", procs);
 
-const asarCli = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\node_modules\.pnpm\@electron+asar@3.4.1\node_modules\@electron\asar\bin\asar.js`;
-const extractDir = path.join(process.env.TEMP, "codecn-msi-smoke", "final-asar");
+const asarCli = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\node_modules\.pnpm\@electron+asar@3.4.1\node_modules\@electron\asar\bin\asar.js`;
+const extractDir = path.join(process.env.TEMP, "newbrain-msi-smoke", "final-asar");
 fs.rmSync(extractDir, { recursive: true, force: true });
 execFileSync("node", [asarCli, "extract", asarPath, extractDir], { stdio: "ignore" });
 const rendererDir = path.join(extractDir, "out", "renderer", "assets");
@@ -88,8 +88,8 @@ const evidence = {
     rendererHasZhEmpty: rendererText.includes("预览内容为空"),
     rendererHasReasonCode: rendererText.includes("原因代码")
   },
-  note: "MSI installs to %LOCALAPPDATA%\\.codecn (not Program Files). Program Files\\\\codeCN remains an older Ulit/base install."
+  note: "MSI installs to %LOCALAPPDATA%\\.newbrain (not Program Files). Program Files\\\\NewBrain remains an older Ulit/base install."
 };
-fs.writeFileSync(path.join(process.env.TEMP, "codecn-msi-smoke", "final-evidence.json"), JSON.stringify(evidence, null, 2));
+fs.writeFileSync(path.join(process.env.TEMP, "newbrain-msi-smoke", "final-evidence.json"), JSON.stringify(evidence, null, 2));
 console.log(JSON.stringify(evidence, null, 2));
 process.exit(evidence.asarMatchesBuild && evidence.markers.preloadHasDiagnostic && Array.isArray(evidence.running) && evidence.running.length ? 0 : 2);

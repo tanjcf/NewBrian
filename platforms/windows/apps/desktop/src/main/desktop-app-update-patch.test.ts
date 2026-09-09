@@ -29,7 +29,7 @@ test("resolves ulit zip/msi package kinds from metadata and filenames", () => {
     "ulit-msi"
   );
   assert.equal(
-    resolveDesktopUpdatePackageKind({ downloadUrl: "https://cdn/codeCN-1.2.8.msi" }),
+    resolveDesktopUpdatePackageKind({ downloadUrl: "https://cdn/NewBrain-1.2.8.msi" }),
     "full-msi"
   );
   assert.equal(
@@ -83,24 +83,24 @@ test("names local download artifacts for ulit packages without double ulit", () 
 
 test("deferred wait uses hidden Get-Process and never find /I", () => {
   const wait = buildDeferredProcessExitWaitPowerShell({
-    processImageName: "codeCN.exe",
+    processImageName: "NewBrain.exe",
     maxWaitSeconds: 30
   });
   assert.match(wait, /Get-Process -Name \$name/);
   assert.match(wait, /WindowStyle Hidden/);
-  assert.match(wait, /等待 codeCN 退出超时/);
+  assert.match(wait, /等待 NewBrain 退出超时/);
   assert.doesNotMatch(wait, /find \/I/i);
   assert.doesNotMatch(wait, /tasklist/i);
 
   const script = buildDeferredUlitZipApplyScript({
     zipPath: "C:\\updates\\1.2.8ulit.zip",
-    installRoot: "C:\\Users\\Ada\\AppData\\Local\\.codecn",
+    installRoot: "C:\\Users\\Ada\\AppData\\Local\\.newbrain",
     stagingDir: "C:\\updates\\ulit-stage"
   });
   assert.match(script, /Expand-Archive/);
   assert.match(script, /apply\.cmd/);
   assert.match(script, /Get-Process -Name \$name/);
   assert.doesNotMatch(script, /find \/I/i);
-  assert.match(script, /Local\\.codecn/);
-  assert.match(script, /title codeCN update/);
+  assert.match(script, /Local\\.newbrain/);
+  assert.match(script, /title NewBrain update/);
 });

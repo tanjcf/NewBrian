@@ -11,10 +11,10 @@ const context = {
 
 test("creates a versioned thread state with stable initialization invariants", () => {
   idSequence = 0;
-  const state = factory.createDefaultThreadState("codeCN", "架构重构", context);
+  const state = factory.createDefaultThreadState("NewBrain", "架构重构", context);
   assert.equal(state.version, 2);
   assert.deepEqual(state.messages.map((item: { role: string }) => item.role), ["system"]);
-  assert.match(state.messages[0].content, /codeCN.*架构重构/);
+  assert.match(state.messages[0].content, /NewBrain.*架构重构/);
   assert.equal(state.memories[0].scope, "workspace");
   assert.equal(state.timeline[0].type, "thread");
   assert.deepEqual(state.runs, []);
@@ -35,7 +35,7 @@ test("creates timeline events using injected identity and time sources", () => {
 });
 
 test("preserves persisted messages when an exported snapshot looks truncated", () => {
-  const persisted = factory.createDefaultThreadState("codeCN", "Persistence", context);
+  const persisted = factory.createDefaultThreadState("NewBrain", "Persistence", context);
   persisted.messages.push({ id: "user-1", role: "user", content: "keep me", createdAt: context.nowIso() });
   const exported = { ...persisted, messages: [persisted.messages[0]], memories: [] };
   const merged = factory.mergeThreadStateForPersistence(exported, persisted);
@@ -44,15 +44,15 @@ test("preserves persisted messages when an exported snapshot looks truncated", (
 });
 
 test("does not merge a previous runtime conversation into a fresh thread", () => {
-  const persisted = factory.createDefaultThreadState("codeCN", "Fresh", context);
-  const exported = factory.createDefaultThreadState("codeCN", "Previous", context);
+  const persisted = factory.createDefaultThreadState("NewBrain", "Fresh", context);
+  const exported = factory.createDefaultThreadState("NewBrain", "Previous", context);
   exported.messages.push({ id: "old-user", role: "user", content: "old conversation", createdAt: context.nowIso() });
   const merged = factory.mergeThreadStateForPersistence(exported, persisted);
   assert.deepEqual(merged.messages, persisted.messages);
 });
 
 test("does not merge a foreign thread conversation into an occupied thread", () => {
-  const persisted = factory.createDefaultThreadState("codeCN", "你好", context);
+  const persisted = factory.createDefaultThreadState("NewBrain", "你好", context);
   persisted.messages.push({ id: "hello-user", role: "user", content: "你好", createdAt: context.nowIso() });
   persisted.messages.push({
     id: "hello-assistant",
@@ -60,7 +60,7 @@ test("does not merge a foreign thread conversation into an occupied thread", () 
     content: "你好！",
     createdAt: context.nowIso()
   });
-  const exported = factory.createDefaultThreadState("codeCN", "十五五规划详细内容", context);
+  const exported = factory.createDefaultThreadState("NewBrain", "十五五规划详细内容", context);
   exported.messages.push({
     id: "plan-user",
     role: "user",
@@ -79,9 +79,9 @@ test("does not merge a foreign thread conversation into an occupied thread", () 
 });
 
 test("merges state collections by id while retaining persisted-only records", () => {
-  const persisted = factory.createDefaultThreadState("codeCN", "Persistence", context);
+  const persisted = factory.createDefaultThreadState("NewBrain", "Persistence", context);
   persisted.memories.push({ id: "memory-shared", scope: "workspace", summary: "old", createdAt: context.nowIso() });
-  const exported = factory.createDefaultThreadState("codeCN", "Persistence", context);
+  const exported = factory.createDefaultThreadState("NewBrain", "Persistence", context);
   exported.memories = [
     { id: "memory-shared", scope: "workspace", summary: "updated", createdAt: context.nowIso() },
     { id: "memory-new", scope: "workspace", summary: "new", createdAt: context.nowIso() }

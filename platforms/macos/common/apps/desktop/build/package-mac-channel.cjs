@@ -95,7 +95,7 @@ function ensureRustCore() {
 }
 
 function resolveElectronDist(arch) {
-  const extracted = "/tmp/codecn-electron-35.7.5-arm64";
+  const extracted = "/tmp/newbrain-electron-35.7.5-arm64";
   if (arch === process.arch && existsSync(join(extracted, "Electron.app", "Contents", "Info.plist"))) {
     return extracted;
   }
@@ -108,7 +108,7 @@ function resolveElectronDist(arch) {
 function moveTestArtifacts(releaseDir, version, arch) {
   const suffix = `-${arch}-test-unsigned.`;
   for (const fileName of readdirSync(releaseDir)) {
-    if (!fileName.startsWith("codeCN Mac-")) continue;
+    if (!fileName.startsWith("NewBrain Mac-")) continue;
     if (!(fileName.endsWith(".dmg") || fileName.endsWith(".zip") || fileName.endsWith(".blockmap"))) continue;
     if (fileName.includes("-test-unsigned")) continue;
     const nextName = fileName
@@ -136,7 +136,7 @@ console.log(`Packaging mac ${channel} ${arch} ${version}`);
 console.log(`Gateway endpoint: ${gatewayBaseUrl}`);
 console.log(`Preview endpoint: ${previewUrl}`);
 
-process.env.CODECN_PACKAGE_CHANNEL = channel;
+process.env.NEWBRAIN_PACKAGE_CHANNEL = channel;
 preparePackageResources(channel);
 ensureRustCore();
 run("pnpm", ["run", "build"]);
@@ -152,7 +152,7 @@ const builderArgs = [
   builderArchFlag,
   `--config.directories.output=release/${channelSlug}`,
   `--config.extraMetadata.version=${version}`,
-  `--config.artifactName=codeCN Mac-\${version}-\${arch}.\${ext}`
+  `--config.artifactName=NewBrain Mac-\${version}-\${arch}.\${ext}`
 ];
 const electronDist = resolveElectronDist(arch);
 if (electronDist) builderArgs.push(`--config.electronDist=${electronDist}`);

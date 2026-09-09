@@ -7,7 +7,7 @@ import test from "node:test";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.ts";
 
 test("persists a sanitized renderer failure and uploads it once after restart", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-error-outbox-"));
   try {
     const firstRun = new DesktopErrorOutbox(root, () => new Date("2026-07-22T11:00:00Z"));
     const record = await firstRun.capture({
@@ -35,7 +35,7 @@ test("persists a sanitized renderer failure and uploads it once after restart", 
 });
 
 test("keeps a failed upload pending for the next restart", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-error-outbox-"));
   try {
     const outbox = new DesktopErrorOutbox(root);
     await outbox.capture({ kind: "renderer_error", message: "boom", stackTrace: "Error: boom" });
@@ -47,7 +47,7 @@ test("keeps a failed upload pending for the next restart", async () => {
 });
 
 test("persists oversized renderer context without throwing", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-error-outbox-"));
   try {
     const outbox = new DesktopErrorOutbox(root);
     const record = await outbox.capture({
@@ -64,7 +64,7 @@ test("persists oversized renderer context without throwing", async () => {
 });
 
 test("keeps structured feedback fields and diagnostic tail when context exceeds the budget", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-error-outbox-"));
   try {
     const outbox = new DesktopErrorOutbox(root);
     const record = await outbox.capture({
@@ -105,7 +105,7 @@ test("keeps structured feedback fields and diagnostic tail when context exceeds 
 });
 
 test("fingerprints distinct terminal messages separately even with the same stack", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-error-outbox-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-error-outbox-"));
   try {
     const outbox = new DesktopErrorOutbox(root, () => new Date("2026-08-05T12:00:00Z"));
     const sharedStack = "Error: failure\n at callModelApi (index.js:1:1)";

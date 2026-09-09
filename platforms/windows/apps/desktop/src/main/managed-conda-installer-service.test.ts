@@ -50,7 +50,7 @@ test("executes npm.cmd when the supplied task environment omits Windows system v
 });
 
 test("reports a missing working directory before spawning a command", async () => {
-  const missingCwd = `${process.cwd()}\\missing-codecn-command-cwd`;
+  const missingCwd = `${process.cwd()}\\missing-newbrain-command-cwd`;
   await assert.rejects(() => runBoundedEnvironmentCommand({
     executable: process.execPath,
     args: ["--version"],
@@ -71,7 +71,7 @@ test("downloads and installs managed Conda through bounded commands", async () =
   const commands: Array<{ executable: string }> = [];
   let installed = false;
   const service = new ManagedCondaInstallerService({
-    workspacePath: "C:\\codecn",
+    workspacePath: "C:\\newbrain",
     platform: "win32",
     getManagedCondaRoot: () => "C:\\state\\conda",
     getManagedCondaExecutable: () => "C:\\state\\conda\\Scripts\\conda.exe",
@@ -99,14 +99,14 @@ test("downloads and installs managed Conda through bounded commands", async () =
   });
 
   assert.equal(await service.ensureInstalled(), "C:\\state\\conda\\Scripts\\conda.exe");
-  assert.deepEqual(commands.map((command) => command.executable), ["powershell.exe", "C:\\codecn\\install\\miniconda.exe"]);
+  assert.deepEqual(commands.map((command) => command.executable), ["powershell.exe", "C:\\newbrain\\install\\miniconda.exe"]);
   assert.ok(commands.every((command) => !("timeoutMs" in command)));
 });
 
 test("requires manual installation when the platform is unsupported", async () => {
   let prompted = false;
   const service = new ManagedCondaInstallerService({
-    workspacePath: "/codecn",
+    workspacePath: "/newbrain",
     platform: "linux",
     getManagedCondaRoot: () => "/state/conda",
     getManagedCondaExecutable: () => "/state/conda/bin/conda",

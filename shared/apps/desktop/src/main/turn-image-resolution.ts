@@ -89,8 +89,8 @@ export function resolvePreferredBridgeVisionModelFromEnv(
   environment: NodeJS.ProcessEnv = process.env
 ): string | undefined {
   const configured =
-    environment.CODECN_BRIDGE_VISION_MODEL?.trim()
-    || environment.CODECN_DEFAULT_VISION_MODEL?.trim()
+    environment.NEWBRAIN_BRIDGE_VISION_MODEL?.trim()
+    || environment.NEWBRAIN_DEFAULT_VISION_MODEL?.trim()
     || "";
   return configured || undefined;
 }

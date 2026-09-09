@@ -2,7 +2,7 @@
 
 ## CASE-ID: HOLON-GAME-001 通过 Holon 开发并验收 Windows 桌面贪吃蛇
 
-- Requirement: 用户在 Windows 桌面版 codeCN 的 Holon 页面领取任务，经显式确认和工具审批后，生成可独立运行的桌面贪吃蛇游戏；自动化程序用真实鼠标、键盘事件验证玩法、持久化和重启恢复。
+- Requirement: 用户在 Windows 桌面版 NewBrain 的 Holon 页面领取任务，经显式确认和工具审批后，生成可独立运行的桌面贪吃蛇游戏；自动化程序用真实鼠标、键盘事件验证玩法、持久化和重启恢复。
 - Source paths: `windows/apps/desktop/src/renderer/app/HolonWorkspace.tsx`、`windows/apps/desktop/src/main/holon-work-item-service.ts`、`windows/apps/desktop/src/main/index.ts`、`windows/apps/desktop/scripts/`。
 - Risk: 审批绕过、模型假完成、只生成网页、程序不可启动、键盘无响应、重复执行、工作区逃逸、重启后状态丢失。
 - Execution tier: 可见 Electron E2E + 真实 Windows 子进程 + 确定性模型契约测试；发布前追加 MSI 安装版和真实模型 smoke。
@@ -10,7 +10,7 @@
 ### Preconditions
 
 1. Windows 11 测试机，屏幕分辨率至少 1366x768，缩放 100% 或记录实际缩放值。
-2. 安装或构建 Windows 桌面版 codeCN；应用必须以普通用户权限运行。
+2. 安装或构建 Windows 桌面版 NewBrain；应用必须以普通用户权限运行。
 3. 使用独立用户数据目录、独立工作区和唯一测试运行 ID，禁止复用生产账号数据。
 4. 工作区初始为空，线程标题为 `HOLON-GAME-001`，权限模式为“请求批准”。
 5. 测试机具备项目选定的桌面游戏运行时。优先使用仓库现有、免费、维护中的桌面技术栈；不得把 HTML 页面包装成验收目标。
@@ -46,7 +46,7 @@ Holon WorkItem：
 
 所有业务动作必须通过系统级鼠标/键盘事件执行。CDP 仅可读取可见控件矩形和页面状态；禁止调用 `element.click()` 代替点击。
 
-1. 启动可见 codeCN 桌面窗口并截图。
+1. 启动可见 NewBrain 桌面窗口并截图。
 2. 鼠标点击左侧 `Holon`。
 3. 鼠标点击 `远程任务`，再点击 `刷新并领取`。
 4. 验证任务正文完整显示；鼠标点击 `准备执行`。
@@ -61,18 +61,18 @@ Holon WorkItem：
 13. 使用测试模式或确定性种子让食物位于蛇前方；发送方向键吃到食物，验证分数由 0 变为 10。
 14. 连续发送方向键使蛇撞墙，验证显示 `游戏结束`。
 15. 发送 `R`，验证游戏重新开始且分数归零。
-16. 使用 `Alt+F4` 关闭游戏，验证 codeCN 仍正常运行。
-17. 关闭并重新启动 codeCN；重新打开同一项目、线程和 Holon 页面。
+16. 使用 `Alt+F4` 关闭游戏，验证 NewBrain 仍正常运行。
+17. 关闭并重新启动 NewBrain；重新打开同一项目、线程和 Holon 页面。
 18. 验证任务仍为完成状态，生成物链接仍可用；再次启动游戏并完成一次方向键移动。
 
 ### Running-state assertions
 
-- codeCN 窗口始终可见、响应鼠标，不出现白屏或 renderer 崩溃。
+- NewBrain 窗口始终可见、响应鼠标，不出现白屏或 renderer 崩溃。
 - 任务执行前必须出现明确确认，不能领取后自动运行。
 - 审批请求必须在 30 秒内形成可见 `approval-dialog`。
 - 执行中显示运行状态、取消控制、推理摘要或工具步骤；不能长时间显示假完成。
 - 游戏启动后必须出现独立 Windows 顶层窗口，不得使用浏览器标签页。
-- 键盘事件发送到游戏窗口，不得错误输入到 codeCN 编辑框。
+- 键盘事件发送到游戏窗口，不得错误输入到 NewBrain 编辑框。
 
 ### Runtime assertions
 
@@ -100,9 +100,9 @@ Holon WorkItem：
 
 ### Recovery assertions
 
-- 强制关闭 codeCN 后重启，线程消息、审批记录、Holon 终态和生成物链接仍存在。
+- 强制关闭 NewBrain 后重启，线程消息、审批记录、Holon 终态和生成物链接仍存在。
 - 再次启动游戏不会重新构建或生成第二份输出。
-- 游戏进程在 codeCN 重启前若仍运行，codeCN 不得把它误判为新的 Holon 执行。
+- 游戏进程在 NewBrain 重启前若仍运行，NewBrain 不得把它误判为新的 Holon 执行。
 - 恢复后事件数量和构建产物哈希不变。
 
 ### Failure variants
@@ -113,7 +113,7 @@ Holon WorkItem：
 - `HOLON-GAME-005`: 构建工具缺失，验证页面显示可操作错误，不声称已生成游戏。
 - `HOLON-GAME-006`: 游戏启动后立即崩溃，验证 Holon 验收失败并保留崩溃日志。
 - `HOLON-GAME-007`: 请求写出工作区，必须拒绝并记录安全事件。
-- `HOLON-GAME-008`: 批准后杀死 codeCN，重启不得重复执行已确认副作用。
+- `HOLON-GAME-008`: 批准后杀死 NewBrain，重启不得重复执行已确认副作用。
 - `HOLON-GAME-009`: MSI 安装版执行主案例，验证资源、运行时和进程名称与开发版一致。
 
 ### Evidence
@@ -126,7 +126,7 @@ input-events.jsonl
 process-tree-before.json
 process-tree-running.json
 process-tree-after.json
-01-codecn-start.png
+01-newbrain-start.png
 02-holon-task.png
 03-execution-confirm.png
 04-approval.png
@@ -136,7 +136,7 @@ process-tree-after.json
 08-paused.png
 09-game-over.png
 10-restarted.png
-11-after-codecn-restart.png
+11-after-newbrain-restart.png
 renderer.log
 main.log
 holon-events.json
@@ -155,7 +155,7 @@ screen-recording.mp4
 3. 独立桌面游戏窗口启动，不打开浏览器。
 4. 移动、暂停、得分、撞墙、重启五项玩法断言全部通过。
 5. 产物路径、安全边界、进程清理和哈希断言全部通过。
-6. 重启 codeCN 后任务、线程和产物可恢复且无重复副作用。
+6. 重启 NewBrain 后任务、线程和产物可恢复且无重复副作用。
 7. 所有规定证据存在，`result.json` 没有缺失步骤。
 
 任一关键项缺失时使用 `FAIL`、`PARTIAL`、`BLOCKED` 或 `NOT RUN`，禁止输出 `PASS`。
@@ -168,7 +168,7 @@ screen-recording.mp4
 
 ## 自动化实现建议
 
-1. codeCN Electron 操作使用 CDP `Input.dispatchMouseEvent`、`Input.dispatchKeyEvent` 和 `Input.insertText`。
+1. NewBrain Electron 操作使用 CDP `Input.dispatchMouseEvent`、`Input.dispatchKeyEvent` 和 `Input.insertText`。
 2. Windows 游戏窗口发现、前台激活和控件读取使用免费开源的 Windows UI Automation 实现；优先复用已维护库，不手写 Win32 辅助功能协议。
 3. 每次动作记录时间、目标窗口、控件矩形、坐标、按键和动作后截图。
 4. 测试失败时先截图，再保存 DOM/UIA 状态、进程树和日志，最后关闭隔离进程。

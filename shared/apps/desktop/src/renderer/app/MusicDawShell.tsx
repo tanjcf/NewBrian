@@ -51,8 +51,8 @@ export function MusicDawShell({ projectId, activeStep, refreshToken = 0 }: Music
   const pane = activeStep ?? localStep;
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.getBrainMusicDaw) return;
-    void window.codecn.getBrainMusicDaw({ projectId }).then((result: { state?: BrainMusicDawState }) => {
+    if (!projectId || !window.newbrain?.getBrainMusicDaw) return;
+    void window.newbrain.getBrainMusicDaw({ projectId }).then((result: { state?: BrainMusicDawState }) => {
       if (!result.state) return;
       setTitle(result.state.title);
       setLyrics(result.state.lyrics);
@@ -75,13 +75,13 @@ export function MusicDawShell({ projectId, activeStep, refreshToken = 0 }: Music
   });
 
   const persistDaw = async (cook = false) => {
-    if (!projectId || !window.codecn?.saveBrainMusicDaw) {
+    if (!projectId || !window.newbrain?.saveBrainMusicDaw) {
       setStatus(cook ? "已导出（本地草稿）" : "已保存（本地草稿）");
       return;
     }
     try {
-      await window.codecn.saveBrainMusicDaw({ projectId, state: state() });
-      if (cook && window.codecn.cookBrainMusicDaw) await window.codecn.cookBrainMusicDaw({ projectId });
+      await window.newbrain.saveBrainMusicDaw({ projectId, state: state() });
+      if (cook && window.newbrain.cookBrainMusicDaw) await window.newbrain.cookBrainMusicDaw({ projectId });
       setStatus(cook ? "已保存并生成 Rust 音乐产物" : "DAW 已保存");
     } catch (error) {
       setStatus(`操作失败：${error instanceof Error ? error.message : String(error)}`);
@@ -96,13 +96,13 @@ export function MusicDawShell({ projectId, activeStep, refreshToken = 0 }: Music
     setStatus("正在请求 music_generate…");
     try {
       await persistDaw(false);
-      if (window.codecn?.generateBrainSceneMedia) {
+      if (window.newbrain?.generateBrainSceneMedia) {
         const prompt = [
           `Title: ${title}`,
           typeof style === "string" ? `Style: ${style}` : `Style: ${JSON.stringify(style)}`,
           `Lyrics:\n${lyrics}`
         ].join("\n");
-        await window.codecn.generateBrainSceneMedia({ projectId, kind: "music", prompt });
+        await window.newbrain.generateBrainSceneMedia({ projectId, kind: "music", prompt });
         setStatus("music_generate 已完成 · 可进入音轨编排");
         return;
       }
@@ -116,19 +116,19 @@ export function MusicDawShell({ projectId, activeStep, refreshToken = 0 }: Music
   };
 
   const exportMix = async () => {
-    if (!projectId || !window.codecn?.startMusicRender) {
+    if (!projectId || !window.newbrain?.startMusicRender) {
       await persistDaw(true);
       return;
     }
     setStatus("正在导出 mix…");
     try {
       await persistDaw(true);
-      const started = await window.codecn.startMusicRender({
+      const started = await window.newbrain.startMusicRender({
         projectId,
         outputRelativePath: `exports/music-mix-${Date.now()}.wav`
       });
       setStatus(`FFmpeg 已启动 · ${started.renderId}`);
-      const getStatus = window.codecn.getMusicRenderStatus;
+      const getStatus = window.newbrain.getMusicRenderStatus;
       if (getStatus) {
         for (let attempt = 0; attempt < 120; attempt += 1) {
           const tick = await getStatus({ renderId: started.renderId });

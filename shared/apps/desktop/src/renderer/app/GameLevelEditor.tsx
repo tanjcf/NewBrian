@@ -87,15 +87,15 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
     () => level?.actors.find((actor) => actor.on) || level?.actors[0],
     [level]
   );
-  const hasCore = Boolean(projectId && window.codecn?.getBrainGameLevelEditor);
+  const hasCore = Boolean(projectId && window.newbrain?.getBrainGameLevelEditor);
   const bound = Boolean(projectId);
   const canMutate = bound && hasCore && !busy;
 
   const refreshFromCore = async () => {
-    if (!projectId || !window.codecn?.getBrainGameLevelEditor) return;
+    if (!projectId || !window.newbrain?.getBrainGameLevelEditor) return;
     setBusy(true);
     try {
-      const result = await window.codecn.getBrainGameLevelEditor({ projectId });
+      const result = await window.newbrain.getBrainGameLevelEditor({ projectId });
       const mapped = fromCoreState(result?.state);
       setLevels(mapped.levels);
       setLevelIndex(mapped.levelIndex);
@@ -107,8 +107,8 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
             ? "工程内有关卡草稿 · 保存后写入磁盘"
             : "尚无关卡 · 请新建关卡后保存到工程"
       );
-      if (window.codecn.getBrainGameContentTree) {
-        const tree = await window.codecn.getBrainGameContentTree({ projectId });
+      if (window.newbrain.getBrainGameContentTree) {
+        const tree = await window.newbrain.getBrainGameContentTree({ projectId });
         setContentExists(Boolean(tree?.exists));
         setContentEntries(Array.isArray(tree?.entries) ? tree.entries : []);
       } else {
@@ -137,7 +137,7 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
       setStatus("请先绑定本地游戏工程；未绑定工程时不提供演示关卡或假 Content");
       return;
     }
-    if (!window.codecn?.getBrainGameLevelEditor) {
+    if (!window.newbrain?.getBrainGameLevelEditor) {
       setLevels([]);
       setLevelIndex(0);
       setPersisted(false);
@@ -167,7 +167,7 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
   };
 
   const spawn = async (kind: "enemy" | "boss" | "npc") => {
-    if (!projectId || !window.codecn?.spawnBrainGameActor) {
+    if (!projectId || !window.newbrain?.spawnBrainGameActor) {
       setStatus("请先绑定本地游戏工程后再生成 Actor");
       return;
     }
@@ -180,7 +180,7 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
       // spawn_actor reads disk state; persist editor draft first so empty defaults are never used.
       const saved = await persist();
       if (!saved) return;
-      const result = await window.codecn.spawnBrainGameActor({ projectId, kind, levelIndex });
+      const result = await window.newbrain.spawnBrainGameActor({ projectId, kind, levelIndex });
       const mapped = fromCoreState(result?.saved?.state || result?.state);
       setLevels(mapped.levels);
       setLevelIndex(mapped.levelIndex);
@@ -195,11 +195,11 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
   };
 
   const persist = async () => {
-    if (!projectId || !window.codecn?.saveBrainGameLevelEditor) {
+    if (!projectId || !window.newbrain?.saveBrainGameLevelEditor) {
       setStatus("请先绑定本地游戏工程");
       return null;
     }
-    const result = await window.codecn.saveBrainGameLevelEditor({
+    const result = await window.newbrain.saveBrainGameLevelEditor({
       projectId,
       state: toCoreState(levels, levelIndex)
     });
@@ -226,14 +226,14 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
   };
 
   const play = async () => {
-    if (!projectId || !window.codecn?.startBrainGamePreview) {
+    if (!projectId || !window.newbrain?.startBrainGamePreview) {
       setStatus("请先绑定本地游戏工程后再试玩");
       return;
     }
     setBusy(true);
     setStatus("正在启动试玩…");
     try {
-      const preview = await window.codecn.startBrainGamePreview({ projectId });
+      const preview = await window.newbrain.startBrainGamePreview({ projectId });
       setStatus(preview?.previewUrl ? `试玩已启动 · ${preview.previewUrl}` : `试玩状态：${preview?.status || "running"}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "启动试玩失败");
@@ -247,7 +247,7 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
       setStatus("请先绑定本地游戏工程");
       return;
     }
-    if (!window.codecn?.exportBrainGameDesign) {
+    if (!window.newbrain?.exportBrainGameDesign) {
       setStatus("当前构建未接入 Cook IPC，拒绝假成功");
       return;
     }
@@ -256,7 +256,7 @@ export function GameLevelEditor({ projectId }: { projectId?: string }) {
       const saved = await persist();
       if (!saved) return;
       setStatus("正在 Cook 工程…");
-      const cooked = await window.codecn.exportBrainGameDesign({ projectId });
+      const cooked = await window.newbrain.exportBrainGameDesign({ projectId });
       const detail = Array.isArray(cooked?.written)
         ? `${cooked.written.length} 文件`
         : (cooked?.artifactCount ?? "Docs/BRAIN");

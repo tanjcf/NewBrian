@@ -37,7 +37,7 @@ flowchart LR
 - `agents/*.md`：主理人 / 成员人设与 SOP（协作动作写 `agent.delegate` / `agent.wait`）
 - `skills/*/SKILL.md`：可执行领域流程
 
-安装态：`~/.codecn/experts/installed/` + `~/.codecn/experts/registry.json`（含 thread→expert 召唤映射）。
+安装态：`~/.newbrain/experts/installed/` + `~/.newbrain/experts/registry.json`（含 thread→expert 召唤映射）。
 
 打包：Windows `extraResources` 复制到 `resources/experts`。
 

@@ -68,8 +68,8 @@ function buildPatchPreview(originalText, nextText) {
 
 function approvalMessageForTool(descriptor, call) {
   const command = call.name === "shell.exec" ? String(call.arguments?.command ?? "").trim() : "";
-  if (command) return `是否允许 codeCN 执行这条命令？`;
-  return `是否允许 codeCN 使用工具：${descriptor.title || descriptor.name}？`;
+  if (command) return `是否允许 NewBrain 执行这条命令？`;
+  return `是否允许 NewBrain 使用工具：${descriptor.title || descriptor.name}？`;
 }
 
 export class LocalAgentRuntime {

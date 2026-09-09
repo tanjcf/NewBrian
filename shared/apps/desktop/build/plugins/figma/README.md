@@ -1,6 +1,6 @@
-# Figma builtin for codeCN
+# Figma builtin for NewBrain
 
-This package adapts the Codex curated Figma plugin skills for codeCN.
+This package adapts the Codex curated Figma plugin skills for NewBrain.
 
 ## What you get
 
@@ -11,7 +11,7 @@ This package adapts the Codex curated Figma plugin skills for codeCN.
 
 Cloud writes (“直接出现在 Figma 里”) need Figma tools:
 
-1. **Recommended for codeCN:** open Figma desktop → Dev Mode → enable **desktop MCP**, then in codeCN **设置 → MCP → ＋ Figma Desktop MCP** (`http://127.0.0.1:3845/mcp`), save and start.
+1. **Recommended for NewBrain:** open Figma desktop → Dev Mode → enable **desktop MCP**, then in NewBrain **设置 → MCP → ＋ Figma Desktop MCP** (`http://127.0.0.1:3845/mcp`), save and start.
 2. Optional: **设置 → 环境** → `FIGMA_ACCESS_TOKEN` (Personal Access Token) for REST-style helpers.
 3. Optional remote: `https://mcp.figma.com/mcp` (may require Figma OAuth / client allowlisting).
 

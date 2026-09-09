@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const session = await ensureElectronE2ESession(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9341));
+const session = await ensureElectronE2ESession(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9341));
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
@@ -10,7 +10,7 @@ let id = 0;
 const command = (method, params = {}) => new Promise((resolve, reject) => { const current = ++id; const listener = (event) => { const payload = JSON.parse(event.data); if (payload.id !== current) return; socket.removeEventListener("message", listener); if (payload.error || payload.result?.exceptionDetails) reject(new Error(payload.error?.message || payload.result?.exceptionDetails?.exception?.description || payload.result.exceptionDetails.text)); else resolve(payload.result); }; socket.addEventListener("message", listener); socket.send(JSON.stringify({ id: current, method, params })); });
 const evaluate = async (expression) => (await command("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }))?.result?.value;
 const waitFor = async (expression, timeout = 30_000) => { const deadline = Date.now() + timeout; while (Date.now() < deadline) { if (await evaluate(expression)) return; await new Promise((resolve) => setTimeout(resolve, 200)); } throw new Error(`Timed out: ${expression}`); };
-const seeded = await evaluate(`(async () => { const projects = await window.codecn.listBrainProjects({ workspaceKey: "software" }); let project = projects[0]; if (!project) project = await window.codecn.createBrainProject({ name: "Flow Electron E2E", primaryWorkspaceKey: "software" }); let conversations = await window.codecn.listBrainConversations({ projectId: project.id, workspaceKey: "software" }); let conversation = conversations[0]; if (!conversation) conversation = await window.codecn.createBrainConversation({ projectId: project.id, workspaceKey: "software", title: "Flow Electron E2E" }); localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({ version: 2, selectedWorkspaceKey: "software", catalogs: { software: { projectId: project.id, conversationId: conversation.id } } })); return true; })()`);
+const seeded = await evaluate(`(async () => { const projects = await window.newbrain.listBrainProjects({ workspaceKey: "software" }); let project = projects[0]; if (!project) project = await window.newbrain.createBrainProject({ name: "Flow Electron E2E", primaryWorkspaceKey: "software" }); let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey: "software" }); let conversation = conversations[0]; if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey: "software", title: "Flow Electron E2E" }); localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({ version: 2, selectedWorkspaceKey: "software", catalogs: { software: { projectId: project.id, conversationId: conversation.id } } })); return true; })()`);
 assert.equal(seeded, true);
 await command("Page.reload", { ignoreCache: true });
 await waitFor("Boolean(document.querySelector('.brain-conversation-list'))");
@@ -23,19 +23,19 @@ await evaluate("document.querySelector('[data-testid=flow-name]').value = 'Elect
 await waitFor("document.querySelector('[data-testid=flow-workspace]')?.textContent?.includes('Flow ID')");
 await evaluate("document.querySelector('[data-testid=flow-schedule-time]').value = '09:00'; document.querySelector('[data-testid=flow-schedule-create]').click(); true");
 await waitFor("document.querySelector('[data-testid=flow-schedules]')?.textContent?.includes('09:00')");
-const longRun = await evaluate(`(async () => { const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}'); const projectId = selection.catalogs?.software?.projectId; const definition = { schemaVersion: 1, nodes: [{ id: 'start', type: 'start', next: 'delay' }, { id: 'delay', type: 'tool', tool: 'software.delay', input: { milliseconds: 50 }, next: 'end' }, { id: 'end', type: 'end' }] }; const flow = await window.codecn.saveBrainFlow({ projectId, name: 'Electron Event Driven Fixture', definition }); return window.codecn.startBrainFlow({ flowId: flow.id }); })()`);
+const longRun = await evaluate(`(async () => { const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}'); const projectId = selection.catalogs?.software?.projectId; const definition = { schemaVersion: 1, nodes: [{ id: 'start', type: 'start', next: 'delay' }, { id: 'delay', type: 'tool', tool: 'software.delay', input: { milliseconds: 50 }, next: 'end' }, { id: 'end', type: 'end' }] }; const flow = await window.newbrain.saveBrainFlow({ projectId, name: 'Electron Event Driven Fixture', definition }); return window.newbrain.startBrainFlow({ flowId: flow.id }); })()`);
 assert.equal(longRun.status, "SUCCEEDED", JSON.stringify(longRun)); assert.equal(longRun.audit.some((item) => item.nodeId === "end"), true, JSON.stringify(longRun));
-const approvalRun = await evaluate(`(async () => { const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}'); const projectId = selection.catalogs?.software?.projectId; const definition = { schemaVersion: 1, nodes: [{ id: 'start', type: 'start', next: 'approve' }, { id: 'approve', type: 'approval', next: 'end' }, { id: 'end', type: 'end' }] }; const flow = await window.codecn.saveBrainFlow({ projectId, name: 'Electron Approval Fixture', definition }); return window.codecn.startBrainFlow({ flowId: flow.id }); })()`);
+const approvalRun = await evaluate(`(async () => { const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}'); const projectId = selection.catalogs?.software?.projectId; const definition = { schemaVersion: 1, nodes: [{ id: 'start', type: 'start', next: 'approve' }, { id: 'approve', type: 'approval', next: 'end' }, { id: 'end', type: 'end' }] }; const flow = await window.newbrain.saveBrainFlow({ projectId, name: 'Electron Approval Fixture', definition }); return window.newbrain.startBrainFlow({ flowId: flow.id }); })()`);
 assert.equal(["SUCCEEDED", "WAITING_APPROVAL", "DECLINED"].includes(approvalRun.status), true, JSON.stringify(approvalRun));
 const retryRun = await evaluate(`(async () => {
   const selection = JSON.parse(localStorage.getItem('brain.workspaceSelection.v2') || '{}');
   const projectId = selection.catalogs?.software?.projectId;
   const failDefinition = { schemaVersion: 1, nodes: [{ id: 'start', type: 'start', next: 'tool' }, { id: 'tool', type: 'tool', tool: 'shell.anything', next: 'end' }, { id: 'end', type: 'end' }] };
-  const failedFlow = await window.codecn.saveBrainFlow({ projectId, name: 'Electron Retry Fixture', definition: failDefinition });
-  const failed = await window.codecn.startBrainFlow({ flowId: failedFlow.id });
+  const failedFlow = await window.newbrain.saveBrainFlow({ projectId, name: 'Electron Retry Fixture', definition: failDefinition });
+  const failed = await window.newbrain.startBrainFlow({ flowId: failedFlow.id });
   const passDefinition = { schemaVersion: 1, nodes: [{ id: 'start', type: 'start', next: 'delay' }, { id: 'delay', type: 'tool', tool: 'software.delay', input: { milliseconds: 25 }, next: 'end' }, { id: 'end', type: 'end' }] };
-  await window.codecn.saveBrainFlow({ projectId, id: failedFlow.id, name: failedFlow.name, definition: passDefinition });
-  const retried = await window.codecn.startBrainFlow({ flowId: failedFlow.id });
+  await window.newbrain.saveBrainFlow({ projectId, id: failedFlow.id, name: failedFlow.name, definition: passDefinition });
+  const retried = await window.newbrain.startBrainFlow({ flowId: failedFlow.id });
   return { failedStatus: failed.status, retriedStatus: retried.status, retriedAudit: retried.audit?.length || 0 };
 })()`);
 assert.equal(retryRun.failedStatus, "FAILED", JSON.stringify(retryRun));

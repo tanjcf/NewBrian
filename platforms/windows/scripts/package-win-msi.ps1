@@ -43,21 +43,21 @@ $artifactName = if ($isProduction) { $builderArtifactName } else { "$productName
 $releaseRoot = Join-Path (Join-Path $desktopRoot "release") $channelSlug
 $msiOut = Join-Path $releaseRoot $artifactName
 $maxPackageAttempts = 3
-$msiInstallDir = $env:CODECN_MSI_INSTALL_DIR
-$rootConfigPath = Join-Path $repoRoot "codecn.config.json"
-$featureConfigPath = Join-Path $repoRoot "codecn.features.json"
-$bootstrapConfigPath = Join-Path $repoRoot "codecn.bootstrap.json"
+$msiInstallDir = $env:NEWBRAIN_MSI_INSTALL_DIR
+$rootConfigPath = Join-Path $repoRoot "newbrain.config.json"
+$featureConfigPath = Join-Path $repoRoot "newbrain.features.json"
+$bootstrapConfigPath = Join-Path $repoRoot "newbrain.bootstrap.json"
 $documentWorkerSourcePath = Join-Path $desktopRoot "src\main\document-worker.js"
 $documentWorkerPath = Join-Path $desktopRoot "document-worker.js"
 $packageResourcesDir = Join-Path $desktopRoot "build\package-resources"
-$packageConfigPath = Join-Path $packageResourcesDir "codecn.config.json"
-$packageFeatureConfigPath = Join-Path $packageResourcesDir "codecn.features.json"
+$packageConfigPath = Join-Path $packageResourcesDir "newbrain.config.json"
+$packageFeatureConfigPath = Join-Path $packageResourcesDir "newbrain.features.json"
 $iconPath = Join-Path $desktopRoot "build\icon.ico"
 $rustCoreBuildScript = Join-Path $repoRoot "scripts\build-rust-core.ps1"
 $rustCorePackagePath = Join-Path $desktopRoot "build\rust-core\brain-core.exe"
-$sourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $repoRoot } else { $env:CODECN_SOURCE_ROOT }
-$gatewayBaseUrl = if ($isProduction) { $env:CODECN_PRODUCTION_GATEWAY_BASE_URL } else { $env:CODECN_TEST_GATEWAY_BASE_URL }
-$previewUrl = if ($isProduction) { $env:CODECN_PRODUCTION_PREVIEW_URL } else { $env:CODECN_TEST_PREVIEW_URL }
+$sourceRoot = if ([string]::IsNullOrWhiteSpace($env:NEWBRAIN_SOURCE_ROOT)) { $repoRoot } else { $env:NEWBRAIN_SOURCE_ROOT }
+$gatewayBaseUrl = if ($isProduction) { $env:NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL } else { $env:NEWBRAIN_TEST_GATEWAY_BASE_URL }
+$previewUrl = if ($isProduction) { $env:NEWBRAIN_PRODUCTION_PREVIEW_URL } else { $env:NEWBRAIN_TEST_PREVIEW_URL }
 # Test keeps the known-live Spring IP. Production defaults to the HTTPS api.sinnauze.cn
 # gateway; retired *.wangjietech.com hosts stay in rewrite lists for legacy asar cleanup only.
 if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
@@ -66,8 +66,8 @@ if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
 if ([string]::IsNullOrWhiteSpace($previewUrl)) {
   $previewUrl = if ($isProduction) { "https://api.sinnauze.cn" } else { "http://120.48.151.202:3000" }
 }
-$allowUnsigned = $AllowUnsigned -or ($env:CODECN_ALLOW_UNSIGNED -eq "true")
-$requireSignature = ($isProduction -or ($env:CODECN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned
+$allowUnsigned = $AllowUnsigned -or ($env:NEWBRAIN_ALLOW_UNSIGNED -eq "true")
+$requireSignature = ($isProduction -or ($env:NEWBRAIN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned
 $hasSigningMaterial = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) `
   -or -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK) `
   -or -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
@@ -124,7 +124,7 @@ if ([string]::IsNullOrWhiteSpace($msiInstallDir)) {
   Write-Host "MSI install dir: $msiInstallDir" -ForegroundColor Cyan
 }
 
-Write-Host "Keeping installed codeCN processes running; packaging uses an isolated output directory." -ForegroundColor DarkGray
+Write-Host "Keeping installed NewBrain processes running; packaging uses an isolated output directory." -ForegroundColor DarkGray
 
 # pnpm leaves optional-platform symlinks (esbuild/napi-rs/etc.) that point at missing
 # packages; @electron/rebuild stats them and aborts. Drop dangling links before packaging.
@@ -228,7 +228,7 @@ try {
         reviewModel = "deepseek-v4-pro"
         reasoningEffort = "medium"
         disableResponseStorage = $true
-        systemPrompt = "You are a helpful coding assistant for the codeCN desktop workspace."
+        systemPrompt = "You are a helpful coding assistant for the NewBrain desktop workspace."
       }
       preferences = [ordered]@{
         hooks = [ordered]@{
@@ -339,7 +339,7 @@ try {
     Push-Location $desktopRoot
     try {
       if (-not [string]::IsNullOrWhiteSpace($msiInstallDir)) {
-        $env:CODECN_MSI_INSTALL_DIR = $msiInstallDir
+        $env:NEWBRAIN_MSI_INSTALL_DIR = $msiInstallDir
       }
       $dirArgs = @("--win", "dir", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
       $dirArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
@@ -351,10 +351,10 @@ try {
       if ($lastBuilderExit -eq 0) {
         $unpackedRoot = Join-Path $builderOut "win-unpacked"
         $unpackedExe = Join-Path $unpackedRoot "$productName.exe"
-        $packagedIcon = Join-Path $unpackedRoot "resources\\codecn.ico"
+        $packagedIcon = Join-Path $unpackedRoot "resources\\newbrain.ico"
         $packagedAsar = Join-Path $unpackedRoot "resources\\app.asar"
         $packagedRustCore = Join-Path $unpackedRoot "resources\\brain-core\\brain-core.exe"
-        $packagedBootstrap = Join-Path $unpackedRoot "resources\\codecn.bootstrap.json"
+        $packagedBootstrap = Join-Path $unpackedRoot "resources\\newbrain.bootstrap.json"
         $packagedDocumentWorker = Join-Path $unpackedRoot "resources\\document-worker.js"
         if (-not (Test-Path -LiteralPath $unpackedExe)) { throw "Missing unpacked executable: $unpackedExe" }
         if (-not (Test-Path -LiteralPath $packagedIcon)) { throw "Missing packaged taskbar icon: $packagedIcon" }
@@ -432,7 +432,7 @@ process.stdout.write(asar.extractFile(archive, file));
         }
         Write-Host "Verified renderer asset: $rendererAsset" -ForegroundColor DarkGray
 
-        Write-Host "Verified packaged codeCN executable and icon resource." -ForegroundColor DarkGray
+        Write-Host "Verified packaged NewBrain executable and icon resource." -ForegroundColor DarkGray
 
         $msiArgs = @("--win", "msi", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
         $msiArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
@@ -443,7 +443,7 @@ process.stdout.write(asar.extractFile(archive, file));
         $lastBuilderExit = $LASTEXITCODE
       }
     } finally {
-      Remove-Item Env:\CODECN_MSI_INSTALL_DIR -ErrorAction SilentlyContinue
+      Remove-Item Env:\NEWBRAIN_MSI_INSTALL_DIR -ErrorAction SilentlyContinue
       Pop-Location
     }
 
@@ -520,7 +520,7 @@ if (Test-Path -LiteralPath $generatedMsi) {
 
 # -Ulit no longer renames the full Electron MSI. Real small patches are produced by
 # windows/scripts/package-win-ulit-patch.ps1 (bsdiff of app.asar + tiny applicator).
-$emitUlit = $Ulit -or ($env:CODECN_ULIT_PACKAGE -eq "1") -or ($env:CODECN_ULIT_PACKAGE -eq "true")
+$emitUlit = $Ulit -or ($env:NEWBRAIN_ULIT_PACKAGE -eq "1") -or ($env:NEWBRAIN_ULIT_PACKAGE -eq "true")
 if ($emitUlit) {
   Write-Host "REFUSING to emit {version}ulit.MSI as a renamed full Electron MSI." -ForegroundColor Red
   Write-Host "Build a real patch instead:" -ForegroundColor Yellow

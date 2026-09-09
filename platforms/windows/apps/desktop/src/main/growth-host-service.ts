@@ -32,7 +32,7 @@ export class GrowthHostService {
 
   constructor(input: GrowthHostServiceInput) {
     this.client = input.client;
-    this.leaseOwner = (input.leaseOwner || "codecn-desktop-host").trim() || "codecn-desktop-host";
+    this.leaseOwner = (input.leaseOwner || "newbrain-desktop-host").trim() || "newbrain-desktop-host";
     this.intervalMs = Math.max(5_000, Math.min(120_000, input.intervalMs ?? 15_000));
     this.isLocallyEnabled = input.isLocallyEnabled ?? (() => true);
     this.readCapabilities = input.readCapabilities;

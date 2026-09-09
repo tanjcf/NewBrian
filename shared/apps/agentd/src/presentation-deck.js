@@ -1,5 +1,5 @@
 /**
- * Shared presentation deck engine for codeCN artifact.create.
+ * Shared presentation deck engine for NewBrain artifact.create.
  * Produces modern multi-layout PPTX and Cursor-style HTML slide decks.
  */
 
@@ -251,7 +251,7 @@ function renderTitleSlide(deck, slideModel, theme) {
       fontFace: FONT, fontSize: 18, color: theme.onDarkMuted, margin: 0
     });
   }
-  slide.addText("codeCN", {
+  slide.addText("NewBrain", {
     x: 0.9, y: 6.7, w: 4, h: 0.3,
     fontFace: FONT, fontSize: 12, color: theme.accentSoft, margin: 0
   });
@@ -575,10 +575,10 @@ export async function writePptxDeck(input, target, sectionsFn, options = {}) {
   const theme = DECK_THEME;
   const deck = new PptxGenJS();
   deck.layout = "LAYOUT_WIDE";
-  deck.author = "codeCN";
+  deck.author = "NewBrain";
   deck.title = deckTitle;
   deck.subject = deckTitle;
-  deck.company = "codeCN";
+  deck.company = "NewBrain";
   deck.lang = "zh-CN";
   deck.theme = { headFontFace: FONT, bodyFontFace: FONT, lang: "zh-CN" };
 
@@ -647,7 +647,7 @@ function htmlSlideInner(slideModel) {
   const body = escapeHtml(slideModel.body);
   const subtitle = escapeHtml(slideModel.subtitle || "");
   if (slideModel.layout === "title") {
-    return `<div class="slide title-slide"><div class="accent-rail"></div><div class="copy"><h1>${title}</h1>${subtitle || body ? `<p class="lede">${subtitle || body}</p>` : ""}<span class="brand">codeCN</span></div></div>`;
+    return `<div class="slide title-slide"><div class="accent-rail"></div><div class="copy"><h1>${title}</h1>${subtitle || body ? `<p class="lede">${subtitle || body}</p>` : ""}<span class="brand">NewBrain</span></div></div>`;
   }
   if (slideModel.layout === "closing") {
     return `<div class="slide closing-slide"><h1>${title}</h1>${body ? `<p>${body}</p>` : ""}${slideModel.bullets.length ? `<p>${slideModel.bullets.map(escapeHtml).join(" · ")}</p>` : ""}<div class="closing-bar"></div></div>`;

@@ -52,8 +52,8 @@ export class AppMenuService {
       showAbout: () => {
         void dialog.showMessageBox(window, {
           type: "info",
-          title: "关于 codeCN",
-          message: "codeCN",
+          title: "关于 NewBrain",
+          message: "NewBrain",
           detail: `版本 ${app.getVersion()}\n面向 Windows 的智能编程协作桌面应用。`
         });
       },
@@ -140,7 +140,7 @@ export function setupAppMenu(window: BrowserWindow) {
     },
     {
       label: "帮助",
-      submenu: [{ role: "about", label: "关于 codeCN" }]
+      submenu: [{ role: "about", label: "关于 NewBrain" }]
     }
   ];
 

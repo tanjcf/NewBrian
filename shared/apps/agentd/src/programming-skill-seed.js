@@ -15,7 +15,7 @@ export const PROGRAMMING_SKILL_TEMPLATE_MARKER = "Programming Guardrails (coding
 export const PROGRAMMING_GUARDRAILS_MARKDOWN = `# Programming Guardrails
 
 Use these rules for general code-change work when reliability matters more than speed.
-Adapted from the codeCN programming-skill pack for always-on project context.
+Adapted from the NewBrain programming-skill pack for always-on project context.
 
 ## Core Rules
 

@@ -38,7 +38,7 @@ test("owns shell lifecycle and publishes immutable snapshots", () => {
     onUpdate: (snapshot: { isRunning: boolean; lines: string[]; lastExitCode?: number | null }) => updates.push(snapshot)
   });
 
-  service.ensure({ CODECN_TEST: "1" });
+  service.ensure({ NEWBRAIN_TEST: "1" });
   child.stdout.write("hello\r\n");
   child.emit("exit", 7);
   assert.equal(service.snapshot().isRunning, false);

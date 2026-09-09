@@ -8,7 +8,7 @@ export function ExpertCandidateReview() {
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<{ item: Candidate; approve: boolean } | null>(null);
   async function refresh() {
-    const api = window.codecn;
+    const api = window.newbrain;
     if (!api) { setError("桌面服务尚未就绪"); return; }
     setBusy(true);
     try { setItems(await api.listLearningCandidates({ limit: 100 })); setError(""); }
@@ -18,7 +18,7 @@ export function ExpertCandidateReview() {
   useEffect(() => { void refresh(); }, []);
   async function decide() {
     if (!confirmation) return;
-    const api = window.codecn;
+    const api = window.newbrain;
     if (!api) { setError("桌面服务尚未就绪"); return; }
     setBusy(true);
     try {

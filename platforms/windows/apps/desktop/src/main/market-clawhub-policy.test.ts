@@ -13,7 +13,7 @@ test("defaults direct ClawHub to closed", () => {
 test("allows explicit preference or developer env override", () => {
   assert.equal(resolveDirectClawhubAllowed({ preferenceAllowed: true, env: {} }), true);
   assert.equal(
-    resolveDirectClawhubAllowed({ preferenceAllowed: false, env: { CODECN_MARKET_DIRECT_CLAWHUB: "1" } }),
+    resolveDirectClawhubAllowed({ preferenceAllowed: false, env: { NEWBRAIN_MARKET_DIRECT_CLAWHUB: "1" } }),
     true
   );
 });

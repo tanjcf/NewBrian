@@ -166,7 +166,7 @@ import type {
 } from "@codex-forge/protocol";
 import { brainWorkspaceIpcChannels, desktopIpcChannels } from "@codex-forge/protocol";
 
-contextBridge.exposeInMainWorld("codecn", {
+contextBridge.exposeInMainWorld("newbrain", {
   listBrainWorkspaces: (): Promise<BrainWorkspaceDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceList),
   listBrainProjects: (input: BrainProjectListInput = {}): Promise<BrainProjectDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectList, input),
   createBrainProject: (input: BrainProjectCreateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectCreate, input),

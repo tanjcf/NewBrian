@@ -1,0 +1,24 @@
+{
+  "llm": {
+    "provider": "OpenAI",
+    "baseUrl": "http://127.0.0.1:8790/v1",
+    "apiKey": "",
+    "wireApi": "responses",
+    "model": "gpt-5.4",
+    "reviewModel": "gpt-5.4-mini",
+    "reasoningEffort": "medium",
+    "disableResponseStorage": true,
+    "systemPrompt": "You are a helpful coding assistant for the NewBrain desktop workspace."
+  },
+  "preferences": {
+    "appearance": { "theme": "light", "density": "comfortable", "reduceMotion": false },
+    "configuration": { "requireApprovalForShell": true, "saveResponses": false, "telemetryEnabled": false },
+    "personalization": { "proactiveUpdates": true, "includeVerificationSummary": true, "reviewFindingsFirst": true },
+    "hooks": { "beforeCommand": true, "afterCommand": true, "beforeCommit": true, "afterTask": true, "beforeCommandScript": "", "afterCommandScript": "", "beforeCommitScript": "", "afterTaskScript": "" },
+    "git": { "statusCommand": "git status --short --branch", "branchPrefix": "codex/", "showDiffBeforeCommit": true, "confirmBeforePush": true },
+    "environment": { "terminalShell": "/bin/bash", "extraEnv": {}, "autoBootstrapConda": true },
+    "worktree": { "defaultIsolated": true, "keepArchived": false, "rootDir": ".newbrain/worktrees" },
+    "browser": { "autoOpenPreview": true, "preserveTabs": true, "highResScreenshots": false, "previewUrl": "http://127.0.0.1:8790" }
+  },
+  "mcpServers": []
+}

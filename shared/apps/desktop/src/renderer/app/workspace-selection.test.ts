@@ -296,7 +296,7 @@ test("matches the approved prototype with separate global and workspace capabili
   ]) assert.ok(source.includes(`label: "${label}"`), `missing prototype capability: ${label}`);
 });
 
-test("explore scene restores original codeCN right panel without fake scene tools", () => {
+test("explore scene restores original NewBrain right panel without fake scene tools", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   const tabsBlock = source.slice(source.indexOf("const brainWorkspaceCapabilityTabs"), source.indexOf("import { WorkspaceHtmlViewer"));
   const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));

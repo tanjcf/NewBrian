@@ -1,7 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$Action,
-  [string]$WindowTitle = "codeCN",
-  [string]$ProcessName = "codecn",
+  [string]$WindowTitle = "NewBrain",
+  [string]$ProcessName = "newbrain",
   [int]$ProcessId = 0,
   [string]$Name = "",
   [string]$AutomationId = "",

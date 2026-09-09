@@ -179,7 +179,7 @@ function buildPrompt(
     stackTrace: redactUsageExceptionText(bounded(trusted.stackTrace, MAX_DIAGNOSTIC_CHARS))
   };
   return [
-    "分析一次 codeCN 用户主动报告的使用异常。只依据给定材料，不把可能原因表述为已确认根因。",
+    "分析一次 NewBrain 用户主动报告的使用异常。只依据给定材料，不把可能原因表述为已确认根因。",
     "只返回 JSON：title(不超过30字符)、symptomSummary、possibleCause、category、stableFeatures(1到8个稳定英文特征)、contextSummary。",
     JSON.stringify(payload)
   ].join("\n");

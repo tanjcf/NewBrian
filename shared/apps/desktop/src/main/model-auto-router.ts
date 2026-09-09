@@ -148,7 +148,7 @@ const IMAGE_GEN_REQUEST_RE =
   /(?:文生图|画一[张幅只个]|生成一?[张幅].*(?:图|图片|海报|插画|壁纸|场景)|帮我画|画张|做张图|做[一]?[张幅].*(?:图|图片|海报|插画|壁纸|场景)|做出[一]?[张幅].*(?:图|图片|壁纸)|出[一]?[张幅]?图|出图|生成图片|生成海报|生成壁纸|做壁纸|画壁纸|桌面(?:图片|壁纸|背景)|壁纸|wallpaper|卡通.*(?:图|壁纸|场景)|3d?\s*动画|动画电影|电影风|两个人.*相遇|生成.*场景|做成.*壁纸|一张.*(?:图|壁纸|场景)|hy-image|tokenhub.*(?:image|图)|混元生图)/i;
 
 const MEDIA_CAPABILITY_QUESTION_RE =
-  /^(?:你|brain|codecn|ai|系统)?\s*(?:会|能|可以|是否可以|支持)\s*(?:直接)?\s*(?:生成|制作|画)\s*(?:图片|图像|图|视频|动画)\s*(?:吗|么|嘛|不|\?|？)?$/i;
+  /^(?:你|brain|newbrain|ai|系统)?\s*(?:会|能|可以|是否可以|支持)\s*(?:直接)?\s*(?:生成|制作|画)\s*(?:图片|图像|图|视频|动画)\s*(?:吗|么|嘛|不|\?|？)?$/i;
 
 export function looksLikeMediaCapabilityQuestion(text: string | undefined | null): boolean {
   return MEDIA_CAPABILITY_QUESTION_RE.test(String(text || "").trim());

@@ -2,8 +2,8 @@
   "name": "@codex-forge/desktop",
   "version": "1.4.3",
   "private": true,
-  "description": "Desktop shell for the codeCN local-first coding agent workbench.",
-  "author": "codeCN",
+  "description": "Desktop shell for the NewBrain local-first coding agent workbench.",
+  "author": "NewBrain",
   "type": "module",
   "scripts": {
     "predev": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
@@ -94,9 +94,9 @@
   },
   "main": "out/main/index.js",
   "build": {
-    "appId": "cn.codecn.desktop",
-    "executableName": "codecn",
-    "productName": "codeCN",
+    "appId": "cn.newbrain.desktop",
+    "executableName": "newbrain",
+    "productName": "NewBrain",
     "directories": {
       "output": "release"
     },
@@ -125,20 +125,20 @@
     "extraResources": [
       { "from": "resources/garden", "to": "garden" },
       {
-        "from": "build/package-resources/codecn.config.json",
-        "to": "codecn.config.json"
+        "from": "build/package-resources/newbrain.config.json",
+        "to": "newbrain.config.json"
       },
       {
-        "from": "build/package-resources/codecn.features.json",
-        "to": "codecn.features.json"
+        "from": "build/package-resources/newbrain.features.json",
+        "to": "newbrain.features.json"
       },
       {
-        "from": "../../codecn.bootstrap.json",
-        "to": "codecn.bootstrap.json"
+        "from": "../../newbrain.bootstrap.json",
+        "to": "newbrain.bootstrap.json"
       },
       {
         "from": "build/icon.ico",
-        "to": "codecn.ico"
+        "to": "newbrain.ico"
       },
       {
         "from": "build/plugins",
@@ -176,7 +176,7 @@
       "oneClick": false,
       "additionalLightArgs": [
         "-loc",
-        "codecn-localization.wxl",
+        "newbrain-localization.wxl",
         "-sval",
         "-ct",
         "1"

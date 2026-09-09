@@ -876,7 +876,7 @@ export function createBuiltinToolRegistry() {
                     additionalProperties: false
                   }
                 },
-                imagePath: { type: "string", description: "Workspace-relative PNG/JPG path (outputs/ or .codecn/generated-media/image/)" },
+                imagePath: { type: "string", description: "Workspace-relative PNG/JPG path (outputs/ or .newbrain/generated-media/image/)" },
                 imagePlaceholder: { type: "string", description: "Placeholder text when imagePath is not yet available" },
                 caption: { type: "string" },
                 columns: {

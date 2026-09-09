@@ -47,12 +47,12 @@ export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?
   }, [selectedId]);
 
   const refresh = useCallback(async () => {
-    if (!window.codecn?.listExperts) {
+    if (!window.newbrain?.listExperts) {
       setError("当前桌面版本尚未暴露专家市场 API。");
       return;
     }
     try {
-      const list = await window.codecn.listExperts();
+      const list = await window.newbrain.listExperts();
       setExperts(Array.isArray(list) ? list as ExpertCatalogCard[] : []);
       setError("");
     } catch (err) {
@@ -87,10 +87,10 @@ export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?
   const source = (item: ExpertCatalogCard) => item.id.startsWith("nuwa-") ? "女娲 Nuwa" : item.id.startsWith("agency-") ? "Agency Agents" : item.id.startsWith("game-studios") ? "Game Studios" : "BRAIN";
 
   const install = async (expert: ExpertCatalogCard) => {
-    if (!window.codecn?.installExpert) return;
+    if (!window.newbrain?.installExpert) return;
     setBusyId(expert.id);
     try {
-      await window.codecn.installExpert({ expertId: expert.id });
+      await window.newbrain.installExpert({ expertId: expert.id });
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -100,13 +100,13 @@ export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?
   };
 
   const toggleEnabled = async (expert: ExpertCatalogCard) => {
-    if (!window.codecn?.setExpertEnabled) return;
+    if (!window.newbrain?.setExpertEnabled) return;
     setBusyId(expert.id);
     try {
       if (!expert.installed) {
-        await window.codecn.installExpert({ expertId: expert.id });
+        await window.newbrain.installExpert({ expertId: expert.id });
       }
-      await window.codecn.setExpertEnabled({ expertId: expert.id, enabled: !expert.enabled });
+      await window.newbrain.setExpertEnabled({ expertId: expert.id, enabled: !expert.enabled });
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

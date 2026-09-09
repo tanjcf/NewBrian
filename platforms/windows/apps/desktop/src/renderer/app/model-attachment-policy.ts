@@ -6,6 +6,6 @@ export function compactModelAttachment(attachment: ComposerAttachment): Composer
   const fileName = attachment.path.split(/[\\/]/).pop() || attachment.name;
   return {
     ...attachment,
-    url: `codecn-attachment://media/${encodeURIComponent(fileName)}`
+    url: `newbrain-attachment://media/${encodeURIComponent(fileName)}`
   };
 }

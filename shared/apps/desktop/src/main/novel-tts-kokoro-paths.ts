@@ -45,10 +45,10 @@ export function listNovelTtsKokoroRootHints(options?: {
 
   return [
     userDataPath ? path.join(userDataPath, "novel-tts", "kokoro") : "",
-    path.join(localAppData, ".codecn", "novel-tts", "kokoro"),
-    path.join(home, ".codecn", "novel-tts", "kokoro"),
-    path.join(appData, "codeCN", "novel-tts", "kokoro"),
-    path.join(appData, "codecn", "novel-tts", "kokoro"),
+    path.join(localAppData, ".newbrain", "novel-tts", "kokoro"),
+    path.join(home, ".newbrain", "novel-tts", "kokoro"),
+    path.join(appData, "NewBrain", "novel-tts", "kokoro"),
+    path.join(appData, "newbrain", "novel-tts", "kokoro"),
     path.join(appData, "@codex-forge", "desktop", "novel-tts", "kokoro"),
     resourcesPath ? path.join(resourcesPath, "novel-tts", "kokoro") : ""
   ].filter(Boolean);

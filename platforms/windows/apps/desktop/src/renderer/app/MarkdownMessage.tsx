@@ -35,7 +35,7 @@ class MarkdownErrorBoundary extends Component<{ content: string; children: React
 
 function openLocalFile(workspaceId: string, reference: LocalFileReference, onOpenLocalFile?: OpenLocalFile) {
   if (onOpenLocalFile) onOpenLocalFile(reference.filePath, reference);
-  else window.dispatchEvent(new CustomEvent("codecn:open-local-file", { detail: { workspaceId, ...reference } }));
+  else window.dispatchEvent(new CustomEvent("newbrain:open-local-file", { detail: { workspaceId, ...reference } }));
 }
 
 function MermaidDiagram({ source }: { source: string }) {
@@ -45,7 +45,7 @@ function MermaidDiagram({ source }: { source: string }) {
 
   useEffect(() => {
     let active = true;
-    const diagramId = `codecn-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    const diagramId = `newbrain-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
     void import("mermaid").then(async ({ default: mermaid }) => {
       mermaid.initialize({ startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, theme: "neutral" });
       const result = await mermaid.render(diagramId, source);
@@ -96,7 +96,7 @@ function markdownComponents(workspaceId?: string, onOpenLocalFile?: OpenLocalFil
       const localHref = reference ? localTarget! : "";
       const citation = reference?.line ? `第 ${reference.line}${reference.endLine ? `–${reference.endLine}` : ""} 行` : "";
       return <a {...props} href={local ? localHref : safeMarkdownUrl(href)} target={local ? undefined : "_blank"} rel={local ? undefined : "noreferrer"}
-        title={local ? `${citation ? `${citation} · ` : ""}在 codeCN 中打开` : props.title}
+        title={local ? `${citation ? `${citation} · ` : ""}在 NewBrain 中打开` : props.title}
         data-local-file-path={reference?.filePath} data-local-file-line={reference?.line}
         data-local-file-end-line={reference?.endLine} data-local-file-column={reference?.column}
         onClick={local ? (event) => { event.preventDefault(); openLocalFile(workspaceId || "", reference!, onOpenLocalFile); } : undefined}
@@ -107,7 +107,7 @@ function markdownComponents(workspaceId?: string, onOpenLocalFile?: OpenLocalFil
       const isBlock = Boolean(className?.startsWith("language-") || value.includes("\n"));
       const reference = parseLocalFileReference(value);
       const localArtifact = Boolean(!isBlock && onOpenLocalFile && isArtifactFilePath(reference.filePath) && isLocalFileLink(reference.filePath));
-      if (localArtifact) return <a href={value} className="markdown-artifact-link" title="在 codeCN 中打开"
+      if (localArtifact) return <a href={value} className="markdown-artifact-link" title="在 NewBrain 中打开"
         data-local-file-path={reference.filePath} data-local-file-line={reference.line} data-local-file-end-line={reference.endLine}
         onClick={(event) => { event.preventDefault(); openLocalFile(workspaceId || "", reference, onOpenLocalFile); }}
       ><code {...props}>{children}</code>{reference.line ? <span className="markdown-file-line-badge">第 {reference.line}{reference.endLine ? `–${reference.endLine}` : ""} 行</span> : null}</a>;

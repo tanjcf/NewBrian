@@ -134,14 +134,14 @@ export function QuantWorkspace({
   const isSymbolWatched = Boolean(activeWatchlistGroup?.symbols.includes(symbol));
 
   const refreshWatchlistQuotes = async () => {
-    if (!window.codecn?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
+    if (!window.newbrain?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
       setWatchlistQuotes({});
       return;
     }
     setWatchlistStatus("正在读取真实行情…");
     const entries = await Promise.all(activeWatchlistGroup.symbols.map(async (item) => {
       try {
-        const result = await window.codecn.queryQuantBars({
+        const result = await window.newbrain.queryQuantBars({
           query: { symbol: item, interval: "1d", adjustment: "none", startDate: startDate || undefined, endDate: endDate || undefined }
         });
         const bars = Array.isArray(result) ? result.filter((bar) => typeof bar?.close === "number") : [];
@@ -170,14 +170,14 @@ export function QuantWorkspace({
   };
 
   const refreshMarketOverview = async () => {
-    if (!window.codecn?.queryQuantMarketOverview) {
+    if (!window.newbrain?.queryQuantMarketOverview) {
       setMarketOverviewStatus("大盘服务不可用");
       return;
     }
     setMarketOverviewBusy(true);
     setMarketOverviewStatus("正在通过 Spring 读取 AKShare…");
     try {
-      const result = await window.codecn.queryQuantMarketOverview({ limit: 20 });
+      const result = await window.newbrain.queryQuantMarketOverview({ limit: 20 });
       setMarketOverview(result && typeof result === "object" ? result as Record<string, any> : null);
       setMarketOverviewStatus("已读取真实大盘数据");
     } catch (error) {
@@ -199,16 +199,16 @@ export function QuantWorkspace({
     setUi((current) => ({ ...current, symbol: code }));
   };
   const runScreener = async () => {
-    if (!window.codecn?.queryQuantMarketScreener) { setScreenerStatus("选股服务不可用"); return; }
+    if (!window.newbrain?.queryQuantMarketScreener) { setScreenerStatus("选股服务不可用"); return; }
     const criteria = Object.fromEntries(Object.entries(screenerCriteria).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)]));
     setScreenerBusy(true); setScreenerStatus("正在读取 AKShare A 股快照…");
-    try { const result = await window.codecn.queryQuantMarketScreener({ criteria: { ...criteria, limit: 30 } }); setScreenerResult(result); setScreenerStatus(`已筛选 ${Array.isArray(result?.items) ? result.items.length : 0} 只真实股票`); }
+    try { const result = await window.newbrain.queryQuantMarketScreener({ criteria: { ...criteria, limit: 30 } }); setScreenerResult(result); setScreenerStatus(`已筛选 ${Array.isArray(result?.items) ? result.items.length : 0} 只真实股票`); }
     catch (error) { setScreenerResult(null); setScreenerStatus(`选股失败：${error instanceof Error ? error.message : String(error)}`); }
     finally { setScreenerBusy(false); }
   };
   useEffect(() => {
-    if (!window.codecn?.onQuantScreenerUpdated) return;
-    return window.codecn.onQuantScreenerUpdated((payload: any) => { if (!payload?.result) return; setScreenerResult(payload.result); setScreenerStatus(`AI 已筛选 ${Array.isArray(payload.result.items) ? payload.result.items.length : 0} 只真实股票`); });
+    if (!window.newbrain?.onQuantScreenerUpdated) return;
+    return window.newbrain.onQuantScreenerUpdated((payload: any) => { if (!payload?.result) return; setScreenerResult(payload.result); setScreenerStatus(`AI 已筛选 ${Array.isArray(payload.result.items) ? payload.result.items.length : 0} 只真实股票`); });
   }, [projectId, workspaceId]);
 
   useEffect(() => {
@@ -273,8 +273,8 @@ export function QuantWorkspace({
   }, [symbol, interval, startDate, endDate, queryVersion]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.onQuantMarketUpdated) return;
-    return window.codecn.onQuantMarketUpdated((payload) => {
+    if (!projectId || !window.newbrain?.onQuantMarketUpdated) return;
+    return window.newbrain.onQuantMarketUpdated((payload) => {
       // The model runtime uses the local workspace id, while the Brain panel
       // may be keyed by a Brain project id. This panel is the active quant
       // surface, so a completed quant tool result must be applied here even
@@ -292,8 +292,8 @@ export function QuantWorkspace({
   }, [projectId, workspaceId, setUi]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.onQuantPortfolioUpdated) return;
-    return window.codecn.onQuantPortfolioUpdated((payload: any) => {
+    if (!projectId || !window.newbrain?.onQuantPortfolioUpdated) return;
+    return window.newbrain.onQuantPortfolioUpdated((payload: any) => {
       if (payload?.note?.id) {
         setUi((current) => ({
           ...current,
@@ -352,10 +352,10 @@ export function QuantWorkspace({
   }, [symbol, interval, adjustment, startDate, endDate]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.createQuantSession || !window.codecn?.getQuantActivity) return;
+    if (!projectId || !window.newbrain?.createQuantSession || !window.newbrain?.getQuantActivity) return;
     let active = true;
-    void window.codecn.createQuantSession({ projectId, initialCash: 100_000 })
-      .then(() => window.codecn.getQuantActivity?.({ projectId, prices: {} }))
+    void window.newbrain.createQuantSession({ projectId, initialCash: 100_000 })
+      .then(() => window.newbrain.getQuantActivity?.({ projectId, prices: {} }))
       .then((activity: any) => {
         if (!active || !activity) return;
         setPortfolio(activity.snapshot);
@@ -366,11 +366,11 @@ export function QuantWorkspace({
   }, [projectId]);
 
   useEffect(() => {
-    if (!hydrated || !window.codecn?.queryQuantBars) return;
+    if (!hydrated || !window.newbrain?.queryQuantBars) return;
     let active = true;
     const intervalValue = interval === "周线" ? "1w" : interval === "月线" ? "1mo" : "1d";
     const adjustmentValue = adjustment === "后复权" ? "backward" : adjustment === "不复权" ? "none" : "forward";
-    void window.codecn.queryQuantBars({ query: { symbol, interval: intervalValue, adjustment: adjustmentValue, startDate: startDate || undefined, endDate: endDate || undefined } })
+    void window.newbrain.queryQuantBars({ query: { symbol, interval: intervalValue, adjustment: adjustmentValue, startDate: startDate || undefined, endDate: endDate || undefined } })
       .then((result: any[]) => {
         if (!active) return;
         const valid = result.filter((bar) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
@@ -396,9 +396,9 @@ export function QuantWorkspace({
   }, [projectId, workspaceId, symbol, interval, adjustment, startDate, endDate, queryVersion, hydrated]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.getQuantActivity) return;
+    if (!projectId || !window.newbrain?.getQuantActivity) return;
     const prices = latest ? { [symbol]: latest.close } : {};
-    void window.codecn.getQuantActivity({ projectId, prices }).then((activity: any) => {
+    void window.newbrain.getQuantActivity({ projectId, prices }).then((activity: any) => {
       if (!activity) return;
       setPortfolio(activity.snapshot);
       setPortfolioActivity(activity);
@@ -406,8 +406,8 @@ export function QuantWorkspace({
   }, [projectId, symbol, latest?.close]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.listQuantStrategySchedules) { setSchedules([]); return; }
-    void window.codecn.listQuantStrategySchedules({ projectId })
+    if (!projectId || !window.newbrain?.listQuantStrategySchedules) { setSchedules([]); return; }
+    void window.newbrain.listQuantStrategySchedules({ projectId })
       .then((items: any[]) => setSchedules(Array.isArray(items) ? items : []))
       .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划读取失败"));
   }, [projectId]);
@@ -417,11 +417,11 @@ export function QuantWorkspace({
     let active = true;
     const refresh = async () => {
       try {
-        const items = await window.codecn?.listBrainTasks?.({ projectId });
+        const items = await window.newbrain?.listBrainTasks?.({ projectId });
         if (active) setStrategyTasks((Array.isArray(items) ? items : []).filter((item) => String(item.taskType || "").startsWith("quant.strategy.")));
       } catch { if (active) setStrategyTasks([]); }
       try {
-        const runs = await window.codecn?.listQuantStrategyRuns?.({ projectId });
+        const runs = await window.newbrain?.listQuantStrategyRuns?.({ projectId });
         if (active) setStrategyRuns(Array.isArray(runs) ? runs : []);
       } catch { if (active) setStrategyRuns([]); }
       const skillIds = Array.from(new Set([
@@ -430,7 +430,7 @@ export function QuantWorkspace({
       const prices = latest ? { [symbol]: latest.close } : {};
       const entries = await Promise.all(skillIds.map(async (id) => {
         try {
-          const performance = await window.codecn?.getQuantSkillPerformance?.({ projectId, skillId: id });
+          const performance = await window.newbrain?.getQuantSkillPerformance?.({ projectId, skillId: id });
           return [id, performance] as const;
         } catch {
           return [id, null] as const;
@@ -439,7 +439,7 @@ export function QuantWorkspace({
       if (active) setSkillPerformance(Object.fromEntries(entries.filter((entry) => entry[1])));
       const portfolios = await Promise.all(skillIds.map(async (id) => {
         try {
-          const activity = await window.codecn?.getQuantSkillActivity?.({ projectId, skillId: id, prices });
+          const activity = await window.newbrain?.getQuantSkillActivity?.({ projectId, skillId: id, prices });
           return [id, activity] as const;
         } catch {
           return [id, null] as const;
@@ -487,16 +487,16 @@ export function QuantWorkspace({
 
   const executeOrder = (side: "buy" | "sell") => {
     if (!latest) { setOrderStatus("暂无真实行情，不能生成模拟成交"); return; }
-    if (!projectId || !window.codecn?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
-    void window.codecn.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side, quantity, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
-      .then(() => window.codecn.getQuantActivity?.({ projectId, prices: { [symbol]: latest.close } }))
+    if (!projectId || !window.newbrain?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
+    void window.newbrain.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side, quantity, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
+      .then(() => window.newbrain.getQuantActivity?.({ projectId, prices: { [symbol]: latest.close } }))
       .then((activity: any) => { if (activity) { setPortfolio(activity.snapshot); setPortfolioActivity(activity); } setOrderStatus(`已手动模拟${side === "buy" ? "买入" : "卖出"} ${symbol} ${quantity} 股（对照盘，不含 Skill）`); })
       .catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
   };
 
   const setScheduleEnabled = (scheduleId: string, enabled: boolean) => {
-    if (!projectId || !window.codecn?.setQuantStrategyScheduleEnabled) return;
-    void window.codecn.setQuantStrategyScheduleEnabled({ projectId, scheduleId, enabled })
+    if (!projectId || !window.newbrain?.setQuantStrategyScheduleEnabled) return;
+    void window.newbrain.setQuantStrategyScheduleEnabled({ projectId, scheduleId, enabled })
       .then((updated: any) => { setSchedules((items) => items.map((item) => item.id === scheduleId ? updated : item)); setScheduleStatus(enabled ? "雷达任务已启用" : "雷达任务已暂停"); })
       .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "雷达状态更新失败"));
   };
@@ -510,15 +510,15 @@ export function QuantWorkspace({
   }, [portfolioActivity.equityCurve]);
 
   const createSchedule = () => {
-    if (!projectId || !window.codecn?.createQuantStrategySchedule) { setScheduleStatus("模拟项目尚未连接"); return; }
+    if (!projectId || !window.newbrain?.createQuantStrategySchedule) { setScheduleStatus("模拟项目尚未连接"); return; }
     if (!skillId.trim()) { setScheduleStatus("请选择量化 Skill"); return; }
-    void window.codecn.createQuantStrategySchedule({ projectId, skillId, exchange: scheduleExchange, runAt: scheduleTime, symbol, quantity })
+    void window.newbrain.createQuantStrategySchedule({ projectId, skillId, exchange: scheduleExchange, runAt: scheduleTime, symbol, quantity })
       .then((created: any) => { setSchedules((items) => [...items, created]); setScheduleStatus(`已绑定 Skill「${skillId}」到雷达计划，交易日将自动模拟买卖`); })
       .catch((error: unknown) => setScheduleStatus(error instanceof Error ? error.message : "策略计划保存失败"));
   };
 
   const runSkillNow = () => {
-    if (!projectId || !window.codecn?.runQuantSkillSimulation) {
+    if (!projectId || !window.newbrain?.runQuantSkillSimulation) {
       setSkillRunStatus("当前构建未接入 Skill 模拟 IPC");
       return;
     }
@@ -528,7 +528,7 @@ export function QuantWorkspace({
     }
     setSkillRunBusy(true);
     setSkillRunStatus(`正在用 Skill「${skillId}」按真实行情自动模拟买卖…`);
-    void window.codecn.runQuantSkillSimulation({
+    void window.newbrain.runQuantSkillSimulation({
       projectId,
       skillId,
       symbol,
@@ -539,7 +539,7 @@ export function QuantWorkspace({
       setSkillPerformance((current) => ({ ...current, [skillId]: result.performance }));
       setSkillPortfolios((current) => ({ ...current, [skillId]: result.snapshot }));
       try {
-        const activity = await window.codecn.getQuantSkillActivity?.({
+        const activity = await window.newbrain.getQuantSkillActivity?.({
           projectId,
           skillId,
           prices: latest ? { [symbol]: latest.close } : {}

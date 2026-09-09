@@ -13,7 +13,7 @@ novel-tts/kokoro/
 
 查找顺序（运行时）：
 
-1. `%LOCALAPPDATA%\.codecn\novel-tts\kokoro`（或 Electron `userData/novel-tts/kokoro`）
+1. `%LOCALAPPDATA%\.newbrain\novel-tts\kokoro`（或 Electron `userData/novel-tts/kokoro`）
 2. 安装包 `resources/novel-tts/kokoro`（可选打进 extraResources）
 
 ## 下载 8 音色精简包
@@ -27,7 +27,7 @@ node .\scripts\fetch-novel-tts-kokoro.mjs
 或指定目录：
 
 ```powershell
-node .\scripts\fetch-novel-tts-kokoro.mjs --out "$env:LOCALAPPDATA\.codecn\novel-tts\kokoro"
+node .\scripts\fetch-novel-tts-kokoro.mjs --out "$env:LOCALAPPDATA\.newbrain\novel-tts\kokoro"
 ```
 
 ## 运行时行为

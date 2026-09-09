@@ -6,10 +6,10 @@ import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
 // Deterministic model fixture: tests the real runtime, IPC, decision UI and activation gate.
 let accepted = false;
-const acceptPlan = process.env.CODECN_E2E_EXPERT_ACCEPT === "1";
+const acceptPlan = process.env.NEWBRAIN_E2E_EXPERT_ACCEPT === "1";
 const requests = [];
 const server = createServer((req, res) => {
-  if (req.method !== "POST") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ data: [{ id: "codecn-e2e-model" }] })); return; }
+  if (req.method !== "POST") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ data: [{ id: "newbrain-e2e-model" }] })); return; }
   const chunks = [];
   req.on("data", chunk => chunks.push(chunk));
   req.on("end", () => {
@@ -32,7 +32,7 @@ const server = createServer((req, res) => {
   });
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-process.env.CODECN_MODEL_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+process.env.NEWBRAIN_MODEL_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
 const reservation = createServer(); await new Promise(resolve => reservation.listen(0, "127.0.0.1", resolve));
 const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));
 let session, socket;
@@ -76,7 +76,7 @@ try {
   await evaluate(`document.querySelector('[data-testid=goal-option-${acceptPlan ? "0" : "2"}]').click()`);
   await waitFor("!document.querySelector('[data-testid=goal-question-card]')");
   if (acceptPlan) {
-    await waitFor("(async () => (await window.codecn.listExperts()).some(e=>e.id==='agency-testing-reality-checker'&&e.installed))()");
+    await waitFor("(async () => (await window.newbrain.listExperts()).some(e=>e.id==='agency-testing-reality-checker'&&e.installed))()");
     for (let i = 0; i < 120 && !requests.some(r => JSON.stringify(r.input || []).includes('allowedDelegateRoles')); i++) await new Promise(resolve => setTimeout(resolve, 250));
     assert.ok(requests.some(r => JSON.stringify(r.input || []).includes('allowedDelegateRoles')), "Real expert activation must return its role contract");
   }

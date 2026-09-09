@@ -1,5 +1,5 @@
 /**
- * Detect and schedule codeCN "ulit" patch packages (bsdiff of app.asar).
+ * Detect and schedule NewBrain "ulit" patch packages (bsdiff of app.asar).
  * Full Electron MSIs stay on the msiexec path; this module only handles patch zips
  * and documents how tiny ulit applicator MSIs are still installed via msiexec.
  */
@@ -84,7 +84,7 @@ export function safeDesktopUpdateFileName(input: {
   });
   if (kind === "ulit-zip") return `${safeVersion}ulit.zip`;
   if (kind === "ulit-msi") return `${safeVersion}ulit.msi`;
-  return `codeCN-${safeVersion}.msi`;
+  return `NewBrain-${safeVersion}.msi`;
 }
 
 /**
@@ -95,8 +95,8 @@ export function buildDeferredProcessExitWaitPowerShell(input: {
   processImageName?: string;
   maxWaitSeconds?: number;
 }): string {
-  const image = String(input.processImageName || "codeCN.exe").replace(/['"`]/g, "");
-  const processName = image.replace(/\.exe$/i, "") || "codeCN";
+  const image = String(input.processImageName || "NewBrain.exe").replace(/['"`]/g, "");
+  const processName = image.replace(/\.exe$/i, "") || "NewBrain";
   const maxWait = Math.max(15, Math.min(300, Number(input.maxWaitSeconds) || 90));
   return (
     `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `
@@ -105,13 +105,13 @@ export function buildDeferredProcessExitWaitPowerShell(input: {
     + `while ((Get-Date) -lt $deadline) { `
     + `if (-not (Get-Process -Name $name -ErrorAction SilentlyContinue)) { exit 0 }; `
     + `Start-Sleep -Seconds 1 }; `
-    + `Write-Host '等待 codeCN 退出超时（${maxWait}s），仍将继续安装/补丁。请确认已完全退出应用。'; `
+    + `Write-Host '等待 NewBrain 退出超时（${maxWait}s），仍将继续安装/补丁。请确认已完全退出应用。'; `
     + `exit 0"`
   );
 }
 
 /**
- * Build a deferred .cmd that waits for codeCN.exe to exit, expands a ulit zip
+ * Build a deferred .cmd that waits for NewBrain.exe to exit, expands a ulit zip
  * (if needed), then runs apply.cmd against the install root.
  */
 export function buildDeferredUlitZipApplyScript(input: {
@@ -130,10 +130,10 @@ export function buildDeferredUlitZipApplyScript(input: {
   return [
     "@echo off",
     "setlocal EnableExtensions",
-    "title codeCN update",
-    "echo codeCN update: waiting for app exit...",
+    "title NewBrain update",
+    "echo NewBrain update: waiting for app exit...",
     waitLine,
-    "title codeCN update: applying patch",
+    "title NewBrain update: applying patch",
     `if exist ${stagingDir} rmdir /S /Q ${stagingDir}`,
     `mkdir ${stagingDir} >NUL 2>&1`,
     `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${escapePsSingle(input.zipPath)}' -DestinationPath '${escapePsSingle(input.stagingDir)}' -Force"`,

@@ -15,36 +15,36 @@ export function SoftwareWorkspace({ projectId, activeView, files = [], onOpenFil
   const [terminal, setTerminal] = useState<ProjectTerminalSnapshot>();
   useEffect(() => {
     setTask(undefined);
-    if (!projectId || !window.codecn?.listSoftwareScripts) { setScripts([]); setStatus("请选择软件项目"); return; }
+    if (!projectId || !window.newbrain?.listSoftwareScripts) { setScripts([]); setStatus("请选择软件项目"); return; }
     setStatus("正在读取项目脚本");
-    void window.codecn.listSoftwareScripts({ projectId }).then((items: BrainSoftwareScript[]) => { setScripts(Array.isArray(items) ? items : []); setStatus("项目已就绪"); }).catch(() => { setScripts([]); setStatus("项目脚本读取失败"); });
+    void window.newbrain.listSoftwareScripts({ projectId }).then((items: BrainSoftwareScript[]) => { setScripts(Array.isArray(items) ? items : []); setStatus("项目已就绪"); }).catch(() => { setScripts([]); setStatus("项目脚本读取失败"); });
   }, [projectId]);
   useEffect(() => {
-    if (!task?.id || terminalStatuses.has(task.status) || !window.codecn?.getSoftwareTaskStatus) return;
+    if (!task?.id || terminalStatuses.has(task.status) || !window.newbrain?.getSoftwareTaskStatus) return;
     let active = true;
-    const timer = window.setInterval(() => void window.codecn?.getSoftwareTaskStatus({ taskId: task.id }).then((next) => { if (active) setTask(next); }).catch(() => undefined), 1_000);
+    const timer = window.setInterval(() => void window.newbrain?.getSoftwareTaskStatus({ taskId: task.id }).then((next) => { if (active) setTask(next); }).catch(() => undefined), 1_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [task?.id, task?.status]);
   useEffect(() => {
-    if (activeView !== "terminal" || !window.codecn?.getTerminalSession) return;
+    if (activeView !== "terminal" || !window.newbrain?.getTerminalSession) return;
     let active = true;
-    void window.codecn.getTerminalSession().then((snapshot) => { if (active) setTerminal(snapshot); }).catch(() => undefined);
-    const unsubscribe = window.codecn.onTerminalUpdate?.((snapshot) => { if (active) setTerminal(snapshot); });
+    void window.newbrain.getTerminalSession().then((snapshot) => { if (active) setTerminal(snapshot); }).catch(() => undefined);
+    const unsubscribe = window.newbrain.onTerminalUpdate?.((snapshot) => { if (active) setTerminal(snapshot); });
     return () => { active = false; unsubscribe?.(); };
   }, [activeView, projectId]);
   const visibleScripts = useMemo(() => scripts.filter((script) => activeView === "test" ? script.operation === "test" : activeView === "deploy" ? script.operation === "deploy" : activeView === "code" ? ["build", "lint", "format"].includes(script.operation) : false), [activeView, scripts]);
   async function run(script: BrainSoftwareScript) {
-    if (!projectId || !window.codecn?.startSoftwareTask) return;
+    if (!projectId || !window.newbrain?.startSoftwareTask) return;
     setStatus("等待系统确认");
-    try { const next = await window.codecn.startSoftwareTask({ projectId, scriptId: script.id }); setTask(next); setStatus(next.status === "RUNNING" ? "正在执行" : next.status); }
+    try { const next = await window.newbrain.startSoftwareTask({ projectId, scriptId: script.id }); setTask(next); setStatus(next.status === "RUNNING" ? "正在执行" : next.status); }
     catch (error) { setStatus(error instanceof Error ? error.message : "执行失败"); }
   }
   async function openTerminal() {
-    if (!projectId || !window.codecn?.openSoftwareProjectTerminal) return;
+    if (!projectId || !window.newbrain?.openSoftwareProjectTerminal) return;
     setTerminalBusy(true); setStatus("正在打开项目终端");
     try {
-      await window.codecn.openSoftwareProjectTerminal({ projectId });
-      const snapshot = await window.codecn.getTerminalSession?.();
+      await window.newbrain.openSoftwareProjectTerminal({ projectId });
+      const snapshot = await window.newbrain.getTerminalSession?.();
       if (snapshot) setTerminal(snapshot);
       setStatus("已在授权项目目录打开终端");
     }
@@ -52,11 +52,11 @@ export function SoftwareWorkspace({ projectId, activeView, files = [], onOpenFil
     finally { setTerminalBusy(false); }
   }
   async function submitTerminalInput(input: string, inputElement?: HTMLInputElement | null) {
-    if (!input || !terminal?.isRunning || !window.codecn?.writeTerminalInput) return;
+    if (!input || !terminal?.isRunning || !window.newbrain?.writeTerminalInput) return;
     if (inputElement) inputElement.value = "";
     setStatus("正在发送终端命令");
     try {
-      const snapshot = await window.codecn.writeTerminalInput(`${input}\r\n`);
+      const snapshot = await window.newbrain.writeTerminalInput(`${input}\r\n`);
       setTerminal(snapshot);
       setStatus("终端命令已发送");
     } catch (error) {
@@ -89,6 +89,6 @@ export function SoftwareWorkspace({ projectId, activeView, files = [], onOpenFil
       {visibleScripts.map((script) => <article className="brain-software-card" key={script.id}><div><strong>{script.label}</strong><small>{script.operation} · {script.source}</small></div><code>{script.executable} {script.args.join(" ")}</code><button type="button" onClick={() => void run(script)}>请求执行</button></article>)}
       {!visibleScripts.length ? <div className="brain-resource-empty">项目没有声明对应脚本。请在 package.json 中配置{activeView === "test" ? " test" : activeView === "deploy" ? " deploy" : " build、lint 或 format"}。</div> : null}
     </section> : null}
-    {task ? <section className="brain-software-task" aria-label="最近软件任务"><header><strong>最近任务：{task.status}</strong><small>{task.errorCode || "受控执行"}</small></header><pre>{task.output || "等待输出"}</pre>{!terminalStatuses.has(task.status) ? <button type="button" onClick={() => void window.codecn?.cancelSoftwareTask?.({ taskId: task.id })}>取消任务</button> : null}</section> : null}
+    {task ? <section className="brain-software-task" aria-label="最近软件任务"><header><strong>最近任务：{task.status}</strong><small>{task.errorCode || "受控执行"}</small></header><pre>{task.output || "等待输出"}</pre>{!terminalStatuses.has(task.status) ? <button type="button" onClick={() => void window.newbrain?.cancelSoftwareTask?.({ taskId: task.id })}>取消任务</button> : null}</section> : null}
   </main>;
 }

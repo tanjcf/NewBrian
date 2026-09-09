@@ -46,6 +46,13 @@ export function normalizeDesktopBillingPayload(payloadRecord: Record<string, unk
     status: String(activeSubscription.status ?? summary.status ?? "unknown"),
     expires_at: activeSubscription.expires_at ?? summary.expires_at ?? summary.expire_at ?? "",
     balance: Number(activeSubscription.balance ?? summary.balance ?? 0),
+    wallet_overage_enabled: Boolean(
+      activeSubscription.wallet_overage_enabled
+        ?? activeSubscription.walletOverageEnabled
+        ?? summary.wallet_overage_enabled
+        ?? summary.walletOverageEnabled
+        ?? false
+    ),
     daily_used: Number(activeSubscription.daily_used ?? summary.daily_used ?? 0),
     daily_quota: Number(activeSubscription.daily_quota ?? summary.daily_quota ?? 0),
     monthly_used: Number(activeSubscription.monthly_used ?? summary.monthly_used ?? 0),

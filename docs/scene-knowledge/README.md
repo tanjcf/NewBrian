@@ -1,6 +1,6 @@
 # 场景知识描述
 
-这些文档定义 codeCN 场景聊天与右侧 Tools 子架构的共同契约。运行时会按当前场景和用户问题检索，并把结果注入模型上下文；模型必须通过右侧工具取得真实结果，不能把 Skill 文件变更当作场景执行结果。
+这些文档定义 NewBrain 场景聊天与右侧 Tools 子架构的共同契约。运行时会按当前场景和用户问题检索，并把结果注入模型上下文；模型必须通过右侧工具取得真实结果，不能把 Skill 文件变更当作场景执行结果。
 
 **例外：** 场景学习探索 — 无业务 Tools 面板，仅文件/产物/任务 + 原生对话。
 
@@ -10,9 +10,9 @@
 
 新建/打开业务场景项目时，`project-init` + `*-project-manager` 会把对应 `docs/scene-knowledge/<scene>.md` 基线写入：
 
-- `.codecn/skills/<project>-project-manager/references/scene-knowledge.md`
-- `.codecn/skills/<project>-project-manager/references/scene-tools-routing.md`
-- `.codecn/skills/project-init/SKILL.md`
+- `.newbrain/skills/<project>-project-manager/references/scene-knowledge.md`
+- `.newbrain/skills/<project>-project-manager/references/scene-tools-routing.md`
+- `.newbrain/skills/project-init/SKILL.md`
 - `Docs/BRAIN/scene-knowledge-<scene>.md`（便于人读）
 
 全局/项目 Skill 模板也要求：除探索场景外，AI 必须走右侧 Tools 子架构（与视频流水线同级）。

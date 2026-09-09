@@ -30,8 +30,8 @@ export function MusicWorkspace({
   };
 
   const load = async () => {
-    if (!projectId || !window.codecn?.getMusicTimeline) { setStatus("请选择音乐项目"); return; }
-    try { setTimeline(await window.codecn.getMusicTimeline({ projectId })); setStatus("时间线已加载"); }
+    if (!projectId || !window.newbrain?.getMusicTimeline) { setStatus("请选择音乐项目"); return; }
+    try { setTimeline(await window.newbrain.getMusicTimeline({ projectId })); setStatus("时间线已加载"); }
     catch { setStatus("尚未创建音乐时间线"); }
   };
   useEffect(() => { void load(); }, [projectId]);
@@ -40,34 +40,34 @@ export function MusicWorkspace({
     if (!localFileId && files[0]?.id) setLocalFileId(files[0].id);
   }, [files, localFileId, onSelectFile]);
   useEffect(() => {
-    if (!projectId || !selectedFile || activeView !== "audio" || !window.codecn?.getBrainFilePreviewUrl) {
+    if (!projectId || !selectedFile || activeView !== "audio" || !window.newbrain?.getBrainFilePreviewUrl) {
       setSourcePreviewUrl("");
       return;
     }
-    void window.codecn.getBrainFilePreviewUrl({ projectId, fileId: selectedFile })
+    void window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: selectedFile })
       .then((url) => setSourcePreviewUrl(url))
       .catch(() => setSourcePreviewUrl(""));
   }, [projectId, selectedFile, activeView]);
   useEffect(() => {
-    if (!projectId || !render?.outputFileId || render.status !== "SUCCEEDED" || !window.codecn?.getBrainFilePreviewUrl) {
+    if (!projectId || !render?.outputFileId || render.status !== "SUCCEEDED" || !window.newbrain?.getBrainFilePreviewUrl) {
       setMixPreviewUrl("");
       return;
     }
-    void window.codecn.getBrainFilePreviewUrl({ projectId, fileId: render.outputFileId })
+    void window.newbrain.getBrainFilePreviewUrl({ projectId, fileId: render.outputFileId })
       .then((url) => setMixPreviewUrl(url))
       .catch(() => setMixPreviewUrl(""));
   }, [projectId, render?.outputFileId, render?.status]);
   useEffect(() => {
-    if (!render?.renderId || !window.codecn?.getMusicRenderStatus || ["SUCCEEDED", "FAILED", "CANCELLED"].includes(render.status)) return;
-    const timer = window.setInterval(() => void window.codecn.getMusicRenderStatus({ renderId: render.renderId }).then((value: any) => {
+    if (!render?.renderId || !window.newbrain?.getMusicRenderStatus || ["SUCCEEDED", "FAILED", "CANCELLED"].includes(render.status)) return;
+    const timer = window.setInterval(() => void window.newbrain.getMusicRenderStatus({ renderId: render.renderId }).then((value: any) => {
       setRender(value);
       if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(value.status)) setStatus(`音乐渲染${value.status === "SUCCEEDED" ? "完成" : `结束：${value.status}`}`);
     }), 1000);
     return () => window.clearInterval(timer);
   }, [render?.renderId, render?.status]);
   useEffect(() => {
-    if (!projectId || !render?.outputFileId || render.status !== "SUCCEEDED" || !window.codecn?.inspectMusicMedia) return;
-    void window.codecn.inspectMusicMedia({ projectId, sourceFileId: render.outputFileId })
+    if (!projectId || !render?.outputFileId || render.status !== "SUCCEEDED" || !window.newbrain?.inspectMusicMedia) return;
+    void window.newbrain.inspectMusicMedia({ projectId, sourceFileId: render.outputFileId })
       .then((info) => setMediaInfo(info))
       .catch(() => setMediaInfo(null));
   }, [projectId, render?.outputFileId, render?.status]);
@@ -76,9 +76,9 @@ export function MusicWorkspace({
   const duration = Math.max(Number(timeline?.durationMs || 0), 10_000);
   const tracks = useMemo(() => (["audio", "midi"] as const).map((type) => ({ type, clips: clips.filter((clip) => clip.trackType === type) })), [clips]);
   const add = async (trackType: "audio" | "midi") => {
-    if (!projectId || !selectedFile || !window.codecn?.addMusicClip) { setStatus("请先选择项目文件"); return; }
+    if (!projectId || !selectedFile || !window.newbrain?.addMusicClip) { setStatus("请先选择项目文件"); return; }
     try {
-      setTimeline(await window.codecn.addMusicClip({
+      setTimeline(await window.newbrain.addMusicClip({
         projectId, trackType, sourceFileId: selectedFile, startMs: Number(timeline?.durationMs || 0),
         durationMs: 5_000, sourceInMs: 0, gain: 1, pan: 0
       }));
@@ -88,8 +88,8 @@ export function MusicWorkspace({
     }
   };
   const renderMix = async () => {
-    if (!projectId || !window.codecn?.startMusicRender) return;
-    try { setRender(await window.codecn.startMusicRender({ projectId, outputRelativePath: "renders/mix-output.wav" })); setStatus("音乐渲染中"); }
+    if (!projectId || !window.newbrain?.startMusicRender) return;
+    try { setRender(await window.newbrain.startMusicRender({ projectId, outputRelativePath: "renders/mix-output.wav" })); setStatus("音乐渲染中"); }
     catch (error) { setStatus(error instanceof Error ? error.message : "音乐渲染失败"); }
   };
 
@@ -106,7 +106,7 @@ export function MusicWorkspace({
         <button type="button" onClick={() => void load()}>刷新</button>
         {activeView === "export" ? <button type="button" data-testid="brain-music-render" onClick={() => void renderMix()}>渲染混音</button> : null}
         {activeView === "export" && render && ["STARTING", "RUNNING"].includes(render.status)
-          ? <button type="button" data-testid="brain-music-cancel" onClick={() => void window.codecn.cancelMusicRender?.({ renderId: render.renderId })}>取消渲染</button>
+          ? <button type="button" data-testid="brain-music-cancel" onClick={() => void window.newbrain.cancelMusicRender?.({ renderId: render.renderId })}>取消渲染</button>
           : null}
       </section>
       {activeView === "export" ? <section className="brain-music-info" data-testid="brain-music-preview">

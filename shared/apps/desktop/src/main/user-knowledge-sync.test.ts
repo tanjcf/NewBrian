@@ -58,17 +58,17 @@ test("clampKnowledgeContent enforces per-doc caps", () => {
 });
 
 test("local knowledge paths and injection load global + project", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-knowledge-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-"));
   const project = join(root, "proj");
   try {
-    const globalDir = resolveGlobalKnowledgeDir(join(root, ".codecn"));
+    const globalDir = resolveGlobalKnowledgeDir(join(root, ".newbrain"));
     mkdirSync(globalDir, { recursive: true });
     writeFileSync(join(globalDir, "user-output-rules.md"), "# User Output Rules\n\n- Global prefer Chinese.\n", "utf8");
-    const projectRefs = join(project, ".codecn", "skills", "proj-project-manager", "references");
+    const projectRefs = join(project, ".newbrain", "skills", "proj-project-manager", "references");
     mkdirSync(projectRefs, { recursive: true });
     writeFileSync(join(projectRefs, "project-knowledge.md"), "# Project Knowledge\n\n- Uses electron.\n", "utf8");
     const injected = await loadLocalKnowledgeForInjection({
-      userCodecnRoot: join(root, ".codecn"),
+      userNewbrainRoot: join(root, ".newbrain"),
       projectWorkspacePath: project,
       projectKey: "proj"
     });
@@ -76,7 +76,7 @@ test("local knowledge paths and injection load global + project", async () => {
     assert.match(injected, /Uses electron/);
     assert.equal(
       resolveDocFilePath({
-        userCodecnRoot: join(root, ".codecn"),
+        userNewbrainRoot: join(root, ".newbrain"),
         scope: "GLOBAL",
         docType: "user-output-rules"
       }),
@@ -88,8 +88,8 @@ test("local knowledge paths and injection load global + project", async () => {
 });
 
 test("syncUserKnowledgeOnce pull-merges then push with baseGeneration", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-knowledge-sync-"));
-  const userRoot = join(root, ".codecn");
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-sync-"));
+  const userRoot = join(root, ".newbrain");
   const project = join(root, "demo");
   mkdirSync(resolveGlobalKnowledgeDir(userRoot), { recursive: true });
   writeFileSync(
@@ -139,7 +139,7 @@ test("syncUserKnowledgeOnce pull-merges then push with baseGeneration", async ()
         fetchImpl
       },
       paths: {
-        userCodecnRoot: userRoot,
+        userNewbrainRoot: userRoot,
         projectWorkspacePath: project,
         projectKey: "demo"
       },
@@ -158,8 +158,8 @@ test("syncUserKnowledgeOnce pull-merges then push with baseGeneration", async ()
 });
 
 test("sync retries automatically on 409 conflict", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-knowledge-conflict-"));
-  const userRoot = join(root, ".codecn");
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-conflict-"));
+  const userRoot = join(root, ".newbrain");
   mkdirSync(resolveGlobalKnowledgeDir(userRoot), { recursive: true });
   writeFileSync(
     join(resolveGlobalKnowledgeDir(userRoot), "user-output-rules.md"),
@@ -212,7 +212,7 @@ test("sync retries automatically on 409 conflict", async () => {
         bearerToken: "token",
         fetchImpl
       },
-      paths: { userCodecnRoot: userRoot }
+      paths: { userNewbrainRoot: userRoot }
     });
     assert.equal(result.ok, true);
     assert.equal(result.conflictRetried, 1);
@@ -226,18 +226,18 @@ test("sync retries automatically on 409 conflict", async () => {
 });
 
 test("mirrorProjectRulesToGlobal unions into global cache", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-knowledge-mirror-"));
-  const userRoot = join(root, ".codecn");
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-mirror-"));
+  const userRoot = join(root, ".newbrain");
   const project = join(root, "app");
   try {
-    mkdirSync(join(project, ".codecn", "skills", "app-project-manager", "references"), { recursive: true });
+    mkdirSync(join(project, ".newbrain", "skills", "app-project-manager", "references"), { recursive: true });
     writeFileSync(
-      join(project, ".codecn", "skills", "app-project-manager", "references", "user-output-rules.md"),
+      join(project, ".newbrain", "skills", "app-project-manager", "references", "user-output-rules.md"),
       "# User Output Rules\n\n- Project distilled rule.\n",
       "utf8"
     );
     const changed = await mirrorProjectRulesToGlobal({
-      userCodecnRoot: userRoot,
+      userNewbrainRoot: userRoot,
       projectWorkspacePath: project,
       projectKey: "app"
     });
@@ -270,23 +270,23 @@ test("unsafe freeform merge keeps both with markers", () => {
   assert.match(merged.content, />>>>>>> remote/);
 });
 
-test("project-os resolves to workspace-root CODECN.md and merges cleanly", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-project-os-sync-"));
-  const userRoot = join(root, ".codecn");
+test("project-os resolves to workspace-root NEWBRAIN.md and merges cleanly", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-project-os-sync-"));
+  const userRoot = join(root, ".newbrain");
   const project = join(root, "app");
   try {
     mkdirSync(project, { recursive: true });
     assert.equal(
       resolveDocFilePath({
-        userCodecnRoot: userRoot,
+        userNewbrainRoot: userRoot,
         scope: "PROJECT",
         docType: "project-os",
         projectWorkspacePath: project,
         projectKey: "app"
       }),
-      join(project, "CODECN.md")
+      join(project, "NEWBRAIN.md")
     );
-    writeFileSync(join(project, "CODECN.md"), "# Local OS\n\nBuild with pnpm.\n", "utf8");
+    writeFileSync(join(project, "NEWBRAIN.md"), "# Local OS\n\nBuild with pnpm.\n", "utf8");
     const merged = mergeKnowledgeDocuments({
       docType: "project-os",
       localContent: "",
@@ -322,7 +322,7 @@ test("project-os resolves to workspace-root CODECN.md and merges cleanly", async
         }) as typeof fetch
       },
       paths: {
-        userCodecnRoot: userRoot,
+        userNewbrainRoot: userRoot,
         projectWorkspacePath: project,
         projectKey: "app"
       }

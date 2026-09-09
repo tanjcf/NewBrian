@@ -149,9 +149,9 @@ export class SkillRegistry {
 }
 
 export function defaultSkillRoots(workspacePath) {
-  const configured = String(process.env.CODECN_SKILLS_PATH || "")
+  const configured = String(process.env.NEWBRAIN_SKILLS_PATH || "")
     .split(path.delimiter)
     .map((item) => item.trim())
     .filter(Boolean);
-  return [...configured, path.join(workspacePath, ".codecn", "skills"), path.join(workspacePath, "skills")];
+  return [...configured, path.join(workspacePath, ".newbrain", "skills"), path.join(workspacePath, "skills")];
 }

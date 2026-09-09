@@ -28,7 +28,7 @@ test("passes only non-secret runtime environment to Rust Core", () => {
     HOME: "C:/Users/example",
     BOCHA_API_KEY: "search-secret",
     OPENAI_API_KEY: "model-secret",
-    CODECN_ACCESS_TOKEN: "session-secret"
+    NEWBRAIN_ACCESS_TOKEN: "session-secret"
   });
   assert.deepEqual(environment, {
     PATH: "C:/tools",

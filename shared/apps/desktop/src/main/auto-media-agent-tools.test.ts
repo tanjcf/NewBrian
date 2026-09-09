@@ -50,7 +50,7 @@ test("registerAutoMediaAgentTools exposes image_generate, video_generate, and mu
   }
 });
 
-test("downloadGeneratedMediaToWorkspace writes music under .codecn/generated-media", async () => {
+test("downloadGeneratedMediaToWorkspace writes music under .newbrain/generated-media", async () => {
   const root = await mkdtemp(join(tmpdir(), "auto-media-dl-"));
   try {
     const mp3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00]);
@@ -63,13 +63,13 @@ test("downloadGeneratedMediaToWorkspace writes music under .codecn/generated-med
         headers: { "Content-Type": "audio/mpeg" }
       })
     });
-    assert.match(saved.relativePath, /^\.codecn\/generated-media\/music\/.+\.mp3$/);
+    assert.match(saved.relativePath, /^\.newbrain\/generated-media\/music\/.+\.mp3$/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("downloadGeneratedMediaToWorkspace writes under .codecn/generated-media", async () => {
+test("downloadGeneratedMediaToWorkspace writes under .newbrain/generated-media", async () => {
   const root = await mkdtemp(join(tmpdir(), "auto-media-dl-"));
   try {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
@@ -82,7 +82,7 @@ test("downloadGeneratedMediaToWorkspace writes under .codecn/generated-media", a
         headers: { "Content-Type": "image/png" }
       })
     });
-    assert.match(saved.relativePath, /^\.codecn\/generated-media\/image\/.+\.png$/);
+    assert.match(saved.relativePath, /^\.newbrain\/generated-media\/image\/.+\.png$/);
     const bytes = await readFile(saved.absolutePath);
     assert.deepEqual(bytes, png);
   } finally {
@@ -118,10 +118,10 @@ test("image_generate downloads COS result and opens local preview", async () => 
     });
     const result = await tools.get("image_generate")!.execute({ prompt: "青石谷入口" });
     assert.equal(result.ok, true);
-    assert.match(result.output, /\.codecn\/generated-media\/image\//);
+    assert.match(result.output, /\.newbrain\/generated-media\/image\//);
     assert.match(result.output, /禁止再写「正在生成中」/);
     assert.equal(opened.length, 1);
-    assert.match(opened[0]!, /\.codecn\/generated-media\/image\//);
+    assert.match(opened[0]!, /\.newbrain\/generated-media\/image\//);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -143,8 +143,8 @@ test("resolveAutoMediaReferenceImage converts workspace-local paths to data URLs
   const root = await mkdtemp(join(tmpdir(), "auto-media-ref-"));
   try {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x03]);
-    const relativePath = ".codecn/generated-media/image/ref.png";
-    await mkdir(join(root, ".codecn", "generated-media", "image"), { recursive: true });
+    const relativePath = ".newbrain/generated-media/image/ref.png";
+    await mkdir(join(root, ".newbrain", "generated-media", "image"), { recursive: true });
     await writeFile(join(root, relativePath), png);
     const resolved = await resolveAutoMediaReferenceImage({
       workspaceRoot: root,
@@ -169,7 +169,7 @@ test("resolveAutoMediaReferenceImage accepts managed chat attachment paths outsi
       imageUrl: attachmentPath
     });
     assert.match(resolved, /^data:image\/jpeg;base64,/);
-    const staged = await readFile(join(workspaceRoot, ".codecn", "attachments", "1788354236922-e099a846-fee7-4718-a830-0d93f06a75a8.jpg"));
+    const staged = await readFile(join(workspaceRoot, ".newbrain", "attachments", "1788354236922-e099a846-fee7-4718-a830-0d93f06a75a8.jpg"));
     assert.equal(staged.length, png.length);
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -201,8 +201,8 @@ test("resolveAutoMediaReferenceImage rejects arbitrary paths outside workspace a
 test("persistGeneratedMediaToProject registers file artifact and task", async () => {
   const root = await mkdtemp(join(tmpdir(), "auto-media-persist-"));
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x04]);
-  const relativePath = ".codecn/generated-media/image/persisted.png";
-  await mkdir(join(root, ".codecn", "generated-media", "image"), { recursive: true });
+  const relativePath = ".newbrain/generated-media/image/persisted.png";
+  await mkdir(join(root, ".newbrain", "generated-media", "image"), { recursive: true });
   await writeFile(join(root, relativePath), png);
   const files: Array<{ id: string; storageKey: string; contentHash: string; versionNo?: number }> = [];
   const artifacts: Array<{ id: string; storageKey: string; contentHash: string }> = [];

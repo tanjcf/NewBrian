@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "debug",
   "author": {
-    "name": "codeCN"
+    "name": "NewBrain"
   },
   "interface": {
     "displayName": "Debug Plugin Test",
     "shortDescription": "debug",
     "longDescription": "debug",
-    "developerName": "codeCN",
+    "developerName": "NewBrain",
     "category": "Productivity",
     "capabilities": [
       "Interactive"

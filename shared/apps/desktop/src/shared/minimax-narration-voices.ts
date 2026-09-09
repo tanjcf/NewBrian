@@ -55,7 +55,7 @@ export const MINIMAX_NARRATION_VOICES: MinimaxNarrationVoice[] = [
 ];
 
 export const DEFAULT_MINIMAX_NARRATION_VOICE_ID: MinimaxNarrationVoiceId = "narration_default";
-export const MINIMAX_NARRATION_VOICE_STORAGE_KEY = "codecn.videoMinimaxNarrationVoice.v1";
+export const MINIMAX_NARRATION_VOICE_STORAGE_KEY = "newbrain.videoMinimaxNarrationVoice.v1";
 
 export function resolveMinimaxNarrationVoice(voiceId?: string | null): MinimaxNarrationVoice {
   return (

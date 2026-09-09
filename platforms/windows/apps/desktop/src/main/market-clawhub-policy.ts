@@ -5,14 +5,14 @@ import {
 
 /**
  * Product flag gate for desktop ClawHub network installs.
- * When false, callers must use local zip import (or set preference / CODECN_MARKET_DIRECT_CLAWHUB=1).
+ * When false, callers must use local zip import (or set preference / NEWBRAIN_MARKET_DIRECT_CLAWHUB=1).
  */
 export function resolveDirectClawhubAllowed(input?: {
   preferenceAllowed?: boolean;
   env?: NodeJS.ProcessEnv;
 }): boolean {
   const env = input?.env ?? process.env;
-  if (env.CODECN_MARKET_DIRECT_CLAWHUB === "1") return true;
+  if (env.NEWBRAIN_MARKET_DIRECT_CLAWHUB === "1") return true;
   return input?.preferenceAllowed === true;
 }
 

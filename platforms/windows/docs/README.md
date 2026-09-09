@@ -1,6 +1,6 @@
 # 文档索引（docs）
 
-本目录包含 `codeCN / Codex Forge` 的产品设计、操作手册与详细设计文档。
+本目录包含 `NewBrain / Codex Forge` 的产品设计、操作手册与详细设计文档。
 
 ## 快速入口
 

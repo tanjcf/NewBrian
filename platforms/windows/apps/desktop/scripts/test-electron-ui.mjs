@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9333);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9333);
 const session = await ensureElectronE2ESession(debugPort);
 const pages = session.pages;
 const page = pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -47,23 +47,23 @@ function evaluate(expression, timeoutMs = 15_000) {
 }
 
 if (session.started && session.workspacePath) {
-  const testWorkspacePath = join(session.workspacePath, ".codecn", "projects", "test");
+  const testWorkspacePath = join(session.workspacePath, ".newbrain", "projects", "test");
   await mkdir(testWorkspacePath, { recursive: true });
   await writeFile(join(testWorkspacePath, "final-artifact.txt"), "DEEPSEEK_FILE_FINAL_OK\n", "utf8");
   const seeded = await evaluate(`(async () => {
     const workspacePath = ${JSON.stringify(testWorkspacePath)};
-    let catalog = await window.codecn.listWorkspaces();
+    let catalog = await window.newbrain.listWorkspaces();
     if (!catalog.some((item) => item.path === workspacePath)) {
-      catalog = await window.codecn.addWorkspace({ name: "codeCN File Preview E2E", path: workspacePath });
+      catalog = await window.newbrain.addWorkspace({ name: "NewBrain File Preview E2E", path: workspacePath });
     }
     const workspace = catalog.find((item) => item.path === workspacePath);
     if (!workspace) return false;
     if (!(workspace.threads || []).some((thread) => thread.title === "Sidebar Project E2E")) {
-      catalog = await window.codecn.addWorkspaceThread({ workspaceId: workspace.id, title: "Sidebar Project E2E", summary: "project sidebar task", scope: "project" });
+      catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Sidebar Project E2E", summary: "project sidebar task", scope: "project" });
     }
     const refreshed = catalog.find((item) => item.id === workspace.id);
     if (!(refreshed?.threads || []).some((thread) => thread.title === "Sidebar Chat E2E")) {
-      await window.codecn.addWorkspaceThread({ workspaceId: workspace.id, title: "Sidebar Chat E2E", summary: "projectless sidebar task", scope: "chat" });
+      await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Sidebar Chat E2E", summary: "projectless sidebar task", scope: "chat" });
     }
     return true;
   })()`);

@@ -52,14 +52,14 @@ export function LoginScreen({
             type="button"
             aria-label="关闭"
             title="关闭"
-            onClick={() => void window.codecn?.controlWindow("close")}
+            onClick={() => void window.newbrain?.controlWindow("close")}
           >
             ×
           </button>
           <div className="login-panel-brand">
             <div className="login-panel-mark">C</div>
             <div>
-              <strong>codeCN</strong>
+              <strong>NewBrain</strong>
               <span>Mac 桌面端</span>
             </div>
           </div>

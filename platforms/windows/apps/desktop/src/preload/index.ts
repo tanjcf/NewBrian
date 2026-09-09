@@ -166,7 +166,7 @@ import type {
 } from "@codex-forge/protocol";
 import { brainWorkspaceIpcChannels, desktopIpcChannels } from "@codex-forge/protocol";
 
-contextBridge.exposeInMainWorld("codecn", {
+contextBridge.exposeInMainWorld("newbrain", {
   listBrainWorkspaces: (): Promise<BrainWorkspaceDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceList),
   listBrainProjects: (input: BrainProjectListInput = {}): Promise<BrainProjectDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectList, input),
   createBrainProject: (input: BrainProjectCreateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectCreate, input),
@@ -332,7 +332,24 @@ contextBridge.exposeInMainWorld("codecn", {
     ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.confirm, input),
   getAuthStatus: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.getStatus),
   getBillingSubscription: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.getBillingSubscription),
+  getSubscriptionCatalog: (): Promise<unknown> => ipcRenderer.invoke(desktopIpcChannels.auth.getSubscriptionCatalog),
+  rechargeWallet: (input: { amount: number; payment_method?: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.rechargeWallet, input),
+  purchasePlan: (input: { plan_id: number; payment_method?: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.purchasePlan, input),
+  setWalletOverageEnabled: (input: { enabled: boolean }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.setWalletOverageEnabled, input),
   redeemCode: (input: { code: string }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.redeemCode, input),
+  listWalletInvoiceRecords: (input?: { limit?: number }): Promise<unknown> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.listWalletInvoiceRecords, input),
+  listWalletInvoiceRequests: (input?: { limit?: number }): Promise<unknown> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.listWalletInvoiceRequests, input),
+  createWalletInvoiceRequest: (input: {
+    invoice_title: string;
+    tax_no?: string;
+    contact_email?: string;
+    redeem_log_ids: number[];
+  }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.createWalletInvoiceRequest, input),
   sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
   loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
   changeAuthPassword: (input: DesktopAuthChangePasswordInput): Promise<{ ok: boolean; detail: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),

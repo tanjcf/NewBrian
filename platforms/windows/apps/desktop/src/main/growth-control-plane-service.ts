@@ -193,7 +193,7 @@ export class GrowthControlPlaneService {
     const memory = await this.upsertMemory({
       scope: "company",
       kind: "glossary",
-      content: { brand: "codeCN", rule: "prefer-app-channel" }
+      content: { brand: "NewBrain", rule: "prefer-app-channel" }
     });
     const memoryId = String(memory.id || "");
     const memoryEtag = String(memory.etag || "");
@@ -237,7 +237,7 @@ export class GrowthControlPlaneService {
     const started = await this.startInstance({ process_id: processId, context: { demo: true } });
     const instanceId = String(started.id || "");
     if (!instanceId) throw new Error("GROWTH_INSTANCE_ID_MISSING");
-    await this.lease(instanceId, "codecn-desktop-host");
+    await this.lease(instanceId, "newbrain-desktop-host");
     await this.advance(instanceId, { result: { step: 1 } });
     const done = await this.advance(instanceId, { result: { step: 2 } });
     return {
@@ -275,7 +275,7 @@ export class GrowthControlPlaneService {
     const started = await this.startInstance({ process_id: processId, context: { demo: "g2" } });
     const instanceId = String(started.id || "");
     if (!instanceId) throw new Error("GROWTH_INSTANCE_ID_MISSING");
-    await this.lease(instanceId, "codecn-desktop-host");
+    await this.lease(instanceId, "newbrain-desktop-host");
     const parked = await this.advance(instanceId, { result: { step: 1 } });
     const pending = parked.pending_human_task && typeof parked.pending_human_task === "object"
       ? parked.pending_human_task as Record<string, unknown>
@@ -298,7 +298,7 @@ export class GrowthControlPlaneService {
     if (String(duplicate.cursor_node_id || "") !== "n2" && duplicateCallbackStatus !== "completed") {
       throw new Error(`GROWTH_DOUBLE_ADVANCE:${duplicate.cursor_node_id}`);
     }
-    await this.lease(instanceId, "codecn-desktop-host");
+    await this.lease(instanceId, "newbrain-desktop-host");
     const done = await this.advance(instanceId, { result: { step: 2 } });
     return {
       processId,
@@ -377,7 +377,7 @@ export class GrowthControlPlaneService {
       if (status === "waiting_human") {
         throw new Error("GROWTH_HUMAN_WITHOUT_TOKEN");
       }
-      await this.lease(instanceId, "codecn-desktop-host");
+      await this.lease(instanceId, "newbrain-desktop-host");
       const advanced = await this.advance(instanceId, { result: { step } });
       status = String(advanced.status || "");
 

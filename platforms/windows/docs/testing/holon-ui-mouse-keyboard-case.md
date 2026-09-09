@@ -6,16 +6,16 @@
 
 ## 前置条件
 
-1. 启动独立的可见 codeCN Electron 实例，使用独立用户数据目录和调试端口。
+1. 启动独立的可见 NewBrain Electron 实例，使用独立用户数据目录和调试端口。
 2. 测试模型服务准备一个确定的 WorkItem：`wi_ui_001`，目标是触发一次需要本地审批的工具调用。
-3. 仅允许测试夹具通过 `window.codecn.createBlankWorkspace` 和 `window.codecn.addWorkspaceThread` 创建空项目；创建完成后重新加载页面。
+3. 仅允许测试夹具通过 `window.newbrain.createBlankWorkspace` 和 `window.newbrain.addWorkspaceThread` 创建空项目；创建完成后重新加载页面。
 4. 记录屏幕分辨率、Electron 版本、测试端口、测试模型服务地址和工作区路径。
 
 ## 鼠标键盘操作步骤
 
 | 步骤 | 用户可见操作 | 自动化事件 | 必须观察到 |
 |---|---|---|---|
-| 1 | 等待主窗口出现 | 等待窗口标题 `codeCN`；截图 | 主窗口可见，未出现启动错误 |
+| 1 | 等待主窗口出现 | 等待窗口标题 `NewBrain`；截图 | 主窗口可见，未出现启动错误 |
 | 2 | 点击左侧 `Holon` | `Input.dispatchMouseEvent(mouseMoved)` 后发送 `mousePressed`、`mouseReleased`，坐标来自按钮中心 | 出现 `Holon` 工作台和五个标签 |
 | 3 | 点击 `远程任务` 标签 | 同上 | 远程任务视图可见 |
 | 4 | 点击 `刷新并领取` | 同上 | 页面出现 `wi_ui_001`，状态为待确认；不得自动执行 |

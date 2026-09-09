@@ -42,7 +42,7 @@ export function parseOpenClawSkillFrontmatter(source: string, fallbackName: stri
   };
 }
 
-/** Normalize a skill directory / slug name for codeCN managed roots. */
+/** Normalize a skill directory / slug name for NewBrain managed roots. */
 export function normalizeOpenClawSkillName(rawName: string) {
   return rawName
     .trim()
@@ -144,7 +144,7 @@ export async function detectOpenClawSkillPackage(sourceDir: string): Promise<Ope
     (await pathExists(join(rootDir, "agents", "openai.yml")));
 
   if (hasScripts) {
-    warnings.push("Package includes scripts/; codeCN will not auto-execute them without approval.");
+    warnings.push("Package includes scripts/; NewBrain will not auto-execute them without approval.");
   }
 
   return {

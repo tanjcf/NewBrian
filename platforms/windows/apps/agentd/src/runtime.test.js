@@ -9,7 +9,7 @@ import { createLocalRuntime } from "./runtime.js";
 import { ToolRegistry } from "./tool-registry.js";
 
 test("agent loop persists distinct structured execution details for repeated commands", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-command-details-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-command-details-"));
   try {
     const registry = new ToolRegistry()
       .register({ name: "workspace.scan", description: "test scan", requiresApproval: false, execute: async () => ({ ok: true, workspace: [] }) })
@@ -71,7 +71,7 @@ test("agent loop persists distinct structured execution details for repeated com
 const agentdRoot = dirname(fileURLToPath(import.meta.url));
 
 test("production runtime wires a capability resolver by default", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-capabilities-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-capabilities-"));
   try {
     const runtime = await createLocalRuntime({ runtimeId: "capability-wiring", workspacePath: root, platformLabel: "Windows", shellLabel: "PowerShell", skillRoots: [], capabilityDataRoot: join(root, ".capabilities") });
     assert.ok(runtime.capabilityResolver);
@@ -82,7 +82,7 @@ test("production runtime wires a capability resolver by default", async () => {
 });
 
 test("runtime allows read-only agent tools in workspace approval mode", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-"));
   try {
     writeFileSync(join(root, "hello.txt"), "hello");
     const runtime = await createLocalRuntime({
@@ -117,7 +117,7 @@ test("runtime allows read-only agent tools in workspace approval mode", async ()
 });
 
 test("approval_requested syncs session approval before onEvent reaches the UI", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-approval-surface-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-approval-surface-"));
   try {
     const runtime = await createLocalRuntime({
       runtimeId: "approval-surface-test",
@@ -148,7 +148,7 @@ test("approval_requested syncs session approval before onEvent reaches the UI", 
 });
 
 test("runtime blocks critical shell commands before creating an approval", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-policy-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-policy-"));
   try {
     const runtime = await createLocalRuntime({
       runtimeId: "policy-test", workspacePath: root, platformLabel: "test", shellLabel: "test", skillRoots: []
@@ -164,7 +164,7 @@ test("runtime blocks critical shell commands before creating an approval", async
 });
 
 test("direct tool invocation defaults to approval mode and does not execute pending work", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-default-approval-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-default-approval-"));
   try {
     let executions = 0;
     const registry = new ToolRegistry().register({
@@ -190,7 +190,7 @@ test("direct tool invocation defaults to approval mode and does not execute pend
 });
 
 test("restores a serialized pending approval without an in-memory closure", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-restored-approval-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-restored-approval-"));
   try {
     let executions = 0;
     const registry = new ToolRegistry().register({
@@ -225,7 +225,7 @@ test("restores a serialized pending approval without an in-memory closure", asyn
 });
 
 test("runtime exposes dynamically registered MCP-style tools to the agent loop", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-mcp-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-mcp-"));
   try {
     const runtime = await createLocalRuntime({
       runtimeId: "mcp-test", workspacePath: root, platformLabel: "test", shellLabel: "test", skillRoots: []
@@ -251,7 +251,7 @@ test("runtime exposes dynamically registered MCP-style tools to the agent loop",
 });
 
 test("empty shell commands are returned to the model instead of aborting the turn", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-empty-shell-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-empty-shell-"));
   try {
     const runtime = await createLocalRuntime({
       runtimeId: "empty-shell-test", workspacePath: root, platformLabel: "test", shellLabel: "test", skillRoots: []
@@ -272,7 +272,7 @@ test("empty shell commands are returned to the model instead of aborting the tur
 });
 
 test("runtime creates and loads the project manager skill for user shadow updates", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shadow-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shadow-"));
   try {
     const runtime = await createLocalRuntime({
       runtimeId: "shadow-test",
@@ -282,7 +282,7 @@ test("runtime creates and loads the project manager skill for user shadow update
     });
     const projectSkill = runtime.matchSkills("普通项目请求")[0];
     assert.equal(projectSkill.name, `${root.split(/[\\/]/).at(-1).toLowerCase()}-project-manager`);
-    assert.ok(existsSync(join(root, ".codecn", "skills", projectSkill.name, "SKILL.md")));
+    assert.ok(existsSync(join(root, ".newbrain", "skills", projectSkill.name, "SKILL.md")));
     const loadedSkill = await runtime.loadSkill(projectSkill.name);
     assert.deepEqual(loadedSkill.resources.references, [
       "backend-technical-design-framework.md",
@@ -300,7 +300,7 @@ test("runtime creates and loads the project manager skill for user shadow update
       scope: "session"
     });
     assert.ok(result.shadow.changed.includes("user-output-rules"));
-    const rules = readFileSync(join(root, ".codecn", "skills", projectSkill.name, "references", "user-output-rules.md"), "utf8");
+    const rules = readFileSync(join(root, ".newbrain", "skills", projectSkill.name, "references", "user-output-rules.md"), "utf8");
     assert.match(rules, /架构和功能细节/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -308,7 +308,7 @@ test("runtime creates and loads the project manager skill for user shadow update
 });
 
 test("runtime hides disabled skills from matching and loading", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-disabled-skill-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-disabled-skill-"));
   try {
     const skillRoot = join(root, "skills");
     const skillPath = join(skillRoot, "review");
@@ -331,7 +331,7 @@ test("runtime hides disabled skills from matching and loading", async () => {
 });
 
 test("user shadow does not promote one-shot output requirements into durable rules", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shadow-one-shot-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shadow-one-shot-"));
   try {
     const runtime = await createLocalRuntime({
       runtimeId: "shadow-one-shot",
@@ -345,7 +345,7 @@ test("user shadow does not promote one-shot output requirements into durable rul
       assistant: "OK",
       scope: "session"
     });
-    const rules = readFileSync(join(root, ".codecn", "skills", projectSkill.name, "references", "user-output-rules.md"), "utf8");
+    const rules = readFileSync(join(root, ".newbrain", "skills", projectSkill.name, "references", "user-output-rules.md"), "utf8");
     assert.doesNotMatch(rules, /create result\.txt/);
     assert.match(rules, /For Chinese user requests/);
   } finally {
@@ -354,7 +354,7 @@ test("user shadow does not promote one-shot output requirements into durable rul
 });
 
 test("user shadow preserves concurrent thread updates for the same project", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shadow-race-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shadow-race-"));
   try {
     const first = await createLocalRuntime({
       runtimeId: "shadow-race-a",
@@ -381,7 +381,7 @@ test("user shadow preserves concurrent thread updates for the same project", asy
         scope: "session"
       })
     ]);
-    const refs = join(root, ".codecn", "skills", projectSkill.name, "references");
+    const refs = join(root, ".newbrain", "skills", projectSkill.name, "references");
     const rules = readFileSync(join(refs, "user-output-rules.md"), "utf8");
     const digest = readFileSync(join(refs, "session-digest.md"), "utf8");
     assert.match(rules, /RULE_ALPHA_UNIQUE/);
@@ -394,7 +394,7 @@ test("user shadow preserves concurrent thread updates for the same project", asy
 });
 
 test("user shadow creates the workspace root before writing project skills", async () => {
-  const parent = mkdtempSync(join(tmpdir(), "codecn-shadow-parent-"));
+  const parent = mkdtempSync(join(tmpdir(), "newbrain-shadow-parent-"));
   const root = join(parent, "New Project");
   try {
     const runtime = await createLocalRuntime({
@@ -404,33 +404,33 @@ test("user shadow creates the workspace root before writing project skills", asy
       shellLabel: "test"
     });
     const projectSkill = runtime.matchSkills("new project")[0];
-    assert.ok(existsSync(join(root, ".codecn", "skills", projectSkill.name, "SKILL.md")));
+    assert.ok(existsSync(join(root, ".newbrain", "skills", projectSkill.name, "SKILL.md")));
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }
 });
 
 test("user shadow preserves updates from separate runtime processes", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shadow-process-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shadow-process-"));
   try {
     const worker = `
       import { createLocalRuntime } from "./src/runtime.js";
       const runtime = await createLocalRuntime({
-        runtimeId: "process-" + process.env.CODECN_TEST_INDEX,
-        workspacePath: process.env.CODECN_TEST_ROOT,
+        runtimeId: "process-" + process.env.NEWBRAIN_TEST_INDEX,
+        workspacePath: process.env.NEWBRAIN_TEST_ROOT,
         platformLabel: "test",
         shellLabel: "test"
       });
       await runtime.rememberExchangeWithShadow({
-        user: "Process " + process.env.CODECN_TEST_INDEX + " must preserve UNIQUE_PROCESS_" + process.env.CODECN_TEST_INDEX + " in output rules.",
-        assistant: "done " + process.env.CODECN_TEST_INDEX,
+        user: "Process " + process.env.NEWBRAIN_TEST_INDEX + " must preserve UNIQUE_PROCESS_" + process.env.NEWBRAIN_TEST_INDEX + " in output rules.",
+        assistant: "done " + process.env.NEWBRAIN_TEST_INDEX,
         scope: "session"
       });
     `;
     await Promise.all([0, 1, 2, 3].map((index) => new Promise((resolve, reject) => {
       const child = spawn(process.execPath, ["--input-type=module", "-e", worker], {
         cwd: join(agentdRoot, ".."),
-        env: { ...process.env, CODECN_TEST_INDEX: String(index), CODECN_TEST_ROOT: root },
+        env: { ...process.env, NEWBRAIN_TEST_INDEX: String(index), NEWBRAIN_TEST_ROOT: root },
         stdio: "pipe"
       });
       let output = "";
@@ -449,7 +449,7 @@ test("user shadow preserves updates from separate runtime processes", async () =
       shellLabel: "test"
     });
     const projectSkill = runtime.matchSkills("project")[0];
-    const refs = join(root, ".codecn", "skills", projectSkill.name, "references");
+    const refs = join(root, ".newbrain", "skills", projectSkill.name, "references");
     const rules = readFileSync(join(refs, "user-output-rules.md"), "utf8");
     const digest = readFileSync(join(refs, "session-digest.md"), "utf8");
     for (const index of [0, 1, 2, 3]) {
@@ -462,8 +462,8 @@ test("user shadow preserves updates from separate runtime processes", async () =
 });
 
 test("patch generation rejects symlinks that escape the workspace", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-runtime-link-"));
-  const outside = mkdtempSync(join(tmpdir(), "codecn-runtime-outside-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-link-"));
+  const outside = mkdtempSync(join(tmpdir(), "newbrain-runtime-outside-"));
   try {
     const outsideFile = join(outside, "secret.txt");
     writeFileSync(outsideFile, "secret");

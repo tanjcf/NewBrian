@@ -16,11 +16,11 @@ function ps(script) {
 
 const expected = "b06c20c7e21fb117a8147bda5a6f1f15206ac93793308fc00b7a117d5a5fb126";
 const candidates = [
-  String.raw`C:\Program Files\codeCN\resources\app.asar`,
-  String.raw`C:\Program Files (x86)\codeCN\resources\app.asar`,
-  path.join(process.env.LOCALAPPDATA || "", ".codecn", "resources", "app.asar"),
-  path.join(process.env.LOCALAPPDATA || "", "Programs", "codeCN", "resources", "app.asar"),
-  path.join(process.env.APPDATA || "", "codeCN", "resources", "app.asar")
+  String.raw`C:\Program Files\NewBrain\resources\app.asar`,
+  String.raw`C:\Program Files (x86)\NewBrain\resources\app.asar`,
+  path.join(process.env.LOCALAPPDATA || "", ".newbrain", "resources", "app.asar"),
+  path.join(process.env.LOCALAPPDATA || "", "Programs", "NewBrain", "resources", "app.asar"),
+  path.join(process.env.APPDATA || "", "NewBrain", "resources", "app.asar")
 ];
 
 const found = [];
@@ -62,7 +62,7 @@ const searched = [];
 for (const root of searchRoots) shallowFind(root, 0, searched);
 
 const registry = ps(
-  "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'codeCN' } | Select-Object DisplayName,DisplayVersion,InstallLocation,UninstallString,PSPath | ConvertTo-Json -Compress"
+  "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'NewBrain' } | Select-Object DisplayName,DisplayVersion,InstallLocation,UninstallString,PSPath | ConvertTo-Json -Compress"
 ).trim();
 
 console.log(
@@ -71,7 +71,7 @@ console.log(
       expected,
       candidates: found,
       matchingAsars: searched.filter((item) => item.match),
-      allNearbyAsars: searched.filter((item) => /codeCN|\.codecn/i.test(item.path)),
+      allNearbyAsars: searched.filter((item) => /NewBrain|\.newbrain/i.test(item.path)),
       registry: registry ? JSON.parse(registry) : null
     },
     null,
@@ -81,23 +81,23 @@ console.log(
 
 const match = searched.find((item) => item.match);
 if (match) {
-  const exe = path.join(path.dirname(path.dirname(match.path)), "codecn.exe");
+  const exe = path.join(path.dirname(path.dirname(match.path)), "newbrain.exe");
   console.log("launching matched install", exe, fs.existsSync(exe));
   if (fs.existsSync(exe)) {
     try {
-      execFileSync("taskkill.exe", ["/IM", "codecn.exe", "/F"], { stdio: "ignore" });
+      execFileSync("taskkill.exe", ["/IM", "newbrain.exe", "/F"], { stdio: "ignore" });
     } catch {}
     const child = spawn(exe, [], { detached: true, stdio: "ignore" });
     child.unref();
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 4000);
     const procs = ps(
-      "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'codecn.exe' } | Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress"
+      "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'newbrain.exe' } | Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress"
     ).trim();
     console.log("running", procs);
 
     // Extract and verify markers from matched asar.
-    const asarCli = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\node_modules\.pnpm\@electron+asar@3.4.1\node_modules\@electron\asar\bin\asar.js`;
-    const extractDir = String.raw`C:\Users\Administrator\AppData\Local\Temp\codecn-msi-smoke\matched-asar`;
+    const asarCli = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\node_modules\.pnpm\@electron+asar@3.4.1\node_modules\@electron\asar\bin\asar.js`;
+    const extractDir = String.raw`C:\Users\Administrator\AppData\Local\Temp\newbrain-msi-smoke\matched-asar`;
     fs.rmSync(extractDir, { recursive: true, force: true });
     execFileSync("node", [asarCli, "extract", match.path, extractDir], { stdio: "inherit" });
     const rendererDir = path.join(extractDir, "out", "renderer", "assets");

@@ -429,7 +429,7 @@ function renderFeaturePanel() {
                         {desktopBootstrapStatus.conda.source
                           ? desktopBootstrapStatus.conda.source === "system"
                             ? "系统已有 conda"
-                            : "codeCN 托管 conda"
+                            : "NewBrain 托管 conda"
                           : "未就绪"}
                       </dd>
                     </div>

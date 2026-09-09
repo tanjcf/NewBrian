@@ -1,6 +1,6 @@
 {
   "id": "HOLON-GENERIC-EXAMPLE",
-  "windowTitle": "codeCN",
+  "windowTitle": "NewBrain",
   "steps": [
     { "action": "screenshot", "output": "01-before.png" },
     { "action": "click", "name": "Holon" },

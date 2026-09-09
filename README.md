@@ -1,8 +1,8 @@
-# codeCN BRAIN
+# NewBrain BRAIN
 
-codeCN BRAIN is the cross-platform source repository for codeCN. It separates
+NewBrain BRAIN is the cross-platform source repository for NewBrain. It separates
 code shared by macOS and Windows from platform-specific packaging, configuration,
-and source overrides. The original codeCN repository remains unchanged.
+and source overrides. The original NewBrain repository remains unchanged.
 
 ## Layout
 
@@ -71,8 +71,8 @@ pnpm package:windows:production                         # signed production MSI 
 Test artifacts are written to `apps/desktop/release/test`; production artifacts are
 written to `apps/desktop/release/production`. Production packaging always requires a
 valid Authenticode signature. Override service endpoints with
-`CODECN_TEST_GATEWAY_BASE_URL` / `CODECN_TEST_PREVIEW_URL` or
-`CODECN_PRODUCTION_GATEWAY_BASE_URL` / `CODECN_PRODUCTION_PREVIEW_URL`.
+`NEWBRAIN_TEST_GATEWAY_BASE_URL` / `NEWBRAIN_TEST_PREVIEW_URL` or
+`NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL` / `NEWBRAIN_PRODUCTION_PREVIEW_URL`.
 Defaults: Test uses `http://120.48.151.202:8790/v1` and
 `http://120.48.151.202:3000`; Production uses `https://api.sinnauze.cn/v1` and
 `https://api.sinnauze.cn`. Do not use the retired `*.wangjietech.com` hosts —
@@ -96,7 +96,7 @@ corresponding `platforms/<platform>/` path when behavior is platform-specific.
 Refresh the managed layers from a deliberate upstream snapshot with:
 
 ```bash
-node scripts/import-upstream.mjs /path/to/original/codeCN
+node scripts/import-upstream.mjs /path/to/original/NewBrain
 ```
 
 See [docs/README.md](docs/README.md) for the documentation map, and

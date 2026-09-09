@@ -30,7 +30,7 @@ test("selectProjectManagerReferences keeps prefs and tails digest", () => {
     { name: "learning-open-questions.md", content: "- (none)\n" },
     { name: "programming-guardrails.md", content: "# Programming Guardrails\n" },
     { name: "session-digest.md", content: `${"old\n".repeat(2_000)}tail-marker` },
-    { name: "project-knowledge.md", content: "- CODECN候选: demo\n" },
+    { name: "project-knowledge.md", content: "- NEWBRAIN候选: demo\n" },
     { name: "other.md", content: "should drop" }
   ]);
   const names = selected.map((item) => item.name);
@@ -47,8 +47,8 @@ test("selectProjectManagerReferences keeps prefs and tails digest", () => {
   assert.ok(digest?.content.includes("omitted") || digest!.content.length <= 5_000);
 });
 
-test("loadProjectOsInstruction prefers CODECN.md then CLAUDE.md then AGENTS.md", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-os-load-"));
+test("loadProjectOsInstruction prefers NEWBRAIN.md then CLAUDE.md then AGENTS.md", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-os-load-"));
   try {
     writeFileSync(join(root, "AGENTS.md"), "# Agents\nfrom agents\n", "utf8");
     let loaded = await loadProjectOsInstruction(root);
@@ -60,31 +60,31 @@ test("loadProjectOsInstruction prefers CODECN.md then CLAUDE.md then AGENTS.md",
     assert.equal(loaded.sourceFile, "CLAUDE.md");
     assert.match(loaded.text, /from claude/);
 
-    writeFileSync(join(root, "CODECN.md"), "# CodeCN\nfrom codecn\n", "utf8");
+    writeFileSync(join(root, "NEWBRAIN.md"), "# NewBrain\nfrom newbrain\n", "utf8");
     loaded = await loadProjectOsInstruction(root);
-    assert.equal(loaded.sourceFile, "CODECN.md");
-    assert.match(loaded.text, /from codecn/);
-    assert.deepEqual([...PROJECT_OS_FILE_CANDIDATES], ["CODECN.md", "CLAUDE.md", "AGENTS.md"]);
+    assert.equal(loaded.sourceFile, "NEWBRAIN.md");
+    assert.match(loaded.text, /from newbrain/);
+    assert.deepEqual([...PROJECT_OS_FILE_CANDIDATES], ["NEWBRAIN.md", "CLAUDE.md", "AGENTS.md"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("loadProjectOsInstruction prefers real CLAUDE.md over stock CODECN scaffold", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-os-legacy-"));
+test("loadProjectOsInstruction prefers real CLAUDE.md over stock NEWBRAIN scaffold", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-os-legacy-"));
   try {
     writeFileSync(
-      join(root, "CODECN.md"),
-      "# Demo Project OS\n\nThis file is the **repo-root source of truth** for how codeCN works.\n\n- Purpose: _(fill in)_\n",
+      join(root, "NEWBRAIN.md"),
+      "# Demo Project OS\n\nThis file is the **repo-root source of truth** for how NewBrain works.\n\n- Purpose: _(fill in)_\n",
       "utf8"
     );
     writeFileSync(join(root, "CLAUDE.md"), "# Real legacy\n\nAlways run vitest.\n", "utf8");
     const loaded = await loadProjectOsInstruction(root);
     assert.equal(loaded.sourceFile, "CLAUDE.md");
     assert.match(loaded.text, /Always run vitest/);
-    assert.equal(isDefaultProjectOsScaffold(readFileSync(join(root, "CODECN.md"), "utf8")), true);
+    assert.equal(isDefaultProjectOsScaffold(readFileSync(join(root, "NEWBRAIN.md"), "utf8")), true);
     const selected = selectProjectOsSource([
-      { fileName: "CODECN.md", text: readFileSync(join(root, "CODECN.md"), "utf8") },
+      { fileName: "NEWBRAIN.md", text: readFileSync(join(root, "NEWBRAIN.md"), "utf8") },
       { fileName: "CLAUDE.md", text: "real" },
       { fileName: "AGENTS.md", text: "" }
     ]);
@@ -98,13 +98,13 @@ test("buildProjectOsPromptBlock formats injection and skips empty", () => {
   assert.equal(buildProjectOsPromptBlock(""), "");
   assert.equal(buildProjectOsPromptBlock({ sourceFile: null, text: "  " }), "");
   const block = buildProjectOsPromptBlock({
-    sourceFile: "CODECN.md",
+    sourceFile: "NEWBRAIN.md",
     text: "Build with pnpm test"
   });
   assert.match(block, /Project OS/);
-  assert.match(block, /source=CODECN\.md/);
+  assert.match(block, /source=NEWBRAIN\.md/);
   assert.match(block, /Build with pnpm test/);
-  assert.match(block, /CODECN\.md/);
+  assert.match(block, /NEWBRAIN\.md/);
   assert.equal(truncateReferenceTail("abc", 10), "abc");
   assert.equal(isProjectManagerSkillName("demo-project-manager"), true);
   assert.equal(isProjectManagerSkillName("other"), false);

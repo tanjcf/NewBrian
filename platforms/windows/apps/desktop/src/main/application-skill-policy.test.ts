@@ -12,13 +12,13 @@ test("each task runtime receives the global skill root and disabled skills", asy
     async setDisabledSkills(names: string[]) { calls.push(["disabled", names]); }
   };
 
-  await applyApplicationSkillPolicy(runtime, "C:/codecn/user-skills", async () => [
+  await applyApplicationSkillPolicy(runtime, "C:/newbrain/user-skills", async () => [
     { name: "enabled-skill", status: "enabled" },
     { name: "disabled-skill", status: "disabled" }
-  ], ["C:/project/.codecn/skills"]);
+  ], ["C:/project/.newbrain/skills"]);
 
   assert.deepEqual(calls, [
-    ["roots", ["C:/codecn/user-skills", "C:/project/.codecn/skills"]],
+    ["roots", ["C:/newbrain/user-skills", "C:/project/.newbrain/skills"]],
     ["disabled", ["disabled-skill"]]
   ]);
 });

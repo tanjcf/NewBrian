@@ -31,10 +31,10 @@ export function GameDesignPanel(props: {
   }, [revision, updatedAt]);
 
   const load = async () => {
-    if (!props.projectId || !window.codecn?.getBrainWorkspaceSection) return;
+    if (!props.projectId || !window.newbrain?.getBrainWorkspaceSection) return;
     setState("loading");
     try {
-      const section = await window.codecn.getBrainWorkspaceSection({
+      const section = await window.newbrain.getBrainWorkspaceSection({
         projectId: props.projectId, workspaceKey: props.workspaceKey, sectionKey: props.sectionKey
       });
       const nextFields = parseGameDesignContent(section.content, schema);
@@ -54,10 +54,10 @@ export function GameDesignPanel(props: {
   useEffect(() => { void load(); }, [props.projectId, props.workspaceKey, props.sectionKey]);
 
   const save = async () => {
-    if (!props.projectId || !window.codecn?.saveBrainWorkspaceSection || !dirty) return;
+    if (!props.projectId || !window.newbrain?.saveBrainWorkspaceSection || !dirty) return;
     setState("saving");
     try {
-      const result = await window.codecn.saveBrainWorkspaceSection({
+      const result = await window.newbrain.saveBrainWorkspaceSection({
         projectId: props.projectId,
         workspaceKey: props.workspaceKey,
         sectionKey: props.sectionKey,

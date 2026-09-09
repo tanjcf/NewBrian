@@ -31,7 +31,7 @@ try {
     $view.Execute()
     while ($row = $view.Fetch()) { $properties[[string]$row.StringData(1)] = [string]$row.StringData(2) }
     $view.Close()
-    if (([string]$properties.UpgradeCode).Trim('{}') -ne '2D97097C-03A2-54F7-B1D4-7E34233F7A65') { throw 'The update is not a compatible codeCN installer.' }
+    if (([string]$properties.UpgradeCode).Trim('{}') -ne '2D97097C-03A2-54F7-B1D4-7E34233F7A65') { throw 'The update is not a compatible NewBrain installer.' }
     $version = (([string]$properties.ProductVersion).Split('.')[0..2] -join '.')
     if ($version -ne $config.expectedVersion) { throw "Installer version $version does not match the published release." }
     $view = $database.OpenView("SELECT ActionProperty FROM Upgrade WHERE ActionProperty = 'WIX_UPGRADE_DETECTED'")
@@ -57,7 +57,7 @@ try {
   $logPath = Join-Path $config.backupRoot 'install.log'
   $installArgs = @($config.args)
   # Insert logging before ALLUSERS=, which must remain the last MSI argument.
-  $installArgs = @('/L*v', $logPath, 'CODECN_UPDATE_RUNNER=1') + $installArgs
+  $installArgs = @('/L*v', $logPath, 'NEWBRAIN_UPDATE_RUNNER=1') + $installArgs
   & msiexec.exe @installArgs | Out-Null
   $result.exitCode = $LASTEXITCODE
   if ($LASTEXITCODE -notin @(0, 3010)) { throw "MSI installation failed: $LASTEXITCODE. See $logPath" }
@@ -68,7 +68,7 @@ try {
   $result.detail = $_.Exception.Message + [Environment]::NewLine + $_.ScriptStackTrace
   Save-Result
   Add-Type -AssemblyName System.Windows.Forms
-  [System.Windows.Forms.MessageBox]::Show($result.detail + [Environment]::NewLine + 'Backup: ' + $config.backupRoot, 'codeCN update') | Out-Null
+  [System.Windows.Forms.MessageBox]::Show($result.detail + [Environment]::NewLine + 'Backup: ' + $config.backupRoot, 'NewBrain update') | Out-Null
 }
 if (Test-Path -LiteralPath $config.executablePath) {
   Start-Process -FilePath $config.executablePath -WorkingDirectory (Split-Path -Parent $config.executablePath)

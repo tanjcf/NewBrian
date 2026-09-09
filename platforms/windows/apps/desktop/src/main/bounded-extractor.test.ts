@@ -7,7 +7,7 @@ import test from "node:test";
 const { runBoundedExtractor } = await import(new URL("./bounded-extractor.ts", import.meta.url).href) as typeof import("./bounded-extractor.js");
 
 test("kills an extractor that exceeds its output budget", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-extractor-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-extractor-"));
   try {
     const script = join(root, "output.mjs");
     writeFileSync(script, "process.stdout.write('x'.repeat(8192));", "utf8");
@@ -23,7 +23,7 @@ test("kills an extractor that exceeds its output budget", async () => {
 });
 
 test("keeps a long-running extractor alive until explicit cancellation", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-extractor-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-extractor-"));
   try {
     const script = join(root, "hang.mjs");
     writeFileSync(script, "setInterval(() => {}, 1000);", "utf8");

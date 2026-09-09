@@ -28,7 +28,7 @@ test("runs a valid first intake turn and forwards attachments", async () => {
   const result = await runResearchIntakeService({
     input: {
       userRequest: "写调研报告",
-      attachments: [{ name: "素材.docx", path: "C:/tmp/素材.docx", url: "codecn://attachment" }]
+      attachments: [{ name: "素材.docx", path: "C:/tmp/素材.docx", url: "newbrain://attachment" }]
     },
     callModel: async (messages) => {
       calls.push(messages);

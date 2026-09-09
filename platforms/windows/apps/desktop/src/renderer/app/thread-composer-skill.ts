@@ -1,4 +1,4 @@
-export const THREAD_COMPOSER_SKILL_STORAGE_KEY = "codecn.threadComposerSkills.v1";
+export const THREAD_COMPOSER_SKILL_STORAGE_KEY = "newbrain.threadComposerSkills.v1";
 
 export type ThreadComposerSkill = {
   id?: string;

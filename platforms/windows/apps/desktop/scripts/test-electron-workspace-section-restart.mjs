@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9348);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9348);
 
 async function connect(session) {
   const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -59,7 +59,7 @@ async function connect(session) {
 
 async function seedProjects(evaluate) {
   return evaluate(`(async () => {
-    const localWorkspace = (await window.codecn.listWorkspaces())[0];
+    const localWorkspace = (await window.newbrain.listWorkspaces())[0];
     if (!localWorkspace?.id) throw new Error("E2E local workspace is unavailable");
     const definitions = [
       { workspaceKey: "game", name: "场景编辑验收 游戏 A", title: "游戏 A 对话" },
@@ -73,13 +73,13 @@ async function seedProjects(evaluate) {
     ];
     const result = {};
     for (const definition of definitions) {
-      let projects = await window.codecn.listBrainProjects({ workspaceKey: definition.workspaceKey, includeArchived: true });
+      let projects = await window.newbrain.listBrainProjects({ workspaceKey: definition.workspaceKey, includeArchived: true });
       let project = projects.find((item) => item.name === definition.name);
-      if (!project) project = await window.codecn.createBrainProject({ name: definition.name, primaryWorkspaceKey: definition.workspaceKey, ...(definition.workspaceKey === "software" ? { localWorkspaceId: localWorkspace.id } : {}) });
-      else if (definition.workspaceKey === "software") project = await window.codecn.updateBrainProject({ projectId: project.id, localWorkspaceId: localWorkspace.id });
-      let conversations = await window.codecn.listBrainConversations({ projectId: project.id, workspaceKey: definition.workspaceKey, includeArchived: true });
+      if (!project) project = await window.newbrain.createBrainProject({ name: definition.name, primaryWorkspaceKey: definition.workspaceKey, ...(definition.workspaceKey === "software" ? { localWorkspaceId: localWorkspace.id } : {}) });
+      else if (definition.workspaceKey === "software") project = await window.newbrain.updateBrainProject({ projectId: project.id, localWorkspaceId: localWorkspace.id });
+      let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey: definition.workspaceKey, includeArchived: true });
       let conversation = conversations.find((item) => item.title === definition.title);
-      if (!conversation) conversation = await window.codecn.createBrainConversation({ projectId: project.id, workspaceKey: definition.workspaceKey, title: definition.title });
+      if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey: definition.workspaceKey, title: definition.title });
       result[definition.name] = { projectId: project.id, conversationId: conversation.id, workspaceKey: definition.workspaceKey };
     }
     return result;
@@ -202,7 +202,7 @@ const terminalSubmitState = await client.evaluate(`(async () => {
 })()`);
 assert.equal(terminalSubmitState.buttonFound, true, "Terminal submit button is unavailable.");
 assert.equal(terminalSubmitState.inputValue, "", JSON.stringify(terminalSubmitState));
-await client.waitFor("project terminal session command output", `window.codecn.getTerminalSession().then((snapshot) => snapshot.lines.join('\\n').includes('BRAIN_TERMINAL_E2E'))`);
+await client.waitFor("project terminal session command output", `window.newbrain.getTerminalSession().then((snapshot) => snapshot.lines.join('\\n').includes('BRAIN_TERMINAL_E2E'))`);
 await client.waitFor("project terminal command output", `document.querySelector('[data-testid="brain-software-terminal-output"]')?.textContent?.includes('BRAIN_TERMINAL_E2E')`);
 
 await selectCatalog(client.evaluate, client.waitFor, "game", gameA.projectId, gameA.conversationId);
@@ -228,8 +228,8 @@ session.preserveWorkspace();
 await client.closeApplication();
 client.socket.close();
 
-process.env.CODECN_E2E_USE_LIVE_WORKSPACE = "1";
-process.env.CODECN_E2E_MODEL_CONFIG_PATH = join(workspacePath, "codecn.config.json");
+process.env.NEWBRAIN_E2E_USE_LIVE_WORKSPACE = "1";
+process.env.NEWBRAIN_E2E_MODEL_CONFIG_PATH = join(workspacePath, "newbrain.config.json");
 session = await ensureElectronE2ESession(debugPort);
 assert.equal(session.started, true, "Electron did not start a fresh process for restart verification.");
 client = await connect(session);
@@ -249,10 +249,10 @@ await openProjectAndSection(client.evaluate, client.waitFor, "场景编辑验收
 await assertEditorValue(client.evaluate, client.waitFor, "design", "游戏 A：狐火潜行与首领战策划");
 
 const durable = await client.evaluate(`(async () => ({
-  gameA: await window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(gameA.projectId)}, workspaceKey: "game", sectionKey: "design" }),
-  gameB: await window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(gameB.projectId)}, workspaceKey: "game", sectionKey: "design" }),
-  video: await window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(video.projectId)}, workspaceKey: "video", sectionKey: "script" }),
-  music: await window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(music.projectId)}, workspaceKey: "music", sectionKey: "lyrics" })
+  gameA: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(gameA.projectId)}, workspaceKey: "game", sectionKey: "design" }),
+  gameB: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(gameB.projectId)}, workspaceKey: "game", sectionKey: "design" }),
+  video: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(video.projectId)}, workspaceKey: "video", sectionKey: "script" }),
+  music: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(music.projectId)}, workspaceKey: "music", sectionKey: "lyrics" })
 }))()`);
 assert.equal(durable.gameA.content, "游戏 A：狐火潜行与首领战策划");
 assert.equal(durable.gameB.content, "游戏 B：城镇经营与昼夜循环策划");

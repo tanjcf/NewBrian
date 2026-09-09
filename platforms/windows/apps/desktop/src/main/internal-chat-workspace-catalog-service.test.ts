@@ -25,7 +25,7 @@ test("persists one chat-scoped internal workspace only when the catalog changes"
   const writes: WorkspaceCatalogItem[][] = [];
   const first = await ensureInternalChatWorkspaceCatalog({
     workspaces: [workspace()],
-    internalChatPath: "C:\\Apps\\codeCN\\tmp",
+    internalChatPath: "C:\\Apps\\NewBrain\\tmp",
     ensureDirectory: async (path: string) => { directories.push(path); },
     ensureWorkspace: ensureInternalChatWorkspace,
     writeCatalog: async (workspaces: WorkspaceCatalogItem[]) => {
@@ -35,7 +35,7 @@ test("persists one chat-scoped internal workspace only when the catalog changes"
   });
   const second = await ensureInternalChatWorkspaceCatalog({
     workspaces: first.catalog.workspaces,
-    internalChatPath: "C:\\Apps\\codeCN\\tmp",
+    internalChatPath: "C:\\Apps\\NewBrain\\tmp",
     ensureDirectory: async (path: string) => { directories.push(path); },
     ensureWorkspace: ensureInternalChatWorkspace,
     writeCatalog: async (workspaces: WorkspaceCatalogItem[]) => {
@@ -48,8 +48,8 @@ test("persists one chat-scoped internal workspace only when the catalog changes"
   assert.equal(first.changed, true);
   assert.equal(second.changed, false);
   assert.equal(writes.length, 1);
-  assert.deepEqual(directories, ["C:\\Apps\\codeCN\\tmp", "C:\\Apps\\codeCN\\tmp"]);
-  assert.equal(internal?.path, resolve("C:\\Apps\\codeCN\\tmp"));
+  assert.deepEqual(directories, ["C:\\Apps\\NewBrain\\tmp", "C:\\Apps\\NewBrain\\tmp"]);
+  assert.equal(internal?.path, resolve("C:\\Apps\\NewBrain\\tmp"));
   assert.deepEqual(internal?.threads, []);
 });
 
@@ -67,7 +67,7 @@ test("retains chat-scoped threads while persisting the internal workspace", asyn
         updatedAt: "2026-07-23T00:00:00.000Z"
       }]
     })],
-    internalChatPath: "C:\\Apps\\codeCN\\tmp",
+    internalChatPath: "C:\\Apps\\NewBrain\\tmp",
     ensureDirectory: async () => undefined,
     ensureWorkspace: ensureInternalChatWorkspace,
     writeCatalog: async (workspaces: WorkspaceCatalogItem[]) => ({ workspaces })
@@ -81,11 +81,11 @@ test("reports the tmp target path when it cannot create the internal chat direct
   await assert.rejects(
     ensureInternalChatWorkspaceCatalog({
       workspaces: [],
-      internalChatPath: "C:\\Apps\\codeCN\\tmp",
+      internalChatPath: "C:\\Apps\\NewBrain\\tmp",
       ensureDirectory: async () => { throw new Error("access denied"); },
       ensureWorkspace: ensureInternalChatWorkspace,
       writeCatalog: async (workspaces: WorkspaceCatalogItem[]) => ({ workspaces })
     }),
-    /Unable to create standalone chat directory at C:\\Apps\\codeCN\\tmp: access denied/
+    /Unable to create standalone chat directory at C:\\Apps\\NewBrain\\tmp: access denied/
   );
 });

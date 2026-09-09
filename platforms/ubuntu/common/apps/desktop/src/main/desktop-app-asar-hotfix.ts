@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
-export const MAC_ASAR_HOTFIX_FORMAT = "codecn-mac-asar-hotfix/v1";
+export const MAC_ASAR_HOTFIX_FORMAT = "newbrain-mac-asar-hotfix/v1";
 
 export interface HotfixFileEntry {
   path: string;
@@ -202,8 +202,8 @@ function updateInfoPlist(input: {
 
 function replaceFileAtomically(sourcePath: string, destinationPath: string) {
   mkdirSync(dirname(destinationPath), { recursive: true });
-  const stagingPath = `${destinationPath}.codecn-hotfix-new`;
-  const backupPath = `${destinationPath}.codecn-hotfix-bak`;
+  const stagingPath = `${destinationPath}.newbrain-hotfix-new`;
+  const backupPath = `${destinationPath}.newbrain-hotfix-bak`;
   copyFileSync(sourcePath, stagingPath);
   try {
     if (existsSync(destinationPath)) {
@@ -242,7 +242,7 @@ export async function applyMacAsarHotfix(input: ApplyMacAsarHotfixInput): Promis
     return { ok: false, detail: "当前不是可热修的打包应用目录。" };
   }
 
-  const extractRoot = await mkdtemp(join(tmpdir(), "codecn-hotfix-"));
+  const extractRoot = await mkdtemp(join(tmpdir(), "newbrain-hotfix-"));
   try {
     extractZipArchive(input.archivePath, extractRoot);
     const manifestPath = findManifestPath(extractRoot);
@@ -334,7 +334,7 @@ export function createMacAsarHotfixArchive(input: {
   notes?: string;
   extraResourceFiles?: string[];
 }) {
-  const staging = join(tmpdir(), `codecn-hotfix-stage-${Date.now()}`);
+  const staging = join(tmpdir(), `newbrain-hotfix-stage-${Date.now()}`);
   const resourcesStaging = join(staging, "Resources");
   mkdirSync(resourcesStaging, { recursive: true });
 

@@ -4,14 +4,14 @@ import { join } from "node:path";
 import { startPrivatePlanningRetryModelServer } from "./private-planning-retry-model-server.mjs";
 
 const server = await startPrivatePlanningRetryModelServer();
-process.env.CODECN_E2E_FORCE_FRESH = "1";
-process.env.CODECN_E2E_REMOTE_DEBUG_PORT = String(9650 + Math.floor(Math.random() * 200));
-process.env.CODECN_MODEL_BASE_URL = server.baseUrl;
-process.env.CODECN_E2E_MODEL_ID = "codecn-retry-e2e";
+process.env.NEWBRAIN_E2E_FORCE_FRESH = "1";
+process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT = String(9650 + Math.floor(Math.random() * 200));
+process.env.NEWBRAIN_MODEL_BASE_URL = server.baseUrl;
+process.env.NEWBRAIN_E2E_MODEL_ID = "newbrain-retry-e2e";
 const { ensureElectronE2ESession } = await import("./electron-e2e-session.mjs");
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-const session = await ensureElectronE2ESession(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT));
+const session = await ensureElectronE2ESession(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT));
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
@@ -61,11 +61,11 @@ try {
   assert.equal(submitted, true);
   await waitFor("enabled send", `!document.querySelector('[data-testid="composer-send-button"]')?.hasAttribute('disabled')`);
   await evaluate(`document.querySelector('[data-testid="composer-send-button"]')?.click()`);
-  await waitFor("visible retried answer", `([...document.querySelectorAll('.assistant-block')].at(-1)?.innerText || '').includes('我是 codeCN')`, 120_000);
+  await waitFor("visible retried answer", `([...document.querySelectorAll('.assistant-block')].at(-1)?.innerText || '').includes('我是 NewBrain')`, 120_000);
   assert.equal(server.getResponseCount(), 2, "The desktop runtime must retry exactly once.");
 
   const visibleText = await evaluate(`([...document.querySelectorAll('.assistant-block')].at(-1)?.innerText || '').trim()`);
-  assert.match(visibleText, /我是 codeCN/);
+  assert.match(visibleText, /我是 NewBrain/);
   assert.doesNotMatch(visibleText, /The user asks my name/);
   const governmentLink = JSON.parse(await evaluate(`(() => {
     const link = [...document.querySelectorAll('.assistant-block a')].find((item) => item.textContent?.includes('www.gov.cn'));
@@ -78,13 +78,13 @@ try {
   assert.deepEqual(governmentLink, { found: true, href: "https://www.gov.cn/", localFilePath: "" });
   socket.send(JSON.stringify({ id: 0, method: "Page.reload", params: { ignoreCache: true } }));
   await sleep(1_500);
-  await waitFor("persisted answer after reload", `([...document.querySelectorAll('.assistant-block')].at(-1)?.innerText || '').includes('我是 codeCN')`);
+  await waitFor("persisted answer after reload", `([...document.querySelectorAll('.assistant-block')].at(-1)?.innerText || '').includes('我是 NewBrain')`);
 
-  const stateRoot = join(session.workspacePath, ".codecn");
+  const stateRoot = join(session.workspacePath, ".newbrain");
   const rolloutPath = readdirSync(stateRoot, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".rollout.jsonl"))
     .map((entry) => join(entry.parentPath, entry.name))
-    .find((path) => readFileSync(path, "utf8").includes("我是 codeCN"));
+    .find((path) => readFileSync(path, "utf8").includes("我是 NewBrain"));
   assert.ok(rolloutPath, "The visible answer must be persisted in the canonical rollout.");
   const durableDump = readFileSync(rolloutPath, "utf8");
   assert.doesNotMatch(durableDump, /\"role\":\"assistant\"[^\n]*\"content\":\"\"/);

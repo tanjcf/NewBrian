@@ -9,11 +9,11 @@ import { createSceneTestCdpClient } from './scene-test-cdp-client.mjs';
 
 const exec = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), 'brain-video-export-'));
-const evidence = resolve(process.env.CODECN_VIDEO_EVIDENCE || 'evidence/video-export', String(Date.now()));
+const evidence = resolve(process.env.NEWBRAIN_VIDEO_EVIDENCE || 'evidence/video-export', String(Date.now()));
 await mkdir(evidence, { recursive: true });
 await mkdir(join(root, 'media'), { recursive: true });
 const files = [];
-const sourceRoot = process.env.CODECN_VIDEO_SOURCE_ROOT;
+const sourceRoot = process.env.NEWBRAIN_VIDEO_SOURCE_ROOT;
 const sourceState = sourceRoot ? JSON.parse(await readFile(join(sourceRoot, '.brain-video/pipeline-editor.json'), 'utf8')) : null;
 if (sourceState) {
   const paths = [...new Set([...sourceState.shots.flatMap(s => [s.clip, s.audio]), ...(sourceState.clipInstances || []).map(c => c.relativePath)].filter(Boolean))];
@@ -30,7 +30,7 @@ for (const [index, color] of (sourceState ? [] : ['red', 'green', 'blue']).entri
   const bytes = await readFile(join(root, storageKey));
   files.push({ storageKey, logicalName: `shot-${index + 1}.mp4`, mimeType: 'video/mp4', sizeBytes: bytes.length, contentHash: `sha256:${createHash('sha256').update(bytes).digest('hex')}` });
 }
-process.env.CODECN_E2E_FORCE_FRESH = '1';
+process.env.NEWBRAIN_E2E_FORCE_FRESH = '1';
 const client = await createSceneTestCdpClient(9373);
 const actions = [];
 async function click(text) {
@@ -50,17 +50,17 @@ async function screenshot(name) {
 try {
   await client.waitForAppReady();
   const projectId = await client.evaluate(`(async () => {
-    const catalog = await window.codecn.addWorkspace({name:'Video export regression',path:${JSON.stringify(root)}});
+    const catalog = await window.newbrain.addWorkspace({name:'Video export regression',path:${JSON.stringify(root)}});
     const local = catalog.find(w => w.path === ${JSON.stringify(root)});
-    const project = await window.codecn.createBrainProject({name:'Video export regression',primaryWorkspaceKey:'video',localWorkspaceId:local.id});
-    for (const file of ${JSON.stringify(files)}) await window.codecn.registerBrainFile({projectId:project.id,...file});
-    const loaded = await window.codecn.getBrainVideoPipeline({projectId:project.id});
+    const project = await window.newbrain.createBrainProject({name:'Video export regression',primaryWorkspaceKey:'video',localWorkspaceId:local.id});
+    for (const file of ${JSON.stringify(files)}) await window.newbrain.registerBrainFile({projectId:project.id,...file});
+    const loaded = await window.newbrain.getBrainVideoPipeline({projectId:project.id});
     const state = ${JSON.stringify(sourceState)} || {...loaded.state,script:'Three color sequence',canvas:{aspect:'16:9',width:320,height:180,fps:20},
       shots:${JSON.stringify(files)}.map((f,i)=>({title:'Shot '+(i+1),line:'',prompt:'',clip:f.storageKey,audio:'',ready:true,transition:'cut'})),
       clipInstances:${JSON.stringify(files)}.map((f,i)=>({id:'clip-'+i,shotId:'shot-'+(i+1),kind:'video',trackId:'v1',relativePath:f.storageKey,startSec:i*1.5,durationSec:1.5,inSec:0,outSec:1.5})),
       textClips:[],trackEdits:{},lanes:[{id:'v1',kind:'video',name:'V1',output:true}]};
-    await window.codecn.saveBrainVideoPipeline({projectId:project.id,state});
-    await window.codecn.saveVideoTimeline({projectId:project.id,title:'Export regression',width:320,height:180,fps:20});
+    await window.newbrain.saveBrainVideoPipeline({projectId:project.id,state});
+    await window.newbrain.saveVideoTimeline({projectId:project.id,title:'Export regression',width:320,height:180,fps:20});
     localStorage.setItem('brain.workspaceSelection.v2',JSON.stringify({version:2,selectedWorkspaceKey:'video',catalogs:{video:{projectId:project.id,conversationId:''}}}));
     return project.id;
   })()`);
@@ -81,7 +81,7 @@ try {
   for (const label of ['渲染', '导出']) {
     await click(label);
     await client.waitFor(`document.body.innerText.includes('${label}完成 · exports/')`, 90000);
-    const registered = await client.evaluate(`window.codecn.listBrainFiles({projectId:${JSON.stringify(projectId)}})`);
+    const registered = await client.evaluate(`window.newbrain.listBrainFiles({projectId:${JSON.stringify(projectId)}})`);
     const file = registered.find(f => f.storageKey.startsWith('exports/') && !outputs.some(o => o.path === f.storageKey));
     assert.ok(file, 'Export file registered');
     const {stdout} = await exec('ffprobe.exe',['-v','error','-show_entries','format=duration','-of','json',join(root,file.storageKey)],{windowsHide:true});
@@ -90,7 +90,7 @@ try {
     assert.ok(Math.abs(duration-expected)<0.15, `Full sequence duration: ${duration}, expected ${expected}`);
     outputs.push({path:file.storageKey,duration});
   }
-  const artifacts = await client.evaluate(`window.codecn.listBrainArtifacts({projectId:${JSON.stringify(projectId)}})`);
+  const artifacts = await client.evaluate(`window.newbrain.listBrainArtifacts({projectId:${JSON.stringify(projectId)}})`);
   assert.equal(artifacts.filter(a=>a.artifactType==='video_render').length,2);
   const artifactPoint = await client.evaluate("(()=>{const e=[...document.querySelectorAll('button')].find(e=>/^产物/.test(e.textContent.trim()));e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()");
   for (const type of ['mousePressed','mouseReleased']) await client.command('Input.dispatchMouseEvent',{type,...artifactPoint,button:'left',clickCount:1});

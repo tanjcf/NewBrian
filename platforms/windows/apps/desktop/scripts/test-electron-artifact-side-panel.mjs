@@ -4,26 +4,26 @@ import { join, resolve } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 import PptxGenJS from "../../agentd/node_modules/pptxgenjs/dist/pptxgen.es.js";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const session = await ensureElectronE2ESession(port);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
 assert.ok(session.workspacePath, "The artifact test requires an isolated workspace.");
 
-const projectPath = join(session.workspacePath, ".codecn", "projects", "artifact-side-panel");
+const projectPath = join(session.workspacePath, ".newbrain", "projects", "artifact-side-panel");
 await mkdir(projectPath, { recursive: true });
 await copyFile(resolve("..", "..", "..", "test-materials", "GOV-UI-MULTI-001", "安全工作纪要.docx"), join(projectPath, "安全工作纪要.docx"));
 await copyFile(resolve("..", "..", "personal_intro_template.pdf"), join(projectPath, "年度总结示例.pdf"));
-await writeFile(join(projectPath, "readme.txt"), "codeCN artifact side panel\n", "utf8");
+await writeFile(join(projectPath, "readme.txt"), "NewBrain artifact side panel\n", "utf8");
 const presentation = new PptxGenJS();
 presentation.layout = "LAYOUT_WIDE";
 const firstSlide = presentation.addSlide();
 firstSlide.background = { color: "F5F7FA" };
-firstSlide.addText("codeCN PPTX Preview", { x: 0.8, y: 0.7, w: 7.8, h: 0.7, fontSize: 28, bold: true, color: "173B67" });
+firstSlide.addText("NewBrain PPTX Preview", { x: 0.8, y: 0.7, w: 7.8, h: 0.7, fontSize: 28, bold: true, color: "173B67" });
 firstSlide.addText("Selectable, offline presentation rendering", { x: 0.8, y: 1.7, w: 7.8, h: 0.5, fontSize: 18, color: "46596F" });
 const secondSlide = presentation.addSlide();
 secondSlide.addText("Second slide verified", { x: 0.8, y: 0.8, w: 7.8, h: 0.7, fontSize: 26, bold: true, color: "173B67" });
-await presentation.writeFile({ fileName: join(projectPath, "codecn-output.pptx") });
+await presentation.writeFile({ fileName: join(projectPath, "newbrain-output.pptx") });
 
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolveOpen, reject) => {
@@ -71,12 +71,12 @@ const captureScreenshot = async (targetPath) => {
 };
 
 await evaluate(`(async () => {
-  let catalog = await window.codecn.listWorkspaces();
+  let catalog = await window.newbrain.listWorkspaces();
   if (!catalog.some((item) => item.path === ${JSON.stringify(projectPath)})) {
-    catalog = await window.codecn.addWorkspace({ name: "Artifact Preview E2E", path: ${JSON.stringify(projectPath)} });
+    catalog = await window.newbrain.addWorkspace({ name: "Artifact Preview E2E", path: ${JSON.stringify(projectPath)} });
   }
   const workspace = catalog.find((item) => item.path === ${JSON.stringify(projectPath)});
-  if (!(workspace.threads || []).length) await window.codecn.addWorkspaceThread({ workspaceId: workspace.id, title: "Artifact Viewer", summary: "PDF and DOCX side panel", scope: "project" });
+  if (!(workspace.threads || []).length) await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Artifact Viewer", summary: "PDF and DOCX side panel", scope: "project" });
   return true;
 })()`);
 socket.send(JSON.stringify({ id: 0, method: "Page.reload", params: { ignoreCache: true } }));
@@ -86,7 +86,7 @@ await waitFor("project", `Boolean([...document.querySelectorAll('.project-header
 await evaluate(`[...document.querySelectorAll('.project-header-main')].find((item) => item.textContent?.includes('Artifact Preview E2E'))?.click()`);
 await waitFor("selected project", `Boolean([...document.querySelectorAll('.project-group.active .project-header-main')].find((item) => item.textContent?.includes('Artifact Preview E2E')))`);
 await new Promise((resolveWait) => setTimeout(resolveWait, 500));
-await evaluate(`window.codecn.queueWorkspaceScan()`);
+await evaluate(`window.newbrain.queueWorkspaceScan()`);
 await new Promise((resolveWait) => setTimeout(resolveWait, 800));
 assert.equal(await evaluate(`Boolean(document.querySelector('.left-section.tree-section'))`), false, "File tree must not remain in the left navigation.");
 await evaluate(`document.querySelector('.preview-panel-toggle')?.click()`);
@@ -168,13 +168,13 @@ await waitFor("DOCX rendered text", `Boolean(document.querySelector('.workspace-
 await captureScreenshot(join(evidenceDirectory, "docx-side-panel.png"));
 await evaluate(`document.querySelector('.artifact-tab-add')?.click()`);
 await waitFor("right file sidebar after DOCX preview", `Boolean(document.querySelector('.preview-column .side-files-view'))`);
-await waitFor("PPTX file tree row", `Boolean([...document.querySelectorAll('.workspace-tree-item')].find((item) => item.textContent?.includes('codecn-output.pptx')))`);
-await evaluate(`[...document.querySelectorAll('.workspace-tree-item')].find((item) => item.textContent?.includes('codecn-output.pptx'))?.click()`);
+await waitFor("PPTX file tree row", `Boolean([...document.querySelectorAll('.workspace-tree-item')].find((item) => item.textContent?.includes('newbrain-output.pptx')))`);
+await evaluate(`[...document.querySelectorAll('.workspace-tree-item')].find((item) => item.textContent?.includes('newbrain-output.pptx'))?.click()`);
 await waitFor("PPTX preview surface", `Boolean(document.querySelector('.workspace-artifact-pptx') || document.querySelector('.search-file-preview-state.error'))`);
 const pptxPreviewError = await evaluate(`document.querySelector('.search-file-preview-state.error')?.textContent || ''`);
 assert.equal(pptxPreviewError, "", `PPTX preview failed: ${pptxPreviewError}`);
 await waitFor("embedded PPTX viewer", `document.querySelector('.workspace-artifact-pptx')?.getAttribute('data-slide-count') === '2'`, 30_000);
-await waitFor("PPTX first slide text", `document.querySelector('.workspace-artifact-pptx')?.textContent?.includes('codeCN PPTX Preview')`);
+await waitFor("PPTX first slide text", `document.querySelector('.workspace-artifact-pptx')?.textContent?.includes('NewBrain PPTX Preview')`);
 await evaluate(`document.querySelector('.workspace-pptx-toolbar button[aria-label="下一页"]')?.click()`);
 await waitFor("PPTX second slide", `document.querySelector('.workspace-artifact-pptx')?.getAttribute('data-current-slide') === '1' && document.querySelector('.workspace-artifact-pptx')?.textContent?.includes('Second slide verified')`);
 await evaluate(`document.querySelector('.workspace-pptx-toolbar button[aria-label="上一页"]')?.click()`);

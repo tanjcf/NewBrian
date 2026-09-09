@@ -8,7 +8,7 @@ Set-StrictMode -Version Latest
 
 $platformRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
-  $SourceRoot = if ([string]::IsNullOrWhiteSpace($env:CODECN_SOURCE_ROOT)) { $platformRoot } else { $env:CODECN_SOURCE_ROOT }
+  $SourceRoot = if ([string]::IsNullOrWhiteSpace($env:NEWBRAIN_SOURCE_ROOT)) { $platformRoot } else { $env:NEWBRAIN_SOURCE_ROOT }
 }
 $SourceRoot = [IO.Path]::GetFullPath($SourceRoot)
 $manifestPath = Join-Path $SourceRoot "rust\brain-core\Cargo.toml"

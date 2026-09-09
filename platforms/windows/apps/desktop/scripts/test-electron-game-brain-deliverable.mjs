@@ -4,12 +4,12 @@
  * login → game scene → BRAIN conversation → model writes playable mini web game → preview.
  *
  * Env:
- *   CODECN_E2E_LOGIN_EMAIL / CODECN_E2E_LOGIN_PASSWORD (required)
- *   CODECN_E2E_SKIP_EMAIL_CAPTCHA=1 (default in script; allows password-first E2E login)
- *   CODECN_E2E_LOGIN_CAPTCHA (optional fallback when gateway enforces email code login)
- *   CODECN_E2E_REUSE_LOGIN=1 (reuse ~/.codecn session; skips captcha when already logged in)
- *   CODECN_E2E_PROFILE_PATH (optional explicit profile directory)
- *   CODECN_E2E_VISIBLE_STEP_DELAY_MS (optional, default 800 for visible mouse-less UI steps)
+ *   NEWBRAIN_E2E_LOGIN_EMAIL / NEWBRAIN_E2E_LOGIN_PASSWORD (required)
+ *   NEWBRAIN_E2E_SKIP_EMAIL_CAPTCHA=1 (default in script; allows password-first E2E login)
+ *   NEWBRAIN_E2E_LOGIN_CAPTCHA (optional fallback when gateway enforces email code login)
+ *   NEWBRAIN_E2E_REUSE_LOGIN=1 (reuse ~/.newbrain session; skips captcha when already logged in)
+ *   NEWBRAIN_E2E_PROFILE_PATH (optional explicit profile directory)
+ *   NEWBRAIN_E2E_VISIBLE_STEP_DELAY_MS (optional, default 800 for visible mouse-less UI steps)
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -18,40 +18,40 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const email = process.env.CODECN_E2E_LOGIN_EMAIL?.trim();
-const password = process.env.CODECN_E2E_LOGIN_PASSWORD?.trim();
-assert.ok(email && password, "CODECN_E2E_LOGIN_EMAIL and CODECN_E2E_LOGIN_PASSWORD are required.");
+const email = process.env.NEWBRAIN_E2E_LOGIN_EMAIL?.trim();
+const password = process.env.NEWBRAIN_E2E_LOGIN_PASSWORD?.trim();
+assert.ok(email && password, "NEWBRAIN_E2E_LOGIN_EMAIL and NEWBRAIN_E2E_LOGIN_PASSWORD are required.");
 
 const scriptDir = fileURLToPath(new URL(".", import.meta.url));
-const desktopRoot = process.env.CODECN_E2E_APP_DIRECTORY?.trim() || resolve(scriptDir, "..");
+const desktopRoot = process.env.NEWBRAIN_E2E_APP_DIRECTORY?.trim() || resolve(scriptDir, "..");
 const electron = join(desktopRoot, "node_modules", "electron", "dist", "electron.exe");
 assert.equal(existsSync(electron), true, `Electron executable is missing: ${electron}`);
 
-const visibleStepDelayMs = Math.max(0, Number.parseInt(process.env.CODECN_E2E_VISIBLE_STEP_DELAY_MS || "800", 10) || 0);
+const visibleStepDelayMs = Math.max(0, Number.parseInt(process.env.NEWBRAIN_E2E_VISIBLE_STEP_DELAY_MS || "800", 10) || 0);
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const projectName = `BRAIN小游戏${runId.slice(11, 19)}`;
-const reuseLogin = process.env.CODECN_E2E_REUSE_LOGIN === "1";
-const configuredProfile = process.env.CODECN_E2E_PROFILE_PATH?.trim();
+const reuseLogin = process.env.NEWBRAIN_E2E_REUSE_LOGIN === "1";
+const configuredProfile = process.env.NEWBRAIN_E2E_PROFILE_PATH?.trim();
 const profileRoot = configuredProfile
-  || (reuseLogin ? join(homedir(), ".codecn") : mkdtempSync(join(tmpdir(), "codecn-game-deliverable-")));
-const removeProfileAfterRun = !configuredProfile && !reuseLogin && process.env.CODECN_E2E_PRESERVE_PROFILE !== "1";
+  || (reuseLogin ? join(homedir(), ".newbrain") : mkdtempSync(join(tmpdir(), "newbrain-game-deliverable-")));
+const removeProfileAfterRun = !configuredProfile && !reuseLogin && process.env.NEWBRAIN_E2E_PRESERVE_PROFILE !== "1";
 const artifactRoot = resolve(desktopRoot, "../../../docs/evidence/scene-tests/game-deliverable", runId);
 mkdirSync(artifactRoot, { recursive: true });
 const debugPort = 19_500 + (process.pid % 8_000);
 
 // Never inherit E2E auth bypass from the parent shell — real login is mandatory.
-delete process.env.CODECN_E2E_AUTH_BYPASS;
-delete process.env.CODECN_E2E_AUTH_TOKEN;
+delete process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+delete process.env.NEWBRAIN_E2E_AUTH_TOKEN;
 
 const childEnv = { ...process.env };
-delete childEnv.CODECN_E2E_AUTH_BYPASS;
-delete childEnv.CODECN_E2E_AUTH_TOKEN;
-childEnv.CODECN_E2E_REMOTE_DEBUG_PORT = String(debugPort);
-childEnv.CODECN_WORKSPACE_PATH = profileRoot;
-childEnv.CODECN_E2E_AUTH_BYPASS = "0";
-childEnv.CODECN_E2E_SKIP_EMAIL_CAPTCHA = "1";
-if (process.env.CODECN_E2E_LOGIN_CAPTCHA?.trim()) {
-  childEnv.CODECN_E2E_LOGIN_CAPTCHA = process.env.CODECN_E2E_LOGIN_CAPTCHA.trim();
+delete childEnv.NEWBRAIN_E2E_AUTH_BYPASS;
+delete childEnv.NEWBRAIN_E2E_AUTH_TOKEN;
+childEnv.NEWBRAIN_E2E_REMOTE_DEBUG_PORT = String(debugPort);
+childEnv.NEWBRAIN_WORKSPACE_PATH = profileRoot;
+childEnv.NEWBRAIN_E2E_AUTH_BYPASS = "0";
+childEnv.NEWBRAIN_E2E_SKIP_EMAIL_CAPTCHA = "1";
+if (process.env.NEWBRAIN_E2E_LOGIN_CAPTCHA?.trim()) {
+  childEnv.NEWBRAIN_E2E_LOGIN_CAPTCHA = process.env.NEWBRAIN_E2E_LOGIN_CAPTCHA.trim();
 }
 
 const child = spawn(electron, ["."], {
@@ -180,7 +180,7 @@ async function approveNativeDialog() {
 }
 
 async function readAuthStatus() {
-  return evaluate(`window.codecn.getAuthStatus().then((auth) => ({
+  return evaluate(`window.newbrain.getAuthStatus().then((auth) => ({
     authenticated: Boolean(auth?.authenticated),
     email: String(auth?.user?.email || auth?.account?.email || "").trim(),
     mode: auth?.mode || "none"
@@ -191,14 +191,14 @@ async function assertRealAccount(label = "checkpoint") {
   const auth = await readAuthStatus();
   assert.equal(auth?.authenticated, true, `[${label}] not authenticated: ${JSON.stringify(auth)}`);
   assert.equal(auth.email.toLowerCase(), email.toLowerCase(), `[${label}] wrong account: expected ${email}, got ${auth?.email}`);
-  assert.notEqual(auth.email.toLowerCase(), "e2e@codecn.local", `[${label}] E2E bypass account detected`);
+  assert.notEqual(auth.email.toLowerCase(), "e2e@newbrain.local", `[${label}] E2E bypass account detected`);
   return auth;
 }
 
 async function readLoginCaptcha() {
-  const fromEnv = process.env.CODECN_E2E_LOGIN_CAPTCHA?.trim();
+  const fromEnv = process.env.NEWBRAIN_E2E_LOGIN_CAPTCHA?.trim();
   if (fromEnv) return fromEnv;
-  const captchaFile = process.env.CODECN_E2E_LOGIN_CAPTCHA_FILE?.trim();
+  const captchaFile = process.env.NEWBRAIN_E2E_LOGIN_CAPTCHA_FILE?.trim();
   if (captchaFile && existsSync(captchaFile)) {
     return readFileSync(captchaFile, "utf8").trim();
   }
@@ -224,22 +224,22 @@ async function ensureRealAccountLogin() {
     return;
   }
   if (auth?.authenticated && auth.email.toLowerCase() !== email.toLowerCase()) {
-    await evaluate(`window.codecn.logoutAuth()`);
+    await evaluate(`window.newbrain.logoutAuth()`);
     await waitFor("login shell after logout", `Boolean(document.querySelector('input[type="email"]') || document.body?.innerText?.includes('正在检查登录状态'))`, 60_000);
     auth = await readAuthStatus();
   }
   if (!auth?.authenticated || auth.email.toLowerCase() !== email.toLowerCase()) {
     await waitFor("login shell", `Boolean(document.querySelector('input[type="email"]') || document.body?.innerText?.includes('正在检查登录状态'))`, 120_000);
     let loginCaptcha = await readLoginCaptcha();
-    if (!loginCaptcha && process.env.CODECN_E2E_SKIP_EMAIL_CAPTCHA === "1") {
-      await evaluate(`window.codecn.sendLoginCode({ email: ${JSON.stringify(email)} })`);
+    if (!loginCaptcha && process.env.NEWBRAIN_E2E_SKIP_EMAIL_CAPTCHA === "1") {
+      await evaluate(`window.newbrain.sendLoginCode({ email: ${JSON.stringify(email)} })`);
       evidence.steps.push("login-code-sent");
-      process.stderr.write("[game-deliverable] 已发送邮箱验证码；可设置 CODECN_E2E_LOGIN_CAPTCHA 或 CODECN_E2E_LOGIN_CAPTCHA_FILE 后自动继续\\n");
+      process.stderr.write("[game-deliverable] 已发送邮箱验证码；可设置 NEWBRAIN_E2E_LOGIN_CAPTCHA 或 NEWBRAIN_E2E_LOGIN_CAPTCHA_FILE 后自动继续\\n");
       loginCaptcha = await waitForLoginCaptcha(120_000);
     }
     evidence.screenshots.push(await screenshot("01-before-login"));
     await visiblePause();
-    const loginResult = await evaluate(`window.codecn.loginAuth({
+    const loginResult = await evaluate(`window.newbrain.loginAuth({
       email: ${JSON.stringify(email)},
       password: ${JSON.stringify(password)},
       captcha: ${JSON.stringify(loginCaptcha)},
@@ -251,7 +251,7 @@ async function ensureRealAccountLogin() {
     assert.equal(loginResult?.ok, true, `loginAuth failed: ${JSON.stringify(loginResult)}`);
     evidence.steps.push(loginCaptcha ? "login-submitted-code" : "login-submitted-ipc");
     await waitFor("login success", `(async () => {
-      const auth = await window.codecn.getAuthStatus();
+      const auth = await window.newbrain.getAuthStatus();
       return auth.authenticated && String(auth.user?.email || auth.account?.email || "").toLowerCase() === ${JSON.stringify(email.toLowerCase())};
     })()`, 120_000);
   }
@@ -263,10 +263,10 @@ async function ensureRealAccountLogin() {
 
 async function waitForProjectBinding(name) {
   return waitFor("project bound to legacy workspace", `(async () => {
-    const projects = await window.codecn.listBrainProjects({ workspaceKey: "game" });
+    const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
     const brain = projects.find((item) => item.name === ${JSON.stringify(name)});
     if (!brain?.localWorkspaceId) return false;
-    const catalog = await window.codecn.listWorkspaces();
+    const catalog = await window.newbrain.listWorkspaces();
     const legacy = catalog.find((item) => item.id === brain.localWorkspaceId);
     return Boolean(legacy?.path);
   })()`, 120_000);
@@ -274,9 +274,9 @@ async function waitForProjectBinding(name) {
 
 async function ensureExecutionWorkspace(name) {
   const state = await evaluate(`(async () => {
-    const projects = await window.codecn.listBrainProjects({ workspaceKey: "game" });
+    const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
     const brain = projects.find((item) => item.name === ${JSON.stringify(name)});
-    const catalog = await window.codecn.listWorkspaces();
+    const catalog = await window.newbrain.listWorkspaces();
     const legacy = catalog.find((item) => item.id === brain?.localWorkspaceId) || catalog.find((item) => item.name === ${JSON.stringify(name)});
     const header = [...document.querySelectorAll(".projects-section .project-header, .project-list .project-header")].find((el) => (el.textContent || "").includes(${JSON.stringify(name.slice(0, 8))}));
     header?.click();
@@ -398,13 +398,13 @@ try {
   await visiblePause();
 
   const state = await evaluate(`(async () => {
-    const catalog = await window.codecn.listWorkspaces();
+    const catalog = await window.newbrain.listWorkspaces();
     const local = catalog.find((item) => item.name === ${JSON.stringify(projectName)});
-    const projects = await window.codecn.listBrainProjects({ workspaceKey: "game" });
+    const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
     const brain = projects.find((item) => item.name === ${JSON.stringify(projectName)});
     let inspection = null;
-    if (brain?.id && window.codecn.inspectBrainGameProject) {
-      try { inspection = await window.codecn.inspectBrainGameProject({ projectId: brain.id }); } catch {}
+    if (brain?.id && window.newbrain.inspectBrainGameProject) {
+      try { inspection = await window.newbrain.inspectBrainGameProject({ projectId: brain.id }); } catch {}
     }
     const assistantText = [...document.querySelectorAll('.brain-chat-message.assistant')].map((n) => n.textContent || '').join('\\n---\\n');
     const artifactPaths = [...document.querySelectorAll('[data-local-file-path]')].map((el) => decodeURIComponent(el.getAttribute('data-local-file-path') || ''));

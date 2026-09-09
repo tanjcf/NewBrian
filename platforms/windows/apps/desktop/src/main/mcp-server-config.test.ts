@@ -26,7 +26,7 @@ test("filters MCP servers without a runnable endpoint", () => {
   assert.deepEqual(servers.map((server: { id: string }) => server.id), ["stdio", "sse"]);
 });
 
-test("removes the legacy Codex errer_outf MCP server from codeCN configuration", () => {
+test("removes the legacy Codex errer_outf MCP server from NewBrain configuration", () => {
   const servers = config.normalizeMcpServers([
     { id: "builtin:errer_outf", name: "errer_outf", transport: "stdio", command: "node" },
     { id: "keep", name: "Keep", transport: "stdio", command: "node" }

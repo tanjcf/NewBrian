@@ -55,7 +55,7 @@ export function registerUsageExceptionFeedbackComposition(deps: UsageExceptionFe
       const result = await deps.callModelApi({
         ...config,
         disableResponseStorage: true,
-        systemPrompt: "你是 codeCN 异常归因分析器。只返回请求要求的 JSON，不执行工具。",
+        systemPrompt: "你是 NewBrain 异常归因分析器。只返回请求要求的 JSON，不执行工具。",
         messages: [{ role: "user", content: prompt }]
       });
       return result.content;

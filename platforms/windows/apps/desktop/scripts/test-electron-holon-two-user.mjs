@@ -11,13 +11,13 @@ const port = 32_000 + (process.pid % 5_000);
 const debugPortBase = 20_000 + (process.pid % 10_000) * 2;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const server = spawn(process.execPath, [fileURLToPath(new URL("./holon-two-user-mock-server.mjs", import.meta.url))], {
-  env: { ...process.env, CODECN_HOLON_TWO_USER_PORT: String(port) }, windowsHide: true,
+  env: { ...process.env, NEWBRAIN_HOLON_TWO_USER_PORT: String(port) }, windowsHide: true,
   stdio: ["ignore", "pipe", "inherit"]
 });
 await ready(server);
-process.env.CODECN_MODEL_BASE_URL = `http://127.0.0.1:${port}/v1`;
-process.env.CODECN_E2E_MODEL_ID = "codecn-holon-two-user";
-process.env.CODECN_E2E_AUTH_BYPASS = "1";
+process.env.NEWBRAIN_MODEL_BASE_URL = `http://127.0.0.1:${port}/v1`;
+process.env.NEWBRAIN_E2E_MODEL_ID = "newbrain-holon-two-user";
+process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
 
 let sessionA;
 let sessionB;
@@ -56,7 +56,7 @@ try {
   assert.equal(await sessionB.cdp.evaluate(`Boolean(document.querySelector('.candidate-diff'))`), false);
   await openKnowledgeAndSearch(sessionB.cdp, "private-a-rule");
   assert.equal(await sessionB.cdp.evaluate(`Boolean(document.querySelector('.holon-list article'))`), false);
-  const denied = await sessionB.cdp.evaluate(`window.codecn.getKnowledgeSnapshot({ snapshotId: 'snapshot-a-2' })
+  const denied = await sessionB.cdp.evaluate(`window.newbrain.getKnowledgeSnapshot({ snapshotId: 'snapshot-a-2' })
     .then(() => false, () => true)`);
   assert.equal(denied, true);
   const isolated = await waitState((state) => state.crossUserDenials >= 1, "cross-user denial");
@@ -74,7 +74,7 @@ try {
     crossUserDenied: true,
     cleanupResidue: 0
   };
-  const evidencePath = fileURLToPath(new URL("../../../integration-artifacts/holon-codecn/two-user-mock-electron.json", import.meta.url));
+  const evidencePath = fileURLToPath(new URL("../../../integration-artifacts/holon-newbrain/two-user-mock-electron.json", import.meta.url));
   mkdirSync(dirname(evidencePath), { recursive: true });
   writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(evidence)}\n`);
@@ -87,7 +87,7 @@ try {
 }
 
 async function openUser(token, debugPort) {
-  process.env.CODECN_E2E_AUTH_TOKEN = token;
+  process.env.NEWBRAIN_E2E_AUTH_TOKEN = token;
   const session = await ensureElectronE2ESession(debugPort);
   const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
   assert.ok(page);

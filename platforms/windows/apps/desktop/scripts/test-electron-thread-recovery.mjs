@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9888);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9888);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
@@ -60,25 +60,25 @@ mkdirSync(healthyWorkspacePath, { recursive: true });
 
 await waitFor("renderer bootstrap", `Boolean(document.querySelector('[data-testid="new-chat-button"]'))`);
 const fixture = JSON.parse(await evaluate(`(async () => {
-  let catalog = await window.codecn.listWorkspaces();
+  let catalog = await window.newbrain.listWorkspaces();
   const ensureWorkspace = async (name, path) => {
-    if (!catalog.some((item) => item.path === path)) catalog = await window.codecn.addWorkspace({ name, path });
+    if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name, path });
     return catalog.find((item) => item.path === path);
   };
   let missingWorkspace = await ensureWorkspace('缺失任务工作区', ${JSON.stringify(missingWorkspacePath)});
   let healthyWorkspace = await ensureWorkspace('正常任务工作区', ${JSON.stringify(healthyWorkspacePath)});
   if (!missingWorkspace.threads.some((item) => item.title === '即将缺失的任务')) {
-    catalog = await window.codecn.addWorkspaceThread({ workspaceId: missingWorkspace.id, title: '即将缺失的任务', summary: '故障注入', scope: 'chat' });
+    catalog = await window.newbrain.addWorkspaceThread({ workspaceId: missingWorkspace.id, title: '即将缺失的任务', summary: '故障注入', scope: 'chat' });
   }
   missingWorkspace = catalog.find((item) => item.path === ${JSON.stringify(missingWorkspacePath)});
   if (!healthyWorkspace.threads.some((item) => item.title === '正常备用任务')) {
-    catalog = await window.codecn.addWorkspaceThread({ workspaceId: healthyWorkspace.id, title: '正常备用任务', summary: '恢复校验', scope: 'chat' });
+    catalog = await window.newbrain.addWorkspaceThread({ workspaceId: healthyWorkspace.id, title: '正常备用任务', summary: '恢复校验', scope: 'chat' });
   }
   healthyWorkspace = catalog.find((item) => item.path === ${JSON.stringify(healthyWorkspacePath)});
   const missingThread = missingWorkspace.threads.find((item) => item.title === '即将缺失的任务');
   const healthyThread = healthyWorkspace.threads.find((item) => item.title === '正常备用任务');
-  localStorage.setItem('codecn.lastSelectedWorkspaceId.v1', healthyWorkspace.id);
-  localStorage.setItem('codecn.lastSelectedThreadId.v1', healthyThread.id);
+  localStorage.setItem('newbrain.lastSelectedWorkspaceId.v1', healthyWorkspace.id);
+  localStorage.setItem('newbrain.lastSelectedThreadId.v1', healthyThread.id);
   return JSON.stringify({ missingWorkspaceId: missingWorkspace.id, missingThreadId: missingThread.id, healthyWorkspaceId: healthyWorkspace.id, healthyThreadId: healthyThread.id });
 })()`));
 
@@ -89,7 +89,7 @@ await waitFor("stale target task row", `Boolean(document.querySelector('[data-te
 
 // Fault injection only: delete the durable task without applying the returned catalog,
 // leaving the visible row stale so the normal user click exercises renderer recovery.
-await evaluate(`window.codecn.deleteWorkspaceThread({ workspaceId: ${JSON.stringify(fixture.missingWorkspaceId)}, threadId: ${JSON.stringify(fixture.missingThreadId)} }).then(() => true)`);
+await evaluate(`window.newbrain.deleteWorkspaceThread({ workspaceId: ${JSON.stringify(fixture.missingWorkspaceId)}, threadId: ${JSON.stringify(fixture.missingThreadId)} }).then(() => true)`);
 const clicked = await evaluate(`(() => {
   const row = document.querySelector('[data-testid="sidebar-task-row"][data-thread-key=${JSON.stringify(missingThreadKey)}]');
   if (!(row instanceof HTMLButtonElement)) return false;

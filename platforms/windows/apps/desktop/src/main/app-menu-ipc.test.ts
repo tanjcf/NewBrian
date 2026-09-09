@@ -51,7 +51,7 @@ test("builds Chinese menu structure with injected side effects", () => {
   (windowMenu[1].click as Function)();
   assert.deepEqual(windowActions, ["minimize", "maximize"]);
   const help = menuPolicy.createAppMenuTemplate("help", {}, actions);
-  assert.equal(help[0].label, "codeCN 文档");
+  assert.equal(help[0].label, "NewBrain 文档");
   (help[0].click as Function)();
   (help.at(-1)?.click as Function)();
   assert.match(urls[0], /codex/);

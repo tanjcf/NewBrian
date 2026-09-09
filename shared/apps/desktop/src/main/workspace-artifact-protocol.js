@@ -1,6 +1,6 @@
 import { extname } from "node:path";
 
-export const ARTIFACT_PROTOCOL_SCHEME = "codecn-artifact";
+export const ARTIFACT_PROTOCOL_SCHEME = "newbrain-artifact";
 export const ARTIFACT_PROTOCOL_HOST = "preview";
 export const ARTIFACT_PROTOCOL_MAX_BYTES = 40 * 1024 * 1024;
 
@@ -49,7 +49,7 @@ export function buildWorkspaceArtifactPreviewUrl(workspaceId, relativePath) {
 }
 
 /**
- * Parses `codecn-artifact://preview/<workspaceId>/<relative/path>` requests.
+ * Parses `newbrain-artifact://preview/<workspaceId>/<relative/path>` requests.
  * Rejects host spoofing, empty segments, and traversal markers before path resolution.
  */
 export function parseWorkspaceArtifactPreviewUrl(requestUrl) {

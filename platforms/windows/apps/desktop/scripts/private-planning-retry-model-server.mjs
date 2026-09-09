@@ -9,7 +9,7 @@ export async function startPrivatePlanningRetryModelServer() {
   let responseCount = 0;
   const server = createServer((request, response) => {
     if (request.method === "GET" && request.url === "/v1/models") {
-      sendJson(response, { data: [{ id: "codecn-retry-e2e", name: "codeCN Retry E2E", owned_by: "codecn" }] });
+      sendJson(response, { data: [{ id: "newbrain-retry-e2e", name: "NewBrain Retry E2E", owned_by: "newbrain" }] });
       return;
     }
     if (request.method !== "POST" || request.url !== "/v1/responses") {
@@ -21,7 +21,7 @@ export async function startPrivatePlanningRetryModelServer() {
       responseCount += 1;
       const content = responseCount === 1
         ? "The user asks my name. I should answer directly in Chinese."
-        : "我是 codeCN，你的智能协作助手。\n\n[www.gov.cn）整理的最新消息：](https://www.gov.cn/)";
+        : "我是 NewBrain，你的智能协作助手。\n\n[www.gov.cn）整理的最新消息：](https://www.gov.cn/)";
       response.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache",

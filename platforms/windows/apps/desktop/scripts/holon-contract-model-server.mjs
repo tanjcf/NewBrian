@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 
-const port = Number(process.env.CODECN_HOLON_TEST_PORT || 18891);
-const restartMode = process.env.CODECN_HOLON_RESTART_MODE === "1";
-const gameMode = process.env.CODECN_HOLON_GAME_MODE === "1";
+const port = Number(process.env.NEWBRAIN_HOLON_TEST_PORT || 18891);
+const restartMode = process.env.NEWBRAIN_HOLON_RESTART_MODE === "1";
+const gameMode = process.env.NEWBRAIN_HOLON_GAME_MODE === "1";
 const now = new Date().toISOString();
 const state = { claimIndex: 0, events: [], eventAttempts: 0, feedback: [], mutations: [], cancelRequests: [] };
 const workItem = {
@@ -81,7 +81,7 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
   const body = await readBody(request);
   if (url.pathname === "/__state") return json(response, state);
-  if (url.pathname === "/v1/models") return json(response, { data: [{ id: "codecn-e2e-model", name: "Holon E2E", owned_by: "codecn", config_id: "e2e" }] });
+  if (url.pathname === "/v1/models") return json(response, { data: [{ id: "newbrain-e2e-model", name: "Holon E2E", owned_by: "newbrain", config_id: "e2e" }] });
   if (url.pathname === "/v1/responses") {
     state.responseCount = (state.responseCount ?? 0) + 1;
     if (restartMode) await new Promise((resolve) => setTimeout(resolve, 120_000));

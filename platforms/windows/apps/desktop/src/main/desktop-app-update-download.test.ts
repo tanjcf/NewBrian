@@ -23,7 +23,7 @@ test("parseContentRange reads start/end/total", () => {
 });
 
 test("sha256FileStreaming matches full-buffer digest", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "codecn-hash-"));
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-hash-"));
   const path = join(dir, "blob.bin");
   const payload = Buffer.alloc(64 * 1024, 7);
   await writeFile(path, payload);
@@ -38,8 +38,8 @@ test("sha256FileStreaming matches full-buffer digest", async () => {
 
 test("downloadResumableToFile resumes with Range and appends on 206", async () => {
   const full = Buffer.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-resume-"));
-  const partialPath = join(dir, "codeCN-1.3.6.msi.partial");
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-resume-"));
+  const partialPath = join(dir, "NewBrain-1.3.6.msi.partial");
   const firstHalf = full.subarray(0, 10);
   await writeFile(partialPath, firstHalf);
   const rangeHeaders: string[] = [];
@@ -94,8 +94,8 @@ test("downloadResumableToFile resumes with Range and appends on 206", async () =
 
 test("downloadResumableToFile rewrites when server returns 200 for Range", async () => {
   const full = Buffer.from("full-package-bytes-for-restart");
-  const dir = await mkdtemp(join(tmpdir(), "codecn-restart-"));
-  const partialPath = join(dir, "codeCN-1.3.6.msi.partial");
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-restart-"));
+  const partialPath = join(dir, "NewBrain-1.3.6.msi.partial");
   await writeFile(partialPath, Buffer.from("stale-partial"));
   const server = createServer((request, response) => {
     // Ignore Range and always send full body (common CDN / proxy behavior).

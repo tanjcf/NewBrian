@@ -39,7 +39,7 @@ function parseOutDir(argv) {
   const index = argv.indexOf("--out");
   if (index >= 0 && argv[index + 1]) return path.resolve(argv[index + 1]);
   const localAppData = process.env.LOCALAPPDATA || process.env.HOME || process.cwd();
-  return path.join(localAppData, ".codecn", "novel-tts", "kokoro");
+  return path.join(localAppData, ".newbrain", "novel-tts", "kokoro");
 }
 
 async function download(url, dest) {

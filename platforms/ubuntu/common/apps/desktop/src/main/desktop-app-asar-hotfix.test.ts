@@ -16,9 +16,9 @@ const {
 
 test("detects hotfix package kind from payload and URL", () => {
   assert.equal(resolveUpdatePackageKind({ package_kind: "hotfix" }, "https://x/a.zip"), "hotfix");
-  assert.equal(resolveUpdatePackageKind({}, "https://cdn/codeCN-0.1.66-arm64.hotfix.zip"), "hotfix");
+  assert.equal(resolveUpdatePackageKind({}, "https://cdn/NewBrain-0.1.66-arm64.hotfix.zip"), "hotfix");
   assert.equal(resolveUpdatePackageKind({ package_kind: "full" }, "https://cdn/a.hotfix.zip"), "full");
-  assert.equal(resolveUpdatePackageKind({}, "https://cdn/codeCN.dmg"), "full");
+  assert.equal(resolveUpdatePackageKind({}, "https://cdn/NewBrain.dmg"), "full");
 });
 
 test("parses and rejects invalid hotfix manifests", () => {
@@ -29,7 +29,7 @@ test("parses and rejects invalid hotfix manifests", () => {
     arch: "arm64",
     version: "0.1.66",
     minVersion: "0.1.65",
-    appId: "cn.codecn.mac.desktop",
+    appId: "cn.newbrain.mac.desktop",
     files: [{ path: "Resources/app.asar", sha256: "abc", size: 1 }],
     asarIntegrity: { "Resources/app.asar": { algorithm: "SHA256", hash: "abc" } }
   };
@@ -46,7 +46,7 @@ test("creates and applies an asar hotfix zip into a fake app bundle", async (t) 
     return;
   }
 
-  const root = mkdtempSync(join(tmpdir(), "codecn-hotfix-test-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-hotfix-test-"));
   const resources = join(root, "Contents", "Resources");
   const infoPlist = join(root, "Contents", "Info.plist");
   mkdirSync(resources, { recursive: true });
@@ -78,7 +78,7 @@ test("creates and applies an asar hotfix zip into a fake app bundle", async (t) 
     outputPath: archivePath,
     version: "0.1.66",
     minVersion: "0.1.65",
-    appId: "cn.codecn.mac.desktop",
+    appId: "cn.newbrain.mac.desktop",
     arch: process.arch,
     notes: "test hotfix"
   });
@@ -89,7 +89,7 @@ test("creates and applies an asar hotfix zip into a fake app bundle", async (t) 
     resourcesPath: resources,
     infoPlistPath: infoPlist,
     currentVersion: "0.1.65",
-    currentAppId: "cn.codecn.mac.desktop",
+    currentAppId: "cn.newbrain.mac.desktop",
     expectedArch: process.arch
   });
   assert.equal(applied.ok, true, applied.detail);
@@ -110,7 +110,7 @@ test("refuses hotfix when current version is already newer", async (t) => {
     t.skip("macOS only");
     return;
   }
-  const root = mkdtempSync(join(tmpdir(), "codecn-hotfix-refuse-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-hotfix-refuse-"));
   const resources = join(root, "Contents", "Resources");
   const infoPlist = join(root, "Contents", "Info.plist");
   mkdirSync(resources, { recursive: true });
@@ -130,7 +130,7 @@ test("refuses hotfix when current version is already newer", async (t) => {
     outputPath: archivePath,
     version: "0.1.66",
     minVersion: "0.1.65",
-    appId: "cn.codecn.mac.desktop",
+    appId: "cn.newbrain.mac.desktop",
     arch: process.arch
   });
   const applied = await applyMacAsarHotfix({
@@ -138,7 +138,7 @@ test("refuses hotfix when current version is already newer", async (t) => {
     resourcesPath: resources,
     infoPlistPath: infoPlist,
     currentVersion: "0.1.66",
-    currentAppId: "cn.codecn.mac.desktop",
+    currentAppId: "cn.newbrain.mac.desktop",
     expectedArch: process.arch
   });
   assert.equal(applied.ok, false);

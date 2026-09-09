@@ -65,11 +65,11 @@ const features = {
 function resolveChannelEndpoints(channel) {
   const isProduction = channel === "production";
   const gatewayBaseUrl = (
-    (isProduction ? process.env.CODECN_PRODUCTION_GATEWAY_BASE_URL : process.env.CODECN_TEST_GATEWAY_BASE_URL) ||
+    (isProduction ? process.env.NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL : process.env.NEWBRAIN_TEST_GATEWAY_BASE_URL) ||
     "http://120.48.151.202:8790/v1"
   ).trim();
   const previewUrl = (
-    (isProduction ? process.env.CODECN_PRODUCTION_PREVIEW_URL : process.env.CODECN_TEST_PREVIEW_URL) ||
+    (isProduction ? process.env.NEWBRAIN_PRODUCTION_PREVIEW_URL : process.env.NEWBRAIN_TEST_PREVIEW_URL) ||
     "http://120.48.151.202:3000"
   ).trim();
   return { gatewayBaseUrl, previewUrl };
@@ -86,12 +86,12 @@ function applyChannelEndpoints(config, channel) {
   return next;
 }
 
-function preparePackageResources(channel = process.env.CODECN_PACKAGE_CHANNEL || "") {
+function preparePackageResources(channel = process.env.NEWBRAIN_PACKAGE_CHANNEL || "") {
   mkdirSync(packageResourcesDir, { recursive: true });
-  const input = JSON.parse(readFileSync(join(repoRoot, "codecn.config.json"), "utf8"));
+  const input = JSON.parse(readFileSync(join(repoRoot, "newbrain.config.json"), "utf8"));
   const config = applyChannelEndpoints(sanitizeConfig(input), channel);
-  writeFileSync(join(packageResourcesDir, "codecn.config.json"), JSON.stringify(config, null, 2) + "\n", "utf8");
-  writeFileSync(join(packageResourcesDir, "codecn.features.json"), JSON.stringify(features, null, 2) + "\n", "utf8");
+  writeFileSync(join(packageResourcesDir, "newbrain.config.json"), JSON.stringify(config, null, 2) + "\n", "utf8");
+  writeFileSync(join(packageResourcesDir, "newbrain.features.json"), JSON.stringify(features, null, 2) + "\n", "utf8");
   console.log(channel ? `Prepared sanitized mac ${channel} package resources.` : "Prepared sanitized mac package resources.");
   return config;
 }

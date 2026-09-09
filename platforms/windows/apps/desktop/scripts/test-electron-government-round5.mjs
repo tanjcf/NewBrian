@@ -5,10 +5,10 @@ import { basename, isAbsolute, resolve } from "node:path";
 import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const page = (await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json()))
   .find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-assert.ok(page, "No visible codeCN renderer is available.");
+assert.ok(page, "No visible NewBrain renderer is available.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((ok, fail) => { socket.addEventListener("open", ok, { once: true }); socket.addEventListener("error", fail, { once: true }); });
 let nextId = 0;
@@ -44,7 +44,7 @@ for (let attempt = 0; attempt < 30 && !activated; attempt += 1) {
 }
 assert.equal(activated, true, "Could not activate the GOV-UI-MULTI-001 project conversation.");
 await sleep(1_000);
-const before = await evaluate(`(async () => ({ messages: (await window.codecn.getSnapshot()).messages || [], goal: await window.codecn.getGoalExecution(), workspacePath: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.path || '', threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0 }))()`);
+const before = await evaluate(`(async () => ({ messages: (await window.newbrain.getSnapshot()).messages || [], goal: await window.newbrain.getGoalExecution(), workspacePath: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.path || '', threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0 }))()`);
 assert.equal(before.goal?.goal?.threadId, targetThreadId, "Wrong thread is active before round 5.");
 const request = `确认修改。生成第二版完整正文，同时输出以下两个文件：
 
@@ -59,7 +59,7 @@ let state = null;
 let sawBusy = false;
 const deadline = Date.now() + 420_000;
 while (Date.now() < deadline) {
-  state = await evaluate(`(async () => { const goal = await window.codecn.getGoalExecution(); let approvalClicked = false; if (goal?.goal?.threadId === ${JSON.stringify(targetThreadId)}) { const button = document.querySelector('[data-testid="approval-approve-button"]'); if (button instanceof HTMLButtonElement && !button.disabled) { button.click(); approvalClicked = true; } } return { approvalClicked, busy: Boolean(document.querySelector('.composer-card.busy')), messages: (await window.codecn.getSnapshot()).messages || [], goal, localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '')), threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0, composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true, body: document.body.innerText }; })()`);
+  state = await evaluate(`(async () => { const goal = await window.newbrain.getGoalExecution(); let approvalClicked = false; if (goal?.goal?.threadId === ${JSON.stringify(targetThreadId)}) { const button = document.querySelector('[data-testid="approval-approve-button"]'); if (button instanceof HTMLButtonElement && !button.disabled) { button.click(); approvalClicked = true; } } return { approvalClicked, busy: Boolean(document.querySelector('.composer-card.busy')), messages: (await window.newbrain.getSnapshot()).messages || [], goal, localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '')), threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0, composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true, body: document.body.innerText }; })()`);
   const files = state.localFiles || [];
   sawBusy ||= state.busy;
   const newAssistant = state.messages.filter((m) => m.role === "assistant").length > before.messages.filter((m) => m.role === "assistant").length;

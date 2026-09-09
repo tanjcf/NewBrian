@@ -1,8 +1,8 @@
-# CodeCN Agent Platform V2
+# NewBrain Agent Platform V2
 
 ## 目标
 
-CodeCN V2 将 Cursor 的项目内编辑体验、Trae CN 的独立 Tool Host、WorkBuddy 式任务协作体验，以及 TRAC（Traceability、Recovery、Autonomy、Control）原则组合成一个本地优先、可恢复、可审计的 Agent 平台。
+NewBrain V2 将 Cursor 的项目内编辑体验、Trae CN 的独立 Tool Host、WorkBuddy 式任务协作体验，以及 TRAC（Traceability、Recovery、Autonomy、Control）原则组合成一个本地优先、可恢复、可审计的 Agent 平台。
 
 平台不展示模型私有思维链，只保存并展示安全的推理摘要、工具证据、任务状态和质量门结果。
 
@@ -34,7 +34,7 @@ CodeCN V2 将 Cursor 的项目内编辑体验、Trae CN 的独立 Tool Host、Wo
 
 ## 相对参考产品的差异化
 
-本机参考安装显示 Cursor 3.11.19 采用 VS Code/Electron 工作台；Trae CN 1.107.1 附带独立 `modules/ai-agent/bin/agent-tool-host.exe`。CodeCN 保留两者的优势，同时把以下能力作为公开、可测试的产品协议，而不是仅作为内部实现：
+本机参考安装显示 Cursor 3.11.19 采用 VS Code/Electron 工作台；Trae CN 1.107.1 附带独立 `modules/ai-agent/bin/agent-tool-host.exe`。NewBrain 保留两者的优势，同时把以下能力作为公开、可测试的产品协议，而不是仅作为内部实现：
 
 - 子 Agent 任务、依赖、审批和恢复状态统一持久化。
 - 编辑任务默认 worktree 隔离，研究/验证任务不承担无意义的分支成本。

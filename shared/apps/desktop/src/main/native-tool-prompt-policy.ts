@@ -19,14 +19,14 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
   const artifactContract = requestsOutputArtifact(latestUserRequest)
       ? [
         "The user requested a real output artifact. You must create it inside the attached workspace before claiming completion.",
-        "Place user-facing output artifacts under the attached project's outputs/ directory. Never place conversation outputs in .codecn/, skills/, another project, or an absolute path.",
+        "Place user-facing output artifacts under the attached project's outputs/ directory. Never place conversation outputs in .newbrain/, skills/, another project, or an absolute path.",
         "For multiline source or scripts, call workspace.write_file instead of embedding source in `python -c` or shell quoting.",
         "Do not probe whether libraries are installed before the first run. Write the script and run it; only install or repair dependencies if that run reports a missing dependency.",
         "Run the generated script with one minimal shell.exec call, then call artifact.inspect on every requested output file.",
         "Do not claim success unless artifact.inspect returns ok with a non-zero byte size and the expected real file signature.",
         "Do not perform cleanup or delete generated scripts during the artifact task, and never delete the requested output artifact.",
         "After successful inspection, stop calling tools immediately and summarize the outcome concisely.",
-        "Do not write a manual file-change list or Markdown file link in the final answer. CodeCN appends an authoritative, clickable created/modified file summary from tool results."
+        "Do not write a manual file-change list or Markdown file link in the final answer. NewBrain appends an authoritative, clickable created/modified file summary from tool results."
       ]
     : [];
   const pdfContract = requestsPdfFile(latestUserRequest)
@@ -68,7 +68,7 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
       ]
     : [];
   return [
-    "Native CodeCN tool contract:",
+    "Native NewBrain tool contract:",
     ...shellContract,
     ...searchContract,
     ...codingFileContract,

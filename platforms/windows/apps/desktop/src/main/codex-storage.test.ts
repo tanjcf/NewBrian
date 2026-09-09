@@ -18,7 +18,7 @@ function cleanupTempRoot(root: string) {
 
 test("creates Codex-style WAL databases and persists each core domain", async () => {
   const { CodexStorage } = await import(new URL("./codex-storage.ts", import.meta.url).href) as typeof import("./codex-storage.js");
-  const root = mkdtempSync(join(tmpdir(), "codecn-storage-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-storage-"));
   try {
     const storage = new CodexStorage(root);
     storage.upsertThread({
@@ -168,7 +168,7 @@ test("creates Codex-style WAL databases and persists each core domain", async ()
 
 test("updates and deletes the current goal without deleting its thread", async () => {
   const { CodexStorage } = await import(new URL("./codex-storage.ts", import.meta.url).href) as typeof import("./codex-storage.js");
-  const root = mkdtempSync(join(tmpdir(), "codecn-goal-controls-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-goal-controls-"));
   try {
     const storage = new CodexStorage(root);
     storage.upsertThread({
@@ -189,7 +189,7 @@ test("updates and deletes the current goal without deleting its thread", async (
 
 test("sustains 2000 state and log writes and reopens without data loss", async () => {
   const { CodexStorage } = await import(new URL("./codex-storage.ts", import.meta.url).href) as typeof import("./codex-storage.js");
-  const root = mkdtempSync(join(tmpdir(), "codecn-storage-pressure-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-storage-pressure-"));
   try {
     let storage = new CodexStorage(root);
     for (let index = 0; index < 2000; index += 1) {

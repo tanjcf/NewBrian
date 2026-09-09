@@ -22,7 +22,7 @@ const fromOpId = args.find((item) => item.startsWith("--from="))?.slice(7);
 const freshLedger = args.includes("--fresh-ledger");
 const continueOnBlocking = args.includes("--continue");
 const limit = Number(args.find((item) => item.startsWith("--limit="))?.slice(8) || 0);
-const debugPort = Number(process.env.CODECN_SCENE_TEST_DEBUG_PORT || 9350);
+const debugPort = Number(process.env.NEWBRAIN_SCENE_TEST_DEBUG_PORT || 9350);
 
 async function loadCatalog(scene) {
   const path = join(catalogDir, `${scene}.json`);

@@ -86,7 +86,7 @@ Expected: all commands exit zero. Platform packaging remains blocked until execu
 - [x] Scope projects and threads by workspace while retaining shared project files.
 - [x] Persist the selected workspace and restore it without moving a conversation to another catalog.
 - [x] Add empty, loading, unavailable, and migration states.
-- [x] Left catalog uses Claude Code / codeCN local folder projects (`projects-section` + `WorkspaceCatalogItem.path`), filtered by `brainWorkspaceKey` (missing → `document`); unbound history defaults to 文档创作; cross-scene「最近」;「新对话」binds the current scene project thread. `brain_project` remains metadata bridge only, not the primary sidebar list (2026-08-22).
+- [x] Left catalog uses Claude Code / NewBrain local folder projects (`projects-section` + `WorkspaceCatalogItem.path`), filtered by `brainWorkspaceKey` (missing → `document`); unbound history defaults to 文档创作; cross-scene「最近」;「新对话」binds the current scene project thread. `brain_project` remains metadata bridge only, not the primary sidebar list (2026-08-22).
 
 ### Task 5: Document ingestion and structural anchors
 
@@ -213,7 +213,7 @@ Desktop progress: free-first orchestration + admin policy/audit + citation final
 - Create release evidence manifests under `docs/evidence/releases/`.
 
 - [ ] Build signed Windows installer, signed/notarized macOS DMG/ZIP, and Ubuntu AppImage/DEB for both supported architectures.
-  - Partial (2026-08-21): **unsigned** Windows MSI package build succeeded from `.materialized/windows-build` via `pnpm package:win-msi`. Artifact `codeCN 1.3.0.msi` + SHA-256 recorded in `docs/evidence/releases/2026-08-21-windows-msi.md`. Signing identity not configured; macOS/Ubuntu packages **not built**.
+  - Partial (2026-08-21): **unsigned** Windows MSI package build succeeded from `.materialized/windows-build` via `pnpm package:win-msi`. Artifact `NewBrain 1.3.0.msi` + SHA-256 recorded in `docs/evidence/releases/2026-08-21-windows-msi.md`. Signing identity not configured; macOS/Ubuntu packages **not built**.
 - [ ] Test clean install, upgrade from previous release, restart recovery, uninstall, and rollback.
   - Install/start **NOT RUN** on evidence host (documented in the same release note to avoid machine-wide install risk).
 - [ ] Run real credential-store tests on each OS.
@@ -229,7 +229,7 @@ Desktop progress: free-first orchestration + admin policy/audit + citation final
   - [x] Bind projects and conversations to their workspace scene, persist independent selections for every scene, and migrate unbound historical project/conversation records to `document`. Real temporary SQLite migration/restart/owner-isolation tests and renderer scene-selection contract tests pass as part of the same 72-test Windows gate (2026-08-22).
   - [x] Re-run the production Electron `BRAIN-WORKSPACE-SECTIONS-RESTART-E2E` against a fresh isolated profile: all seven scenes expose only their own project/conversation catalogs; the embedded software terminal accepts and renders real PowerShell input; game/video/music project-scoped content remains isolated; a full application exit and fresh process restore every catalog and saved section (2026-08-22).
   - [x] Correct the document capability routing mismatch: the `files` capability returns to the shared project file panel, while `citation` maps to the document references view; the renderer contract test passes 19/19 and the Windows protocol/desktop production build passes (2026-08-22).
-  - [x] Windows Test MSI packaging now stages the document worker explicitly and fails closed when `codecn.bootstrap.json` or `document-worker.js` is absent; the rebuilt unpacked artifact contains both resources and the unsigned Test MSI is generated (2026-08-22).
+  - [x] Windows Test MSI packaging now stages the document worker explicitly and fails closed when `newbrain.bootstrap.json` or `document-worker.js` is absent; the rebuilt unpacked artifact contains both resources and the unsigned Test MSI is generated (2026-08-22).
   - [x] Re-run the scene-bound Electron flows with the current left-side workbench switcher and right-side capability tabs: document revision, quant simulation, video render/preview, and music render/preview all pass; video/music E2E follows the approved prototype navigation (2026-08-22).
   - [x] Repair stale macOS and Ubuntu platform lockfiles against the current shared document/media dependency graph. macOS ARM64/x64 and Ubuntu ARM64/x64 now pass offline frozen installation, protocol/UI/agentd compilation, and complete production Electron builds from freshly materialized workspaces. This is cross-target compile evidence only; physical-host terminal, credential-store, install, and uninstall evidence remains open (2026-08-22).
 - [ ] Publish hashes, signatures, known risks, and a truthful GO/NO-GO decision.

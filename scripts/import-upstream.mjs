@@ -10,10 +10,10 @@ const windowsSource = path.join(source, "windows");
 
 const rootFiles = new Set([
   "README.md", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
-  "tsconfig.base.json", "codecn.config.json", "codecn.features.json",
-  "codecn.workspaces.json"
+  "tsconfig.base.json", "newbrain.config.json", "newbrain.features.json",
+  "newbrain.workspaces.json"
 ]);
-const sourceRootSharedFiles = new Set(["codecn.bootstrap.json"]);
+const sourceRootSharedFiles = new Set(["newbrain.bootstrap.json"]);
 const allowedTopDirectories = {
   macos: new Set(["apps", "packages"]),
   windows: new Set(["apps", "packages", "docs", "references", "scripts", "skills"])
@@ -57,7 +57,7 @@ async function collect(base, platform, current = "") {
 }
 
 if (!process.argv[2]) {
-  console.error("Usage: node scripts/import-upstream.mjs <codecn-source-root>");
+  console.error("Usage: node scripts/import-upstream.mjs <newbrain-source-root>");
   process.exit(1);
 }
 await Promise.all([assertDirectory(macSource), assertDirectory(windowsSource)]);

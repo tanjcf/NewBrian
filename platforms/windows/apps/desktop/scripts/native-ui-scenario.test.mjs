@@ -7,9 +7,9 @@ const completeScenario = {
   version: 1,
   id: "HOLON-NATIVE-UI-EXAMPLE",
   application: {
-    windowTitle: "codeCN",
-    processNames: ["codecn", "electron"],
-    executable: "windows/apps/desktop/release/codecn.exe"
+    windowTitle: "NewBrain",
+    processNames: ["newbrain", "electron"],
+    executable: "windows/apps/desktop/release/newbrain.exe"
   },
   steps: [
     { action: "maximize" },
@@ -20,7 +20,7 @@ const completeScenario = {
     { action: "assertFile", path: "outputs/demo/result.txt", contains: ["READY"] },
     { action: "closeWindow" },
     { action: "launchApplication" },
-    { action: "waitWindow", title: "codeCN", timeoutMs: 30_000 },
+    { action: "waitWindow", title: "NewBrain", timeoutMs: 30_000 },
     { action: "screenshot", output: "recovered.png" }
   ]
 };
@@ -46,7 +46,7 @@ test("accepts a real-screen region assertion when Electron exposes no named cont
 });
 
 test("rejects internal browser and application shortcuts", () => {
-  for (const action of ["evaluate", "cdp", "dom", "internalApi", "window.codecn"]) {
+  for (const action of ["evaluate", "cdp", "dom", "internalApi", "window.newbrain"]) {
     assert.throws(
       () => validateScenario({ ...completeScenario, steps: [{ action }] }),
       /unsupported native UI action/i

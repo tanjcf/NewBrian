@@ -127,7 +127,7 @@ export class CodexStorage {
         rollout_path TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        source TEXT NOT NULL DEFAULT 'codecn',
+        source TEXT NOT NULL DEFAULT 'newbrain',
         model_provider TEXT NOT NULL DEFAULT 'openai',
         cwd TEXT NOT NULL,
         title TEXT NOT NULL,

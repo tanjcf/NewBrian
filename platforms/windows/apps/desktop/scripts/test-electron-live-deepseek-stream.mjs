@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9444);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9444);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
@@ -47,14 +47,14 @@ async function waitFor(label, expression, timeoutMs = 60_000) {
 await waitFor("authenticated workspace", `Boolean(document.querySelector('[data-testid="new-chat-button"]'))`, 120_000);
 const threadTitle = `Live DeepSeek Stream ${Date.now()}`;
 const prepared = await evaluate(`(async () => {
-  const path = ${JSON.stringify("G:\\workrpase\\codeCN")};
-  let catalog = await window.codecn.listWorkspaces();
+  const path = ${JSON.stringify("G:\\workrpase\\NewBrain")};
+  let catalog = await window.newbrain.listWorkspaces();
   if (!catalog.some((item) => item.path === path)) {
-    catalog = await window.codecn.addWorkspace({ name: "codeCN", path });
+    catalog = await window.newbrain.addWorkspace({ name: "NewBrain", path });
   }
   const workspace = catalog.find((item) => item.path === path);
   if (!workspace) return false;
-  await window.codecn.addWorkspaceThread({
+  await window.newbrain.addWorkspaceThread({
     workspaceId: workspace.id,
     title: ${JSON.stringify(threadTitle)},
     summary: "Authorized real DeepSeek streaming verification",
@@ -62,7 +62,7 @@ const prepared = await evaluate(`(async () => {
   });
   return true;
 })()`);
-assert.equal(prepared, true, "Could not prepare the existing codeCN project.");
+assert.equal(prepared, true, "Could not prepare the existing NewBrain project.");
 socket.send(JSON.stringify({ id: 0, method: "Page.reload", params: { ignoreCache: true } }));
 await sleep(1_500);
 await waitFor("prepared live task", `Boolean([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${JSON.stringify(threadTitle)})))`, 30_000);

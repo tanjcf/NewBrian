@@ -7,7 +7,7 @@ import test from "node:test";
 const { runGitUtf8 } = await import(new URL("./git-command.ts", import.meta.url).href) as typeof import("./git-command.js");
 
 test("git status preserves Chinese paths instead of octal quoting", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-git-path-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-git-path-"));
   try {
     if (runGitUtf8(root, ["init"]).status !== 0) {
       t.skip("Git is unavailable on this host.");

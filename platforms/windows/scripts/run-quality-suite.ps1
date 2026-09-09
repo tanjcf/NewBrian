@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    CodeCN 自动质量检测流程：运行全部自动化测试 + 假实现/缺陷静态扫描，产出可复用报告。
+    NewBrain 自动质量检测流程：运行全部自动化测试 + 假实现/缺陷静态扫描，产出可复用报告。
 
 .DESCRIPTION
     统一入口，供本地和 CI 复用。执行三类检查：
@@ -72,7 +72,7 @@ foreach ($pat in $patterns.GetEnumerator()) {
 
 # ---- 3. 生成报告 ----
 $sb = New-Object System.Text.StringBuilder
-[void]$sb.AppendLine("# CodeCN 质量检测报告")
+[void]$sb.AppendLine("# NewBrain 质量检测报告")
 [void]$sb.AppendLine("")
 [void]$sb.AppendLine("生成时间: $stamp")
 [void]$sb.AppendLine("")

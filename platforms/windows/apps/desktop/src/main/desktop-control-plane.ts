@@ -48,7 +48,7 @@ export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledB
   const bundled = String(bundledBaseUrl ?? "").trim();
   // Packaged MSI ships a production gateway. Never leave end-user configs on
   // loopback when a non-local bundled endpoint is available. Local developers
-  // can still force localhost via CODECN_MODEL_BASE_URL.
+  // can still force localhost via NEWBRAIN_MODEL_BASE_URL.
   if (!configured) return bundled;
   if (
     (isLoopbackGatewayBaseUrl(configured) || isRetiredGatewayBaseUrl(configured))
@@ -204,7 +204,7 @@ export async function syncDesktopControlPlane(input: {
     && compareVersions(input.clientVersion, minimumClientVersion) < 0
     && !isCurrentPreOneReleaseAccepted(input.clientVersion, minimumClientVersion)
   ) {
-    throw new Error(`codeCN ${input.clientVersion} 低于服务端最低版本 ${minimumClientVersion}`);
+    throw new Error(`NewBrain ${input.clientVersion} 低于服务端最低版本 ${minimumClientVersion}`);
   }
 
   for (const payload of [modelConfig, capabilities]) {

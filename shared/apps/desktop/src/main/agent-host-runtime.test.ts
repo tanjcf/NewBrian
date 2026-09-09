@@ -16,11 +16,11 @@ test("dispatches terminal lifecycle requests and returns serializable snapshots"
     process: null as null | { stdin: { write: (input: string, encoding: string) => void } },
     snapshot: () => ({ cwd: terminal.cwd, shell: terminal.shell, prompt: terminal.prompt, isRunning: terminal.process !== null, lines: [] }),
     ensure: (env: Record<string, string>) => {
-      calls.push(`ensure:${env.CODECN_TEST ?? ""}`);
+      calls.push(`ensure:${env.NEWBRAIN_TEST ?? ""}`);
       terminal.process = { stdin: { write: (input, encoding) => calls.push(`write:${input}:${encoding}`) } };
       return terminal.process;
     },
-    restart: (env: Record<string, string>) => { calls.push(`restart:${env.CODECN_TEST ?? ""}`); terminal.ensure(env); },
+    restart: (env: Record<string, string>) => { calls.push(`restart:${env.NEWBRAIN_TEST ?? ""}`); terminal.ensure(env); },
     stop: () => { calls.push("stop"); terminal.process = null; }
   };
   const runtime = new runtimeModule.AgentHostRuntime({
@@ -33,10 +33,10 @@ test("dispatches terminal lifecycle requests and returns serializable snapshots"
     cwd: "C:/workspace",
     shell: "pwsh.exe",
     prompt: ">",
-    env: { CODECN_TEST: "1" }
+    env: { NEWBRAIN_TEST: "1" }
   }));
   const written = await runtime.handle(request("2", "terminal.write", { input: "Get-Date\n" }));
-  const restarted = await runtime.handle(request("3", "terminal.restart", { env: { CODECN_TEST: "2" } }));
+  const restarted = await runtime.handle(request("3", "terminal.restart", { env: { NEWBRAIN_TEST: "2" } }));
 
   assert.equal(ensured.ok, true);
   assert.equal(written.ok, true);

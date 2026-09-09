@@ -17,7 +17,7 @@ function workspace(overrides: Partial<WorkspaceCatalogItem> = {}): WorkspaceCata
   return {
     id: INTERNAL_CHAT_WORKSPACE_ID,
     name: "__internal_chat__",
-    path: "C:\\codeCN\\tmp",
+    path: "C:\\NewBrain\\tmp",
     threads: [],
     ...overrides
   };

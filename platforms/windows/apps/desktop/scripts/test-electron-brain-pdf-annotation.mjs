@@ -6,13 +6,13 @@ import { PDFDocument } from "pdf-lib";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
 const annotationText = "修改标注：扩产公告";
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9342);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9342);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
 assert.ok(session.workspacePath, "The isolated Electron workspace is unavailable.");
 
-const projectRoot = join(session.workspacePath, ".codecn", "projects", "brain-pdf-annotation");
+const projectRoot = join(session.workspacePath, ".newbrain", "projects", "brain-pdf-annotation");
 await mkdir(join(projectRoot, "files"), { recursive: true });
 
 const sourceDoc = await PDFDocument.create();
@@ -62,19 +62,19 @@ async function waitFor(label, expression, timeoutMs = 15_000) {
 
 const seeded = JSON.parse(await evaluate(`(async () => {
   const path = ${JSON.stringify(projectRoot)};
-  let catalog = await window.codecn.listWorkspaces();
-  if (!catalog.some((item) => item.path === path)) catalog = await window.codecn.addWorkspace({ name: "BRAIN PDF Annotation E2E", path });
+  let catalog = await window.newbrain.listWorkspaces();
+  if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: "BRAIN PDF Annotation E2E", path });
   const workspace = catalog.find((item) => item.path === path);
   if (!workspace) throw new Error("workspace seed failed");
-  let projects = await window.codecn.listBrainProjects({ workspaceKey: "document", includeArchived: true });
+  let projects = await window.newbrain.listBrainProjects({ workspaceKey: "document", includeArchived: true });
   let project = projects.find((item) => item.name === "PDF中文标注 E2E");
-  if (!project) project = await window.codecn.createBrainProject({ name: "PDF中文标注 E2E", primaryWorkspaceKey: "document", localWorkspaceId: workspace.id });
-  let conversations = await window.codecn.listBrainConversations({ projectId: project.id, workspaceKey: "document", includeArchived: true });
+  if (!project) project = await window.newbrain.createBrainProject({ name: "PDF中文标注 E2E", primaryWorkspaceKey: "document", localWorkspaceId: workspace.id });
+  let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey: "document", includeArchived: true });
   let conversation = conversations.find((item) => item.title === "标注 note.pdf");
-  if (!conversation) conversation = await window.codecn.createBrainConversation({ projectId: project.id, workspaceKey: "document", title: "标注 note.pdf" });
-  let files = await window.codecn.listBrainFiles({ projectId: project.id });
+  if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey: "document", title: "标注 note.pdf" });
+  let files = await window.newbrain.listBrainFiles({ projectId: project.id });
   let file = files.find((item) => item.storageKey === "files/note.pdf" && item.versionNo === 1);
-  if (!file) file = await window.codecn.registerBrainFile({
+  if (!file) file = await window.newbrain.registerBrainFile({
     projectId: project.id,
     logicalName: "note.pdf",
     mimeType: "application/pdf",
@@ -83,9 +83,9 @@ const seeded = JSON.parse(await evaluate(`(async () => {
     storageKey: "files/note.pdf",
     versionNo: 1
   });
-  let annotations = await window.codecn.listBrainAnnotations({ projectId: project.id });
+  let annotations = await window.newbrain.listBrainAnnotations({ projectId: project.id });
   let annotation = annotations.find((item) => item.fileId === file.id);
-  if (!annotation) annotation = await window.codecn.createBrainAnnotation({
+  if (!annotation) annotation = await window.newbrain.createBrainAnnotation({
     projectId: project.id,
     fileId: file.id,
     fileVersion: 1,
@@ -101,9 +101,9 @@ const seeded = JSON.parse(await evaluate(`(async () => {
       selectedText: ${JSON.stringify(annotationText)}
     }
   });
-  let changes = await window.codecn.listBrainChangeSets({ projectId: project.id });
+  let changes = await window.newbrain.listBrainChangeSets({ projectId: project.id });
   let change = changes.find((item) => item.annotationId === annotation.id);
-  if (!change) change = await window.codecn.createBrainChangeSet({
+  if (!change) change = await window.newbrain.createBrainChangeSet({
     projectId: project.id,
     annotationId: annotation.id,
     baseFileVersion: 1,
@@ -116,7 +116,7 @@ const seeded = JSON.parse(await evaluate(`(async () => {
       text: ${JSON.stringify(annotationText)}
     })
   });
-  localStorage.setItem("codecn.lastSelectedWorkspaceId.v1", workspace.id);
+  localStorage.setItem("newbrain.lastSelectedWorkspaceId.v1", workspace.id);
   localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({
     version: 2,
     selectedWorkspaceKey: "document",
@@ -144,8 +144,8 @@ const exportedBytes = await readFile(exportedPath);
 assert.ok(exportedBytes.length > sourceBytes.length, "Exported PDF should embed annotation content/font.");
 
 const verify = JSON.parse(await evaluate(`(async () => {
-  const files = await window.codecn.listBrainFiles({ projectId: ${JSON.stringify(seeded.projectId)} });
-  const changes = await window.codecn.listBrainChangeSets({ projectId: ${JSON.stringify(seeded.projectId)} });
+  const files = await window.newbrain.listBrainFiles({ projectId: ${JSON.stringify(seeded.projectId)} });
+  const changes = await window.newbrain.listBrainChangeSets({ projectId: ${JSON.stringify(seeded.projectId)} });
   return JSON.stringify({
     hasV2: files.some((file) => file.versionNo === 2 && /note\\.v2\\.pdf$/.test(file.storageKey)),
     accepted: changes.some((change) => change.id === ${JSON.stringify(seeded.changeSetId)} && change.resultFileVersion === 2)

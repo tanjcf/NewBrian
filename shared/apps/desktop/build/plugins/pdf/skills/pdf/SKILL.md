@@ -1,6 +1,6 @@
 ---
 name: pdf
-description: Read, create, inspect, render, and verify PDF files in the active codeCN workspace.
+description: Read, create, inspect, render, and verify PDF files in the active NewBrain workspace.
 ---
 # PDF
 

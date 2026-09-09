@@ -113,7 +113,7 @@ async function assertExpected(ctx, op, observation) {
     const key = expected.match(/"(\w+)"/)?.[1];
     const localId = ctx.state.lastCreatedLocalWorkspaceId;
     assert.ok(localId, `${op.opId}: missing lastCreatedLocalWorkspaceId`);
-    const projects = await ctx.cdp.evaluate(`window.codecn.listBrainProjects({ workspaceKey: ${JSON.stringify(key)} })`);
+    const projects = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(key)} })`);
     const hit = (projects || []).find((item) => item.localWorkspaceId === localId);
     assert.ok(hit, `${op.opId}: project not in ${key}`);
     assert.equal(hit.primaryWorkspaceKey, key);
@@ -124,10 +124,10 @@ async function assertExpected(ctx, op, observation) {
     const scene = expected.match(/workspaceKey=(\w+)/)?.[1] || ctx.scene;
     const currentId = ctx.state.lastCreatedBrainProjectId;
     assert.ok(currentId, `${op.opId}: missing created project id`);
-    const inScene = await ctx.cdp.evaluate(`window.codecn.listBrainProjects({ workspaceKey: ${JSON.stringify(scene)} })`);
+    const inScene = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(scene)} })`);
     assert.ok((inScene || []).some((item) => item.id === currentId), `${op.opId}: not in ${scene}`);
     for (const other of Object.keys(SCENE_LABELS).filter((key) => key !== scene)) {
-      const list = await ctx.cdp.evaluate(`window.codecn.listBrainProjects({ workspaceKey: ${JSON.stringify(other)} })`);
+      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(other)} })`);
       assert.equal((list || []).some((item) => item.id === currentId), false, `${op.opId}: leaked to ${other}`);
     }
     return observation;
@@ -213,7 +213,7 @@ async function assertExpected(ctx, op, observation) {
   if (expected.startsWith("sidebarOrganizeMode ===")) {
     const mode = expected.match(/"(\w+)"/)?.[1];
     if (mode === "priority" || mode === "updated") {
-      const sort = await ctx.cdp.evaluate("localStorage.getItem('codecn.sidebar.sort.v1')");
+      const sort = await ctx.cdp.evaluate("localStorage.getItem('newbrain.sidebar.sort.v1')");
       assert.equal(sort, mode, `${op.opId}: sort mode ${mode}`);
       return observation;
     }
@@ -289,7 +289,7 @@ async function assertExpected(ctx, op, observation) {
     const projectId = ctx.state.lastCreatedBrainProjectId;
     assert.ok(projectId, `${op.opId}: missing project id`);
     const sectionKey = ctx.state.lastSectionKey || "design";
-    const revision = await ctx.cdp.evaluate(`window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(projectId)}, workspaceKey: "game", sectionKey: ${JSON.stringify(sectionKey)} }).then((section) => section.revision)`);
+    const revision = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(projectId)}, workspaceKey: "game", sectionKey: ${JSON.stringify(sectionKey)} }).then((section) => section.revision)`);
     const before = ctx.state.sectionRevisionBefore ?? 0;
     assert.ok(Number(revision) > Number(before), `${op.opId}: revision ${revision} not > ${before}`);
     return { ...observation, revision };
@@ -493,11 +493,11 @@ async function handleL0Proj(ctx, op) {
     const meta = await ctx.cdp.evaluate(`(async () => {
       const name = ${JSON.stringify(saveName)};
       const scene = ${JSON.stringify(ctx.scene)};
-      await window.codecn.listBrainWorkspaces();
-      const catalog = await window.codecn.listWorkspaces();
+      await window.newbrain.listBrainWorkspaces();
+      const catalog = await window.newbrain.listWorkspaces();
       const ws = catalog.find((item) => item.name === name || item.name?.includes(${JSON.stringify(saveName.slice(0, 8))}));
-      const inScene = await window.codecn.listBrainProjects({ workspaceKey: scene });
-      const all = await window.codecn.listBrainProjects({});
+      const inScene = await window.newbrain.listBrainProjects({ workspaceKey: scene });
+      const all = await window.newbrain.listBrainProjects({});
       const hit = inScene.find((item) => item.localWorkspaceId === ws?.id)
         || all.find((item) => item.localWorkspaceId === ws?.id);
       return {
@@ -715,7 +715,7 @@ async function handleL1(ctx, op) {
     }
     if (suffix === "L1.section.design.004") {
       const projectId = ctx.state.lastCreatedBrainProjectId;
-      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(projectId)}, workspaceKey: "game", sectionKey: "design" }).then((section) => section.revision).catch(() => 0)`);
+      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(projectId)}, workspaceKey: "game", sectionKey: "design" }).then((section) => section.revision).catch(() => 0)`);
       await ctx.cdp.mouseClickButtonText("保存", '[data-testid="brain-section-design"]');
       return {};
     }
@@ -747,7 +747,7 @@ async function handleL1(ctx, op) {
     }
     if (step.includes("Tab")) return {};
     if (step.includes("保存")) {
-      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.codecn.getBrainWorkspaceSection({ projectId: ${JSON.stringify(ctx.state.lastCreatedBrainProjectId)}, workspaceKey: "game", sectionKey: ${JSON.stringify(sectionKey)} }).then((section) => section.revision).catch(() => 0)`);
+      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(ctx.state.lastCreatedBrainProjectId)}, workspaceKey: "game", sectionKey: ${JSON.stringify(sectionKey)} }).then((section) => section.revision).catch(() => 0)`);
       await ctx.cdp.mouseClickButtonText("保存", `[data-testid="brain-design-${sectionKey}"]`);
       return {};
     }
@@ -781,7 +781,7 @@ async function handleL3(ctx, op) {
     await ctx.cdp.switchWorkspace(other);
     const currentId = ctx.state.lastCreatedBrainProjectId;
     if (currentId) {
-      const list = await ctx.cdp.evaluate(`window.codecn.listBrainProjects({ workspaceKey: ${JSON.stringify(other)} })`);
+      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(other)} })`);
       assert.equal((list || []).some((item) => item.id === currentId), false);
     }
     await ctx.cdp.switchWorkspace(ctx.scene);

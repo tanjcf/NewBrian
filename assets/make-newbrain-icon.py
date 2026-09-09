@@ -11,7 +11,7 @@ src = Path(
 out_dir = Path(r"I:\G盘迁移备份\workrpase\BRAIN\assets")
 out_dir.mkdir(parents=True, exist_ok=True)
 
-# Match existing codeCN icon corner radius (~51px on 256 ≈ 20%).
+# Match existing NewBrain icon corner radius (~51px on 256 ≈ 20%).
 CORNER_RADIUS_RATIO = 51 / 256
 
 

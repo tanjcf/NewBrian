@@ -2,8 +2,8 @@
  * ClawHub HTTP client (search / resolve / download).
  *
  * Desktop product path connects directly to ClawHub (`https://clawhub.ai` by default).
- * Gate with `market.directClawhubAllowed` (default true) or `CODECN_MARKET_DIRECT_CLAWHUB=1`.
- * Override base URL via `CODECN_CLAWHUB_URL` / `OPENCLAW_CLAWHUB_URL` / `CLAWHUB_URL`.
+ * Gate with `market.directClawhubAllowed` (default true) or `NEWBRAIN_MARKET_DIRECT_CLAWHUB=1`.
+ * Override base URL via `NEWBRAIN_CLAWHUB_URL` / `OPENCLAW_CLAWHUB_URL` / `CLAWHUB_URL`.
  */
 const DEFAULT_CLAWHUB_URL = "https://clawhub.ai";
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
@@ -60,7 +60,7 @@ export type ClawHubResolvedInstall =
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 function normalizeBaseUrl(baseUrl?: string) {
-  return (baseUrl || process.env.CODECN_CLAWHUB_URL || process.env.OPENCLAW_CLAWHUB_URL || process.env.CLAWHUB_URL || DEFAULT_CLAWHUB_URL)
+  return (baseUrl || process.env.NEWBRAIN_CLAWHUB_URL || process.env.OPENCLAW_CLAWHUB_URL || process.env.CLAWHUB_URL || DEFAULT_CLAWHUB_URL)
     .trim()
     .replace(/\/+$/, "");
 }

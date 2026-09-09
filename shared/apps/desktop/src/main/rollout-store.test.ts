@@ -10,7 +10,7 @@ const rolloutStore = import(new URL("./rollout-store.ts", import.meta.url).href)
 
 test("serializes concurrent rollout appends without losing records", async () => {
   const { appendRolloutRecords, createRolloutEvent, readRolloutRecords } = await rolloutStore;
-  const root = mkdtempSync(join(tmpdir(), "codecn-rollout-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-rollout-"));
   const path = join(root, "thread.rollout.jsonl");
   try {
     await Promise.all(Array.from({ length: 24 }, (_, index) => appendRolloutRecords(path, [
@@ -27,7 +27,7 @@ test("serializes concurrent rollout appends without losing records", async () =>
 
 test("recovers the latest snapshot when the rollout has a truncated tail", async () => {
   const { appendRolloutRecords, createRolloutEvent, createStateSnapshot, readLatestStateSnapshot } = await rolloutStore;
-  const root = mkdtempSync(join(tmpdir(), "codecn-rollout-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-rollout-"));
   const path = join(root, "thread.rollout.jsonl");
   try {
     await appendRolloutRecords(path, [
@@ -44,7 +44,7 @@ test("recovers the latest snapshot when the rollout has a truncated tail", async
 
 test("reads the latest snapshot from a multi-chunk oversized rollout without loading the whole file", async () => {
   const { createStateSnapshot, readLatestStateSnapshot } = await rolloutStore;
-  const root = mkdtempSync(join(tmpdir(), "codecn-rollout-huge-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-rollout-huge-"));
   const path = join(root, "thread.rollout.jsonl");
   try {
     const padding = JSON.stringify({
@@ -72,7 +72,7 @@ test("compacts historical snapshots after the size threshold", async () => {
     readRolloutRecords,
     readLatestStateSnapshot
   } = await rolloutStore;
-  const root = mkdtempSync(join(tmpdir(), "codecn-rollout-compact-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-rollout-compact-"));
   const path = join(root, "thread.rollout.jsonl");
   try {
     await appendRolloutRecords(path, [

@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 
-const port = Number(process.env.CODECN_USAGE_FEEDBACK_PORT || 18941);
+const port = Number(process.env.NEWBRAIN_USAGE_FEEDBACK_PORT || 18941);
 const state = { offline: false, modelRequests: 0, chatRequests: 0, uploads: [], requests: [] };
 const analysis = JSON.stringify({
   title: "文档生成任务无法完成",
@@ -20,7 +20,7 @@ const server = createServer(async (request, response) => {
     state.offline = Boolean(body?.offline);
     return json(response, { ok: true, offline: state.offline });
   }
-  if (url.pathname === "/v1/models") return json(response, { data: [{ id: "codecn-e2e-model" }] });
+  if (url.pathname === "/v1/models") return json(response, { data: [{ id: "newbrain-e2e-model" }] });
   if (url.pathname === "/v1/responses") {
     state.modelRequests += 1;
     const prompt = JSON.stringify(body || {});

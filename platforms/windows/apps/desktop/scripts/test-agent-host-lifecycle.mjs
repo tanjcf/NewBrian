@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 const desktopRoot = resolve(import.meta.dirname, "..");
 const hostEntry = join(desktopRoot, "out", "main", "agent-host-entry.js");
 const fixtureEntry = join(desktopRoot, "scripts", "agent-host-child-fixture.mjs");
-const tempRoot = await mkdtemp(join(tmpdir(), "codecn-agent-host-"));
+const tempRoot = await mkdtemp(join(tmpdir(), "newbrain-agent-host-"));
 const pidFile = join(tempRoot, "child.pid");
 const host = fork(hostEntry, [], { cwd: desktopRoot, stdio: ["ignore", "pipe", "pipe", "ipc"] });
 let nextId = 1;

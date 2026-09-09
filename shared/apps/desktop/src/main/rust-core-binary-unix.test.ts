@@ -5,13 +5,13 @@ import { resolveUnixRustCoreBinary } from "./rust-core-binary-unix.ts";
 test("resolves only the bundled Unix Rust Core binary in packaged mode", () => {
   assert.equal(resolveUnixRustCoreBinary({
     isPackaged: true,
-    resourcesPath: "C:/opt/codecn/resources",
-    appDirectory: "C:/opt/codecn/app.asar/out/main",
-    exists: (path) => path.replaceAll("\\", "/") === "C:/opt/codecn/resources/brain-core/brain-core"
-  }).replaceAll("\\", "/"), "C:/opt/codecn/resources/brain-core/brain-core");
+    resourcesPath: "C:/opt/newbrain/resources",
+    appDirectory: "C:/opt/newbrain/app.asar/out/main",
+    exists: (path) => path.replaceAll("\\", "/") === "C:/opt/newbrain/resources/brain-core/brain-core"
+  }).replaceAll("\\", "/"), "C:/opt/newbrain/resources/brain-core/brain-core");
   assert.throws(() => resolveUnixRustCoreBinary({
     isPackaged: true,
-    resourcesPath: "/opt/codecn/resources",
+    resourcesPath: "/opt/newbrain/resources",
     appDirectory: "/tmp/source",
     exists: () => false
   }), /BRAIN_CORE_BINARY_MISSING/u);

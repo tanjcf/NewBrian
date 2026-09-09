@@ -107,7 +107,7 @@ export function mergeDigestKnowledge(
 }
 
 /**
- * Merge repo-root Project OS (CODECN.md): take the other side when empty,
+ * Merge repo-root Project OS (NEWBRAIN.md): take the other side when empty,
  * prefer real content over stock scaffolds, keep longer when one subsumes the other,
  * otherwise keep-both markers.
  */

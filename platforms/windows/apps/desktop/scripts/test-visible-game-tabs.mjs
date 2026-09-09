@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
 
-const client = await createSceneTestCdpClient(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555));
+const client = await createSceneTestCdpClient(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555));
 const cases = [
   ["关卡", "关卡列表"],
   ["项目与文件", "项目资产与试玩"],
@@ -14,7 +14,7 @@ const cases = [
 const actions = [];
 const results = [];
 try {
-  execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$s=New-Object -ComObject WScript.Shell; [void]$s.AppActivate('codeCN')"], { windowsHide: true });
+  execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$s=New-Object -ComObject WScript.Shell; [void]$s.AppActivate('NewBrain')"], { windowsHide: true });
   await new Promise((resolve) => setTimeout(resolve, 500));
   await client.waitForAppReady();
   const selected = await client.getSelectedWorkspaceKey();

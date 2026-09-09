@@ -31,12 +31,12 @@ export function GameWorkspace({ projectId, conversationId }: { projectId?: strin
 
   useEffect(() => {
     let active = true;
-    if (!projectId || !window.codecn?.inspectBrainGameProject) {
+    if (!projectId || !window.newbrain?.inspectBrainGameProject) {
       setInspection(null); setStatus("idle"); setError("");
       return () => { active = false; };
     }
     setStatus("loading"); setError("");
-    void window.codecn.inspectBrainGameProject({ projectId }).then((result) => {
+    void window.newbrain.inspectBrainGameProject({ projectId }).then((result) => {
       if (!active) return;
       setInspection(result); setStatus("ready");
     }).catch((reason: unknown) => {
@@ -49,10 +49,10 @@ export function GameWorkspace({ projectId, conversationId }: { projectId?: strin
   }, [projectId, refreshVersion]);
 
   useEffect(() => {
-    if (!projectId || !preview || !activePreviewStatuses.has(preview.status) || !window.codecn?.getBrainGamePreviewStatus) return;
+    if (!projectId || !preview || !activePreviewStatuses.has(preview.status) || !window.newbrain?.getBrainGamePreviewStatus) return;
     let active = true;
     const timer = window.setInterval(() => {
-      void window.codecn?.getBrainGamePreviewStatus({ projectId }).then((state) => {
+      void window.newbrain?.getBrainGamePreviewStatus({ projectId }).then((state) => {
         if (active) setPreview(state);
       }).catch(() => undefined);
     }, 750);
@@ -62,8 +62,8 @@ export function GameWorkspace({ projectId, conversationId }: { projectId?: strin
   useEffect(() => { setPreview(null); setPreviewError(""); setPreviewBusy(false); setEvidencePath(""); }, [projectId]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.listBrainArtifacts) { setArtifacts([]); return; }
-    void window.codecn.listBrainArtifacts({ projectId }).then((items) => setArtifacts(Array.isArray(items) ? items : [])).catch(() => setArtifacts([]));
+    if (!projectId || !window.newbrain?.listBrainArtifacts) { setArtifacts([]); return; }
+    void window.newbrain.listBrainArtifacts({ projectId }).then((items) => setArtifacts(Array.isArray(items) ? items : [])).catch(() => setArtifacts([]));
   }, [projectId, refreshVersion, preview?.status]);
 
   const previewCommand = inspection?.preview.supported
@@ -71,10 +71,10 @@ export function GameWorkspace({ projectId, conversationId }: { projectId?: strin
     : "";
 
   const startPreview = async () => {
-    if (!projectId || !window.codecn?.startBrainGamePreview) return;
+    if (!projectId || !window.newbrain?.startBrainGamePreview) return;
     setPreviewBusy(true); setPreviewError("");
     try {
-      setPreview(await window.codecn.startBrainGamePreview({ projectId, ...(conversationId ? { conversationId } : {}) }));
+      setPreview(await window.newbrain.startBrainGamePreview({ projectId, ...(conversationId ? { conversationId } : {}) }));
     } catch (reason) {
       const detail = reason instanceof Error ? reason.message : String(reason);
       if (!detail.includes("BRAIN_GAME_PREVIEW_DECLINED")) setPreviewError("试玩启动失败，请检查工程启动脚本或任务日志。");
@@ -82,25 +82,25 @@ export function GameWorkspace({ projectId, conversationId }: { projectId?: strin
   };
 
   const stopPreview = async () => {
-    if (!projectId || !window.codecn?.stopBrainGamePreview) return;
+    if (!projectId || !window.newbrain?.stopBrainGamePreview) return;
     setPreviewBusy(true); setPreviewError("");
-    try { setPreview(await window.codecn.stopBrainGamePreview({ projectId })); }
+    try { setPreview(await window.newbrain.stopBrainGamePreview({ projectId })); }
     catch { setPreviewError("未能停止试玩进程，请查看任务状态。"); }
     finally { setPreviewBusy(false); }
   };
 
   const openPreview = async () => {
-    if (preview?.status !== "READY" || !preview.previewUrl || !window.codecn?.openBrowserPreview) return;
+    if (preview?.status !== "READY" || !preview.previewUrl || !window.newbrain?.openBrowserPreview) return;
     setPreviewError("");
-    try { await window.codecn.openBrowserPreview(preview.previewUrl); }
+    try { await window.newbrain.openBrowserPreview(preview.previewUrl); }
     catch { setPreviewError("试玩页面打开失败，请确认预览服务仍在运行。"); }
   };
 
   const captureEvidence = async () => {
-    if (preview?.status !== "READY" || !window.codecn?.captureBrowserPreview) return;
+    if (preview?.status !== "READY" || !window.newbrain?.captureBrowserPreview) return;
     setPreviewBusy(true); setPreviewError("");
     try {
-      const result = await window.codecn.captureBrowserPreview();
+      const result = await window.newbrain.captureBrowserPreview();
       setEvidencePath(result.path);
     } catch { setPreviewError("试玩截图保存失败，请先打开试玩页面。"); }
     finally { setPreviewBusy(false); }
@@ -138,7 +138,7 @@ export function GameWorkspace({ projectId, conversationId }: { projectId?: strin
       {inspection.engine === "unreal" ? <section className="brain-game-unreal-guide" data-testid="brain-game-unreal-guide">
         <h3>Unreal 工程引导</h3>
         <p>检测到 Unreal 工程时，请先在 Epic Games Launcher 登录并安装对应引擎版本，再用 Epic 打开 .uproproject 文件。</p>
-        <button type="button" data-testid="brain-game-ensure-epic" onClick={() => void window.codecn?.ensureBrainEngine?.({ engineId: "epic-launcher" }).catch(() => undefined)}>检测 Epic Launcher</button>
+        <button type="button" data-testid="brain-game-ensure-epic" onClick={() => void window.newbrain?.ensureBrainEngine?.({ engineId: "epic-launcher" }).catch(() => undefined)}>检测 Epic Launcher</button>
       </section> : null}
     </> : null}
   </section>;

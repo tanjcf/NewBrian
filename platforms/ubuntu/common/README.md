@@ -1,6 +1,6 @@
-# codeCN for Ubuntu
+# NewBrain for Ubuntu
 
-This workspace packages the shared codeCN desktop application for Ubuntu Linux.
+This workspace packages the shared NewBrain desktop application for Ubuntu Linux.
 It uses Bash for shell execution and produces AppImage and Debian packages.
 
 ## Supported architectures

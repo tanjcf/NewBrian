@@ -43,7 +43,7 @@ the overlay, writes provenance metadata, and then replaces the prior generated t
 The supported targets are `macos-arm64`, `macos-x64`, `ubuntu-arm64`,
 `ubuntu-x64`, and `windows`. The macOS and Ubuntu targets each apply their own
 common platform overlay before the CPU overlay. The generated
-`codecn.arch.json` gives packaging and diagnostics an explicit architecture contract:
+`newbrain.arch.json` gives packaging and diagnostics an explicit architecture contract:
 `arm64` for M-series Apple Silicon and `x64` with distribution label `intel` for Intel.
 Ubuntu uses `arm64` or `x64` directly and packages AppImage plus Debian artifacts.
 

@@ -42,14 +42,14 @@ export function LocalFileContextMenu({ menu, workspaceId, onClose }: {
 
   useEffect(() => {
     let active = true;
-    void window.codecn?.getSystemTools().then((tools) => { if (active) setSystemTools(tools); }).catch(() => undefined);
+    void window.newbrain?.getSystemTools().then((tools) => { if (active) setSystemTools(tools); }).catch(() => undefined);
     return () => { active = false; };
   }, []);
 
   const performFileAction = async (action: "open-vscode" | "open-with" | "copy-contents" | "reveal") => {
-    if (!window.codecn) return;
+    if (!window.newbrain) return;
     try {
-      const result = await window.codecn.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action });
+      const result = await window.newbrain.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action });
       if (action === "copy-contents" && result.ok && typeof result.content === "string") await navigator.clipboard.writeText(result.content);
     } catch {
       // Soft-fail: missing files must not crash the renderer ErrorBoundary.
@@ -59,9 +59,9 @@ export function LocalFileContextMenu({ menu, workspaceId, onClose }: {
   };
 
   const openWithSystemTool = async (tool: SystemToolState) => {
-    if (!window.codecn) return;
+    if (!window.newbrain) return;
     try {
-      await window.codecn.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action: "open-tool", toolId: tool.id });
+      await window.newbrain.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action: "open-tool", toolId: tool.id });
     } catch {
       // Soft-fail: missing files must not crash the renderer ErrorBoundary.
     } finally {

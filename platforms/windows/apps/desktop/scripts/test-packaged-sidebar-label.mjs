@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9666);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9666);
 const pages = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
 const page = pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-assert.ok(page, "No packaged codeCN renderer is available.");
+assert.ok(page, "No packaged NewBrain renderer is available.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {
   socket.addEventListener("open", resolve, { once: true });

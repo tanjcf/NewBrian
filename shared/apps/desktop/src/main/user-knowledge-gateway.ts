@@ -14,7 +14,7 @@ export type KnowledgeDocType =
   | "project-knowledge"
   | "session-digest"
   | "learning-open-questions"
-  /** Repo-root CODECN.md Project OS (synced across devices with the knowledge space). */
+  /** Repo-root NEWBRAIN.md Project OS (synced across devices with the knowledge space). */
   | "project-os";
 
 export type KnowledgeSpaceSnapshot = {

@@ -36,7 +36,7 @@ test("accepts independently inspected PDF evidence", async () => {
 test("accepts OOXML office artifacts by path and size", async () => {
   const result = await verifyBuiltinArtifactResult({
     ok: true,
-    artifact: { path: "outputs/codecn-output.pptx", size: 53094, type: "application/octet-stream" }
+    artifact: { path: "outputs/newbrain-output.pptx", size: 53094, type: "application/octet-stream" }
   });
   assert.equal(result.status, "verified");
   assert.ok(result.checks.includes("office-size-and-extension"));

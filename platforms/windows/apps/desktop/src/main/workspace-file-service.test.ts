@@ -7,7 +7,7 @@ import ExcelJS from "exceljs";
 const { WorkspaceFileService } = await import(new URL("./workspace-file-service.ts", import.meta.url).href);
 
 async function withWorkspace(run: (root: string, service: InstanceType<typeof WorkspaceFileService>) => Promise<void>) {
-  const root = await mkdtemp(join(tmpdir(), "codecn-workspace-files-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-workspace-files-"));
   const resolveFile = async (workspaceRoot: string, target: string) => {
     const targetPath = resolve(workspaceRoot, target);
     const relativePath = relative(workspaceRoot, targetPath);
@@ -81,7 +81,7 @@ test("returns an HTML preview URL and source for the embedded browser viewer", a
     assert.equal(preview.path.replace(/\\/g, "/"), "outputs/吉祥物-旺财动画狗.html");
     assert.equal(preview.content, html);
     assert.equal(preview.mimeType, "text/html");
-    assert.match(String(preview.previewUrl), /^codecn-artifact:\/\/preview\/w1\/outputs\//);
+    assert.match(String(preview.previewUrl), /^newbrain-artifact:\/\/preview\/w1\/outputs\//);
   });
 });
 
@@ -96,19 +96,19 @@ test("returns image, video, and audio preview URLs for the embedded media viewer
     const image = await service.preview({ workspaceId: "w1", filePath: "outputs/shot.png" });
     assert.equal(image.kind, "image");
     assert.equal(image.mimeType, "image/png");
-    assert.match(String(image.previewUrl), /^codecn-artifact:\/\/preview\/w1\/outputs\/shot\.png$/);
+    assert.match(String(image.previewUrl), /^newbrain-artifact:\/\/preview\/w1\/outputs\/shot\.png$/);
     const video = await service.preview({ workspaceId: "w1", filePath: "outputs/clip.mp4" });
     assert.equal(video.kind, "video");
     assert.equal(video.mimeType, "video/mp4");
-    assert.match(String(video.previewUrl), /^codecn-artifact:\/\/preview\/w1\/outputs\/clip\.mp4$/);
+    assert.match(String(video.previewUrl), /^newbrain-artifact:\/\/preview\/w1\/outputs\/clip\.mp4$/);
     const audio = await service.preview({ workspaceId: "w1", filePath: "outputs/track.mp3" });
     assert.equal(audio.kind, "audio");
     assert.equal(audio.mimeType, "audio/mpeg");
-    assert.match(String(audio.previewUrl), /^codecn-artifact:\/\/preview\/w1\/outputs\/track\.mp3$/);
+    assert.match(String(audio.previewUrl), /^newbrain-artifact:\/\/preview\/w1\/outputs\/track\.mp3$/);
     const sniffed = await service.preview({ workspaceId: "w1", filePath: "media/imports/import-1" });
     assert.equal(sniffed.kind, "audio");
     assert.equal(sniffed.mimeType, "audio/mpeg");
-    assert.match(String(sniffed.previewUrl), /^codecn-artifact:\/\/preview\/w1\/media\/imports\/import-1$/);
+    assert.match(String(sniffed.previewUrl), /^newbrain-artifact:\/\/preview\/w1\/media\/imports\/import-1$/);
   });
 });
 

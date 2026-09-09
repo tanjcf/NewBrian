@@ -16,12 +16,12 @@ export function GameTemplateWizard(props: { projectId?: string; projectName?: st
     setMessage("");
     try {
       if (engine === "web") {
-        if (!window.codecn?.createBrainGameWebTemplate) throw new Error("Web 模板 API 不可用");
-        const result = await window.codecn.createBrainGameWebTemplate({ projectId: props.projectId });
+        if (!window.newbrain?.createBrainGameWebTemplate) throw new Error("Web 模板 API 不可用");
+        const result = await window.newbrain.createBrainGameWebTemplate({ projectId: props.projectId });
         setMessage(`Web 模板已创建 · ${result.previewUrl}`);
       } else {
-        if (!window.codecn?.createBrainGameUnrealTemplate) throw new Error("UE5 模板 API 不可用");
-        const result = await window.codecn.createBrainGameUnrealTemplate({
+        if (!window.newbrain?.createBrainGameUnrealTemplate) throw new Error("UE5 模板 API 不可用");
+        const result = await window.newbrain.createBrainGameUnrealTemplate({
           projectId: props.projectId,
           projectName: ueProjectName.trim() || props.projectName || "BrainGame",
           engineAssociation: ueEngineVersion

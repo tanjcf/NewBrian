@@ -1,18 +1,18 @@
-# Install OpenClaw / ClawHub skills in codeCN
+# Install OpenClaw / ClawHub skills in NewBrain
 
-codeCN can install **OpenClaw-compatible** community skills (AgentSkills layout centered on `SKILL.md`), including packages from [ClawHub](https://clawhub.ai).
+NewBrain can install **OpenClaw-compatible** community skills (AgentSkills layout centered on `SKILL.md`), including packages from [ClawHub](https://clawhub.ai).
 
 ## Compatibility model
 
-| Layer | Layout | codeCN behavior |
+| Layer | Layout | NewBrain behavior |
 |---|---|---|
 | OpenClaw / ClawHub | `{slug}/SKILL.md` (+ optional `references/`, `scripts/`, `assets/`, `agents/openai.yaml`) | Detected and installed as-is into managed skills root |
 | Spring SkillAsset ZIP | `asset.json` + `skill/SKILL.md` (+ `knowledge/`) | Remapped on install: root `SKILL.md`, `knowledge/` → `references/` |
-| codeCN local scaffold | `{name}/SKILL.md` + `agents/openai.yaml` | Unchanged |
+| NewBrain local scaffold | `{name}/SKILL.md` + `agents/openai.yaml` | Unchanged |
 
 Installed skills land in the desktop managed root:
 
-`{appWorkspace}/.codecn/skills/{skill-name}/`
+`{appWorkspace}/.newbrain/skills/{skill-name}/`
 
 Runtime loading uses the existing `SkillRegistry` (`SKILL.md` at skill root). After install, the skill appears in **技能 → 已安装** and can be selected in the composer like any local skill.
 
@@ -27,11 +27,11 @@ Provenance is written to:
 - Zip entries are checked for path traversal.
 - A lightweight static scan looks for credential / download-cradle patterns in `SKILL.md`. Suspicious packages still require risk acknowledgement.
 - Prefer reviewing the ClawHub page and `SKILL.md` before installing community skills.
-- Registry base URL defaults to `https://clawhub.ai` and can be overridden with `CODECN_CLAWHUB_URL` / `OPENCLAW_CLAWHUB_URL` / `CLAWHUB_URL`.
+- Registry base URL defaults to `https://clawhub.ai` and can be overridden with `NEWBRAIN_CLAWHUB_URL` / `OPENCLAW_CLAWHUB_URL` / `CLAWHUB_URL`.
 
 ## How to install (UI)
 
-1. Open codeCN → **技能**.
+1. Open NewBrain → **技能**.
 2. Open the **OpenClaw** tab.
 3. Either:
    - Search ClawHub and click **安装**, or
@@ -44,34 +44,34 @@ Provenance is written to:
 
 1. Download a ClawHub skill zip from `https://clawhub.ai` (or export an OpenClaw skill folder).
 2. Ensure the package contains `SKILL.md` at the skill root (or spring `skill/SKILL.md`).
-3. Unpack into `{appWorkspace}/.codecn/skills/{skill-name}/` **or** use the OpenClaw tab zip installer.
+3. Unpack into `{appWorkspace}/.newbrain/skills/{skill-name}/` **or** use the OpenClaw tab zip installer.
 4. Refresh skills / restart desktop if the catalog does not refresh automatically.
 5. Select the skill in chat.
 
 ## How to install (IPC / preload)
 
 ```ts
-await window.codecn.searchOpenClawSkills({ query: "calendar", limit: 20 });
+await window.newbrain.searchOpenClawSkills({ query: "calendar", limit: 20 });
 
-await window.codecn.installOpenClawSkillFromClawHub({
+await window.newbrain.installOpenClawSkillFromClawHub({
   ref: "@owner/slug",
   acknowledgeRisk: true,
   force: true
 });
 
-await window.codecn.selectAndInstallOpenClawSkill({
+await window.newbrain.selectAndInstallOpenClawSkill({
   acknowledgeRisk: true,
   force: true
 });
 
 // Backup an installed skill as a portable zip (preferred over copying loose folders)
-await window.codecn.exportOpenClawSkillZip({
+await window.newbrain.exportOpenClawSkillZip({
   skillId: "skill-my-skill",
   skillName: "my-skill"
 });
 
 // Uninstall known writing skills from the local managed catalog first
-await window.codecn.uninstallWritingSkills({});
+await window.newbrain.uninstallWritingSkills({});
 ```
 
 ## Backup / export as zip

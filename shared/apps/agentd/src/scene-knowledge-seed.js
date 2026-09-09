@@ -29,7 +29,7 @@ export const SCENE_TITLES = {
 export const SCENE_KNOWLEDGE_MARKDOWN = {
   explore: `# 场景学习探索
 
-这是 codeCN 原生工作台模式。右侧不挂业务场景专属 Tools，只保留项目资源：文件、产物、任务。
+这是 NewBrain 原生工作台模式。右侧不挂业务场景专属 Tools，只保留项目资源：文件、产物、任务。
 
 对话、项目、线程、Skill、知识检索和通用工具按原生能力工作。工作区检索请用 \`workspace.glob\` / \`workspace.grep\` / \`workspace.read\`（别名 \`glob\` / \`grep\` / \`read\`），不要用 shell 无边界递归检索。进入量化、游戏、视频、音乐等业务场景时，必须切换到对应场景并使用其右侧专属 Tools 子架构。
 `,
@@ -156,8 +156,8 @@ metadata:
 
 ## 必须写入的内容
 
-1. \`.codecn/skills/<project>-project-manager/references/${SCENE_KNOWLEDGE_FILENAME}\` — 当前场景规则知识文档基线。
-2. \`.codecn/skills/<project>-project-manager/references/${SCENE_TOOLS_ROUTING_FILENAME}\` — Tools 子架构强制路由。
+1. \`.newbrain/skills/<project>-project-manager/references/${SCENE_KNOWLEDGE_FILENAME}\` — 当前场景规则知识文档基线。
+2. \`.newbrain/skills/<project>-project-manager/references/${SCENE_TOOLS_ROUTING_FILENAME}\` — Tools 子架构强制路由。
 3. 确保 always-on \`*-project-manager\` Skill 含「${SCENE_TOOLS_TEMPLATE_MARKER}」段落。
 4. 本 Skill 包（\`project-init\`）自身保持可发现，便于用户显式调用。
 
@@ -198,8 +198,8 @@ export async function ensureSceneProjectInit(input = {}) {
     .slice(0, 48) || "project";
 
   const pmName = `${safeProject}-project-manager`;
-  const pmReferences = path.join(workspacePath, ".codecn", "skills", pmName, "references");
-  const initSkillDir = path.join(workspacePath, ".codecn", "skills", PROJECT_INIT_SKILL_NAME);
+  const pmReferences = path.join(workspacePath, ".newbrain", "skills", pmName, "references");
+  const initSkillDir = path.join(workspacePath, ".newbrain", "skills", PROJECT_INIT_SKILL_NAME);
 
   await fs.mkdir(pmReferences, { recursive: true });
   await fs.mkdir(initSkillDir, { recursive: true });

@@ -10,7 +10,7 @@ Windows synthesis routes explicit Kokoro voices to Kokoro and MiniMax profiles t
 
 - `node scripts/test-video-voice-casting.mjs`: analysis validation, PCM encoding, and provider identity tests.
 - Materialized desktop `node scripts/test-electron-voice-casting.mjs`: real Electron/preload/IPC/model fixture integration; this is not a visible UI acceptance test.
-- Set `CODECN_VOICE_LIVE=1`, `CODECN_E2E_MODEL_CONFIG_PATH` and `CODECN_E2E_COPY_LIVE_AUTH=1` for an isolated live analysis and synthesis probe. Credentials are not logged.
+- Set `NEWBRAIN_VOICE_LIVE=1`, `NEWBRAIN_E2E_MODEL_CONFIG_PATH` and `NEWBRAIN_E2E_COPY_LIVE_AUTH=1` for an isolated live analysis and synthesis probe. Credentials are not logged.
 
 ## Outstanding Acceptance
 

@@ -4,8 +4,8 @@ import test from "node:test";
 const policy = await import(new URL("./skill-scaffold-policy.ts", import.meta.url).href);
 
 test("normalizes skill names and capability lists", () => {
-  assert.equal(policy.normalizeSkillName("  CodeCN 架构---Guard  "), "codecn-guard");
-  assert.equal(policy.titleCaseSkillName("codecn-guard"), "Codecn Guard");
+  assert.equal(policy.normalizeSkillName("  NewBrain 架构---Guard  "), "newbrain-guard");
+  assert.equal(policy.titleCaseSkillName("newbrain-guard"), "Newbrain Guard");
   assert.deepEqual(policy.normalizeCapabilityList(" read, write\nreview "), ["read", "write", "review"]);
 });
 

@@ -22,7 +22,7 @@ const { parseClawHubSkillRef, searchClawHubSkills, resolveClawHubSkillInstall } 
 );
 
 async function withTempDir(run) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-openclaw-skill-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-openclaw-skill-"));
   try {
     return await run(root);
   } finally {
@@ -82,7 +82,7 @@ test("installs OpenClaw zip into managed skills root", async () => {
     const zip = new JSZip();
     zip.file(
       "demo-skill/SKILL.md",
-      "---\nname: demo-skill\ndescription: Demo OpenClaw skill for codeCN.\n---\n\n# Demo\n"
+      "---\nname: demo-skill\ndescription: Demo OpenClaw skill for NewBrain.\n---\n\n# Demo\n"
     );
     zip.file("demo-skill/references/guide.md", "# Guide\n");
     const bytes = await zip.generateAsync({ type: "uint8array" });

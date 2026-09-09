@@ -22,12 +22,12 @@ test("normalizes annotation geometry with defaults", () => {
   assert.deepEqual(normalizeAnnotationGeometry({
     style: { tool: "select-rect", color: "#FFEB3B" },
     displayIndex: 3,
-    snapshotPath: ".codecn/attachments/mark.png",
+    snapshotPath: ".newbrain/attachments/mark.png",
     snapshotUrl: "data:image/png;base64,abc"
   }), {
     style: { tool: "select-rect", color: "#FFEB3B" },
     displayIndex: 3,
-    snapshotPath: ".codecn/attachments/mark.png",
+    snapshotPath: ".newbrain/attachments/mark.png",
     snapshotUrl: "data:image/png;base64,abc"
   });
 });

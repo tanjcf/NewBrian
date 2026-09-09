@@ -54,11 +54,11 @@ foreach ($tool in @("node", "pnpm", "cargo")) {
 
 $isProduction = $resolvedChannel -eq "Production"
 $names = @(
-  "CODECN_SOURCE_ROOT",
-  "CODECN_TEST_GATEWAY_BASE_URL",
-  "CODECN_TEST_PREVIEW_URL",
-  "CODECN_PRODUCTION_GATEWAY_BASE_URL",
-  "CODECN_PRODUCTION_PREVIEW_URL"
+  "NEWBRAIN_SOURCE_ROOT",
+  "NEWBRAIN_TEST_GATEWAY_BASE_URL",
+  "NEWBRAIN_TEST_PREVIEW_URL",
+  "NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL",
+  "NEWBRAIN_PRODUCTION_PREVIEW_URL"
 )
 $saved = @{}
 foreach ($name in $names) {
@@ -66,15 +66,15 @@ foreach ($name in $names) {
 }
 
 try {
-  $env:CODECN_SOURCE_ROOT = $sourceRoot
+  $env:NEWBRAIN_SOURCE_ROOT = $sourceRoot
   if ($isProduction) {
-    $env:CODECN_PRODUCTION_GATEWAY_BASE_URL = "https://api.sinnauze.cn/v1"
-    $env:CODECN_PRODUCTION_PREVIEW_URL = "https://api.sinnauze.cn"
-    $gateway = $env:CODECN_PRODUCTION_GATEWAY_BASE_URL
+    $env:NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL = "https://api.sinnauze.cn/v1"
+    $env:NEWBRAIN_PRODUCTION_PREVIEW_URL = "https://api.sinnauze.cn"
+    $gateway = $env:NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL
   } else {
-    $env:CODECN_TEST_GATEWAY_BASE_URL = "http://120.48.151.202:8790/v1"
-    $env:CODECN_TEST_PREVIEW_URL = "http://120.48.151.202:3000"
-    $gateway = $env:CODECN_TEST_GATEWAY_BASE_URL
+    $env:NEWBRAIN_TEST_GATEWAY_BASE_URL = "http://120.48.151.202:8790/v1"
+    $env:NEWBRAIN_TEST_PREVIEW_URL = "http://120.48.151.202:3000"
+    $gateway = $env:NEWBRAIN_TEST_GATEWAY_BASE_URL
   }
 
   $packageArgs = @{

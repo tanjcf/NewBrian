@@ -4,7 +4,7 @@ import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
 import { osKeyCombo, osPressEnter } from "./scene-test-os-input.mjs";
 const execFileAsync = promisify(execFile);
 const prompt = `请只使用右侧游戏制作 Tools 操作当前游戏项目：创建一个名为“青石谷入口”的新关卡并保存；创建一个 UE5 游戏工程（UE5.4），生成真实 .uproject、Config 和 Content 文件；再通过右侧游戏制作 Tools 读取关卡与 Content 资源，说明 UE5 Editor 的运行入口。不要生成 Web 工程，不要使用 shell，不要只输出代码，不要编造关卡、资产或试玩数据。`;
-const client = await createSceneTestCdpClient(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555));
+const client = await createSceneTestCdpClient(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555));
 const actions = [];
 try {
   await client.waitForAppReady();

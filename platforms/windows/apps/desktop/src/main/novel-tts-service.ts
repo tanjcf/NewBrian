@@ -175,7 +175,7 @@ export class NovelTtsService {
           const { writeFile, mkdtemp } = await import("node:fs/promises");
           const { tmpdir } = await import("node:os");
           const { join } = await import("node:path");
-          const dir = await mkdtemp(join(tmpdir(), "codecn-minimax-tts-"));
+          const dir = await mkdtemp(join(tmpdir(), "newbrain-minimax-tts-"));
           const ext = remote.mimeType?.includes("wav") ? ".wav" : ".mp3";
           const audioPath = join(dir, `narration${ext}`);
           await writeFile(audioPath, Buffer.from(remote.audioBase64, "base64"));

@@ -39,16 +39,16 @@ async function waitFor(expression) {
   }
   throw new Error(`Not ready: ${expression}`);
 }
-const output = resolve(process.env.CODECN_EXPERT_EVIDENCE || "evidence/expert-scenes");
+const output = resolve(process.env.NEWBRAIN_EXPERT_EVIDENCE || "evidence/expert-scenes");
 await mkdir(output, { recursive: true });
 try {
-  await waitFor("Boolean(window.codecn && document.querySelector('.workspace-frame'))");
+  await waitFor("Boolean(window.newbrain && document.querySelector('.workspace-frame'))");
   const counts = {};
   for (const key of ["quant", "game", "video", "music", "data", "software", "document", "explore"]) {
     await evaluate(`localStorage.setItem('brain.workspaceSelection.v2', JSON.stringify({version:2,selectedWorkspaceKey:${JSON.stringify(key)},catalogs:{}}))`);
     await command("Page.reload");
-    await waitFor("Boolean(window.codecn && document.querySelector('.workspace-frame'))");
-    await evaluate("window.dispatchEvent(new CustomEvent('codecn:app-command', {detail:{command:'experts'}}))");
+    await waitFor("Boolean(window.newbrain && document.querySelector('.workspace-frame'))");
+    await evaluate("window.dispatchEvent(new CustomEvent('newbrain:app-command', {detail:{command:'experts'}}))");
     await waitFor("document.querySelectorAll('.experts-card').length > 0");
     const state = await evaluate("({count:document.querySelectorAll('.experts-card').length, names:[...document.querySelectorAll('.experts-card-top strong')].map(el=>el.textContent), heading:document.querySelector('.experts-marketplace-header p').textContent})");
     counts[key] = state;

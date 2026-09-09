@@ -87,7 +87,7 @@ test("runAutoMediaTool posts to /v1/auto/tools/invoke", async () => {
     toolName: "image_generate",
     prompt: "卡通壁纸",
     model: "hy-image-v3",
-    idempotencyKey: "codecn-req-1",
+    idempotencyKey: "newbrain-req-1",
     fetchImpl: (async (url, init) => {
       calls.push({ url: String(url), body: String(init?.body || "") });
       return new Response(JSON.stringify({

@@ -31,7 +31,7 @@ function createCoreSessionFixture(options: { requireApproval?: boolean; activeTh
     applyPatch: async () => { events.push("apply"); return { operation: "apply" }; }
   };
   const service = new CoreSessionService({
-    appName: "codeCN", platform: "Windows", phase: "phase-1", shell: "PowerShell",
+    appName: "NewBrain", platform: "Windows", phase: "phase-1", shell: "PowerShell",
     getRuntime: () => runtime,
     getActiveThread: async () => options.activeThread === false
       ? {}
@@ -52,7 +52,7 @@ function createCoreSessionFixture(options: { requireApproval?: boolean; activeTh
 test("builds the core snapshot and refreshes only the matching active workspace", async () => {
   const { service, events } = createCoreSessionFixture();
   assert.deepEqual(await service.bootstrap(), {
-    appName: "codeCN", platform: "Windows", phase: "phase-1", shell: "PowerShell", workspacePath: process.cwd()
+    appName: "NewBrain", platform: "Windows", phase: "phase-1", shell: "PowerShell", workspacePath: process.cwd()
   });
   assert.deepEqual(await service.snapshot(), { source: "thread" });
   assert.deepEqual(events, ["refresh"]);

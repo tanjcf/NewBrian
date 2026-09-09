@@ -4,10 +4,10 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 
-const msi = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release\codeCN 1.3.0-unsigned.msi`;
+const msi = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release\NewBrain 1.3.0-unsigned.msi`;
 const expectedAsar = "9C5E6441502244D2071EB78F263B068D6C6D3758A78DBF212C8F763631AF8A28";
-const unpackedAsar = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release\_p\15992-1\win-unpacked\resources\app.asar`;
-const logDir = path.join(os.tmpdir(), "codecn-msi-smoke-130");
+const unpackedAsar = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release\_p\15992-1\win-unpacked\resources\app.asar`;
+const logDir = path.join(os.tmpdir(), "newbrain-msi-smoke-130");
 fs.mkdirSync(logDir, { recursive: true });
 const installLog = path.join(logDir, "msiexec-install.log");
 const evidencePath = path.join(logDir, "evidence.json");
@@ -37,7 +37,7 @@ function sleep(ms) {
 function listCodeCnProcesses() {
   try {
     const out = ps(
-      "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(codeCN|codecn|electron)\\.exe$' } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
+      "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(NewBrain|newbrain|electron)\\.exe$' } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
     ).trim();
     if (!out) return [];
     const parsed = JSON.parse(out);
@@ -50,7 +50,7 @@ function listCodeCnProcesses() {
 function stopInstalledCodeCn() {
   for (const p of listCodeCnProcesses()) {
     const exe = String(p.ExecutablePath || "");
-    if (!/codecn\.exe$/i.test(exe) && !/codeCN\.exe$/i.test(exe)) continue;
+    if (!/newbrain\.exe$/i.test(exe) && !/NewBrain\.exe$/i.test(exe)) continue;
     try {
       run("taskkill.exe", ["/PID", String(p.ProcessId), "/T", "/F"]);
     } catch (error) {
@@ -61,28 +61,28 @@ function stopInstalledCodeCn() {
 
 function candidateInstallRoots() {
   return [
-    path.join(process.env.LOCALAPPDATA || "", ".codecn"),
-    path.join(process.env.LOCALAPPDATA || "", "Programs", "codeCN"),
-    String.raw`C:\Program Files\codeCN`,
-    String.raw`C:\Program Files (x86)\codeCN`
+    path.join(process.env.LOCALAPPDATA || "", ".newbrain"),
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "NewBrain"),
+    String.raw`C:\Program Files\NewBrain`,
+    String.raw`C:\Program Files (x86)\NewBrain`
   ].filter(Boolean);
 }
 
 function findInstalledExe() {
   for (const root of candidateInstallRoots()) {
-    for (const name of ["codecn.exe", "codeCN.exe"]) {
+    for (const name of ["newbrain.exe", "NewBrain.exe"]) {
       const exe = path.join(root, name);
       if (fs.existsSync(exe)) return exe;
     }
   }
   try {
     const out = ps(
-      "$paths = @('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); $p = Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'codeCN' } | Select-Object -First 1 DisplayName,DisplayVersion,InstallLocation,UninstallString; if ($p) { $p | ConvertTo-Json -Compress }"
+      "$paths = @('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); $p = Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'NewBrain' } | Select-Object -First 1 DisplayName,DisplayVersion,InstallLocation,UninstallString; if ($p) { $p | ConvertTo-Json -Compress }"
     ).trim();
     if (out) {
       const info = JSON.parse(out);
       if (info.InstallLocation) {
-        for (const name of ["codecn.exe", "codeCN.exe"]) {
+        for (const name of ["newbrain.exe", "NewBrain.exe"]) {
           const exe = path.join(info.InstallLocation, name);
           if (fs.existsSync(exe)) return exe;
         }
@@ -104,8 +104,8 @@ function fileVersion(exe) {
 }
 
 function resolveAsarCli() {
-  const desktop = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop`;
-  const windowsRoot = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows`;
+  const desktop = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop`;
+  const windowsRoot = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows`;
   const direct = [
     path.join(desktop, "node_modules", "@electron", "asar", "bin", "asar.js"),
     path.join(windowsRoot, "node_modules", "@electron", "asar", "bin", "asar.js")
@@ -151,7 +151,7 @@ if (!fs.existsSync(msi)) {
 }
 
 const buildAsarSha = fs.existsSync(unpackedAsar) ? sha256(unpackedAsar) : "";
-console.log("Stopping installed codeCN...");
+console.log("Stopping installed NewBrain...");
 stopInstalledCodeCn();
 sleep(1000);
 
@@ -167,10 +167,10 @@ try {
 sleep(1500);
 let installedExe = findInstalledExe();
 
-// Known quirk: some MSI builds land under %LOCALAPPDATA%\.codecn; if registry/exe still missing,
+// Known quirk: some MSI builds land under %LOCALAPPDATA%\.newbrain; if registry/exe still missing,
 // fall back to syncing the just-built unpacked tree there for smoke continuity.
-const localAppInstall = path.join(process.env.LOCALAPPDATA || "", ".codecn");
-const localExe = path.join(localAppInstall, "codecn.exe");
+const localAppInstall = path.join(process.env.LOCALAPPDATA || "", ".newbrain");
+const localExe = path.join(localAppInstall, "newbrain.exe");
 if ((!installedExe || typeof installedExe !== "string") && fs.existsSync(unpackedAsar)) {
   const unpackedRoot = path.dirname(path.dirname(unpackedAsar));
   console.log("Primary install path missing; syncing unpacked build to", localAppInstall);
@@ -206,7 +206,7 @@ const evidence = {
   rootsChecked: candidateInstallRoots().map((root) => ({
     root,
     exists: fs.existsSync(root),
-    exe: ["codecn.exe", "codeCN.exe"].map((name) => path.join(root, name)).find((p) => fs.existsSync(p)) || null
+    exe: ["newbrain.exe", "NewBrain.exe"].map((name) => path.join(root, name)).find((p) => fs.existsSync(p)) || null
   }))
 };
 

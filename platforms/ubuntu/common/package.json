@@ -1,8 +1,8 @@
 {
-  "name": "codecn-ubuntu",
+  "name": "newbrain-ubuntu",
   "version": "0.1.0",
   "private": true,
-  "description": "codeCN desktop workspace for Ubuntu Linux.",
+  "description": "NewBrain desktop workspace for Ubuntu Linux.",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev:desktop": "pnpm --dir apps/desktop dev",

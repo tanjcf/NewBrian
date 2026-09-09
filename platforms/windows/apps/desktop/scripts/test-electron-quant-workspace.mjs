@@ -42,7 +42,7 @@ const address = marketServer.address();
 assert.ok(address && typeof address === "object");
 process.env.BRAIN_MARKET_DATA_URL = `http://127.0.0.1:${address.port}/bars`;
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9344);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9344);
 const session = await ensureElectronE2ESession(debugPort);
 try {
   const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -79,15 +79,15 @@ try {
   const root = await mkdtemp(join(tmpdir(), "brain-quant-ui-"));
   const seeded = await evaluate(`(async () => {
     const path = ${JSON.stringify(root)};
-    let catalog = await window.codecn.listWorkspaces();
-    if (!catalog.some((item) => item.path === path)) catalog = await window.codecn.addWorkspace({ name: "BRAIN Quant E2E", path });
+    let catalog = await window.newbrain.listWorkspaces();
+    if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: "BRAIN Quant E2E", path });
     const local = catalog.find((item) => item.path === path); if (!local) return { ok: false, reason: "workspace-missing" };
-    let projects = await window.codecn.listBrainProjects({ workspaceKey: "quant" });
+    let projects = await window.newbrain.listBrainProjects({ workspaceKey: "quant" });
     let project = projects.find((item) => item.name === "BRAIN Quant E2E");
-    if (!project) project = await window.codecn.createBrainProject({ name: "BRAIN Quant E2E", primaryWorkspaceKey: "quant", localWorkspaceId: local.id });
-    let conversations = await window.codecn.listBrainConversations({ projectId: project.id, workspaceKey: "quant" });
+    if (!project) project = await window.newbrain.createBrainProject({ name: "BRAIN Quant E2E", primaryWorkspaceKey: "quant", localWorkspaceId: local.id });
+    let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey: "quant" });
     let conversation = conversations[0];
-    if (!conversation) conversation = await window.codecn.createBrainConversation({ projectId: project.id, workspaceKey: "quant", title: "量化工作台验收" });
+    if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey: "quant", title: "量化工作台验收" });
     localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({ version: 2, selectedWorkspaceKey: "quant", catalogs: { quant: { projectId: project.id, conversationId: conversation.id } } }));
     return { ok: true, projectId: project.id };
   })()`);
@@ -112,8 +112,8 @@ try {
 
   const observation = await evaluate(`(async () => ({
     activeView: document.querySelector('[data-testid=brain-quant-workspace]')?.getAttribute('data-active-view'),
-    schedules: (await window.codecn.listQuantStrategySchedules({ projectId: ${JSON.stringify(seeded.projectId)} })).length,
-    activity: await window.codecn.getQuantActivity({ projectId: ${JSON.stringify(seeded.projectId)}, prices: { "600519": 110 } }),
+    schedules: (await window.newbrain.listQuantStrategySchedules({ projectId: ${JSON.stringify(seeded.projectId)} })).length,
+    activity: await window.newbrain.getQuantActivity({ projectId: ${JSON.stringify(seeded.projectId)}, prices: { "600519": 110 } }),
     liveBrokerText: document.body.innerText.includes('真实下单')
   }))()`);
   assert.equal(observation.activeView, "radar", JSON.stringify(observation));

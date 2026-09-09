@@ -11,7 +11,7 @@ test("projects ordered agent events into the durable Holon outbox", async () => 
       typeof import("./holon-runtime-projector.js")
     >
   ]);
-  const root = mkdtempSync(join(tmpdir(), "codecn-holon-projector-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-holon-projector-"));
   const storage = new CodexStorage(root);
   try {
     const projector = new HolonRuntimeProjector({

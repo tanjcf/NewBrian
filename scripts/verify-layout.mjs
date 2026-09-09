@@ -53,11 +53,11 @@ for (const [platform, overlay] of [["macos", macosCommon], ["ubuntu", ubuntuComm
 }
 
 for (const [arch, overlay] of [["arm64", macosArm64], ["x64", macosX64]]) {
-  if (!overlay.includes("codecn.arch.json")) throw new Error(`Missing codecn.arch.json for macOS ${arch}`);
+  if (!overlay.includes("newbrain.arch.json")) throw new Error(`Missing newbrain.arch.json for macOS ${arch}`);
 }
 
 for (const [arch, overlay] of [["arm64", ubuntuArm64], ["x64", ubuntuX64]]) {
-  if (!overlay.includes("codecn.arch.json")) throw new Error(`Missing codecn.arch.json for Ubuntu ${arch}`);
+  if (!overlay.includes("newbrain.arch.json")) throw new Error(`Missing newbrain.arch.json for Ubuntu ${arch}`);
 }
 
 const mergeLayers = (...sourceLayers) => [...new Set(sourceLayers.flat())];

@@ -4,10 +4,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
 import { PDFParse } from "pdf-parse";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const page = (await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json()))
   .find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-assert.ok(page, "No visible codeCN renderer is available.");
+assert.ok(page, "No visible NewBrain renderer is available.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolveOpen, reject) => { socket.addEventListener("open", resolveOpen, { once: true }); socket.addEventListener("error", reject, { once: true }); });
 let nextId = 0;
@@ -52,10 +52,10 @@ if (!activation?.ok) {
 assert.equal(activation?.ok, true, `Could not reopen the round-2 project conversation after restart: ${JSON.stringify(activation)}`);
 await sleep(1_000);
 const before = await evaluate(`(async () => ({
-  goal: await window.codecn.getGoalExecution(),
-  messages: (await window.codecn.getSnapshot()).messages || [],
-  workspacePath: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.path || '',
-  threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0
+  goal: await window.newbrain.getGoalExecution(),
+  messages: (await window.newbrain.getSnapshot()).messages || [],
+  workspacePath: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.path || '',
+  threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0
 }))()`);
 assert.equal(before.goal?.goal?.threadId, targetThreadId, "The UI did not activate the GOV-UI-MULTI-001 project conversation.");
 const existingConfirmation = before.messages.filter((message) => message.role === "user").at(-1)?.content || "";
@@ -78,10 +78,10 @@ while (Date.now() < deadline) {
       return true;
     })(),
     busy: Boolean(document.querySelector('.composer-card.busy')),
-    messages: (await window.codecn.getSnapshot()).messages || [],
-    goal: await window.codecn.getGoalExecution(),
+    messages: (await window.newbrain.getSnapshot()).messages || [],
+    goal: await window.newbrain.getGoalExecution(),
     localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((element) => element.getAttribute('data-local-file-path') || ''),
-    threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
+    threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
     body: document.body.innerText
   }))()`);
   if (!state.busy && state.messages.filter((message) => message.role === 'user').length >= 3 && state.localFiles.some((file) => /\.pdf$/i.test(file))) break;

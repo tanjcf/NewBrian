@@ -8,25 +8,25 @@ const hook = require('./msi-project-created.cjs').default;
 test('upgrades retain the product family, use rollback, and skip user-data cleanup', async () => {
   const root = mkdtempSync(join(tmpdir(), 'brain-msi-upgrade-'));
   const file = join(root, 'project.wxs');
-  const installDir = process.env.CODECN_MSI_INSTALL_DIR;
-  delete process.env.CODECN_MSI_INSTALL_DIR;
+  const installDir = process.env.NEWBRAIN_MSI_INSTALL_DIR;
+  delete process.env.NEWBRAIN_MSI_INSTALL_DIR;
   try {
     const family = '2D97097C-03A2-54F7-B1D4-7E34233F7A65';
     writeFileSync(file, `<Wix><Product Id="*" UpgradeCode="${family}" Version="1.4.5.0">
     <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="Newer version installed"/>
-    <Property Id="ApplicationFolderName" Value="codeCN"/>
-    <Directory Id="ProgramFiles64Folder"><Directory Id="APPLICATIONFOLDER" Name="codeCN"/></Directory>
+    <Property Id="ApplicationFolderName" Value="NewBrain"/>
+    <Directory Id="ProgramFiles64Folder"><Directory Id="APPLICATIONFOLDER" Name="NewBrain"/></Directory>
     </Product></Wix>`);
     await hook(file);
     const xml = readFileSync(file, 'utf8');
     assert.ok(xml.includes(`UpgradeCode="${family}"`));
     assert.match(xml, /<MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize"/);
     assert.match(xml, /DowngradeErrorMessage=/);
-    assert.doesNotMatch(xml, /DISABLEROLLBACK|CleanCodecnInstallDir/);
-    assert.match(xml, /Action="StopRunningCodecn" Before="InstallInitialize"/);
+    assert.doesNotMatch(xml, /DISABLEROLLBACK|CleanNewbrainInstallDir/);
+    assert.match(xml, /Action="StopRunningNewbrain" Before="InstallInitialize"/);
     assert.match(xml, /<Property Id="APPLICATIONFOLDER" Secure="yes">/);
-    assert.match(xml, /RegistrySearch Id="PreviousCodecnInstallDirectory" Root="HKCU" Key="Environment" Name="CODECN_HOME" Type="raw"/);
-    for (const action of ['RemoveCodecnUserDataOnUninstall', 'ClearCodecnHomeEnv']) {
+    assert.match(xml, /RegistrySearch Id="PreviousNewbrainInstallDirectory" Root="HKCU" Key="Environment" Name="NEWBRAIN_HOME" Type="raw"/);
+    for (const action of ['RemoveNewbrainUserDataOnUninstall', 'ClearNewbrainHomeEnv']) {
       assert.ok(xml.includes(`<Custom Action="${action}" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>`));
     }
     const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json')));
@@ -39,8 +39,8 @@ test('upgrades retain the product family, use rollback, and skip user-data clean
     writeFileSync(file, xml.replace(/<MajorUpgrade[^>]*\/>/, ''));
     await assert.rejects(hook(file), /missing MajorUpgrade/);
   } finally {
-    if (installDir === undefined) delete process.env.CODECN_MSI_INSTALL_DIR;
-    else process.env.CODECN_MSI_INSTALL_DIR = installDir;
+    if (installDir === undefined) delete process.env.NEWBRAIN_MSI_INSTALL_DIR;
+    else process.env.NEWBRAIN_MSI_INSTALL_DIR = installDir;
     rmSync(root, { recursive: true, force: true });
   }
 });

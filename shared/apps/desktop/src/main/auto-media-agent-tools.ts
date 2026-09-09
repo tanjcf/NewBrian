@@ -100,7 +100,7 @@ function guessExtension(kind: GeneratedMediaKind, url: string, contentType: stri
 }
 
 /**
- * Download a remote media URL into `{workspace}/.codecn/generated-media/{kind}/`.
+ * Download a remote media URL into `{workspace}/.newbrain/generated-media/{kind}/`.
  *
  * @param workspaceRoot Absolute workspace root
  * @param kind image, video, or music
@@ -142,11 +142,11 @@ export async function downloadGeneratedMediaToWorkspace(input: {
   const stamp = Date.now();
   const digest = createHash("sha256").update(bytes).digest("hex").slice(0, 10);
   const indexPart = input.index == null ? "" : `-${input.index + 1}`;
-  const relativePath = `.codecn/generated-media/${input.kind}/${stamp}${indexPart}-${digest}${extension}`;
+  const relativePath = `.newbrain/generated-media/${input.kind}/${stamp}${indexPart}-${digest}${extension}`;
   const absolutePath = resolve(root, relativePath);
   const boundary = root.endsWith(sep) ? root : `${root}${sep}`;
   if (!absolutePath.startsWith(boundary)) throw new Error("媒体落盘路径非法。");
-  await mkdir(resolve(root, `.codecn/generated-media/${input.kind}`), { recursive: true });
+  await mkdir(resolve(root, `.newbrain/generated-media/${input.kind}`), { recursive: true });
   await writeFile(absolutePath, bytes);
   return { relativePath: relativePath.replace(/\\/g, "/"), absolutePath, bytes: bytes.length };
 }
@@ -180,13 +180,13 @@ function artifactTypeForGeneratedMedia(kind: GeneratedMediaKind, fileName: strin
 /**
  * Resolve workspace-local or managed-attachment reference images for Auto media tools.
  * Cloud providers cannot fetch local paths; convert trusted local files to data URLs.
- * Chat attachments live under app state (`…/.codecn/attachments`), not the project tree.
+ * Chat attachments live under app state (`…/.newbrain/attachments`), not the project tree.
  */
 export async function resolveAutoMediaReferenceImage(input: {
   workspaceRoot: string;
   imageUrl: string;
   attachmentRoots?: string[];
-  /** Copy attachment-root files into `{workspace}/.codecn/attachments/` for reuse. Default true. */
+  /** Copy attachment-root files into `{workspace}/.newbrain/attachments/` for reuse. Default true. */
   stageIntoWorkspace?: boolean;
 }): Promise<string> {
   const raw = text(input.imageUrl);
@@ -255,7 +255,7 @@ export async function resolveAutoMediaReferenceImage(input: {
   }
 
   if (input.stageIntoWorkspace !== false && !isInside(absolute, workspaceRoot)) {
-    const stageDir = resolve(workspaceRoot, ".codecn", "attachments");
+    const stageDir = resolve(workspaceRoot, ".newbrain", "attachments");
     await mkdir(stageDir, { recursive: true });
     const leaf = basename(absolute);
     let stagedPath = resolve(stageDir, leaf);
@@ -612,7 +612,7 @@ export function registerAutoMediaAgentTools(
     description:
       "当用户明确要求创作/生成图片、壁纸、海报、插画时必须调用本工具，并等待工具返回后再回复。"
       + " 能力询问（能不能/会不会生成图片）不要调用。"
-      + " 工具会在 spring-app 出图、下载到工作区 `.codecn/generated-media/image/`，并尝试打开侧栏预览。"
+      + " 工具会在 spring-app 出图、下载到工作区 `.newbrain/generated-media/image/`，并尝试打开侧栏预览。"
       + " 图生图时 image_url 可直接传聊天附件本地路径（无需先复制进工作区）。"
       + " 禁止只写「正在生成中」或 `![正在生成中...]` 后结束；禁止伪造本地图片。",
     namespace: "auto-media",
@@ -627,7 +627,7 @@ export function registerAutoMediaAgentTools(
     title: "生成视频",
     description:
       "当用户明确要求创作/生成视频或动画时必须调用本工具，并等待工具返回后再回复。"
-      + " 能力询问不要调用。工具会下载到 `.codecn/generated-media/video/` 并尝试打开侧栏预览。"
+      + " 能力询问不要调用。工具会下载到 `.newbrain/generated-media/video/` 并尝试打开侧栏预览。"
       + " 若当前是视频工程，必须传入工程画幅适配器的 size（如 1920x1080）或 width/height，使生成尺寸与预览窗口一致。"
       + " 禁止写「正在生成中」占位后结束。",
     namespace: "auto-media",
@@ -668,7 +668,7 @@ export function registerAutoMediaAgentTools(
     description:
       "当用户明确要求创作/生成歌曲、配乐、纯音乐或把歌词变成可听音频时必须调用本工具，并等待工具返回后再回复。"
       + " 能力询问（能不能/会不会生成音乐）不要调用。"
-      + " 工具会在 spring-app 生成音乐、下载到工作区 `.codecn/generated-media/music/`。"
+      + " 工具会在 spring-app 生成音乐、下载到工作区 `.newbrain/generated-media/music/`。"
       + " 禁止只写「正在生成中」或建议用户去 Suno/Udio 后结束；禁止伪造本地音频路径。",
     namespace: "auto-media",
     kind: "write",

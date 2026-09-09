@@ -58,7 +58,7 @@ test("spawns one sanitized Rust Core per authorized project and performs a healt
       PATH: "C:/Windows/System32",
       SystemRoot: "C:/Windows",
       OPENAI_API_KEY: "must-not-leak",
-      CODECN_ACCESS_TOKEN: "must-not-leak"
+      NEWBRAIN_ACCESS_TOKEN: "must-not-leak"
     }
   });
 

@@ -29,7 +29,7 @@ test("GrowthControlPlaneService runs two-auto-node demo against mock fetch", asy
       return json({ id: "gpi_1", status: "running", cursor_node_id: "n1" });
     }
     if (url.endsWith("/api/growth/v1/instances/gpi_1/lease")) {
-      return json({ ok: true, lease_owner: "codecn-desktop-host" });
+      return json({ ok: true, lease_owner: "newbrain-desktop-host" });
     }
     if (url.endsWith("/api/growth/v1/instances/gpi_1/advance")) {
       const step = calls.filter((c) => c.url.endsWith("/advance")).length;
@@ -74,7 +74,7 @@ test("GrowthControlPlaneService runs auto-then-human demo against mock fetch", a
       return json({ id: "gpi_2", status: "running", cursor_node_id: "n1" });
     }
     if (url.endsWith("/api/growth/v1/instances/gpi_2/lease")) {
-      return json({ ok: true, lease_owner: "codecn-desktop-host" });
+      return json({ ok: true, lease_owner: "newbrain-desktop-host" });
     }
     if (url.endsWith("/api/growth/v1/instances/gpi_2/advance")) {
       advanceCount += 1;

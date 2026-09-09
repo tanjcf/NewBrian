@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const page = (await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json()))
   .find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-assert.ok(page, "No visible codeCN renderer is available.");
+assert.ok(page, "No visible NewBrain renderer is available.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolveOpen, reject) => { socket.addEventListener("open", resolveOpen, { once: true }); socket.addEventListener("error", reject, { once: true }); });
 let nextId = 0;
@@ -42,9 +42,9 @@ const activated = await evaluate(`(() => {
 assert.equal(activated, true, "Could not activate the GOV-UI-MULTI-001 project conversation.");
 await sleep(1_000);
 const before = await evaluate(`(async () => ({
-  messages: (await window.codecn.getSnapshot()).messages || [],
-  threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
-  goal: await window.codecn.getGoalExecution()
+  messages: (await window.newbrain.getSnapshot()).messages || [],
+  threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
+  goal: await window.newbrain.getGoalExecution()
 }))()`);
 assert.equal(before.goal?.goal?.threadId, targetThreadId, "Wrong thread is active before round 4.");
 const request = `保留第一版PDF，不得覆盖。
@@ -73,10 +73,10 @@ while (Date.now() < deadline) {
   state = await evaluate(`(async () => ({
     approvalClicked: (() => { const button = document.querySelector('[data-testid="approval-approve-button"]'); if (!(button instanceof HTMLButtonElement) || button.disabled) return false; button.click(); return true; })(),
     busy: Boolean(document.querySelector('.composer-card.busy')),
-    messages: (await window.codecn.getSnapshot()).messages || [],
-    goal: await window.codecn.getGoalExecution(),
+    messages: (await window.newbrain.getSnapshot()).messages || [],
+    goal: await window.newbrain.getGoalExecution(),
     localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((element) => decodeURIComponent(element.getAttribute('data-local-file-path') || '')),
-    threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
+    threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
     composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true,
     body: document.body.innerText
   }))()`);

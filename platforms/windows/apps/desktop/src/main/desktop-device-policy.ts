@@ -148,7 +148,7 @@ export function createDesktopAuthHeaders(input: {
 }) {
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "X-Desktop-Client": "codecn",
+    "X-Desktop-Client": "newbrain",
     "X-Request-Id": sanitizeDesktopHeaderValue((input.createRequestId ?? randomUUID)(), "request"),
     "X-Desktop-Device-Id": sanitizeDesktopHeaderValue(input.device.device_id, "device"),
     "X-Desktop-Device-Name": sanitizeDesktopHeaderValue(input.device.device_name, "desktop"),

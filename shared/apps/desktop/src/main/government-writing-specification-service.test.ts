@@ -52,7 +52,7 @@ function seedGoal(storage: any, threadId = "thread-1", goalId = "goal-1") {
 }
 
 test("persists immutable versions and restores the confirmed version", () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-gov-spec-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-gov-spec-"));
   try {
     let storage = new CodexStorage(root);
     seedGoal(storage);
@@ -80,7 +80,7 @@ test("persists immutable versions and restores the confirmed version", () => {
 });
 
 test("confirmation is idempotent and rejects a stale version from another goal", () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-gov-spec-confirm-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-gov-spec-confirm-"));
   try {
     const storage = new CodexStorage(root);
     seedGoal(storage);
@@ -99,7 +99,7 @@ test("confirmation is idempotent and rejects a stale version from another goal",
 });
 
 test("rejects confirmation while an approximate length requirement is pending user confirmation", () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-gov-spec-pending-length-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-gov-spec-pending-length-"));
   let storage: any;
   try {
     storage = new CodexStorage(root);
@@ -118,7 +118,7 @@ test("rejects confirmation while an approximate length requirement is pending us
 });
 
 test("rejects confirmation when specification analysis dimensions are incomplete", () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-gov-spec-incomplete-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-gov-spec-incomplete-"));
   let storage: any;
   try {
     storage = new CodexStorage(root);
@@ -144,7 +144,7 @@ test("rejects confirmation when specification analysis dimensions are incomplete
 });
 
 test("stores guidance and applies selected suggestions as a new version", () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-gov-spec-guidance-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-gov-spec-guidance-"));
   let storage: any;
   try {
     storage = new CodexStorage(root);

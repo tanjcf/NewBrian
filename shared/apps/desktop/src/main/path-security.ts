@@ -4,7 +4,7 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 const SKIPPED_BASENAME_SEARCH_DIRS = new Set([
   ".git",
   "node_modules",
-  ".codecn",
+  ".newbrain",
   ".desktop-profile",
   "out",
   "dist",
@@ -59,9 +59,9 @@ export function previewPathFallbacks(requestedPath: string) {
   const name = basename(trimmed);
   if (!name || name === "." || name === "..") return [];
   const generatedMediaFallbacks = [
-    `.codecn/generated-media/image/${name}`,
-    `.codecn/generated-media/video/${name}`,
-    `.codecn/generated-media/music/${name}`
+    `.newbrain/generated-media/image/${name}`,
+    `.newbrain/generated-media/video/${name}`,
+    `.newbrain/generated-media/music/${name}`
   ];
   if (trimmed.includes("/")) {
     // Also try the bare basename under common roots when a nested relative path misses.
@@ -156,9 +156,9 @@ export async function findBasenameUnderRoot(rootPath: string, fileName: string, 
       }
       if (!entry.isDirectory() || current.depth >= maxDepth) continue;
       if (SKIPPED_BASENAME_SEARCH_DIRS.has(entry.name)) {
-        // Auto media lands under .codecn/generated-media/; still search there by basename.
-        if (entry.name === ".codecn" && current.depth === 0) {
-          queue.push({ dir: join(current.dir, ".codecn", "generated-media"), depth: current.depth + 1 });
+        // Auto media lands under .newbrain/generated-media/; still search there by basename.
+        if (entry.name === ".newbrain" && current.depth === 0) {
+          queue.push({ dir: join(current.dir, ".newbrain", "generated-media"), depth: current.depth + 1 });
         }
         continue;
       }

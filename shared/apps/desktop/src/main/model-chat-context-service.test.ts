@@ -10,7 +10,7 @@ import { ModelChatContextService } from "./model-chat-context-service.ts";
 import { buildUpstreamModelMessages } from "./model-gateway-protocol.ts";
 
 test("runs Codex-style model compaction and persists replacement history before the main turn", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-context-compaction-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-context-compaction-"));
   const rolloutPath = join(root, "rollout.jsonl");
   const calls: Array<Record<string, unknown>> = [];
   let written: ThreadStateFile | null = null;
@@ -76,7 +76,7 @@ test("runs Codex-style model compaction and persists replacement history before 
 });
 
 test("persists an automatically routed central skill for activity replay", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-central-skill-event-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-central-skill-event-"));
   const rolloutPath = join(root, "rollout.jsonl");
   let written: ThreadStateFile | null = null;
   const service = new ModelChatContextService({
@@ -116,7 +116,7 @@ test("persists an automatically routed central skill for activity replay", async
 });
 
 test("does not serialize persisted assistant reasoning summaries as provider thinking context", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-context-reasoning-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-context-reasoning-"));
   const rolloutPath = join(root, "rollout.jsonl");
   const service = new ModelChatContextService({
     makeId: (prefix: string) => `${prefix}-fixed`,

@@ -3,7 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
-const releaseRoot = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release`;
+const releaseRoot = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release`;
 function walk(dir, depth = 0, acc = []) {
   if (depth > 4) return acc;
   for (const name of fs.readdirSync(dir)) {
@@ -31,7 +31,7 @@ function stSize(p) {
   return fs.statSync(p).size;
 }
 
-const extractDir = String.raw`C:\Users\Administrator\AppData\Local\Temp\codecn-msi-smoke\asar-extract`;
+const extractDir = String.raw`C:\Users\Administrator\AppData\Local\Temp\newbrain-msi-smoke\asar-extract`;
 const needles = [
   "report-renderer-diagnostic",
   "reportRendererDiagnostic",
@@ -71,10 +71,10 @@ function scanDir(root) {
 console.log("installed extract hits", JSON.stringify(scanDir(extractDir), null, 2));
 
 // Force reinstall with REINSTALLMODE
-const msi = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release\codeCN 1.2.9-unsigned.msi`;
-const log = String.raw`C:\Users\Administrator\AppData\Local\Temp\codecn-msi-smoke\msiexec-reinstall.log`;
+const msi = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release\NewBrain 1.2.9-unsigned.msi`;
+const log = String.raw`C:\Users\Administrator\AppData\Local\Temp\newbrain-msi-smoke\msiexec-reinstall.log`;
 try {
-  execFileSync("taskkill.exe", ["/IM", "codecn.exe", "/F"], { stdio: "ignore" });
+  execFileSync("taskkill.exe", ["/IM", "newbrain.exe", "/F"], { stdio: "ignore" });
 } catch {}
 console.log("force reinstall...");
 try {
@@ -88,12 +88,12 @@ try {
   console.log("reinstall exit", error.status);
 }
 
-const installed = String.raw`C:\Program Files\codeCN\resources\app.asar`;
+const installed = String.raw`C:\Program Files\NewBrain\resources\app.asar`;
 const installedHash = crypto.createHash("sha256").update(fs.readFileSync(installed)).digest("hex");
 console.log("installed after reinstall", installedHash, fs.statSync(installed).size);
 
-const asarCli = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\node_modules\.pnpm\@electron+asar@3.4.1\node_modules\@electron\asar\bin\asar.js`;
-const extract2 = String.raw`C:\Users\Administrator\AppData\Local\Temp\codecn-msi-smoke\asar-extract-2`;
+const asarCli = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\node_modules\.pnpm\@electron+asar@3.4.1\node_modules\@electron\asar\bin\asar.js`;
+const extract2 = String.raw`C:\Users\Administrator\AppData\Local\Temp\newbrain-msi-smoke\asar-extract-2`;
 fs.rmSync(extract2, { recursive: true, force: true });
 execFileSync("node", [asarCli, "extract", installed, extract2], { stdio: "inherit" });
 console.log("extract2 hits", JSON.stringify(scanDir(extract2), null, 2));

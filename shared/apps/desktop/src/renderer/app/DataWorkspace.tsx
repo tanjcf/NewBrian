@@ -71,8 +71,8 @@ export function DataWorkspace({
   useEffect(() => {
     const file = files.find((item) => item.id === fileId);
     const isXlsx = `${file?.originalName || ""} ${file?.logicalName || ""} ${file?.storageKey || ""}`.toLowerCase().includes(".xlsx");
-    if (!isXlsx || !projectId || !fileId || !window.codecn?.listDataXlsxSheets) { setXlsxSheets([]); return; }
-    void window.codecn.listDataXlsxSheets({ projectId, fileId }).then((items: string[]) => {
+    if (!isXlsx || !projectId || !fileId || !window.newbrain?.listDataXlsxSheets) { setXlsxSheets([]); return; }
+    void window.newbrain.listDataXlsxSheets({ projectId, fileId }).then((items: string[]) => {
       const safe = Array.isArray(items) ? items : [];
       setXlsxSheets(safe);
       const nextSheet = ui.xlsxSheet && safe.includes(ui.xlsxSheet) ? ui.xlsxSheet : (safe[0] || "");
@@ -81,12 +81,12 @@ export function DataWorkspace({
   }, [fileId, files, projectId, ui.xlsxSheet, setUi]);
 
   useEffect(() => {
-    if (!projectId || !window.codecn?.listDataDatasets) { setStatus("请选择数据项目"); return; }
-    void window.codecn.listDataDatasets({ projectId }).then(async (items: any[]) => {
+    if (!projectId || !window.newbrain?.listDataDatasets) { setStatus("请选择数据项目"); return; }
+    void window.newbrain.listDataDatasets({ projectId }).then(async (items: any[]) => {
       const safe = Array.isArray(items) ? items : [];
       setDatasets(safe);
-      if (window.codecn?.readDataRows) {
-        const loaded = await Promise.all(safe.map(async (item) => [item.id, await window.codecn.readDataRows({ projectId, datasetId: item.id })] as const));
+      if (window.newbrain?.readDataRows) {
+        const loaded = await Promise.all(safe.map(async (item) => [item.id, await window.newbrain.readDataRows({ projectId, datasetId: item.id })] as const));
         setRows(Object.fromEntries(loaded));
       }
       if (hydrated && ui.selectedDatasetId && safe.some((item) => item.id === ui.selectedDatasetId)) {
@@ -99,8 +99,8 @@ export function DataWorkspace({
   }, [projectId, hydrated, refreshToken]);
 
   useEffect(() => {
-    if (!projectId || !selectedId || !window.codecn?.listDataAnalyses) return;
-    void window.codecn.listDataAnalyses({ projectId, datasetId: selectedId }).then((items: any[]) => {
+    if (!projectId || !selectedId || !window.newbrain?.listDataAnalyses) return;
+    void window.newbrain.listDataAnalyses({ projectId, datasetId: selectedId }).then((items: any[]) => {
       const latest = Array.isArray(items) ? items : [];
       const summary = latest.find((item) => item?.result?.operation === "summary") || latest[0];
       const grouped = latest.find((item) => item?.result?.operation === "aggregate");
@@ -133,7 +133,7 @@ export function DataWorkspace({
     if (!projectId || !fileId) { setStatus("请选择已登记的 CSV/XLSX 文件"); return; }
     const file = files.find((item) => item.id === fileId);
     const isXlsx = `${file?.originalName || ""} ${file?.logicalName || ""} ${file?.storageKey || ""}`.toLowerCase().includes(".xlsx");
-    const importer = isXlsx ? window.codecn?.importDataXlsx : window.codecn?.importDataCsv;
+    const importer = isXlsx ? window.newbrain?.importDataXlsx : window.newbrain?.importDataCsv;
     if (!importer) { setStatus("当前桌面版本暂不支持该表格格式"); return; }
     void importer({
       projectId, fileId, datasetId: `dataset-${Date.now()}`,
@@ -150,22 +150,22 @@ export function DataWorkspace({
     }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "CSV 导入失败"));
   };
   const runAnalysis = () => {
-    if (!projectId || !selected || !window.codecn?.summarizeData) return;
+    if (!projectId || !selected || !window.newbrain?.summarizeData) return;
     setStatus("正在生成摘要");
-    void window.codecn.summarizeData({ projectId, datasetId: selected.id }).then((result: any) => {
+    void window.newbrain.summarizeData({ projectId, datasetId: selected.id }).then((result: any) => {
       setAnalysis(result?.result || null);
       setStatus("分析结果已保存");
     }).catch((error: unknown) => setStatus(error instanceof Error ? error.message : "分析失败"));
   };
   const runAggregate = () => {
-    if (!projectId || !selected || !window.codecn?.aggregateData) return;
+    if (!projectId || !selected || !window.newbrain?.aggregateData) return;
     const columnKeys = selected.columns.map((column: any) => column.key);
     const numericKey = columnKeys.find((key: string) => selected.columns.find((column: any) => column.key === key)?.type === "number");
     const dimensionKey = columnKeys.find((key: string) => selected.columns.find((column: any) => column.key === key)?.type !== "number");
     const periodKey = columnKeys.find((key: string) => /quarter|month|date|period|季度|月份|日期/iu.test(key));
     if (!numericKey || !dimensionKey) { setStatus("当前数据集缺少可用于聚合的维度列或数值列"); return; }
     setStatus("正在生成分组聚合");
-    void window.codecn.aggregateData({
+    void window.newbrain.aggregateData({
       projectId,
       datasetId: selected.id,
       groupBy: [dimensionKey],

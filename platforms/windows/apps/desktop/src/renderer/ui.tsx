@@ -414,22 +414,22 @@ export function App() {
       return new Set<string>();
     }
   };
-  const [pinnedThreadIds, setPinnedThreadIds] = useState<Set<string>>(() => readPersistedIdSet("codecn.pinnedThreadIds.v1"));
-  const [unreadThreadIds, setUnreadThreadIds] = useState<Set<string>>(() => readPersistedIdSet("codecn.unreadThreadIds.v1"));
-  const [archivedThreadIds, setArchivedThreadIds] = useState<Set<string>>(() => readPersistedIdSet("codecn.archivedThreadIds.v1"));
+  const [pinnedThreadIds, setPinnedThreadIds] = useState<Set<string>>(() => readPersistedIdSet("newbrain.pinnedThreadIds.v1"));
+  const [unreadThreadIds, setUnreadThreadIds] = useState<Set<string>>(() => readPersistedIdSet("newbrain.unreadThreadIds.v1"));
+  const [archivedThreadIds, setArchivedThreadIds] = useState<Set<string>>(() => readPersistedIdSet("newbrain.archivedThreadIds.v1"));
   useEffect(() => {
     try {
-      localStorage.setItem("codecn.pinnedThreadIds.v1", JSON.stringify([...pinnedThreadIds]));
-      localStorage.setItem("codecn.unreadThreadIds.v1", JSON.stringify([...unreadThreadIds]));
-      localStorage.setItem("codecn.archivedThreadIds.v1", JSON.stringify([...archivedThreadIds]));
+      localStorage.setItem("newbrain.pinnedThreadIds.v1", JSON.stringify([...pinnedThreadIds]));
+      localStorage.setItem("newbrain.unreadThreadIds.v1", JSON.stringify([...unreadThreadIds]));
+      localStorage.setItem("newbrain.archivedThreadIds.v1", JSON.stringify([...archivedThreadIds]));
     } catch {
       // localStorage 不可用时忽略，仅影响状态持久化
     }
   }, [pinnedThreadIds, unreadThreadIds, archivedThreadIds]);
   useEffect(() => {
     try {
-      if (selectedWorkspaceId) localStorage.setItem("codecn.lastSelectedWorkspaceId.v1", selectedWorkspaceId);
-      if (selectedThreadId) localStorage.setItem("codecn.lastSelectedThreadId.v1", selectedThreadId);
+      if (selectedWorkspaceId) localStorage.setItem("newbrain.lastSelectedWorkspaceId.v1", selectedWorkspaceId);
+      if (selectedThreadId) localStorage.setItem("newbrain.lastSelectedThreadId.v1", selectedThreadId);
     } catch {
       // 忽略持久化失败
     }
@@ -475,7 +475,7 @@ export function App() {
   const [authStatus, setAuthStatus] = useState<DesktopAuthStatusState>(initialDesktopAuthStatus);
   const [accountProfile, setAccountProfile] = useState<Record<string, string>>(() => {
     try {
-      return JSON.parse(localStorage.getItem("codecn.accountProfile.v1") || "{}");
+      return JSON.parse(localStorage.getItem("newbrain.accountProfile.v1") || "{}");
     } catch {
       return {};
     }
@@ -497,7 +497,7 @@ export function App() {
   });
   const [isRetryingCondaBootstrap, setIsRetryingCondaBootstrap] = useState(false);
 
-  const api = window.codecn;
+  const api = window.newbrain;
 
   useEffect(() => {
     const openSettings = (event: Event) => {
@@ -505,8 +505,8 @@ export function App() {
       setActiveSettingsSection(section || "account");
       setActiveFeature("settings");
     };
-    window.addEventListener("codecn:open-settings", openSettings);
-    return () => window.removeEventListener("codecn:open-settings", openSettings);
+    window.addEventListener("newbrain:open-settings", openSettings);
+    return () => window.removeEventListener("newbrain:open-settings", openSettings);
   }, []);
 
   useEffect(() => {
@@ -847,7 +847,7 @@ export function App() {
   const latestAssistantMessage =
     [...chatMessages].reverse().find((message) => message.role === "assistant")?.content ??
     selectedThread?.summary ??
-    "这里会显示 codeCN 对当前任务的处理结果、建议、变更摘要和模型回复。";
+    "这里会显示 NewBrain 对当前任务的处理结果、建议、变更摘要和模型回复。";
   const condaBootstrapSummary =
     desktopBootstrapStatus.conda.status === "ready"
       ? `已就绪${desktopBootstrapStatus.conda.source ? ` · ${desktopBootstrapStatus.conda.source === "system" ? "复用系统 conda" : "托管 conda"}` : ""}`
@@ -1135,8 +1135,8 @@ export function App() {
         setActiveFeature("settings");
       }
     };
-    window.addEventListener("codecn:app-command", handleAppCommand);
-    return () => window.removeEventListener("codecn:app-command", handleAppCommand);
+    window.addEventListener("newbrain:app-command", handleAppCommand);
+    return () => window.removeEventListener("newbrain:app-command", handleAppCommand);
   }, [addExistingProject, api]);
 
   useEffect(() => {
@@ -1841,7 +1841,7 @@ export function App() {
     const feedbackWorkspaceId = selectedWorkspaceIdRef.current || selectedWorkspaceId;
     const feedbackThreadId = selectedThreadIdRef.current || selectedThreadId;
     if (isComposingNewThread || !feedbackWorkspaceId || !feedbackThreadId) {
-      setErrorMessage("请先进入一个已有对话，再提交 codeCN 使用异常。");
+      setErrorMessage("请先进入一个已有对话，再提交 NewBrain 使用异常。");
       return;
     }
     const normalizedDescription = description.trim();
@@ -1858,7 +1858,7 @@ export function App() {
         threadId: feedbackThreadId,
         description: normalizedDescription
       });
-      setUsageExceptionFeedbackPreview({ ...preview, commandText: commandText || `codecn使用异常：${normalizedDescription}` });
+      setUsageExceptionFeedbackPreview({ ...preview, commandText: commandText || `newbrain使用异常：${normalizedDescription}` });
       if (commandText) setQuestion("");
       setChatStatus("异常分析已完成，请确认提交内容。");
     } catch (error) {
@@ -2601,7 +2601,7 @@ export function App() {
                     <div className="workspace-status-submenu local-status-submenu">
                       <span className="workspace-status-subtitle">继续使用</span>
                       <button type="button"><SidebarIcon name="computer" /><span>在本地处理</span><strong>✓</strong></button>
-                      <button type="button" onClick={() => void api?.openBrowserPreview()}><span>◉</span><span>关联 codeCN web</span><strong>↗</strong></button>
+                      <button type="button" onClick={() => void api?.openBrowserPreview()}><span>◉</span><span>关联 NewBrain web</span><strong>↗</strong></button>
                       <button type="button" disabled><span>☁</span><span>发送至云端</span></button>
                       <div className="thread-context-divider" />
                       <button type="button" onClick={() => { setActiveFeature("settings"); setActiveSettingsSection("billing"); setShowWorkspaceStatusMenu(false); }}><span>◔</span><span>剩余用量 {workspaceUsageRemaining == null ? "--" : `${workspaceUsageRemaining}%`}</span><strong>›</strong></button>

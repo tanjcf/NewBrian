@@ -4152,6 +4152,11 @@ textarea {
 .wallet-summary-card dl div { border-left:1px solid #dceaf7; padding-left:18px; }
 .wallet-summary-card dd { margin:6px 0 0; font-size:17px; font-weight:600; }
 .wallet-recharge-card { margin-top:18px; }
+.wallet-overage-card { margin-top:18px; }
+.wallet-overage-card .settings-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.wallet-overage-card small { display:block; margin-top:10px; color:#98a2b3; }
+.wallet-overage-switch { min-width:88px; min-height:36px; border-radius:999px; border:1px solid #cfd8e3; background:#f2f4f7; color:#344054; padding:0 14px; font-weight:600; }
+.wallet-overage-switch.on { background:#0b6bdb; border-color:#0b6bdb; color:#fff; }
 .wallet-recharge-actions,.wallet-redeem-card > div { display:flex; gap:10px; align-items:center; margin-top:14px; }
 .wallet-recharge-actions input,.wallet-recharge-actions select,.wallet-redeem-card input { min-height:42px; border:1px solid #cfd8e3; border-radius:10px; padding:0 12px; background:#fff; }
 .wallet-recharge-actions input { width:180px; }
@@ -14817,7 +14822,7 @@ textarea {
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-/* codeCN: reveal project actions only while hovering the project header row. */
+/* NewBrain: reveal project actions only while hovering the project header row. */
 .codex-sidebar .project-header:hover .project-hover-actions {
   opacity: 1;
   pointer-events: auto;
@@ -16361,7 +16366,7 @@ textarea {
   display: none !important;
 }
 
-/* Final .codecn new-chat restoration: composer and project strip form one card. */
+/* Final .newbrain new-chat restoration: composer and project strip form one card. */
 .new-chat-task .task-scroll {
   padding: 0 !important;
 }

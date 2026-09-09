@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Create, edit, inspect, and verify Word-compatible DOCX documents in the active codeCN workspace.
+description: Create, edit, inspect, and verify Word-compatible DOCX documents in the active NewBrain workspace.
 ---
 # Documents
 

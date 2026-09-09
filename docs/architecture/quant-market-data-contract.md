@@ -12,7 +12,7 @@ Local lab prerequisites (Windows):
 
 1. `spring-app` on `http://127.0.0.1:8790` (`java -jar target/token-system-1.0.0.jar`)
 2. AKShare adapter on `http://127.0.0.1:5001` — run `pwsh scripts/start-local-akshare.ps1` from the BRAIN repo (or `uvicorn` under `stock-quant-platform/adapters/akshare`)
-3. Desktop `CODECN_MODEL_BASE_URL=http://127.0.0.1:8790/v1` and **do not** set `BRAIN_MARKET_DATA_URL` (that bypasses Spring)
+3. Desktop `NEWBRAIN_MODEL_BASE_URL=http://127.0.0.1:8790/v1` and **do not** set `BRAIN_MARKET_DATA_URL` (that bypasses Spring)
 
 If Spring returns HTTP 502 on market-bars, AKShare is usually down or misconfigured — not a desktop chart bug.
 

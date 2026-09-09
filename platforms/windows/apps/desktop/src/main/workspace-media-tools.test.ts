@@ -39,5 +39,5 @@ test("builds a side-panel open payload with artifact protocol URL", () => {
   assert.equal(payload.mimeType, "image/png");
   assert.equal(payload.size, 12);
   assert.equal(payload.openedInSidePanel, true);
-  assert.match(payload.previewUrl, /^codecn-artifact:\/\/preview\/w1\/outputs\//);
+  assert.match(payload.previewUrl, /^newbrain-artifact:\/\/preview\/w1\/outputs\//);
 });

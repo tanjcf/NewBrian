@@ -42,8 +42,8 @@ pnpm dev:agentd
 
 本项目桌面端使用 `electron-builder` 打包。Windows 下默认产物包括：
 
-- `CodeCN Installer.exe`：NSIS 标准安装向导（可安装/卸载）
-- `CodeCN Portable.exe`：便携版单文件（免安装）
+- `NewBrain Installer.exe`：NSIS 标准安装向导（可安装/卸载）
+- `NewBrain Portable.exe`：便携版单文件（免安装）
 
 ### 方式 A：本机直接打包（推荐在“无安全策略拦截”的机器上）
 
@@ -57,8 +57,8 @@ pnpm --filter @codex-forge/desktop package:win
 
 产物位置：
 
-- `windows/apps/desktop/release/CodeCN Installer.exe`
-- `windows/apps/desktop/release/CodeCN Portable.exe`
+- `windows/apps/desktop/release/NewBrain Installer.exe`
+- `windows/apps/desktop/release/NewBrain Portable.exe`
 
 ### 方式 B：Windows Sandbox 打包（推荐在宿主机受策略限制时）
 
@@ -69,13 +69,13 @@ pnpm --filter @codex-forge/desktop package:win
    - `windows/_sandbox_out/logs`
    - `windows/_sandbox_out/release`
 3. 用 WindowsSandbox 运行配置文件：
-   - `windows/sandbox/codecn-build-win.wsb`
+   - `windows/sandbox/newbrain-build-win.wsb`
 4. 打包完成后从宿主机取回：
-   - `windows/_sandbox_out/release/CodeCN Installer.exe`
+   - `windows/_sandbox_out/release/NewBrain Installer.exe`
 
 > 备注：若双击 `.wsb` 文件提示“需要新应用打开”，可用命令行启动：
 >
-> `C:\Windows\System32\WindowsSandbox.exe windows\sandbox\codecn-build-win.wsb`
+> `C:\Windows\System32\WindowsSandbox.exe windows\sandbox\newbrain-build-win.wsb`
 
 ### 方式 C：CI 打包（GitHub Actions）
 

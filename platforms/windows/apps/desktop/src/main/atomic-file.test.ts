@@ -7,7 +7,7 @@ import test from "node:test";
 const { readTextWithTransientRetry, recoverDurableText, writeTextAtomically } = await import(new URL("./atomic-file.ts", import.meta.url).href) as typeof import("./atomic-file.js");
 
 test("readers never observe partial JSON during concurrent atomic writes", async () => {
-  const directory = await fs.mkdtemp(join(os.tmpdir(), "codecn-atomic-"));
+  const directory = await fs.mkdtemp(join(os.tmpdir(), "newbrain-atomic-"));
   const filePath = join(directory, "desktop-auth.json");
   try {
     await writeTextAtomically(filePath, JSON.stringify({ sequence: 0, value: "initial" }));
@@ -38,8 +38,8 @@ test("readers never observe partial JSON during concurrent atomic writes", async
 });
 
 test("keeps a last-good backup and recovers when the primary file vanishes mid-write", async () => {
-  const directory = await fs.mkdtemp(join(os.tmpdir(), "codecn-atomic-recover-"));
-  const filePath = join(directory, "codecn.workspaces.json");
+  const directory = await fs.mkdtemp(join(os.tmpdir(), "newbrain-atomic-recover-"));
+  const filePath = join(directory, "newbrain.workspaces.json");
   try {
     await writeTextAtomically(filePath, JSON.stringify({ workspaces: [{ id: "keep-me" }] }));
     await writeTextAtomically(filePath, JSON.stringify({ workspaces: [{ id: "next" }] }));
@@ -54,8 +54,8 @@ test("keeps a last-good backup and recovers when the primary file vanishes mid-w
 });
 
 test("recovers leftover crash sidecar tmp when the primary catalog is gone", async () => {
-  const directory = await fs.mkdtemp(join(os.tmpdir(), "codecn-atomic-sidecar-"));
-  const filePath = join(directory, "codecn.workspaces.json");
+  const directory = await fs.mkdtemp(join(os.tmpdir(), "newbrain-atomic-sidecar-"));
+  const filePath = join(directory, "newbrain.workspaces.json");
   try {
     await fs.writeFile(
       `${filePath}.1234.deadbeef-crash.tmp`,

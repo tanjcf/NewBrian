@@ -21,14 +21,14 @@ export function useWorkspaceSceneState<T extends Record<string, unknown>>(
   useEffect(() => {
     hydratedRef.current = false;
     setHydrated(false);
-    if (!projectId || !window.codecn?.getBrainWorkspaceSection) {
+    if (!projectId || !window.newbrain?.getBrainWorkspaceSection) {
       setStateInternal(defaults);
       hydratedRef.current = true;
       setHydrated(true);
       return;
     }
     let active = true;
-    void window.codecn.getBrainWorkspaceSection({ projectId, workspaceKey, sectionKey: UI_STATE_SECTION })
+    void window.newbrain.getBrainWorkspaceSection({ projectId, workspaceKey, sectionKey: UI_STATE_SECTION })
       .then((section) => {
         if (!active) return;
         try {
@@ -49,9 +49,9 @@ export function useWorkspaceSceneState<T extends Record<string, unknown>>(
   }, [projectId, workspaceKey]);
 
   useEffect(() => {
-    if (!hydratedRef.current || !projectId || !window.codecn?.saveBrainWorkspaceSection) return;
+    if (!hydratedRef.current || !projectId || !window.newbrain?.saveBrainWorkspaceSection) return;
     const timer = window.setTimeout(() => {
-      void window.codecn.saveBrainWorkspaceSection({
+      void window.newbrain.saveBrainWorkspaceSection({
         projectId,
         workspaceKey,
         sectionKey: UI_STATE_SECTION,

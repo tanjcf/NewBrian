@@ -43,10 +43,10 @@ const windowsWorkflow = await readFile(
 test("keeps Chromium sandbox enabled and external navigation approved", () => {
   assert.doesNotMatch(source, /appendSwitch\(["']no-sandbox["']\)/);
   assert.doesNotMatch(source, /sandbox:\s*false/);
-  assert.match(source, /partition:\s*["']codecn-browser-preview["']/);
+  assert.match(source, /partition:\s*["']newbrain-browser-preview["']/);
   assert.match(source, /name:\s*["']browser\.open["'][\s\S]{0,300}requiresApproval:\s*true/);
-  assert.match(source, /!app\.isPackaged && e2eRemoteDebugPort && process\.env\.CODECN_E2E_AUTH_BYPASS === "1"/);
-  assert.doesNotMatch(source, /if \(process\.env\.CODECN_E2E_AUTH_BYPASS === "1"\) \{/);
+  assert.match(source, /!app\.isPackaged && e2eRemoteDebugPort && process\.env\.NEWBRAIN_E2E_AUTH_BYPASS === "1"/);
+  assert.doesNotMatch(source, /if \(process\.env\.NEWBRAIN_E2E_AUTH_BYPASS === "1"\) \{/);
 });
 
 test("keeps application menu composition outside the desktop entry point", () => {
@@ -166,9 +166,9 @@ test("builds release configuration from a credential-free allowlist", () => {
   assert.match(packageScript, /fixed credential-free allowlist/);
   assert.match(packageScript, /apiKey\s*=\s*["']["']/);
   assert.match(packageScript, /extraEnv\s*=\s*@\{\}/);
-  assert.match(packageScript, /CODECN_REQUIRE_SIGNATURE/);
+  assert.match(packageScript, /NEWBRAIN_REQUIRE_SIGNATURE/);
   assert.match(packageScript, /-unsigned\.msi/);
-  assert.match(windowsWorkflow, /CODECN_REQUIRE_SIGNATURE:\s*["']true["']/);
+  assert.match(windowsWorkflow, /NEWBRAIN_REQUIRE_SIGNATURE:\s*["']true["']/);
   assert.match(windowsWorkflow, /secrets\.WINDOWS_CSC_LINK/);
   assert.match(windowsWorkflow, /secrets\.WINDOWS_CSC_KEY_PASSWORD/);
 });

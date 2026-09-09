@@ -9,7 +9,7 @@ const { previewPathFallbacks, resolveExistingFileInsideRoot } = await import(
 ) as typeof import("./path-security.js");
 
 test("resolves an existing file inside the project", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     await fs.mkdir(projectRoot);
@@ -23,7 +23,7 @@ test("resolves an existing file inside the project", async () => {
 });
 
 test("rejects lexical traversal outside the project", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     await fs.mkdir(projectRoot);
@@ -39,7 +39,7 @@ test("rejects lexical traversal outside the project", async () => {
 });
 
 test("rejects a directory link that escapes the project", async (t) => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     const outsideRoot = join(tempRoot, "outside");
@@ -66,7 +66,7 @@ test("rejects a directory link that escapes the project", async (t) => {
 });
 
 test("reports a clear Chinese error when the preview target is missing", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     await fs.mkdir(projectRoot);
@@ -80,7 +80,7 @@ test("reports a clear Chinese error when the preview target is missing", async (
 });
 
 test("falls back to outputs/ when a generated artifact is opened by basename", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     await fs.mkdir(join(projectRoot, "outputs"), { recursive: true });
@@ -92,9 +92,9 @@ test("falls back to outputs/ when a generated artifact is opened by basename", a
       "artifacts/龟途-第1章.md",
       "docs/龟途-第1章.md",
       "notes/龟途-第1章.md",
-      ".codecn/generated-media/image/龟途-第1章.md",
-      ".codecn/generated-media/video/龟途-第1章.md",
-      ".codecn/generated-media/music/龟途-第1章.md"
+      ".newbrain/generated-media/image/龟途-第1章.md",
+      ".newbrain/generated-media/video/龟途-第1章.md",
+      ".newbrain/generated-media/music/龟途-第1章.md"
     ]);
     assert.ok(previewPathFallbacks("outputs/龟途-第1章.md").includes("龟途-第1章.md"));
 
@@ -105,27 +105,27 @@ test("falls back to outputs/ when a generated artifact is opened by basename", a
   }
 });
 
-test("resolves Auto generated media under .codecn/generated-media by basename", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-media-"));
+test("resolves Auto generated media under .newbrain/generated-media by basename", async () => {
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-media-"));
   try {
     const projectRoot = join(tempRoot, "project");
-    const mediaDir = join(projectRoot, ".codecn", "generated-media", "image");
+    const mediaDir = join(projectRoot, ".newbrain", "generated-media", "image");
     await fs.mkdir(mediaDir, { recursive: true });
     await fs.writeFile(join(mediaDir, "1788353897888-1-3f78b4f83c.png"), "png", "utf8");
 
     const byRelative = await resolveExistingFileInsideRoot(
       projectRoot,
-      ".codecn/generated-media/image/1788353897888-1-3f78b4f83c.png"
+      ".newbrain/generated-media/image/1788353897888-1-3f78b4f83c.png"
     );
     assert.equal(
       byRelative.relativePath.replace(/\\/g, "/"),
-      ".codecn/generated-media/image/1788353897888-1-3f78b4f83c.png"
+      ".newbrain/generated-media/image/1788353897888-1-3f78b4f83c.png"
     );
 
     const byBasename = await resolveExistingFileInsideRoot(projectRoot, "1788353897888-1-3f78b4f83c.png");
     assert.equal(
       byBasename.relativePath.replace(/\\/g, "/"),
-      ".codecn/generated-media/image/1788353897888-1-3f78b4f83c.png"
+      ".newbrain/generated-media/image/1788353897888-1-3f78b4f83c.png"
     );
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
@@ -133,7 +133,7 @@ test("resolves Auto generated media under .codecn/generated-media by basename", 
 });
 
 test("finds explore-style notes by basename under nested folders", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     await fs.mkdir(join(projectRoot, "notes", "e2e"), { recursive: true });
@@ -147,7 +147,7 @@ test("finds explore-style notes by basename under nested folders", async () => {
 });
 
 test("uses a generic missing-file hint for plain text notes", async () => {
-  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "codecn-path-"));
+  const tempRoot = await fs.mkdtemp(join(os.tmpdir(), "newbrain-path-"));
   try {
     const projectRoot = join(tempRoot, "project");
     await fs.mkdir(projectRoot);

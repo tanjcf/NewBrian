@@ -98,7 +98,7 @@ export const NOVEL_TTS_SELECTABLE_VOICES: NovelTtsVoice[] = NOVEL_TTS_VOICES.fil
   (voice) => voice.id === DEFAULT_NOVEL_TTS_VOICE_ID
 );
 /** v3: UI no longer exposes a voice picker; always use youth_bright. */
-export const NOVEL_TTS_VOICE_STORAGE_KEY = "codecn.novelTtsVoice.v3";
+export const NOVEL_TTS_VOICE_STORAGE_KEY = "newbrain.novelTtsVoice.v3";
 /** Keep speakable payload bounded; Chromium freezes on multi-thousand-char utterances. */
 export const NOVEL_TTS_MAX_CHARS = 4_000;
 /** Local SpeechSynthesis chunk size — long single utterances hang Electron. */

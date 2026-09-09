@@ -12,7 +12,7 @@ const oldBlock = `      setChatStatus("模型回复成功。");
         setChatStatus("已达安全步数上限，正在打开异常上报确认…");
         void startUsageExceptionFeedback(
           "没有输出结果，达到安全步数上限，需要结束并基于当前步数做最终输出",
-          "codecn使用异常：没有输出结果，达到安全步数上限"
+          "newbrain使用异常：没有输出结果，达到安全步数上限"
         );
       }
 `;

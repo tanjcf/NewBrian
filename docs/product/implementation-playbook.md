@@ -40,7 +40,7 @@
 | 七工作台本地库 | 已完成 | BRAIN `721a234`，SQLite migration、七工作台、项目、对话、消息、草稿 |
 | 所有者隔离 IPC | 已完成 | BRAIN `cd9afe1`，owner 由主进程注入，渲染层不能伪造 |
 | 左上工作台切换 | 已完成 | BRAIN `02c2af5`，沿用 BRAIN 线性图标；场景切换过滤左侧目录并切换右侧专业工具 |
-| 场景绑定侧栏（Claude Code 目录） | 已完成 | 左侧主目录为 codeCN `projects-section`（`WorkspaceCatalogItem` 本地文件夹 + 线程）；`brainWorkspaceKey` 场景过滤，缺省归入 `document`；跨场景「最近」；「新对话」绑定当前场景项目；`brain_project` 仅作工具元数据桥 |
+| 场景绑定侧栏（Claude Code 目录） | 已完成 | 左侧主目录为 NewBrain `projects-section`（`WorkspaceCatalogItem` 本地文件夹 + 线程）；`brainWorkspaceKey` 场景过滤，缺省归入 `document`；跨场景「最近」；「新对话」绑定当前场景项目；`brain_project` 仅作工具元数据桥 |
 | 本地对话闭环 | 已完成基础闭环 | BRAIN `359ed44`，本地消息、模型回复、来源、草稿和重启恢复 |
 | 用户私有模型密钥 | Windows 已完成 | BRAIN `f64b058`，只写 OS 保护保险库，配置和界面不回读；macOS/Linux 仍需平台验收 |
 | 文件/产物/任务 | 已完成基础数据与面板 | BRAIN `01f126d`，owner 校验、幂等任务、右侧真实资源面板 |
@@ -462,7 +462,7 @@ message.failed
 
 ### 前端
 
-1. 左侧主目录沿用 codeCN / Claude Code 本地工程目录（`projects-section`：`WorkspaceCatalogItem { id, name, path }` + `threads`），文件树继续对 `path` 做 `workspace.scan`；不用 `brain_project` SQLite 列表替换该目录。
+1. 左侧主目录沿用 NewBrain / Claude Code 本地工程目录（`projects-section`：`WorkspaceCatalogItem { id, name, path }` + `threads`），文件树继续对 `path` 做 `workspace.scan`；不用 `brain_project` SQLite 列表替换该目录。
 2. 左上工作台切换按 `brainWorkspaceKey` 过滤项目与聊天，并切换右侧专业工具；未绑定历史默认 `document`；不清空未发送草稿。
 3. 「新对话」在当前场景选中本地项目下创建 thread（`newThreadScope: "project"`），不创建未绑定全局 chat；「最近」跨场景列出本地项目并可一键切场景。
 4. `brain_project` / `localWorkspaceId` 仅桥接场景工具上下文（量化/文档 Worker 等）。

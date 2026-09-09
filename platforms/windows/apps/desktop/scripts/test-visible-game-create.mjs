@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const client = await createSceneTestCdpClient(port);
 const actions = [];
 try {

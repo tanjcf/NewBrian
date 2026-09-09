@@ -1,8 +1,8 @@
-# 产品设计：codeCN / Codex Forge（Phase 1）
+# 产品设计：NewBrain / Codex Forge（Phase 1）
 
 ## 1. 产品定位
 
-`codeCN / Codex Forge` 是一个 **local-first 的编码智能体工作台**：通过桌面端（Desktop UI）+ 本地运行时（agentd），在**明确的人工审批**与**可预览补丁**机制下，帮助用户对本地仓库完成“阅读—决策—执行—回放”的闭环。
+`NewBrain / Codex Forge` 是一个 **local-first 的编码智能体工作台**：通过桌面端（Desktop UI）+ 本地运行时（agentd），在**明确的人工审批**与**可预览补丁**机制下，帮助用户对本地仓库完成“阅读—决策—执行—回放”的闭环。
 
 Phase 1 的目标不是克隆某个商业产品，而是搭建同等边界的可生产化替代品骨架：
 

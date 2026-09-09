@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9341);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9341);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
 assert.ok(page, "No debuggable Electron renderer page was found.");
@@ -33,17 +33,17 @@ await writeFile(join(root, "server.mjs"), `import { createServer } from "node:ht
 
 const seeded = await evaluate(`(async () => {
   const path = ${JSON.stringify(root)};
-  let catalog = await window.codecn.listWorkspaces();
-  if (!catalog.some((item) => item.path === path)) catalog = await window.codecn.addWorkspace({ name: "BRAIN Game E2E", path });
+  let catalog = await window.newbrain.listWorkspaces();
+  if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: "BRAIN Game E2E", path });
   const local = catalog.find((item) => item.path === path);
   if (!local) return { ok: false, reason: "workspace-missing" };
-  let projects = await window.codecn.listBrainProjects({ workspaceKey: "game" });
+  let projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
   let project = projects.find((item) => item.name === "BRAIN Game E2E");
-  if (!project) project = await window.codecn.createBrainProject({ name: "BRAIN Game E2E", primaryWorkspaceKey: "game", localWorkspaceId: local.id });
-  else project = await window.codecn.updateBrainProject({ projectId: project.id, localWorkspaceId: local.id });
-  let conversations = await window.codecn.listBrainConversations({ projectId: project.id, workspaceKey: "game" });
+  if (!project) project = await window.newbrain.createBrainProject({ name: "BRAIN Game E2E", primaryWorkspaceKey: "game", localWorkspaceId: local.id });
+  else project = await window.newbrain.updateBrainProject({ projectId: project.id, localWorkspaceId: local.id });
+  let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey: "game" });
   let conversation = conversations[0];
-  if (!conversation) conversation = await window.codecn.createBrainConversation({ projectId: project.id, workspaceKey: "game", title: "游戏试玩验收" });
+  if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey: "game", title: "游戏试玩验收" });
   localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({ version: 2, selectedWorkspaceKey: "game", catalogs: { game: { projectId: project.id, conversationId: conversation.id } } }));
   return { ok: true, projectId: project.id, conversationId: conversation.id };
 })()`);

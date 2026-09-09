@@ -57,7 +57,7 @@ test("missing python guidance is Chinese and actionable", () => {
   assert.ok(guidance);
   assert.match(guidance, /PATH/);
   assert.match(guidance, /Python/);
-  assert.match(guidance, /重启 codeCN/);
+  assert.match(guidance, /重启 NewBrain/);
 });
 
 test("guards unbounded recursive shell searches", () => {
@@ -112,7 +112,7 @@ test("shell.exec recovers python when Path was wiped by PATH overwrite", async (
     t.skip("Windows PATH inheritance regression");
     return;
   }
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-path-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-path-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const brokenEnv = {
     Path: "C:\\Windows\\System32",
@@ -130,7 +130,7 @@ test("shell.exec recovers python when Path was wiped by PATH overwrite", async (
 });
 
 test("workspace.scan ignores venv/__pycache__ and reports truncation softly", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-scan-cap-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-scan-cap-"));
   try {
     writeFileSync(join(root, "app.py"), "print(1)\n");
     mkdirSync(join(root, "venv", "lib"), { recursive: true });
@@ -154,7 +154,7 @@ test("workspace.scan ignores venv/__pycache__ and reports truncation softly", as
 });
 
 test("shell.exec rejects unbounded recursive PowerShell searches", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-guard-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-guard-"));
   try {
     const result = await createBuiltinToolRegistry().invoke("shell.exec", {
       command: "Get-ChildItem -Recurse"
@@ -177,7 +177,7 @@ test("guardShellWholeFileWrite blocks PowerShell and Bash write patterns", () =>
 });
 
 test("shell.exec appends Chinese missing-tool guidance on command-not-found", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-guidance-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-guidance-"));
   try {
     // Force a python-shaped CommandNotFound failure so guidance wiring is tested
     // even when host Python is present on the real process PATH.
@@ -186,7 +186,7 @@ test("shell.exec appends Chinese missing-tool guidance on command-not-found", as
     }, { workspacePath: root, shellEnv: process.env });
     assert.equal(result.ok, false);
     assert.match(String(result.output), /未能在当前工具宿主 PATH/);
-    assert.match(String(result.output), /重启 codeCN/);
+    assert.match(String(result.output), /重启 NewBrain/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

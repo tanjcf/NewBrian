@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build a tiny Windows MSI applicator for a codeCN ulit patch stage directory."""
+"""Build a tiny Windows MSI applicator for a NewBrain ulit patch stage directory."""
 
 from __future__ import annotations
 
@@ -18,56 +18,56 @@ def _gen_uuid() -> str:
 
 
 def _bootstrap_cmd_bytes() -> bytes:
-    # APPLICATIONFOLDER / CODECN_INSTALL_ROOT may be passed by msiexec from the
+    # APPLICATIONFOLDER / NEWBRAIN_INSTALL_ROOT may be passed by msiexec from the
     # running client's install dir. Otherwise apply.cmd resolves ARP InstallLocation,
-    # HKU uninstall keys, and ProfileList %%LOCALAPPDATA%%\.codecn (SYSTEM-safe).
-    # Never hardcode a crawl for codeCN.exe (find /I / dir /s).
+    # HKU uninstall keys, and ProfileList %%LOCALAPPDATA%%\.newbrain (SYSTEM-safe).
+    # Never hardcode a crawl for NewBrain.exe (find /I / dir /s).
     #
     # CRITICAL: cmd.exe on Chinese Windows mis-parses UTF-8 .cmd files (BOM + CJK).
     # Keep bootstrap.cmd ASCII-only, CRLF, NO BOM. Chinese UI goes through PowerShell.
-    # Logging goes to %TEMP%\codecn-ulit-patch.log for diagnosis.
+    # Logging goes to %TEMP%\newbrain-ulit-patch.log for diagnosis.
     # Prefer tar.exe for zip expand (Win10+); fall back to PowerShell Expand-Archive.
     lines = [
         "@echo off",
         "setlocal EnableExtensions EnableDelayedExpansion",
-        "title codeCN ulit patch",
+        "title NewBrain ulit patch",
         "set \"HERE=%~dp0\"",
         "if \"%HERE:~-1%\"==\"\\\" set \"HERE=%HERE:~0,-1%\"",
         "set \"STAGE=%HERE%\\_payload\"",
         "set \"ZIP=%HERE%\\payload.ulit.zip\"",
-        "set \"LOG=%TEMP%\\codecn-ulit-patch.log\"",
+        "set \"LOG=%TEMP%\\newbrain-ulit-patch.log\"",
         "set \"REQUESTED_ROOT=\"",
         "set \"ARG1=%~1\"",
         "REM Plain path in %1 (trailing sentinel .). Avoid ROOT=key; cmd eats NAME=VALUE.",
         "REM Never use %VAR:~-1% while VAR may be empty (cmd exits 255 / flash-quit).",
         "if not \"%ARG1%\"==\"\" set \"REQUESTED_ROOT=%ARG1%\"",
         "if \"%REQUESTED_ROOT%\"==\".\" set \"REQUESTED_ROOT=\"",
-        "if \"%REQUESTED_ROOT%\"==\"\" if defined CODECN_INSTALL_ROOT "
-        "set \"REQUESTED_ROOT=%CODECN_INSTALL_ROOT%\"",
+        "if \"%REQUESTED_ROOT%\"==\"\" if defined NEWBRAIN_INSTALL_ROOT "
+        "set \"REQUESTED_ROOT=%NEWBRAIN_INSTALL_ROOT%\"",
         "if defined REQUESTED_ROOT (",
         "  if \"!REQUESTED_ROOT:~-1!\"==\".\" set \"REQUESTED_ROOT=!REQUESTED_ROOT:~0,-1!\"",
         "  if \"!REQUESTED_ROOT:~-1!\"==\"\\\" set \"REQUESTED_ROOT=!REQUESTED_ROOT:~0,-1!\"",
         ")",
-        "echo ===== codeCN ulit bootstrap %DATE% %TIME% =====> \"%LOG%\"",
+        "echo ===== NewBrain ulit bootstrap %DATE% %TIME% =====> \"%LOG%\"",
         "echo HERE=%HERE%>> \"%LOG%\"",
         "echo ZIP=%ZIP%>> \"%LOG%\"",
         "echo STAGE=%STAGE%>> \"%LOG%\"",
         "echo REQUESTED_ROOT=!REQUESTED_ROOT!>> \"%LOG%\"",
-        "echo CODECN_INSTALL_ROOT=%CODECN_INSTALL_ROOT%>> \"%LOG%\"",
+        "echo NEWBRAIN_INSTALL_ROOT=%NEWBRAIN_INSTALL_ROOT%>> \"%LOG%\"",
         "echo USERNAME=%USERNAME%>> \"%LOG%\"",
         "echo USERPROFILE=%USERPROFILE%>> \"%LOG%\"",
         "echo LOCALAPPDATA=%LOCALAPPDATA%>> \"%LOG%\"",
         "set \"FAILUI=%HERE%\\show-ulit-failure.ps1\"",
         "if not exist \"%FAILUI%\" set \"FAILUI=%STAGE%\\show-ulit-failure.ps1\"",
         "if not exist \"%ZIP%\" (",
-        "  echo [codeCN ulit] missing payload.ulit.zip>> \"%LOG%\"",
+        "  echo [NewBrain ulit] missing payload.ulit.zip>> \"%LOG%\"",
         "  echo ERROR: missing payload.ulit.zip. See %LOG%",
         "  if exist \"%FAILUI%\" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File \"%FAILUI%\" "
         "-ExitCode 1 -LogPath \"%LOG%\"",
         "  exit /B 1",
         ")",
-        "echo [codeCN ulit] expanding payload...>> \"%LOG%\"",
-        "echo [codeCN ulit] expanding patch payload...",
+        "echo [NewBrain ulit] expanding payload...>> \"%LOG%\"",
+        "echo [NewBrain ulit] expanding patch payload...",
         "if exist \"%STAGE%\" rmdir /S /Q \"%STAGE%\"",
         "mkdir \"%STAGE%\" >NUL 2>&1",
         "set \"EXPAND_OK=0\"",
@@ -83,27 +83,27 @@ def _bootstrap_cmd_bytes() -> bytes:
         "  if not errorlevel 1 set \"EXPAND_OK=1\"",
         ")",
         "if not \"%EXPAND_OK%\"==\"1\" (",
-        "  echo [codeCN ulit] expand failed>> \"%LOG%\"",
+        "  echo [NewBrain ulit] expand failed>> \"%LOG%\"",
         "  echo ERROR: failed to expand ulit payload. See %LOG%",
         "  if exist \"%FAILUI%\" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File \"%FAILUI%\" "
         "-ExitCode 1 -LogPath \"%LOG%\"",
         "  exit /B 1",
         ")",
         "if not exist \"%STAGE%\\apply.cmd\" (",
-        "  echo [codeCN ulit] apply.cmd missing after expand>> \"%LOG%\"",
+        "  echo [NewBrain ulit] apply.cmd missing after expand>> \"%LOG%\"",
         "  echo ERROR: incomplete payload, apply.cmd missing. See %LOG%",
         "  if exist \"%FAILUI%\" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File \"%FAILUI%\" "
         "-ExitCode 1 -LogPath \"%LOG%\"",
         "  exit /B 1",
         ")",
-        "echo [codeCN ulit] calling apply.cmd>> \"%LOG%\"",
+        "echo [NewBrain ulit] calling apply.cmd>> \"%LOG%\"",
         "if defined REQUESTED_ROOT (",
         "  call \"%STAGE%\\apply.cmd\" \"!REQUESTED_ROOT!\" >> \"%LOG%\" 2>&1",
         ") else (",
         "  call \"%STAGE%\\apply.cmd\" >> \"%LOG%\" 2>&1",
         ")",
         "set \"ERR=!ERRORLEVEL!\"",
-        "echo [codeCN ulit] apply exit=!ERR!>> \"%LOG%\"",
+        "echo [NewBrain ulit] apply exit=!ERR!>> \"%LOG%\"",
         "if not \"!ERR!\"==\"0\" (",
         "  if exist \"%FAILUI%\" (",
         "    powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File \"%FAILUI%\" "
@@ -163,14 +163,14 @@ def build_msi(stage: Path, output: Path, version: str, base_version: str) -> Non
         output.unlink()
 
     # Prefer ProgramData so applicator staging does not depend on per-user LocalAppData
-    # (broken/redirected profiles) and so elevated apply can write Program Files\codeCN.
+    # (broken/redirected profiles) and so elevated apply can write Program Files\NewBrain.
     program_data = os.environ.get("ProgramData") or r"C:\ProgramData"
     product_version = _msi_product_version(version)
-    install_dir = str(Path(program_data) / f"codeCN-ulit-{product_version}") + os.sep
+    install_dir = str(Path(program_data) / f"NewBrain-ulit-{product_version}") + os.sep
     product_code = _gen_uuid()
     # Stable upgrade code for this applicator product line (not the Electron product).
     upgrade_code = "{A7C0E11D-9B2F-4D55-9C3A-7E1D00010A7C}"
-    product_name = f"codeCN Ulit Patch {product_version}"
+    product_name = f"NewBrain Ulit Patch {product_version}"
 
     with tempfile.TemporaryDirectory(prefix="ulit-msi-") as tmp:
         tmp_path = Path(tmp)
@@ -206,7 +206,7 @@ def build_msi(stage: Path, output: Path, version: str, base_version: str) -> Non
             product_name,
             product_code,
             product_version,
-            "codeCN",
+            "NewBrain",
         )
         msilib.add_tables(db, sequence)
 
@@ -228,7 +228,7 @@ def build_msi(stage: Path, output: Path, version: str, base_version: str) -> Non
                 view.Close()
 
         upsert_property("UpgradeCode", upgrade_code)
-        # Per-machine: UAC elevate so bspatch can replace Program Files\codeCN\resources\app.asar.
+        # Per-machine: UAC elevate so bspatch can replace Program Files\NewBrain\resources\app.asar.
         # Per-user LocalAppData applicators cannot write machine installs.
         upsert_property("ALLUSERS", "1")
         upsert_property("INSTALLDIR", install_dir)
@@ -257,7 +257,7 @@ def build_msi(stage: Path, output: Path, version: str, base_version: str) -> Non
             db,
             "UlitPatchFeature",
             "UlitPatch",
-            "codeCN ulit patch applicator",
+            "NewBrain ulit patch applicator",
             1,
             1,
         )
@@ -286,7 +286,7 @@ def build_msi(stage: Path, output: Path, version: str, base_version: str) -> Non
             root,
             str(tmp_path),
             "INSTALLDIR",
-            f"codeCN-ulit-{product_version}|codeCN_ulit",
+            f"NewBrain-ulit-{product_version}|NewBrain_ulit",
         )
         # Keypath is the PowerShell entry (new file) so dirty INSTALLDIR leftovers
         # cannot keep the CA pointed at a broken bootstrap.cmd.
@@ -361,7 +361,7 @@ def build_msi(stage: Path, output: Path, version: str, base_version: str) -> Non
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build codeCN ulit MSI applicator")
+    parser = argparse.ArgumentParser(description="Build NewBrain ulit MSI applicator")
     parser.add_argument("--stage", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--version", required=True)

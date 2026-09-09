@@ -263,13 +263,13 @@ function sendJson(response, value) {
 export async function startGovernmentE2EModelServer() {
   const server = createServer((request, response) => {
     if (request.method === "GET" && request.url === "/v1/models") {
-      sendJson(response, { data: [{ id: "codecn-e2e-model", name: "codeCN E2E Model", owned_by: "codecn" }] });
+      sendJson(response, { data: [{ id: "newbrain-e2e-model", name: "NewBrain E2E Model", owned_by: "newbrain" }] });
       return;
     }
     if (request.method === "GET" && request.url?.startsWith("/api/desktop/v1/")) {
       const common = { protocol_version: "1.0", minimum_client_version: "0.1.0" };
       sendJson(response, request.url.endsWith("/model-config")
-        ? { ...common, endpoint: "/v1/responses", wire_api: "responses", models: [{ id: "codecn-e2e-model", model: "codecn-e2e-model", name: "codeCN E2E Model", provider: "codecn" }] }
+        ? { ...common, endpoint: "/v1/responses", wire_api: "responses", models: [{ id: "newbrain-e2e-model", model: "newbrain-e2e-model", name: "NewBrain E2E Model", provider: "newbrain" }] }
         : common);
       return;
     }

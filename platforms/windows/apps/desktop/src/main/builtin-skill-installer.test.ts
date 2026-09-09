@@ -9,7 +9,7 @@ const { installBuiltinSkillFile } = await import(
 );
 
 test("upgrades a read-only builtin skill and leaves it writable", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codecn-builtin-skill-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-builtin-skill-"));
   const source = join(root, "source.md");
   const destination = join(root, "skills", "error-auto-remediation", "SKILL.md");
 

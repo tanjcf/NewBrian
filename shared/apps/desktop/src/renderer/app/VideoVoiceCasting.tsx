@@ -31,21 +31,21 @@ export function VideoVoiceCasting(props: Props) {
     finally { setBusy(false); }
   };
   const sourceUrl = async (path: string) => {
-    if (!window.codecn) throw new Error("桌面服务未连接。");
-    const files = await window.codecn.listBrainFiles({ projectId: props.projectId });
+    if (!window.newbrain) throw new Error("桌面服务未连接。");
+    const files = await window.newbrain.listBrainFiles({ projectId: props.projectId });
     const file = files.find(f => (f.storageKey || "").replaceAll("\\", "/").endsWith(path));
     if (!file) throw new Error("试听文件未找到，请刷新项目。");
-    return window.codecn.getBrainFilePreviewUrl({ projectId: props.projectId, fileId: file.id });
+    return window.newbrain.getBrainFilePreviewUrl({ projectId: props.projectId, fileId: file.id });
   };
   const generate = async (lineId: string, voiceId: string) => {
-    if (!window.codecn) throw new Error("桌面服务未连接。");
+    if (!window.newbrain) throw new Error("桌面服务未连接。");
     const state = current.current!;
     const line = state.lines.find(l => l.id === lineId)!;
-    const result = await window.codecn.synthesizeNovelSpeech({ text: line.text, voiceId, playback: false });
+    const result = await window.newbrain.synthesizeNovelSpeech({ text: line.text, voiceId, playback: false });
     if (!result.ok || !result.audioBase64) throw new Error(result.detail || "配音生成失败，原版本已保留。");
     const id = crypto.randomUUID();
     const mimeType = result.mimeType || "audio/wav";
-    const imported = await window.codecn.importBrainMedia({ projectId: props.projectId,
+    const imported = await window.newbrain.importBrainMedia({ projectId: props.projectId,
       fileName: `voice-${id}.${mimeType.includes("wav") ? "wav" : "mp3"}`, mimeType, bytesBase64: result.audioBase64, folder: "audio" });
     if (!imported.relativePath) throw new Error("候选音频保存失败。");
     const version = { id, lineId, text: line.text, voiceId, provider: result.provider || "unknown", relativePath: imported.relativePath, createdAt: new Date().toISOString() };
@@ -71,8 +71,8 @@ export function VideoVoiceCasting(props: Props) {
     <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 12, minWidth: 0 }}>
       <label>声音偏好与人物补充<textarea value={preference} onChange={e => setPreference(e.target.value)} placeholder="例如：旁白雄厚坚定但不拖慢；主角清亮，配角温和。" /></label>
       <button type="button" onClick={() => void run(async () => {
-        if (!window.codecn?.analyzeVideoVoices) throw new Error("此版本未接入角色分析。");
-        const next = await window.codecn.analyzeVideoVoices({ script: props.script, shots: props.shots, preference });
+        if (!window.newbrain?.analyzeVideoVoices) throw new Error("此版本未接入角色分析。");
+        const next = await window.newbrain.analyzeVideoVoices({ script: props.script, shots: props.shots, preference });
         change({ ...next, versions: state?.versions || [], accepted: {} });
         if (!await props.onSave()) throw new Error("推荐已生成，但项目保存失败。");
         setMessage("已按剧本推荐角色声音。重新分析后需要重新确认；旧音频文件仍保留。");

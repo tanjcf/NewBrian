@@ -15,30 +15,30 @@ function workspace(overrides: Partial<WorkspaceCatalogItem> = {}): WorkspaceCata
   };
 }
 
-test("resolves the packaged chat cwd beside codeCN.exe", () => {
+test("resolves the packaged chat cwd beside NewBrain.exe", () => {
   assert.equal(policy.resolveInternalChatPath({
     isPackaged: true,
-    execPath: "C:\\Apps\\codeCN\\codeCN.exe",
-    workspacePath: "C:\\Users\\me\\.codecn"
-  }), "C:\\Apps\\codeCN\\tmp");
+    execPath: "C:\\Apps\\NewBrain\\NewBrain.exe",
+    workspacePath: "C:\\Users\\me\\.newbrain"
+  }), "C:\\Apps\\NewBrain\\tmp");
 });
 
 test("resolves the development chat cwd beneath the workspace", () => {
   assert.equal(policy.resolveInternalChatPath({
     isPackaged: false,
-    execPath: "C:\\Apps\\codeCN\\codeCN.exe",
-    workspacePath: "C:\\Users\\me\\codeCN"
-  }), "C:\\Users\\me\\codeCN\\tmp");
+    execPath: "C:\\Apps\\NewBrain\\NewBrain.exe",
+    workspacePath: "C:\\Users\\me\\NewBrain"
+  }), "C:\\Users\\me\\NewBrain\\tmp");
 });
 
 test("adds exactly one stable hidden chat workspace idempotently", () => {
-  const first = policy.ensureInternalChatWorkspace([workspace()], "C:\\Apps\\codeCN\\tmp");
-  const second = policy.ensureInternalChatWorkspace(first, "C:\\Apps\\codeCN\\tmp");
+  const first = policy.ensureInternalChatWorkspace([workspace()], "C:\\Apps\\NewBrain\\tmp");
+  const second = policy.ensureInternalChatWorkspace(first, "C:\\Apps\\NewBrain\\tmp");
   const internal = second.filter(policy.isInternalChatWorkspace);
 
   assert.equal(internal.length, 1);
   assert.equal(internal[0].id, policy.INTERNAL_CHAT_WORKSPACE_ID);
-  assert.equal(internal[0].path, resolve("C:\\Apps\\codeCN\\tmp"));
+  assert.equal(internal[0].path, resolve("C:\\Apps\\NewBrain\\tmp"));
   assert.notEqual(internal[0].name, "tmp");
   assert.deepEqual(second.filter((item: WorkspaceCatalogItem) => item.id === "workspace-user"), [workspace()]);
 });
@@ -52,7 +52,7 @@ test("uses the stable ID as the only internal workspace identity", () => {
   assert.equal(policy.isInternalChatWorkspace(workspace({
     id: "workspace-user",
     name: "tmp",
-    path: "C:\\Apps\\codeCN\\tmp"
+    path: "C:\\Apps\\NewBrain\\tmp"
   })), false);
 });
 
@@ -66,10 +66,10 @@ test("repairs the internal record with only chat-scope threads", () => {
       { id: "project-1", title: "Project", summary: "", scope: "project", updatedAt: "2026-07-23T00:00:00.000Z" },
       { id: "legacy-1", title: "Legacy", summary: "", updatedAt: "2026-07-23T00:00:00.000Z" }
     ]
-  })], "C:\\Apps\\codeCN\\tmp");
+  })], "C:\\Apps\\NewBrain\\tmp");
 
   assert.deepEqual(repaired[0].threads.map((thread: { id: string }) => thread.id), ["chat-1"]);
-  assert.equal(repaired[0].path, resolve("C:\\Apps\\codeCN\\tmp"));
+  assert.equal(repaired[0].path, resolve("C:\\Apps\\NewBrain\\tmp"));
 });
 
 test("repairs duplicate internal records into one chat-thread workspace", () => {
@@ -92,7 +92,7 @@ test("repairs duplicate internal records into one chat-thread workspace", () => 
       ]
     }),
     workspace({ id: "workspace-user", name: "User project" })
-  ], "C:\\Apps\\codeCN\\tmp");
+  ], "C:\\Apps\\NewBrain\\tmp");
   const internal = repaired.filter(policy.isInternalChatWorkspace);
 
   assert.equal(internal.length, 1);
@@ -122,7 +122,7 @@ test("deduplicates merged chat thread IDs with the first occurrence winning", ()
         { id: "chat-2", title: "Second unique chat", summary: "", scope: "chat", updatedAt: "2026-07-23T00:00:00.000Z" }
       ]
     })
-  ], "C:\\Apps\\codeCN\\tmp");
+  ], "C:\\Apps\\NewBrain\\tmp");
   const internal = repaired.filter(policy.isInternalChatWorkspace);
 
   assert.equal(internal.length, 1);

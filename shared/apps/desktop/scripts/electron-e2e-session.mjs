@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const appDirectory = process.env.CODECN_E2E_APP_DIRECTORY?.trim()
-  ? process.env.CODECN_E2E_APP_DIRECTORY.trim()
+const appDirectory = process.env.NEWBRAIN_E2E_APP_DIRECTORY?.trim()
+  ? process.env.NEWBRAIN_E2E_APP_DIRECTORY.trim()
   : join(dirname(fileURLToPath(import.meta.url)), "..");
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -20,14 +20,14 @@ async function readPages(debugPort) {
 
 /** Starts an isolated local Electron test instance when no CDP endpoint is already available. */
 export async function ensureElectronE2ESession(debugPort) {
-  const forceFresh = process.env.CODECN_E2E_FORCE_FRESH === "1";
+  const forceFresh = process.env.NEWBRAIN_E2E_FORCE_FRESH === "1";
   const existingPages = forceFresh ? null : await readPages(debugPort);
   if (existingPages) {
     return {
       pages: existingPages,
       started: false,
       close: () => undefined,
-      workspacePath: process.env.CODECN_WORKSPACE_PATH?.trim() || undefined
+      workspacePath: process.env.NEWBRAIN_WORKSPACE_PATH?.trim() || undefined
     };
   }
 
@@ -36,16 +36,16 @@ export async function ensureElectronE2ESession(debugPort) {
     : join(appDirectory, "node_modules", ".bin", "electron");
   if (!existsSync(executable)) throw new Error(`Electron executable is missing: ${executable}`);
 
-  const sourceModelConfigPath = process.env.CODECN_E2E_MODEL_CONFIG_PATH?.trim();
-  const useLiveWorkspace = process.env.CODECN_E2E_USE_LIVE_WORKSPACE === "1";
+  const sourceModelConfigPath = process.env.NEWBRAIN_E2E_MODEL_CONFIG_PATH?.trim();
+  const useLiveWorkspace = process.env.NEWBRAIN_E2E_USE_LIVE_WORKSPACE === "1";
   const isolatedWorkspacePath = useLiveWorkspace && sourceModelConfigPath
     ? dirname(sourceModelConfigPath)
-    : mkdtempSync(join(tmpdir(), "codecn-e2e-"));
+    : mkdtempSync(join(tmpdir(), "newbrain-e2e-"));
   if (!useLiveWorkspace && sourceModelConfigPath && existsSync(sourceModelConfigPath)) {
-    copyFileSync(sourceModelConfigPath, join(isolatedWorkspacePath, "codecn.config.json"));
-    if (process.env.CODECN_E2E_COPY_LIVE_AUTH === "1") {
-      const sourceStateRoot = join(dirname(sourceModelConfigPath), ".codecn");
-      const isolatedStateRoot = join(isolatedWorkspacePath, ".codecn");
+    copyFileSync(sourceModelConfigPath, join(isolatedWorkspacePath, "newbrain.config.json"));
+    if (process.env.NEWBRAIN_E2E_COPY_LIVE_AUTH === "1") {
+      const sourceStateRoot = join(dirname(sourceModelConfigPath), ".newbrain");
+      const isolatedStateRoot = join(isolatedWorkspacePath, ".newbrain");
       mkdirSync(isolatedStateRoot, { recursive: true });
       for (const name of ["desktop-auth.json", "authorized-models.json", "desktop-bootstrap.json"]) {
         const sourcePath = join(sourceStateRoot, name);
@@ -59,38 +59,38 @@ export async function ensureElectronE2ESession(debugPort) {
       }
     }
   }
-  if (!useLiveWorkspace && process.env.CODECN_MODEL_BASE_URL) {
-    const model = process.env.CODECN_E2E_MODEL_ID?.trim() || "codecn-e2e-model";
-    const modelConfigPath = join(isolatedWorkspacePath, "codecn.config.json");
+  if (!useLiveWorkspace && process.env.NEWBRAIN_MODEL_BASE_URL) {
+    const model = process.env.NEWBRAIN_E2E_MODEL_ID?.trim() || "newbrain-e2e-model";
+    const modelConfigPath = join(isolatedWorkspacePath, "newbrain.config.json");
     writeFileSync(modelConfigPath, `${JSON.stringify({
       llm: {
-        provider: "codecn",
-        baseUrl: process.env.CODECN_MODEL_BASE_URL,
-        apiKey: "codecn-e2e",
+        provider: "newbrain",
+        baseUrl: process.env.NEWBRAIN_MODEL_BASE_URL,
+        apiKey: "newbrain-e2e",
         wireApi: "responses",
         model,
         reviewModel: model,
         reasoningEffort: "medium",
         disableResponseStorage: true,
-        systemPrompt: "You are the deterministic codeCN Electron E2E model."
+        systemPrompt: "You are the deterministic NewBrain Electron E2E model."
       }
     }, null, 2)}\n`, "utf8");
-    const stateRoot = join(isolatedWorkspacePath, ".codecn");
+    const stateRoot = join(isolatedWorkspacePath, ".newbrain");
     mkdirSync(stateRoot, { recursive: true });
     writeFileSync(join(stateRoot, "authorized-models.json"), `${JSON.stringify([{
       id: model,
       model,
-      label: "codeCN E2E Model",
-      provider: "codecn"
+      label: "NewBrain E2E Model",
+      provider: "newbrain"
     }], null, 2)}\n`, "utf8");
   }
   const child = spawn(executable, ["."], {
     cwd: appDirectory,
     env: {
       ...process.env,
-      CODECN_E2E_REMOTE_DEBUG_PORT: String(debugPort),
-      CODECN_E2E_AUTH_BYPASS: "1",
-      CODECN_WORKSPACE_PATH: isolatedWorkspacePath
+      NEWBRAIN_E2E_REMOTE_DEBUG_PORT: String(debugPort),
+      NEWBRAIN_E2E_AUTH_BYPASS: "1",
+      NEWBRAIN_WORKSPACE_PATH: isolatedWorkspacePath
     },
     stdio: "ignore",
     windowsHide: false

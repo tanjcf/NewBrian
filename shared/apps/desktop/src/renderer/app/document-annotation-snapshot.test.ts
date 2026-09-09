@@ -15,8 +15,8 @@ test("resolves snapshot preview url preferring snapshotUrl", () => {
     snapshotUrl: "data:image/png;base64,abc"
   }), "data:image/png;base64,abc");
   assert.equal(resolveAnnotationSnapshotPreview({
-    snapshotPath: "codecn-attachment://media/a.png"
-  }), "codecn-attachment://media/a.png");
+    snapshotPath: "newbrain-attachment://media/a.png"
+  }), "newbrain-attachment://media/a.png");
   assert.equal(resolveAnnotationSnapshotPreview({
     snapshotPath: "C:/tmp/a.png"
   }), "");

@@ -17,6 +17,6 @@ test("market UI queries do not require a Brain project id", () => {
   assert.match(preload, /queryQuantBars: \(input: \{ query: unknown \}\)/);
   assert.match(preload, /queryQuantMarketOverview: \(input: \{ limit\?: number \}\)/);
   assert.match(preload, /queryQuantMarketScreener: \(input: \{ criteria: Record<string, unknown> \}\)/);
-  assert.doesNotMatch(renderer, /if \(!projectId \|\| !window\.codecn\?\.queryQuantBars/);
+  assert.doesNotMatch(renderer, /if \(!projectId \|\| !window\.newbrain\?\.queryQuantBars/);
   assert.match(renderer, /useWorkspaceSceneState\(projectId \|\| workspaceId/);
 });

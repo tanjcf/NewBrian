@@ -100,5 +100,5 @@ export function requestedArtifactTargetPath(content, format, options = {}) {
       .trim();
     if (title) return `outputs/${title}-第一版.${extension}`;
   }
-  return `outputs/codecn-output.${extension}`;
+  return `outputs/newbrain-output.${extension}`;
 }

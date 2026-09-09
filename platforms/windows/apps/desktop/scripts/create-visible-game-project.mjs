@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
 import { osKeyCombo, osPressEnter } from "./scene-test-os-input.mjs";
 const execFileAsync = promisify(execFile);
-const client = await createSceneTestCdpClient(Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555));
+const client = await createSceneTestCdpClient(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555));
 try {
   await client.waitForAppReady();
   await client.mouseClickSelector('button[aria-label="添加项目"]');

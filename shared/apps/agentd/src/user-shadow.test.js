@@ -34,18 +34,18 @@ test("one-shot task text is not promoted into durable rules", () => {
   assert.ok(!facts.outputRules.some((line) => /create result\.txt/i.test(line)));
 });
 
-test("project facts become short CODECN candidates", () => {
+test("project facts become short NEWBRAIN candidates", () => {
   const facts = extractFacts(
     "请记录本项目桌面端架构：main 负责 IPC，renderer 只做 UI。",
     "已记下架构分层。"
   );
   assert.ok(facts.projectFacts.length >= 1);
-  assert.ok(facts.projectFacts.every((line) => line.startsWith("CODECN候选:")));
+  assert.ok(facts.projectFacts.every((line) => line.startsWith("NEWBRAIN候选:")));
   assert.ok(!facts.projectFacts.some((line) => line.startsWith("用户意图:")));
 });
 
-test("ensureProjectSkill scaffolds CODECN.md and Project OS skill", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-project-os-"));
+test("ensureProjectSkill scaffolds NEWBRAIN.md and Project OS skill", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-project-os-"));
   try {
     const shadow = new UserShadow({ workspacePath: root, projectName: "DemoApp" });
     await shadow.ensureProjectSkill();
@@ -53,12 +53,12 @@ test("ensureProjectSkill scaffolds CODECN.md and Project OS skill", async () => 
     assert.equal(existsSync(osPath), true);
     const osText = readFileSync(osPath, "utf8");
     assert.match(osText, /Project OS/);
-    assert.match(osText, /CODECN\.md/);
+    assert.match(osText, /NEWBRAIN\.md/);
     const skill = readFileSync(join(shadow.skillPath, "SKILL.md"), "utf8");
     assert.match(skill, /Project OS/);
-    assert.match(skill, /CODECN\.md/);
-    assert.match(skill, /Do \*\*not\*\* use tools to create or edit `\.codecn`/);
-    assert.match(skill, /update `CODECN\.md` with workspace tools/);
+    assert.match(skill, /NEWBRAIN\.md/);
+    assert.match(skill, /Do \*\*not\*\* use tools to create or edit `\.newbrain`/);
+    assert.match(skill, /update `NEWBRAIN\.md` with workspace tools/);
     assert.match(skill, /Programming Guardrails \(coding\)/);
     assert.match(skill, /references\/programming-guardrails\.md/);
     assert.match(skill, /workspace\.glob/);
@@ -84,7 +84,7 @@ test("ensureProjectSkill scaffolds CODECN.md and Project OS skill", async () => 
 });
 
 test("ensureProjectSkill upgrades older project-manager templates with programming pack", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-project-os-upgrade-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-project-os-upgrade-"));
   try {
     const shadow = new UserShadow({ workspacePath: root, projectName: "Legacy" });
     await shadow.ensureProjectSkill();
@@ -100,7 +100,7 @@ test("ensureProjectSkill upgrades older project-manager templates with programmi
         "",
         "## Project OS",
         "",
-        "CODECN.md",
+        "NEWBRAIN.md",
         "",
         "## Required Workflow (PAHF)",
         "",
@@ -118,8 +118,8 @@ test("ensureProjectSkill upgrades older project-manager templates with programmi
   }
 });
 
-test("ensureProjectOsFiles does not overwrite existing CODECN.md", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-project-os-keep-"));
+test("ensureProjectOsFiles does not overwrite existing NEWBRAIN.md", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-project-os-keep-"));
   try {
     const custom = "# Custom Project OS\n\nKeep me.\n";
     writeFileSync(join(root, PROJECT_OS_FILENAME), custom, "utf8");
@@ -132,17 +132,17 @@ test("ensureProjectOsFiles does not overwrite existing CODECN.md", async () => {
   }
 });
 
-test("upgrade seeds CODECN.md from legacy CLAUDE.md without deleting it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-project-os-migrate-"));
+test("upgrade seeds NEWBRAIN.md from legacy CLAUDE.md without deleting it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-project-os-migrate-"));
   try {
     writeFileSync(join(root, "CLAUDE.md"), "# Legacy\n\nUse pnpm test.\n", "utf8");
     const shadow = new UserShadow({ workspacePath: root, projectName: "LegacyApp" });
     const result = await shadow.ensureProjectOsFiles();
     assert.equal(result.created, true);
     assert.equal(result.seededFrom, "CLAUDE.md");
-    const codecn = readFileSync(join(root, PROJECT_OS_FILENAME), "utf8");
-    assert.match(codecn, /Migrated from `CLAUDE\.md`/);
-    assert.match(codecn, /Use pnpm test/);
+    const newbrain = readFileSync(join(root, PROJECT_OS_FILENAME), "utf8");
+    assert.match(newbrain, /Migrated from `CLAUDE\.md`/);
+    assert.match(newbrain, /Use pnpm test/);
     assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), "# Legacy\n\nUse pnpm test.\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -150,7 +150,7 @@ test("upgrade seeds CODECN.md from legacy CLAUDE.md without deleting it", async 
 });
 
 test("absorbExchange persists active preference and digest", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-active-shadow-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-active-shadow-"));
   try {
     const shadow = new UserShadow({ workspacePath: root });
     const result = await shadow.absorbExchange({
@@ -173,7 +173,7 @@ test("absorbExchange persists active preference and digest", async () => {
 });
 
 test("ensureProjectSkill clears stale lock left by dead pid", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-stale-lock-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-stale-lock-"));
   try {
     const shadow = new UserShadow({ workspacePath: root, projectName: "LockDemo" });
     await shadow.ensureProjectSkill();
@@ -193,7 +193,7 @@ test("ensureProjectSkill clears stale lock left by dead pid", async () => {
 });
 
 test("ensureProjectSkill clears corrupt lock metadata", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-corrupt-lock-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-corrupt-lock-"));
   try {
     const shadow = new UserShadow({ workspacePath: root, projectName: "CorruptLock" });
     await shadow.ensureProjectSkill();

@@ -144,17 +144,17 @@ export function formatMissingHostToolGuidance(command = "", output = "") {
       "也可直接使用绝对路径，例如：",
       `"$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe" --version`,
       "注意：Microsoft Store 的 python 别名若未安装真实 Python，会表现为“找不到命令”；可在“应用执行别名”中关闭。",
-      "修改 PATH 后请完全退出并重启 codeCN（不要只关窗口）。"
+      "修改 PATH 后请完全退出并重启 NewBrain（不要只关窗口）。"
     );
   }
   if (wantsNode) {
     lines.push(
-      "请确认已安装 Node.js，并将安装目录（通常为 C:\\Program Files\\nodejs）加入用户 PATH 后重启 codeCN。"
+      "请确认已安装 Node.js，并将安装目录（通常为 C:\\Program Files\\nodejs）加入用户 PATH 后重启 NewBrain。"
     );
   }
   if (wantsGit) {
     lines.push(
-      "请确认已安装 Git for Windows，并将 git.exe 所在目录（通常为 C:\\Program Files\\Git\\cmd）加入用户 PATH 后重启 codeCN。"
+      "请确认已安装 Git for Windows，并将 git.exe 所在目录（通常为 C:\\Program Files\\Git\\cmd）加入用户 PATH 后重启 NewBrain。"
     );
   }
   return lines.join("\n");

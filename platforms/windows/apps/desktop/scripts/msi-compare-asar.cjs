@@ -7,8 +7,8 @@ function hash(p) {
   return crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
 }
 
-const installed = String.raw`C:\Program Files\codeCN\resources\app.asar`;
-const releaseRoot = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release`;
+const installed = String.raw`C:\Program Files\NewBrain\resources\app.asar`;
+const releaseRoot = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release`;
 const packedDirs = fs.readdirSync(releaseRoot).filter((name) => name.startsWith("_p"));
 let built = null;
 for (const dir of packedDirs.sort().reverse()) {
@@ -35,8 +35,8 @@ console.log(
   )
 );
 
-const log = path.join(process.env.TEMP || process.env.LOCALAPPDATA, "codecn-msi-smoke", "msiexec-install.log");
-const alt = String.raw`C:\Users\Administrator\AppData\Local\Temp\codecn-msi-smoke\msiexec-install.log`;
+const log = path.join(process.env.TEMP || process.env.LOCALAPPDATA, "newbrain-msi-smoke", "msiexec-install.log");
+const alt = String.raw`C:\Users\Administrator\AppData\Local\Temp\newbrain-msi-smoke\msiexec-install.log`;
 const logPath = fs.existsSync(alt) ? alt : log;
 if (fs.existsSync(logPath)) {
   const text = fs.readFileSync(logPath, "utf8");
@@ -52,7 +52,7 @@ if (fs.existsSync(logPath)) {
   console.log(lines.join("\n"));
 }
 
-const msi = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release\codeCN 1.2.9-unsigned.msi`;
+const msi = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release\NewBrain 1.2.9-unsigned.msi`;
 try {
   const props = execFileSync(
     "powershell.exe",

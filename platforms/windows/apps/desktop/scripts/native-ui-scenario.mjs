@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DRIVER = join(SCRIPT_DIR, "windows-installed-ui-driver.ps1");
-const FORBIDDEN_ACTIONS = new Set(["evaluate", "cdp", "dom", "internalapi", "window.codecn"]);
+const FORBIDDEN_ACTIONS = new Set(["evaluate", "cdp", "dom", "internalapi", "window.newbrain"]);
 const ACTIONS = new Set([
   "maximize", "click", "clickpoint", "clickrelative", "type", "typepoint", "typerelative",
   "keys", "rawkeys", "screenshot", "assertvisible", "waitfile", "assertfile", "waitwindow",
@@ -202,7 +202,7 @@ export async function runScenario(input, options = {}) {
   const evidenceDir = resolve(options.evidenceDir ?? join(workspacePath, "integration-artifacts", scenario.id));
   await mkdir(evidenceDir, { recursive: true });
   const context = { scenario, workspacePath, evidenceDir, process: options.processId ? { id: Number(options.processId) } : await findProcess(scenario.application) };
-  if (!context.process) throw new Error("visible codeCN window not found");
+  if (!context.process) throw new Error("visible NewBrain window not found");
   const evidence = { status: "RUNNING", id: scenario.id, startedAt: new Date().toISOString(), steps: [] };
   try {
     for (let index = 0; index < scenario.steps.length; index += 1) {
@@ -228,5 +228,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const scenarioPath = process.argv[2];
   if (!scenarioPath) throw new Error("usage: node native-ui-scenario.mjs <scenario.json> [workspacePath] [evidenceDir]");
   const scenario = JSON.parse(await readFile(resolve(scenarioPath), "utf8"));
-  await runScenario(scenario, { workspacePath: process.argv[3], evidenceDir: process.argv[4], processId: process.env.CODECN_NATIVE_UI_PROCESS_ID });
+  await runScenario(scenario, { workspacePath: process.argv[3], evidenceDir: process.argv[4], processId: process.env.NEWBRAIN_NATIVE_UI_PROCESS_ID });
 }

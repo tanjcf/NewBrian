@@ -203,13 +203,13 @@ test("no vision bridge available yields a clear Chinese error", async () => {
 test("preferred bridge vision model can be read from env", () => {
   assert.equal(
     resolvePreferredBridgeVisionModelFromEnv({
-      CODECN_BRIDGE_VISION_MODEL: " qwen3-vl-plus "
+      NEWBRAIN_BRIDGE_VISION_MODEL: " qwen3-vl-plus "
     }),
     "qwen3-vl-plus"
   );
   assert.equal(
     resolvePreferredBridgeVisionModelFromEnv({
-      CODECN_DEFAULT_VISION_MODEL: "gpt-4o"
+      NEWBRAIN_DEFAULT_VISION_MODEL: "gpt-4o"
     }),
     "gpt-4o"
   );

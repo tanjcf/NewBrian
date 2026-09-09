@@ -7,13 +7,13 @@ import test from "node:test";
 import { WorktreeManager } from "./worktree-manager.js";
 
 test("creates an isolated managed worktree and agent branch", async (context) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-worktree-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-worktree-"));
   context.after(() => fs.rm(root, { recursive: true, force: true }));
   const repository = path.join(root, "repository");
   await fs.mkdir(repository);
   execFileSync("git", ["init"], { cwd: repository, windowsHide: true });
-  execFileSync("git", ["config", "user.email", "test@codecn.local"], { cwd: repository, windowsHide: true });
-  execFileSync("git", ["config", "user.name", "codeCN Test"], { cwd: repository, windowsHide: true });
+  execFileSync("git", ["config", "user.email", "test@newbrain.local"], { cwd: repository, windowsHide: true });
+  execFileSync("git", ["config", "user.name", "NewBrain Test"], { cwd: repository, windowsHide: true });
   await fs.writeFile(path.join(repository, "README.md"), "root\n", "utf8");
   execFileSync("git", ["add", "README.md"], { cwd: repository, windowsHide: true });
   execFileSync("git", ["commit", "-m", "initial"], { cwd: repository, windowsHide: true });
@@ -26,7 +26,7 @@ test("creates an isolated managed worktree and agent branch", async (context) =>
 });
 
 test("rejects non-Git workspaces", async (context) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-worktree-no-git-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-worktree-no-git-"));
   context.after(() => fs.rm(root, { recursive: true, force: true }));
   const manager = new WorktreeManager({ workspacePath: root });
   await assert.rejects(() => manager.create({ taskId: "task" }), /not a Git repository/);

@@ -1,6 +1,6 @@
 ---
 name: default-templates
-description: Create artifacts from codeCN default document, spreadsheet, presentation, and report templates.
+description: Create artifacts from NewBrain default document, spreadsheet, presentation, and report templates.
 ---
 # Default Templates
 

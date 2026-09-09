@@ -3,8 +3,8 @@ export type UsageExceptionCommandResult =
   | { matched: true; description: string }
   | { matched: true; error: string };
 
-const TRIGGER = "codecn使用异常";
-const DESCRIPTION_REQUIRED = "请补充 codeCN 使用异常的具体现象。";
+const TRIGGER = "newbrain使用异常";
+const DESCRIPTION_REQUIRED = "请补充 NewBrain 使用异常的具体现象。";
 
 /** Parse the explicit user-feedback command without treating ordinary mentions as commands. */
 export function parseUsageExceptionCommand(input: string): UsageExceptionCommandResult {

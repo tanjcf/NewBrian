@@ -3,9 +3,9 @@ const { dirname, join } = require("node:path");
 
 exports.default = async function msiProjectCreated(projectFile) {
   // light.exe runs from the generated project's directory, not the desktop root.
-  writeFileSync(join(dirname(projectFile), "codecn-localization.wxl"), readFileSync(join(__dirname, "msi-localization.wxl")));
+  writeFileSync(join(dirname(projectFile), "newbrain-localization.wxl"), readFileSync(join(__dirname, "msi-localization.wxl")));
   let xml = readFileSync(projectFile, "utf8");
-  const explicitInstallDir = process.env.CODECN_MSI_INSTALL_DIR;
+  const explicitInstallDir = process.env.NEWBRAIN_MSI_INSTALL_DIR;
   if (explicitInstallDir) {
     const normalizedInstallDir = explicitInstallDir.replace(/\//g, "\\").replace(/\\+$/, "");
     const installDirProperty = `<Property Id="APPLICATIONFOLDER" Value="${escapeXmlAttr(normalizedInstallDir)}"/>`;
@@ -23,25 +23,25 @@ exports.default = async function msiProjectCreated(projectFile) {
 
     xml = xml.replace(
       /(<Property Id="ApplicationFolderName" Value=")[^"]*("\/>)/,
-      '$1.codecn$2'
+      '$1.newbrain$2'
     );
 
     xml = xml.replace(
       /<Directory Id="ProgramFiles64Folder">\s*<Directory Id="APPLICATIONFOLDER" Name="[^"]*"\/>\s*<\/Directory>/,
-      '<Directory Id="LocalAppDataFolder">\n                      <Directory Id="APPLICATIONFOLDER" Name=".codecn"/>\n              </Directory>'
+      '<Directory Id="LocalAppDataFolder">\n                      <Directory Id="APPLICATIONFOLDER" Name=".newbrain"/>\n              </Directory>'
     );
     // Older installers record the selected directory here. Standalone chat files
     // live below that directory, so changing it during an upgrade loses continuity.
     xml = xml.replace(/(<\/Product>)/, `
     <Property Id="APPLICATIONFOLDER" Secure="yes">
-      <RegistrySearch Id="PreviousCodecnInstallDirectory" Root="HKCU" Key="Environment" Name="CODECN_HOME" Type="raw"/>
+      <RegistrySearch Id="PreviousNewbrainInstallDirectory" Root="HKCU" Key="Environment" Name="NEWBRAIN_HOME" Type="raw"/>
     </Property>
 $1`);
   }
 
   xml = xml
-    .replace(/\n\s*<Property Id="CODECN_USERPROFILE">[\s\S]*?<\/Property>/g, "")
-    .replace(/\n\s*<CustomAction Id="SetApplicationFolderToCodecnHome"[\s\S]*?<\/InstallExecuteSequence>/g, "");
+    .replace(/\n\s*<Property Id="NEWBRAIN_USERPROFILE">[\s\S]*?<\/Property>/g, "")
+    .replace(/\n\s*<CustomAction Id="SetApplicationFolderToNewbrainHome"[\s\S]*?<\/InstallExecuteSequence>/g, "");
 
   xml = xml
     .replace(/\n\s*<CustomAction Id="runAfterFinish"[^>]*\/>/g, "")
@@ -62,15 +62,15 @@ $1`);
   }
   xml = xml.replace(/<MajorUpgrade\b[^>]*\/>/, '<MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>');
   xml = addStopRunningApplicationAction(xml);
-  xml = addCodecnHomeEnvironmentActions(xml);
+  xml = addNewbrainHomeEnvironmentActions(xml);
   xml = addUninstallCleanupAction(xml);
   xml = addLaunchAfterInstallAction(xml);
   xml = stabilizeApplicationShortcuts(xml);
 
   assertApplicationFolder(xml, explicitInstallDir);
 
-  if (process.env.CODECN_MSI_DEBUG_PROJECT) {
-    writeFileSync(`${projectFile}.codecn.wxs`, xml, "utf8");
+  if (process.env.NEWBRAIN_MSI_DEBUG_PROJECT) {
+    writeFileSync(`${projectFile}.newbrain.wxs`, xml, "utf8");
   }
 
   writeFileSync(projectFile, xml, "utf8");
@@ -92,67 +92,67 @@ function stabilizeApplicationShortcuts(xml) {
 }
 
 function addStopRunningApplicationAction(xml) {
-  if (xml.includes('Id="StopRunningCodecn"')) return xml;
-  const command = "cmd.exe /C taskkill /IM codeCN.exe /T /F >NUL 2>NUL & exit /B 0";
-  const action = `\n    <CustomAction Id="StopRunningCodecn" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
+  if (xml.includes('Id="StopRunningNewbrain"')) return xml;
+  const command = "cmd.exe /C taskkill /IM NewBrain.exe /T /F >NUL 2>NUL & exit /B 0";
+  const action = `\n    <CustomAction Id="StopRunningNewbrain" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
   xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="StopRunningCodecn" Before="InstallInitialize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
+  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="StopRunningNewbrain" Before="InstallInitialize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
   return xml;
 }
 
 /**
- * Persist the chosen APPLICATIONFOLDER as user env CODECN_HOME (and lowercase alias).
+ * Persist the chosen APPLICATIONFOLDER as user env NEWBRAIN_HOME (and lowercase alias).
  * Uses HKCU\\Environment so per-user MSI installs do not need admin rights.
  * Existing shells/apps only see the new value after relaunch (Explorer broadcast via setx).
  */
-function addCodecnHomeEnvironmentActions(xml) {
-  if (xml.includes('Id="SetCodecnHomeEnv"')) return xml;
+function addNewbrainHomeEnvironmentActions(xml) {
+  if (xml.includes('Id="SetNewbrainHomeEnv"')) return xml;
   // Trim trailing backslash: setx / REG_SZ paths with trailing \\ can be mis-parsed.
   const setCommand = [
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command",
     "\"$ErrorActionPreference='SilentlyContinue';",
     "$p=[Environment]::ExpandEnvironmentVariables('[APPLICATIONFOLDER]').TrimEnd('\\');",
     "if([string]::IsNullOrWhiteSpace($p)){exit 0};",
-    "[Environment]::SetEnvironmentVariable('CODECN_HOME',$p,'User');",
-    "[Environment]::SetEnvironmentVariable('codecn_home',$p,'User');",
+    "[Environment]::SetEnvironmentVariable('NEWBRAIN_HOME',$p,'User');",
+    "[Environment]::SetEnvironmentVariable('newbrain_home',$p,'User');",
     "exit 0\""
   ].join(" ");
   const clearCommand = [
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command",
     "\"$ErrorActionPreference='SilentlyContinue';",
-    "[Environment]::SetEnvironmentVariable('CODECN_HOME',$null,'User');",
-    "[Environment]::SetEnvironmentVariable('codecn_home',$null,'User');",
+    "[Environment]::SetEnvironmentVariable('NEWBRAIN_HOME',$null,'User');",
+    "[Environment]::SetEnvironmentVariable('newbrain_home',$null,'User');",
     "exit 0\""
   ].join(" ");
-  const setAction = `\n    <CustomAction Id="SetCodecnHomeEnv" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(setCommand)}" Execute="immediate" Return="ignore"/>`;
-  const clearAction = `\n    <CustomAction Id="ClearCodecnHomeEnv" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(clearCommand)}" Execute="immediate" Return="ignore"/>`;
+  const setAction = `\n    <CustomAction Id="SetNewbrainHomeEnv" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(setCommand)}" Execute="immediate" Return="ignore"/>`;
+  const clearAction = `\n    <CustomAction Id="ClearNewbrainHomeEnv" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(clearCommand)}" Execute="immediate" Return="ignore"/>`;
   xml = xml.replace(/(<\/Product>)/, `${setAction}${clearAction}\n$1`);
   xml = insertInstallExecuteSequenceAction(
     xml,
-    '<Custom Action="SetCodecnHomeEnv" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>'
+    '<Custom Action="SetNewbrainHomeEnv" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>'
   );
   xml = insertInstallExecuteSequenceAction(
     xml,
-    '<Custom Action="ClearCodecnHomeEnv" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>'
+    '<Custom Action="ClearNewbrainHomeEnv" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>'
   );
   return xml;
 }
 
 function addUninstallCleanupAction(xml) {
-  if (xml.includes('Id="RemoveCodecnUserDataOnUninstall"')) return xml;
-  const command = "cmd.exe /C rmdir /S /Q [LocalAppDataFolder]..\\..\\.codecn >NUL 2>NUL & rmdir /S /Q [APPLICATIONFOLDER] >NUL 2>NUL & exit /B 0";
-  const action = `\n    <CustomAction Id="RemoveCodecnUserDataOnUninstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
+  if (xml.includes('Id="RemoveNewbrainUserDataOnUninstall"')) return xml;
+  const command = "cmd.exe /C rmdir /S /Q [LocalAppDataFolder]..\\..\\.newbrain >NUL 2>NUL & rmdir /S /Q [APPLICATIONFOLDER] >NUL 2>NUL & exit /B 0";
+  const action = `\n    <CustomAction Id="RemoveNewbrainUserDataOnUninstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
   xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="RemoveCodecnUserDataOnUninstall" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>');
+  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="RemoveNewbrainUserDataOnUninstall" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>');
   return xml;
 }
 
 function addLaunchAfterInstallAction(xml) {
-  if (xml.includes('Id="LaunchCodecnAfterInstall"')) return xml;
-  const command = 'cmd.exe /C if exist "[APPLICATIONFOLDER]codeCN.exe" start "" /D "[APPLICATIONFOLDER]" "[APPLICATIONFOLDER]codeCN.exe" & exit /B 0';
-  const action = `\n    <CustomAction Id="LaunchCodecnAfterInstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="asyncNoWait"/>`;
+  if (xml.includes('Id="LaunchNewbrainAfterInstall"')) return xml;
+  const command = 'cmd.exe /C if exist "[APPLICATIONFOLDER]NewBrain.exe" start "" /D "[APPLICATIONFOLDER]" "[APPLICATIONFOLDER]NewBrain.exe" & exit /B 0';
+  const action = `\n    <CustomAction Id="LaunchNewbrainAfterInstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="asyncNoWait"/>`;
   xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="LaunchCodecnAfterInstall" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL) AND NOT CODECN_UPDATE_RUNNER</Custom>');
+  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="LaunchNewbrainAfterInstall" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL) AND NOT NEWBRAIN_UPDATE_RUNNER</Custom>');
   return xml;
 }
 
@@ -174,11 +174,11 @@ function assertApplicationFolder(xml, explicitInstallDir) {
     return;
   }
 
-  if (!xml.includes('<Property Id="ApplicationFolderName" Value=".codecn"/>')) {
-    throw new Error('MSI ApplicationFolderName was not rewritten to ".codecn".');
+  if (!xml.includes('<Property Id="ApplicationFolderName" Value=".newbrain"/>')) {
+    throw new Error('MSI ApplicationFolderName was not rewritten to ".newbrain".');
   }
-  if (!xml.includes('<Directory Id="LocalAppDataFolder">') || !xml.includes('<Directory Id="APPLICATIONFOLDER" Name=".codecn"/>')) {
-    throw new Error('MSI APPLICATIONFOLDER was not rewritten under LocalAppDataFolder/.codecn.');
+  if (!xml.includes('<Directory Id="LocalAppDataFolder">') || !xml.includes('<Directory Id="APPLICATIONFOLDER" Name=".newbrain"/>')) {
+    throw new Error('MSI APPLICATIONFOLDER was not rewritten under LocalAppDataFolder/.newbrain.');
   }
   if (/<Directory Id="ProgramFiles64Folder">\s*<Directory Id="APPLICATIONFOLDER"/.test(xml)) {
     throw new Error("MSI APPLICATIONFOLDER still points under ProgramFiles64Folder.");

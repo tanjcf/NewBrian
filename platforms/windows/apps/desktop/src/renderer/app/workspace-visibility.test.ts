@@ -24,7 +24,7 @@ const catalog = [
   workspace({
     id: INTERNAL_CHAT_WORKSPACE_ID,
     name: "__internal_chat__",
-    path: "C:\\codeCN\\tmp",
+    path: "C:\\NewBrain\\tmp",
     threads: [
       { id: "chat-1", title: "Standalone chat", summary: "", scope: "chat", updatedAt: "2026-07-23T00:00:00.000Z" }
     ]
@@ -92,7 +92,7 @@ test("sceneChatWorkspaces binds INTERNAL_CHAT threads to the active scene", () =
     workspace({
       id: INTERNAL_CHAT_WORKSPACE_ID,
       name: "__internal_chat__",
-      path: "C:\\codeCN\\tmp",
+      path: "C:\\NewBrain\\tmp",
       threads: [
         { id: "explore-chat", title: "Explore hi", summary: "", scope: "chat", brainWorkspaceKey: "explore", updatedAt: "2026-07-23T00:00:00.000Z" },
         { id: "doc-chat", title: "Doc hi", summary: "", scope: "chat", brainWorkspaceKey: "document", updatedAt: "2026-07-23T00:00:00.000Z" },

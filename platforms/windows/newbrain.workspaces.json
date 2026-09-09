@@ -1,0 +1,16 @@
+{
+  "workspaces": [
+    {
+      "id": "workspace:internal-chat",
+      "name": "__internal_chat__",
+      "path": "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\tmp",
+      "threads": []
+    },
+    {
+      "id": "workspace-1786350525909-4d4694",
+      "name": "新建文件夹",
+      "path": "I:\\G盘迁移备份\\workrpase\\新建文件夹",
+      "threads": []
+    }
+  ]
+}

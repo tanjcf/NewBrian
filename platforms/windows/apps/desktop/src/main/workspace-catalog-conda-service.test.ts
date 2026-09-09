@@ -23,7 +23,7 @@ test("preserves the internal chat workspace without provisioning Conda", async (
   const internal = workspace({
     id: INTERNAL_CHAT_WORKSPACE_ID,
     name: "__internal_chat__",
-    path: "C:\\Apps\\codeCN\\tmp"
+    path: "C:\\Apps\\NewBrain\\tmp"
   });
   let provisioningCalls = 0;
   const result = await ensureWorkspaceCatalogConda({
@@ -53,7 +53,7 @@ test("continues provisioning project workspaces", async () => {
         source: "managed",
         condaPath: "C:\\Conda\\conda.exe",
         envPath: "C:\\Envs\\workspace-user",
-        envName: "codecn-workspace-user",
+        envName: "newbrain-workspace-user",
         pythonVersion: "3.11"
       }
     }),
@@ -66,5 +66,5 @@ test("continues provisioning project workspaces", async () => {
   });
 
   assert.equal(writes, 1);
-  assert.equal(result.workspaces[0].conda?.envName, "codecn-workspace-user");
+  assert.equal(result.workspaces[0].conda?.envName, "newbrain-workspace-user");
 });

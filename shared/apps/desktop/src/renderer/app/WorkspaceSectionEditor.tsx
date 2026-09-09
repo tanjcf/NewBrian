@@ -29,14 +29,14 @@ export function WorkspaceSectionEditor(props: WorkspaceSectionEditorProps) {
   }, [section.revision, section.updatedAt]);
 
   const load = async () => {
-    if (!props.projectId || !window.codecn?.getBrainWorkspaceSection) {
+    if (!props.projectId || !window.newbrain?.getBrainWorkspaceSection) {
       const empty = emptySection(props.projectId || "", props.workspaceKey, props.sectionKey);
       setSection(empty); setContent(""); setState("idle"); setMessage("");
       return;
     }
     setState("loading"); setMessage("");
     try {
-      const result = await window.codecn.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: props.workspaceKey, sectionKey: props.sectionKey });
+      const result = await window.newbrain.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: props.workspaceKey, sectionKey: props.sectionKey });
       setSection(result); setContent(result.content); setState("ready");
     } catch (reason) {
       setState("error");
@@ -47,10 +47,10 @@ export function WorkspaceSectionEditor(props: WorkspaceSectionEditorProps) {
   useEffect(() => { void load(); }, [props.projectId, props.workspaceKey, props.sectionKey]);
 
   const save = async () => {
-    if (!props.projectId || !window.codecn?.saveBrainWorkspaceSection || !dirty) return;
+    if (!props.projectId || !window.newbrain?.saveBrainWorkspaceSection || !dirty) return;
     setState("saving"); setMessage("");
     try {
-      const result = await window.codecn.saveBrainWorkspaceSection({
+      const result = await window.newbrain.saveBrainWorkspaceSection({
         projectId: props.projectId, workspaceKey: props.workspaceKey, sectionKey: props.sectionKey,
         content, expectedRevision: section.revision
       });

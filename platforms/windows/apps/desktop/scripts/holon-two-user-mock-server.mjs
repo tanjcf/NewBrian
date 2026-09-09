@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 
-const port = Number(process.env.CODECN_HOLON_TWO_USER_PORT || 18893);
+const port = Number(process.env.NEWBRAIN_HOLON_TWO_USER_PORT || 18893);
 const now = () => new Date().toISOString();
 const users = {
   "mock-user-a": createUser("a"),
@@ -33,7 +33,7 @@ const server = createServer(async (request, response) => {
     return json(response, { ok: true, residue: residueCount() });
   }
   if (url.pathname === "/v1/models") return json(response, {
-    data: [{ id: "codecn-holon-two-user", name: "Holon two-user mock", owned_by: "codecn", config_id: "mock" }]
+    data: [{ id: "newbrain-holon-two-user", name: "Holon two-user mock", owned_by: "newbrain", config_id: "mock" }]
   });
   if (url.pathname === "/v1/responses") return json(response, modelResponse());
 

@@ -12,23 +12,23 @@ const evidenceDir = process.env.GROWTH_EVIDENCE_DIR?.trim()
 
 const hash = (value) => createHash("sha256").update(value).digest("hex").slice(0, 48);
 const device = {
-  device_id: hash("codecn-growth-g1-device"),
-  device_name: "codeCN Growth G1",
+  device_id: hash("newbrain-growth-g1-device"),
+  device_name: "NewBrain Growth G1",
   device_type: "desktop",
   os_name: "win32",
   os_version: "g1-test",
   app_version: "0.1.61",
-  mac_id: hash("codecn-growth-g1-mac"),
-  motherboard_id: hash("codecn-growth-g1-board"),
-  disk_id: hash("codecn-growth-g1-disk")
+  mac_id: hash("newbrain-growth-g1-mac"),
+  motherboard_id: hash("newbrain-growth-g1-board"),
+  disk_id: hash("newbrain-growth-g1-disk")
 };
 
 function deviceHeaders(token = "") {
   return {
     Accept: "application/json",
     "Content-Type": "application/json; charset=utf-8",
-    "User-Agent": "codeCN-Growth-G1/0.1.61",
-    "X-Desktop-Client": "codecn",
+    "User-Agent": "NewBrain-Growth-G1/0.1.61",
+    "X-Desktop-Client": "newbrain",
     "X-Request-Id": randomUUID(),
     "X-Desktop-Device-Id": device.device_id,
     "X-Desktop-Device-Name": device.device_name,

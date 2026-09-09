@@ -1,10 +1,10 @@
 {
   "name": "figma",
-  "version": "2.0.17-codecn",
-  "description": "Figma design-to-code, FigJam diagrams, and design-system workflows for codeCN. Requires a connected Figma MCP server or FIGMA_ACCESS_TOKEN to write into Figma cloud files.",
+  "version": "2.0.17-newbrain",
+  "description": "Figma design-to-code, FigJam diagrams, and design-system workflows for NewBrain. Requires a connected Figma MCP server or FIGMA_ACCESS_TOKEN to write into Figma cloud files.",
   "author": {
-    "name": "codeCN",
-    "url": "https://codecn.local"
+    "name": "NewBrain",
+    "url": "https://newbrain.local"
   },
   "homepage": "https://www.figma.com/",
   "license": "SEE LICENSE.txt",
@@ -21,7 +21,7 @@
     "displayName": "Figma",
     "shortDescription": "Generate Figma designs and FigJam flowcharts",
     "longDescription": "Use Figma MCP tools to create designs, FigJam flowcharts/architecture diagrams, and design-to-code workflows. Without Figma auth, fall back to Mermaid in chat or the Visualize plugin for local diagrams.",
-    "developerName": "codeCN",
+    "developerName": "NewBrain",
     "category": "Creativity",
     "capabilities": [
       "Interactive",

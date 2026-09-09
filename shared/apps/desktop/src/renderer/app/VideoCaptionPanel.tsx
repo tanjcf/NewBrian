@@ -36,8 +36,8 @@ export function VideoCaptionPanel(props: { projectId?: string }) {
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    if (!props.projectId || !window.codecn?.getBrainWorkspaceSection) return;
-    void window.codecn.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "video", sectionKey: "caption" })
+    if (!props.projectId || !window.newbrain?.getBrainWorkspaceSection) return;
+    void window.newbrain.getBrainWorkspaceSection({ projectId: props.projectId, workspaceKey: "video", sectionKey: "caption" })
       .then((section) => {
         const loaded = parseCaptionContent(section.content);
         setCues(loaded.length ? loaded : [emptyCue()]);
@@ -47,8 +47,8 @@ export function VideoCaptionPanel(props: { projectId?: string }) {
   }, [props.projectId]);
 
   const save = async () => {
-    if (!props.projectId || !window.codecn?.saveBrainWorkspaceSection) return;
-    const section = await window.codecn.saveBrainWorkspaceSection({
+    if (!props.projectId || !window.newbrain?.saveBrainWorkspaceSection) return;
+    const section = await window.newbrain.saveBrainWorkspaceSection({
       projectId: props.projectId, workspaceKey: "video", sectionKey: "caption",
       content: JSON.stringify({ cues }, null, 2), expectedRevision: revision
     });
@@ -58,11 +58,11 @@ export function VideoCaptionPanel(props: { projectId?: string }) {
 
   const importToTimeline = async () => {
     const srt = toSrt(cues);
-    if (!props.projectId || !window.codecn?.importVideoSubtitles) {
+    if (!props.projectId || !window.newbrain?.importVideoSubtitles) {
       setStatus("字幕轨接口不可用");
       return;
     }
-    await window.codecn.importVideoSubtitles({ projectId: props.projectId, srt });
+    await window.newbrain.importVideoSubtitles({ projectId: props.projectId, srt });
     setStatus("SRT 已写入视频字幕轨");
   };
 

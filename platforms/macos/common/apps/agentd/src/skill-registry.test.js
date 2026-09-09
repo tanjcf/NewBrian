@@ -14,7 +14,7 @@ test("parses quoted skill frontmatter", () => {
 });
 
 test("discovers metadata first and loads instructions on demand", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-skills-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-skills-"));
   try {
     const skillPath = join(root, "review");
     mkdirSync(join(skillPath, "references"), { recursive: true });

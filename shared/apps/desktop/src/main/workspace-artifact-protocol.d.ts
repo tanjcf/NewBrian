@@ -1,4 +1,4 @@
-export declare const ARTIFACT_PROTOCOL_SCHEME: "codecn-artifact";
+export declare const ARTIFACT_PROTOCOL_SCHEME: "newbrain-artifact";
 export declare const ARTIFACT_PROTOCOL_HOST: "preview";
 export declare const ARTIFACT_PROTOCOL_MAX_BYTES: number;
 

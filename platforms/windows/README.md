@@ -48,7 +48,7 @@ Later phases add:
 
 This repository is scaffolded manually because the current machine does not yet have `npm` or `cargo`. The code and docs are structured so that once the toolchain is installed, implementation can continue without reshaping the repository.
 
-See [docs/architecture/overview.md](/Users/jctanking/workerpases/测试/codeCN/docs/architecture/overview.md) and [docs/roadmap/phases.md](/Users/jctanking/workerpases/测试/codeCN/docs/roadmap/phases.md).
+See [docs/architecture/overview.md](/Users/jctanking/workerpases/测试/NewBrain/docs/architecture/overview.md) and [docs/roadmap/phases.md](/Users/jctanking/workerpases/测试/NewBrain/docs/roadmap/phases.md).
 
 ## Prerequisites
 
@@ -63,7 +63,7 @@ To move from scaffold to runnable implementation, install:
 After installing `pnpm`, use:
 
 ```bash
-cd /Users/jctanking/workerpases/测试/codeCN
+cd /Users/jctanking/workerpases/测试/NewBrain
 pnpm install
 pnpm dev:desktop
 ```
@@ -87,12 +87,12 @@ Build + package MSI by double-clicking:
 
 Output:
 
-- `windows/apps/desktop/release/codeCN 0.1.0.msi`
+- `windows/apps/desktop/release/NewBrain 0.1.0.msi`
 
 ## Package for macOS
 
 ```bash
-cd /Users/jctanking/workerpases/测试/codeCN
+cd /Users/jctanking/workerpases/测试/NewBrain
 pnpm install
 pnpm package:mac
 ```

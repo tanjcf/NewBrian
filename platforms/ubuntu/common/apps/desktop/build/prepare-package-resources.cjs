@@ -64,10 +64,10 @@ const features = {
 
 function preparePackageResources() {
   mkdirSync(packageResourcesDir, { recursive: true });
-  const input = JSON.parse(readFileSync(join(repoRoot, "codecn.config.json"), "utf8"));
+  const input = JSON.parse(readFileSync(join(repoRoot, "newbrain.config.json"), "utf8"));
   const config = sanitizeConfig(input);
-  writeFileSync(join(packageResourcesDir, "codecn.config.json"), JSON.stringify(config, null, 2) + "\n", "utf8");
-  writeFileSync(join(packageResourcesDir, "codecn.features.json"), JSON.stringify(features, null, 2) + "\n", "utf8");
+  writeFileSync(join(packageResourcesDir, "newbrain.config.json"), JSON.stringify(config, null, 2) + "\n", "utf8");
+  writeFileSync(join(packageResourcesDir, "newbrain.features.json"), JSON.stringify(features, null, 2) + "\n", "utf8");
   console.log("Prepared sanitized mac package resources.");
 }
 

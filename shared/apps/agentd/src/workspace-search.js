@@ -4,7 +4,7 @@ import { decodeChildOutputBuffer } from "./windows-encoding.js";
 
 export const WORKSPACE_IGNORED_NAMES = new Set([
   ".git",
-  ".codecn",
+  ".newbrain",
   ".desktop-profile",
   "node_modules",
   "dist",

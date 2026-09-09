@@ -3,8 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const msi = String.raw`I:\G盘迁移备份\workrpase\codeCN\windows\apps\desktop\release\codeCN 1.2.9-unsigned.msi`;
-const logDir = path.join(os.tmpdir(), "codecn-msi-smoke");
+const msi = String.raw`I:\G盘迁移备份\workrpase\NewBrain\windows\apps\desktop\release\NewBrain 1.2.9-unsigned.msi`;
+const logDir = path.join(os.tmpdir(), "newbrain-msi-smoke");
 fs.mkdirSync(logDir, { recursive: true });
 const installLog = path.join(logDir, "msiexec-install.log");
 const evidencePath = path.join(logDir, "evidence.json");
@@ -30,7 +30,7 @@ function sleep(ms) {
 function listCodeCnProcesses() {
   try {
     const out = ps(
-      "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(codeCN|codecn|electron)\\.exe$' } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
+      "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(NewBrain|newbrain|electron)\\.exe$' } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
     ).trim();
     if (!out) return [];
     const parsed = JSON.parse(out);
@@ -43,7 +43,7 @@ function listCodeCnProcesses() {
 function stopInstalledCodeCn() {
   const procs = listCodeCnProcesses().filter((p) => {
     const exe = String(p.ExecutablePath || "");
-    return /\\codecn\.exe$/i.test(exe);
+    return /\\newbrain\.exe$/i.test(exe);
   });
   for (const p of procs) {
     try {
@@ -56,21 +56,21 @@ function stopInstalledCodeCn() {
 
 function findInstalledExe() {
   const candidates = [
-    String.raw`C:\Program Files\codeCN\codecn.exe`,
-    String.raw`C:\Program Files (x86)\codeCN\codecn.exe`,
-    path.join(process.env.LOCALAPPDATA || "", "Programs", "codeCN", "codecn.exe")
+    String.raw`C:\Program Files\NewBrain\newbrain.exe`,
+    String.raw`C:\Program Files (x86)\NewBrain\newbrain.exe`,
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "NewBrain", "newbrain.exe")
   ];
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) return candidate;
   }
   try {
     const out = ps(
-      "$p = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'codeCN' } | Select-Object -First 1 DisplayName,DisplayVersion,InstallLocation,UninstallString; if ($p) { $p | ConvertTo-Json -Compress }"
+      "$p = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'NewBrain' } | Select-Object -First 1 DisplayName,DisplayVersion,InstallLocation,UninstallString; if ($p) { $p | ConvertTo-Json -Compress }"
     ).trim();
     if (out) {
       const info = JSON.parse(out);
       if (info.InstallLocation) {
-        const exe = path.join(info.InstallLocation, "codecn.exe");
+        const exe = path.join(info.InstallLocation, "newbrain.exe");
         if (fs.existsSync(exe)) return exe;
       }
       return info;
@@ -94,7 +94,7 @@ if (!fs.existsSync(msi)) {
   process.exit(1);
 }
 
-console.log("Stopping previously installed codeCN processes...");
+console.log("Stopping previously installed NewBrain processes...");
 stopInstalledCodeCn();
 
 console.log("Installing MSI...");

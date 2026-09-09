@@ -3,7 +3,7 @@ import { unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
-const debugPort = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9333);
+const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9333);
 const session = await ensureElectronE2ESession(debugPort);
 const pages = session.pages;
 const page = pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -54,15 +54,15 @@ async function waitFor(label, expression, timeoutMs = 15_000) {
 const e2eWorkspacePath = resolve(process.cwd(), "../../..");
 const seeded = await evaluate(`(async () => {
   const workspacePath = ${JSON.stringify(e2eWorkspacePath)};
-  let catalog = await window.codecn.listWorkspaces();
+  let catalog = await window.newbrain.listWorkspaces();
   let workspace = catalog.find((item) => item.path === workspacePath);
   if (!workspace) {
-    catalog = await window.codecn.addWorkspace({ name: "codeCN E2E", path: workspacePath });
+    catalog = await window.newbrain.addWorkspace({ name: "NewBrain E2E", path: workspacePath });
     workspace = catalog.find((item) => item.path === workspacePath);
   }
   if (!workspace) throw new Error("Unable to seed the E2E workspace.");
   if (!workspace.threads?.length) {
-    catalog = await window.codecn.addWorkspaceThread({
+    catalog = await window.newbrain.addWorkspaceThread({
       workspaceId: workspace.id,
       title: "Approval E2E",
       summary: "Self-contained Electron approval verification",
@@ -72,7 +72,7 @@ const seeded = await evaluate(`(async () => {
   }
   const thread = workspace?.threads?.[0];
   if (!thread) throw new Error("Unable to seed the E2E thread.");
-  await window.codecn.activateWorkspaceThread({ workspaceId: workspace.id, threadId: thread.id });
+  await window.newbrain.activateWorkspaceThread({ workspaceId: workspace.id, threadId: thread.id });
   return true;
 })()`);
 assert.equal(seeded, true);
@@ -85,10 +85,10 @@ await evaluate(`(() => {
   return true;
 })()`);
 await sleep(300);
-const previousPreferences = await evaluate(`window.codecn.getDesktopPreferences()`);
+const previousPreferences = await evaluate(`window.newbrain.getDesktopPreferences()`);
 await evaluate(`(async () => {
-  const preferences = await window.codecn.getDesktopPreferences();
-  await window.codecn.saveDesktopPreferences({
+  const preferences = await window.newbrain.getDesktopPreferences();
+  await window.newbrain.saveDesktopPreferences({
     ...preferences,
     configuration: { ...preferences.configuration, requireApprovalForShell: true }
   });
@@ -117,11 +117,11 @@ await evaluate(`document.querySelector('[data-testid="approval-approve-button"]'
 await waitFor("approval completion", `!document.querySelector('[data-testid="approval-dialog"]')`, 30_000);
 const result = JSON.parse(await waitFor("approved command output", `(async () => {
   try {
-    const snapshot = await window.codecn.getSnapshot();
-    const catalog = await window.codecn.listWorkspaces();
+    const snapshot = await window.newbrain.getSnapshot();
+    const catalog = await window.newbrain.listWorkspaces();
     const workspace = catalog.find((item) => item.path === snapshot.session?.workspacePath);
     if (!workspace) return '';
-    const file = await window.codecn.readWorkspaceFile({ workspaceId: workspace.id, filePath: 'approval-e2e.txt' });
+    const file = await window.newbrain.readWorkspaceFile({ workspaceId: workspace.id, filePath: 'approval-e2e.txt' });
     return String(file?.content || '').includes('APPROVAL_E2E_OK')
       ? JSON.stringify({ content: file.content, workspacePath: snapshot.session.workspacePath })
       : '';
@@ -130,7 +130,7 @@ const result = JSON.parse(await waitFor("approved command output", `(async () =>
 assert.match(result.content, /APPROVAL_E2E_OK/);
 await unlink(join(result.workspacePath, "approval-e2e.txt")).catch(() => {});
 
-await evaluate(`window.codecn.saveDesktopPreferences(${JSON.stringify(previousPreferences)})`);
+await evaluate(`window.newbrain.saveDesktopPreferences(${JSON.stringify(previousPreferences)})`);
 socket.close();
 session.close();
 console.log(JSON.stringify({ ok: true, approvalContainers: approval.borderedContainers, commandExecuted: true }, null, 2));

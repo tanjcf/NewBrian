@@ -2,7 +2,7 @@ import { createLocalRuntime } from "./runtime.js";
 import path from "node:path";
 
 const workspacePath =
-  process.env.CODECN_WORKSPACE_PATH ?? path.resolve(process.cwd(), "..", "..");
+  process.env.NEWBRAIN_WORKSPACE_PATH ?? path.resolve(process.cwd(), "..", "..");
 
 const runtime = await createLocalRuntime({
   runtimeId: "agentd-local",

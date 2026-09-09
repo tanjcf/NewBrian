@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const pages = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
 const page = pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-assert.ok(page, "No visible codeCN renderer is available.");
+assert.ok(page, "No visible NewBrain renderer is available.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolveOpen, reject) => {
   socket.addEventListener("open", resolveOpen, { once: true });
@@ -40,9 +40,9 @@ const adjustmentBody = `1. 安全生产放在第一部分，并明确写入“�
 const adjustment = `调整提纲：${adjustmentBody}`;
 
 const initial = await evaluate(`(async () => ({
-  goal: await window.codecn.getGoalExecution(),
-  assistantCount: ((await window.codecn.getSnapshot()).messages || []).filter((message) => message.role === 'assistant').length,
-  threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
+  goal: await window.newbrain.getGoalExecution(),
+  assistantCount: ((await window.newbrain.getSnapshot()).messages || []).filter((message) => message.role === 'assistant').length,
+  threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0,
   questionVisible: Boolean(document.querySelector('[data-testid="goal-question-card"]'))
 }))()`);
 assert.equal(initial.questionVisible, true, "Round 1 outline decision is not visible.");
@@ -64,8 +64,8 @@ let state = null;
 const deadline = Date.now() + 240_000;
 while (Date.now() < deadline) {
   state = await evaluate(`(async () => {
-    const goal = await window.codecn.getGoalExecution();
-    const messages = (await window.codecn.getSnapshot()).messages || [];
+    const goal = await window.newbrain.getGoalExecution();
+    const messages = (await window.newbrain.getSnapshot()).messages || [];
     return {
       goal,
       messages,
@@ -73,7 +73,7 @@ while (Date.now() < deadline) {
       questionVisible: Boolean(document.querySelector('[data-testid="goal-question-card"]')),
       body: document.body.innerText,
       localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((element) => element.getAttribute('data-local-file-path') || ''),
-      threadCount: (await window.codecn.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0
+      threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0
     };
   })()`);
   const userMessages = state.messages.filter((message) => message.role === "user");

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 
-const port = Number(process.env.CODECN_E2E_REMOTE_DEBUG_PORT || 9555);
+const port = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555);
 const page = (await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json()))
   .find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-assert.ok(page, "No visible codeCN renderer is available.");
+assert.ok(page, "No visible NewBrain renderer is available.");
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolveOpen, reject) => {
   socket.addEventListener("open", resolveOpen, { once: true });
@@ -34,5 +34,5 @@ const result = await new Promise((resolveResult, reject) => {
 });
 const state = JSON.parse(String(result));
 assert.equal(state.clicked, true, `No enabled approval button is visible: ${JSON.stringify(state)}`);
-console.log("Clicked the visible codeCN approval button.");
+console.log("Clicked the visible NewBrain approval button.");
 socket.close();

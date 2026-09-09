@@ -105,18 +105,18 @@ test("resolves stable and Chromium-rewritten attachment protocol URLs", async ()
     `${root}/${managed}`
   );
   assert.equal(
-    resolveManagedAttachmentPath(`codecn-attachment:///${managed}`, root)?.replaceAll("\\", "/"),
+    resolveManagedAttachmentPath(`newbrain-attachment:///${managed}`, root)?.replaceAll("\\", "/"),
     `${root}/${managed}`
   );
   assert.equal(
-    resolveManagedAttachmentPath(`codecn-attachment://${managed}/`, root)?.replaceAll("\\", "/"),
+    resolveManagedAttachmentPath(`newbrain-attachment://${managed}/`, root)?.replaceAll("\\", "/"),
     `${root}/${managed}`
   );
   assert.equal(
-    resolveManagedAttachmentPath(`codecn-attachment://${managed}`, root)?.replaceAll("\\", "/"),
+    resolveManagedAttachmentPath(`newbrain-attachment://${managed}`, root)?.replaceAll("\\", "/"),
     `${root}/${managed}`
   );
-  assert.equal(resolveManagedAttachmentPath("codecn-attachment://media/", root), null);
-  assert.equal(resolveManagedAttachmentPath("codecn-attachment://media/sub/dir.png", root), null);
-  assert.equal(resolveManagedAttachmentPath("codecn-attachment://evil.host/file.png", root), null);
+  assert.equal(resolveManagedAttachmentPath("newbrain-attachment://media/", root), null);
+  assert.equal(resolveManagedAttachmentPath("newbrain-attachment://media/sub/dir.png", root), null);
+  assert.equal(resolveManagedAttachmentPath("newbrain-attachment://evil.host/file.png", root), null);
 });

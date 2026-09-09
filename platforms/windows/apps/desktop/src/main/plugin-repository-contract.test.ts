@@ -81,7 +81,7 @@ test("integrates catalog, signed download, atomic install and Spring state repor
   const catalog = await client.list({ scope: "public" }, "device-001");
   assert.equal(catalog.items[0].publisher, "openai-api-curated");
 
-  const root = await mkdtemp(join(tmpdir(), "codecn-contract-"));
+  const root = await mkdtemp(join(tmpdir(), "newbrain-contract-"));
   const installer = new PluginInstallationService({ root, client, deviceId: "device-001", clientVersion: "0.1.55" });
   const installed = await installer.install("game-studio");
   assert.equal(installed.state, "installed");

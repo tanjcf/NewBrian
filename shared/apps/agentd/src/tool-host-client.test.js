@@ -7,7 +7,7 @@ import test from "node:test";
 import { ToolHostClient } from "./tool-host-client.js";
 
 test("executes a builtin write in an isolated Tool Host process", async () => {
-  const workspacePath = await mkdtemp(path.join(tmpdir(), "codecn-tool-host-"));
+  const workspacePath = await mkdtemp(path.join(tmpdir(), "newbrain-tool-host-"));
   try {
     const client = new ToolHostClient({ timeoutMs: 10_000 });
     const result = await client.invoke("workspace.write_file", { targetPath: "hosted.txt", content: "isolated" }, { workspacePath, shellEnv: {} });
@@ -47,7 +47,7 @@ test("formats host failures as non-security Chinese diagnostics", async () => {
 });
 
 test("auto-restarts worker once after a crash for the same call", async () => {
-  const workspacePath = await mkdtemp(path.join(tmpdir(), "codecn-tool-host-restart-"));
+  const workspacePath = await mkdtemp(path.join(tmpdir(), "newbrain-tool-host-restart-"));
   const crashOnceWorker = path.join(workspacePath, "crash-once-worker.mjs");
   await writeFile(crashOnceWorker, `
 import { writeFileSync, existsSync } from "node:fs";

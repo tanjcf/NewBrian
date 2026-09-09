@@ -6,8 +6,8 @@ const policy = await import(new URL("./artifact-request-policy.js", import.meta.
 test("uses the current multi-turn artifact request when it names a new format", () => {
   const request = "原始交付要求：写年度总结并输出PDF文件\n当前用户选择或补充：保留原PDF，再输出一个Word版本，不得覆盖原文件。";
   assert.deepEqual(policy.requestedArtifactFormats(request), ["docx"]);
-  assert.equal(policy.requestedArtifactSatisfied(request, [{ path: "outputs/codecn-output.pdf", size: 1000 }]), false);
-  assert.equal(policy.requestedArtifactSatisfied(request, [{ path: "outputs/codecn-output.docx", size: 1000 }]), true);
+  assert.equal(policy.requestedArtifactSatisfied(request, [{ path: "outputs/newbrain-output.pdf", size: 1000 }]), false);
+  assert.equal(policy.requestedArtifactSatisfied(request, [{ path: "outputs/newbrain-output.docx", size: 1000 }]), true);
 });
 
 test("falls back to the original artifact request for an outline confirmation", () => {
@@ -64,7 +64,7 @@ test("uses and verifies a filename named in natural language", () => {
   const request = "请输出 DOCX 文件，文件名为 test.docx";
   assert.equal(policy.requestedArtifactTargetPath(request, "docx"), "outputs/test.docx");
   assert.equal(policy.requestedArtifactSatisfied(request, [
-    { path: "outputs/codecn-output.docx", size: 1000 }
+    { path: "outputs/newbrain-output.docx", size: 1000 }
   ]), false);
   assert.equal(policy.requestedArtifactSatisfied(request, [
     { path: "outputs/test.docx", size: 1000 }

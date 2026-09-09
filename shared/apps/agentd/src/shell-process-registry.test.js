@@ -12,7 +12,7 @@ import { createBuiltinToolRegistry } from "./tool-registry.js";
 
 test("shell.exec background + shell.process poll/log/kill lifecycle", async () => {
   _resetShellProcessRegistryForTests();
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-process-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-process-"));
   try {
     const registry = createBuiltinToolRegistry();
     const command = process.platform === "win32"
@@ -68,7 +68,7 @@ test("shell.exec background + shell.process poll/log/kill lifecycle", async () =
 
 test("shell.exec yieldMs backgrounds a still-running command", async () => {
   _resetShellProcessRegistryForTests();
-  const root = mkdtempSync(join(tmpdir(), "codecn-shell-yield-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shell-yield-"));
   try {
     const registry = createBuiltinToolRegistry();
     const command = process.platform === "win32"

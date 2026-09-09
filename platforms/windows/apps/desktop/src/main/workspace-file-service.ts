@@ -27,7 +27,7 @@ export interface WorkspaceFileServiceDependencies {
   resolveFile: (root: string, targetPath: string) => Promise<{ targetPath: string; relativePath: string }>;
 }
 
-const skippedDirectories = new Set([".git", "node_modules", ".codecn", ".desktop-profile", "out", "dist", "build", "target"]);
+const skippedDirectories = new Set([".git", "node_modules", ".newbrain", ".desktop-profile", "out", "dist", "build", "target"]);
 
 /** Owns bounded workspace file discovery and safe file projections. */
 export class WorkspaceFileService {

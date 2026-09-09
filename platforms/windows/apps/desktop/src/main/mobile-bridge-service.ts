@@ -83,7 +83,7 @@ function getLocalIpv4Address() {
 function mobilePageHtml(token: string) {
   return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>codeCN Mobile</title><style>
+<title>NewBrain Mobile</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:#17191d;font:15px system-ui,-apple-system,sans-serif}
 main{max-width:520px;margin:auto;padding:24px 20px 100px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}
 h1{margin:0;font-size:29px}small{color:#6f7782}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#20b15a;margin-right:6px}
@@ -97,9 +97,9 @@ footer button{border:0;border-radius:22px;background:#0787f8;color:#fff;padding:
 #gate button{width:100%;height:48px;border:0;border-radius:12px;background:#0787f8;color:#fff;font-weight:650;font-size:16px}
 #gate .err{color:#d1242f;min-height:20px;margin-top:12px}
 </style></head><body>
-<section id="gate"><h1>输入配对码</h1><p>在桌面端 codeCN 上查看 6 位配对码，并在此输入以完成连接。</p>
+<section id="gate"><h1>输入配对码</h1><p>在桌面端 NewBrain 上查看 6 位配对码，并在此输入以完成连接。</p>
 <input id="code" inputmode="numeric" maxlength="6" placeholder="000000" autofocus><button id="connect">连接</button><div class="err" id="gate-err"></div></section>
-<main hidden><header><div><h1>codeCN</h1><small><span class="dot"></span>已连接桌面端</small></div><b>•••</b></header>
+<main hidden><header><div><h1>NewBrain</h1><small><span class="dot"></span>已连接桌面端</small></div><b>•••</b></header>
 <section id="content">正在同步项目...</section></main><footer hidden><div><input placeholder="搜索聊天"><button>聊天</button></div></footer>
 <script>
 const token=${JSON.stringify(token)};let code="";

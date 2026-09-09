@@ -6,7 +6,7 @@ import { buildStableDesktopDeviceId } from "./desktop-device.ts";
 test("desktop device identity remains stable for the same OS user and machine", () => {
   const input = {
     platform: "win32",
-    userDataPath: "C:\\Users\\Example\\.codecn",
+    userDataPath: "C:\\Users\\Example\\.newbrain",
     machineIdentifier: "machine-guid-123"
   };
   const first = buildStableDesktopDeviceId(input);
@@ -15,7 +15,7 @@ test("desktop device identity remains stable for the same OS user and machine", 
 });
 
 test("desktop device identity changes for a different machine", () => {
-  const common = { platform: "win32", userDataPath: "C:\\Users\\Example\\.codecn" };
+  const common = { platform: "win32", userDataPath: "C:\\Users\\Example\\.newbrain" };
   const first = buildStableDesktopDeviceId({ ...common, machineIdentifier: "machine-guid-123" });
   const second = buildStableDesktopDeviceId({ ...common, machineIdentifier: "machine-guid-456" });
   assert.notEqual(second, first);

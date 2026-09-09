@@ -817,7 +817,7 @@ test("government outline preparation bypasses the generic agent loop", async () 
 });
 
 test("government writing executes a material-reading tool and then performs the next model step", async (t) => {
-  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-government-tool-loop-"));
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-government-tool-loop-"));
   t.after(() => fs.rm(workspacePath, { recursive: true, force: true }));
   await fs.writeFile(path.join(workspacePath, "material.txt"), "301 万吨", "utf8");
   const runtime = await createLocalRuntime({
@@ -1058,7 +1058,7 @@ test("automatically continues an active durable goal until its plan completes", 
 });
 
 test("lets the selected model decide and execute a DOCX follow-up after the prior goal completed", async (t) => {
-  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-docx-followup-"));
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-docx-followup-"));
   t.after(() => fs.rm(workspacePath, { recursive: true, force: true }));
   const runtime = await createLocalRuntime({ runtimeId: "docx-followup", workspacePath, platformLabel: "Windows", shellLabel: "PowerShell" });
   const writtenArtifacts: Array<{ path: string; size: number; changeType: "created" | "modified" }> = [];
@@ -1073,7 +1073,7 @@ test("lets the selected model decide and execute a DOCX follow-up after the prio
       if (modelSteps === 1) return {
         content: "",
         toolCalls: [{ id: "model-chosen-docx", name: "artifact.create", arguments: {
-          targetPath: "outputs/codecn-output.docx", format: "docx", title: "年度工作总结", content: prior
+          targetPath: "outputs/newbrain-output.docx", format: "docx", title: "年度工作总结", content: prior
         } }]
       };
       assert.equal(messages.at(-1)?.role, "tool");
@@ -1099,7 +1099,7 @@ test("lets the selected model decide and execute a DOCX follow-up after the prio
     publishRetry: () => undefined, publishWebSearch: () => undefined, publishActivity: () => undefined,
     recordTokens: () => undefined, setModelCallback: () => undefined, getGoalSnapshot: () => completedGoal
   } as never);
-  const docxPath = path.join(workspacePath, "outputs", "codecn-output.docx");
+  const docxPath = path.join(workspacePath, "outputs", "newbrain-output.docx");
   const bytes = await fs.readFile(docxPath);
   assert.equal(bytes.subarray(0, 2).toString("ascii"), "PK");
   assert.equal(modelSteps, 2);
@@ -1282,7 +1282,7 @@ test("「文字在哪」forces a direct visible draft instead of more tool delib
 });
 
 test("delivers and verifies a real PDF through the native runtime within a bounded time", async (t) => {
-  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "codecn-pdf-delivery-"));
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "newbrain-pdf-delivery-"));
   t.after(() => fs.rm(workspacePath, { recursive: true, force: true }));
   const runtime = await createLocalRuntime({
     runtimeId: "pdf-e2e",

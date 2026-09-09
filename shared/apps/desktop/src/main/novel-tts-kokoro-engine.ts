@@ -119,7 +119,7 @@ export class NovelTtsKokoroEngine {
 
     const jobId = ++this.jobSerial;
     const requestId = randomUUID();
-    const outDir = path.join(os.tmpdir(), "codecn-novel-tts");
+    const outDir = path.join(os.tmpdir(), "newbrain-novel-tts");
     await mkdir(outDir, { recursive: true });
     const outPath = path.join(outDir, `${requestId}.wav`);
 
@@ -235,7 +235,7 @@ export class NovelTtsKokoroEngine {
         env: {
           ...process.env,
           ELECTRON_RUN_AS_NODE: "1",
-          CODECN_KOKORO_MODULE_ROOT: moduleRoot,
+          NEWBRAIN_KOKORO_MODULE_ROOT: moduleRoot,
           NODE_PATH: nodePathParts.join(path.delimiter),
           // Force CPU — never touch the display GPU from the TTS child.
           CUDA_VISIBLE_DEVICES: "-1",

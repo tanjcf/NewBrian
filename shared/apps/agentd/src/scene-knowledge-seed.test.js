@@ -13,7 +13,7 @@ import {
 import { UserShadow } from "./user-shadow.js";
 
 test("ensureSceneProjectInit seeds knowledge, routing, project-init skill, and Docs/BRAIN", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-scene-init-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-scene-init-"));
   try {
     const result = await ensureSceneProjectInit({
       workspacePath: root,
@@ -22,7 +22,7 @@ test("ensureSceneProjectInit seeds knowledge, routing, project-init skill, and D
     });
     assert.equal(result.workspaceKey, "music");
     assert.equal(result.skillName, PROJECT_INIT_SKILL_NAME);
-    assert.equal(existsSync(join(root, ".codecn", "skills", PROJECT_INIT_SKILL_NAME, "SKILL.md")), true);
+    assert.equal(existsSync(join(root, ".newbrain", "skills", PROJECT_INIT_SKILL_NAME, "SKILL.md")), true);
     const knowledge = readFileSync(result.knowledgePath, "utf8");
     assert.match(knowledge, /音乐创作/);
     assert.match(knowledge, /生成整曲/);
@@ -39,7 +39,7 @@ test("ensureSceneProjectInit seeds knowledge, routing, project-init skill, and D
 });
 
 test("explore scene routing documents platform retrieval tools", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-scene-explore-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-scene-explore-"));
   try {
     const result = await ensureSceneProjectInit({
       workspacePath: root,
@@ -57,7 +57,7 @@ test("explore scene routing documents platform retrieval tools", async () => {
 });
 
 test("UserShadow ensureProjectSkill includes scene Tools marker and seeds references", async () => {
-  const root = mkdtempSync(join(tmpdir(), "codecn-shadow-scene-"));
+  const root = mkdtempSync(join(tmpdir(), "newbrain-shadow-scene-"));
   try {
     const shadow = new UserShadow({
       workspacePath: root,
@@ -70,7 +70,7 @@ test("UserShadow ensureProjectSkill includes scene Tools marker and seeds refere
     assert.match(skill, new RegExp(SCENE_KNOWLEDGE_FILENAME));
     assert.equal(existsSync(join(shadow.referencesPath, SCENE_KNOWLEDGE_FILENAME)), true);
     assert.equal(existsSync(join(shadow.referencesPath, SCENE_TOOLS_ROUTING_FILENAME)), true);
-    assert.equal(existsSync(join(root, ".codecn", "skills", PROJECT_INIT_SKILL_NAME, "SKILL.md")), true);
+    assert.equal(existsSync(join(root, ".newbrain", "skills", PROJECT_INIT_SKILL_NAME, "SKILL.md")), true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

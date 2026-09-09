@@ -23,8 +23,8 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       if (command === "expand-sidebar") setSidebarCollapsed(false);
       if (command === "collapse-sidebar") setSidebarCollapsed(true);
     };
-    window.addEventListener("codecn:app-command", onAppCommand as EventListener);
-    return () => window.removeEventListener("codecn:app-command", onAppCommand as EventListener);
+    window.addEventListener("newbrain:app-command", onAppCommand as EventListener);
+    return () => window.removeEventListener("newbrain:app-command", onAppCommand as EventListener);
   }, []);
 
   useEffect(() => {
@@ -56,15 +56,15 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
 
   useEffect(() => {
     const dispatchAppCommand = (command: string) => {
-      window.dispatchEvent(new CustomEvent("codecn:app-command", { detail: { command } }));
+      window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command } }));
     };
-    const unsubscribe = window.codecn?.onAppCommand((command) => {
+    const unsubscribe = window.newbrain?.onAppCommand((command) => {
       if (command === "new-chat" || command === "quick-chat" || command === "open-folder" || command === "logout" || command === "toggle-bottom-panel" || command === "toggle-side-panel" || command === "open-browser" || command === "find" || command === "automations" || command === "skills" || command === "mcp") {
         dispatchAppCommand(command);
         return;
       }
       if (command === "settings") {
-        window.dispatchEvent(new CustomEvent("codecn:open-settings", { detail: { section: "account" } }));
+        window.dispatchEvent(new CustomEvent("newbrain:open-settings", { detail: { section: "account" } }));
       }
       if (command === "toggle-sidebar") setSidebarCollapsed((current) => !current);
       if (command === "toggle-file-tree") dispatchAppCommand(command);
@@ -78,19 +78,19 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       if (command === "forward") navigateThreadHistory(1);
       if (command === "worktrees" || command === "local-environments" || command === "shortcuts") {
         const section = command === "worktrees" ? "worktree" : command === "local-environments" ? "environment" : "shortcuts";
-        window.dispatchEvent(new CustomEvent("codecn:open-settings", { detail: { section } }));
+        window.dispatchEvent(new CustomEvent("newbrain:open-settings", { detail: { section } }));
       }
     });
     return unsubscribe;
   }, [threadHistory, onNavigateThread]);
 
   function controlWindow(action: "minimize" | "maximize" | "close") {
-    void window.codecn?.controlWindow(action);
+    void window.newbrain?.controlWindow(action);
   }
 
   function showMenu(event: MouseEvent<HTMLButtonElement>, menu: "file" | "edit" | "view" | "window" | "help") {
     const rect = event.currentTarget.getBoundingClientRect();
-    void window.codecn?.showAppMenu({
+    void window.newbrain?.showAppMenu({
       menu,
       x: Math.round(rect.left),
       y: Math.round(rect.bottom)

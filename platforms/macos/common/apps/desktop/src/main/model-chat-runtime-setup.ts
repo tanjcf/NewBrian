@@ -145,7 +145,7 @@ export function registerWorkspaceMediaAgentTools(
   targetRuntime.registerExternalTool({
     name: "workspace.open_image",
     title: "打开图片预览",
-    description: "Open a workspace image in the codeCN side-panel viewer via codecn-artifact://.",
+    description: "Open a workspace image in the NewBrain side-panel viewer via newbrain-artifact://.",
     kind: "read",
     risk: "low",
     requiresApproval: false,
@@ -165,7 +165,7 @@ export function registerWorkspaceMediaAgentTools(
   targetRuntime.registerExternalTool({
     name: "workspace.open_video",
     title: "打开视频预览",
-    description: "Open a workspace video in the codeCN side-panel player via codecn-artifact://.",
+    description: "Open a workspace video in the NewBrain side-panel player via newbrain-artifact://.",
     kind: "read",
     risk: "low",
     requiresApproval: false,

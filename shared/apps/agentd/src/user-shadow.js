@@ -78,13 +78,13 @@ const DEFAULT_OUTPUT_RULES = [
 ];
 
 /** Repo-root Project OS instruction file (Claude Code–style source of truth). */
-export const PROJECT_OS_FILENAME = "CODECN.md";
+export const PROJECT_OS_FILENAME = "NEWBRAIN.md";
 
 const PROJECT_OS_LEGACY_FILES = ["CLAUDE.md", "AGENTS.md"];
 
 const PROJECT_KNOWLEDGE_INDEX_LIMIT = 24;
 
-/** Detect the stock CODECN.md template so upgrades do not hide richer legacy files. */
+/** Detect the stock NEWBRAIN.md template so upgrades do not hide richer legacy files. */
 export function isDefaultProjectOsScaffold(text) {
   const trimmed = String(text || "").trim();
   if (!trimmed) return true;
@@ -172,12 +172,12 @@ function distillProjectFacts(user, assistant) {
   if (!includesAny(combined, PROJECT_KNOWLEDGE_TERMS) && !includesAny(user, CORRECTION_MARKERS)) {
     return [];
   }
-  // Keep a short CODECN.md candidate index — architecture belongs in repo-root CODECN.md,
+  // Keep a short NEWBRAIN.md candidate index — architecture belongs in repo-root NEWBRAIN.md,
   // not as unbounded bullets in runtime project-knowledge.md.
   const facts = [];
   uniquePush(
     facts,
-    `CODECN候选: ${cleanLine(user, 180)}${assistant ? ` → ${cleanLine(assistant, 120)}` : ""}`
+    `NEWBRAIN候选: ${cleanLine(user, 180)}${assistant ? ` → ${cleanLine(assistant, 120)}` : ""}`
   );
   return facts;
 }
@@ -363,10 +363,10 @@ export function buildPersonalizationGuidance(input = {}) {
   const lines = [
     "Personalization loop (Hermes/PAHF-style):",
     "1. Pre-Action: if the current request is ambiguous/subjective and injected preferences do not cover it, ask ONE clarifying question BEFORE acting. Do not guess lasting taste.",
-    "2. Grounding: apply injected user-output-rules and repo Project OS (CODECN.md); once a preference exists, act directly and do not re-ask the same topic.",
+    "2. Grounding: apply injected user-output-rules and repo Project OS (NEWBRAIN.md); once a preference exists, act directly and do not re-ask the same topic.",
     "3. Post-Action: when the user corrects you or answers a learning question, treat it as durable preference learning (runtime will distill it).",
     "Ask at most one preference question per turn. Prefer executing when memory already answers the ambiguity.",
-    "Durable architecture and project conventions belong in repo-root CODECN.md (agent may edit). Runtime preference files under .codecn must not be edited with tools."
+    "Durable architecture and project conventions belong in repo-root NEWBRAIN.md (agent may edit). Runtime preference files under .newbrain must not be edited with tools."
   ];
   if (openQuestions.length) {
     lines.push("Open learning questions for this project (ask before acting if still unresolved):");
@@ -489,7 +489,7 @@ async function acquireFileLock(filePath) {
         const holder = await describeLockHolder(lockPath);
         throw new Error(
           `Timed out waiting for user shadow lock: ${lockPath} (${holder}). `
-          + "If no codeCN/agentd process is writing this file, delete the .lock and retry thread activate."
+          + "If no NewBrain/agentd process is writing this file, delete the .lock and retry thread activate."
         );
       }
       await sleep(LOCK_RETRY_MS);
@@ -590,7 +590,7 @@ async function trimProjectKnowledgeIndex(filePath) {
 function buildProjectOsMarkdown(projectName, workspacePath) {
   return `# ${projectName} Project OS
 
-This file is the **repo-root source of truth** for how codeCN (and any compatible agent) should work in this workspace.
+This file is the **repo-root source of truth** for how NewBrain (and any compatible agent) should work in this workspace.
 Keep it short, accurate, and version-controlled with the project. Prefer updating this file over burying facts in chat.
 
 ## Overview
@@ -612,9 +612,9 @@ Keep it short, accurate, and version-controlled with the project. Prefer updatin
 
 - Do:
   - Follow existing patterns in this repo
-  - Keep durable architecture notes in this file (\`CODECN.md\`)
+  - Keep durable architecture notes in this file (\`NEWBRAIN.md\`)
 - Don't:
-  - Edit \`.codecn/skills/*/references/*\` with tools (runtime owns preference learning)
+  - Edit \`.newbrain/skills/*/references/*\` with tools (runtime owns preference learning)
   - Invent project conventions that contradict this file
 
 ## Working notes
@@ -623,12 +623,12 @@ Keep it short, accurate, and version-controlled with the project. Prefer updatin
 `;
 }
 
-/** One-time upgrade: seed CODECN.md from an existing CLAUDE.md / AGENTS.md body. */
+/** One-time upgrade: seed NEWBRAIN.md from an existing CLAUDE.md / AGENTS.md body. */
 function buildMigratedProjectOsMarkdown(projectName, legacyFileName, legacyContent) {
   const body = String(legacyContent || "").trim();
   return `# ${projectName} Project OS
 
-> Migrated from \`${legacyFileName}\` for codeCN Project OS compatibility. Edit this file going forward; the original \`${legacyFileName}\` was left unchanged.
+> Migrated from \`${legacyFileName}\` for NewBrain Project OS compatibility. Edit this file going forward; the original \`${legacyFileName}\` was left unchanged.
 
 ${body}
 `;
@@ -638,21 +638,21 @@ function buildSkillMarkdown(projectName, brainWorkspaceKey = "explore") {
   const sceneKey = normalizeSceneKey(brainWorkspaceKey);
   return `---
 name: ${safeName(projectName)}-project-manager
-description: Always-on Project OS + preference shadow for this workspace. Own PAHF personalization under .codecn; durable architecture lives in repo-root CODECN.md. Enforce scene Tools sub-architecture (except explore) and seeded programming guardrails when coding.
+description: Always-on Project OS + preference shadow for this workspace. Own PAHF personalization under .newbrain; durable architecture lives in repo-root NEWBRAIN.md. Enforce scene Tools sub-architecture (except explore) and seeded programming guardrails when coding.
 metadata:
   short-description: Project OS, scene Tools, preferences, coding guardrails
 ---
 
 # ${projectName} Project Manager
 
-This skill is the always-on shadow for ${projectName}. It combines Claude Code–style **Project OS** (repo-root \`CODECN.md\`) with a Hermes/PAHF **personalization** loop (runtime-managed preference files), **scene Tools routing**, and seeded **programming guardrails** for reliable code edits.
+This skill is the always-on shadow for ${projectName}. It combines Claude Code–style **Project OS** (repo-root \`NEWBRAIN.md\`) with a Hermes/PAHF **personalization** loop (runtime-managed preference files), **scene Tools routing**, and seeded **programming guardrails** for reliable code edits.
 
 ## Project OS (repo layer)
 
-1. Durable project truth lives in repo-root \`CODECN.md\` (also honor \`CLAUDE.md\` / \`AGENTS.md\` if present and \`CODECN.md\` is empty).
-2. When architecture, build/test commands, directory layout, or lasting conventions change, **update \`CODECN.md\` with workspace tools**.
-3. You may edit \`CODECN.md\`, \`docs/**\`, and normal project source files.
-4. Do **not** use tools to create or edit \`.codecn\`, \`.codebuddy\`, skill \`references/\`, memory, or session-summary files — the runtime owns those after each turn.
+1. Durable project truth lives in repo-root \`NEWBRAIN.md\` (also honor \`CLAUDE.md\` / \`AGENTS.md\` if present and \`NEWBRAIN.md\` is empty).
+2. When architecture, build/test commands, directory layout, or lasting conventions change, **update \`NEWBRAIN.md\` with workspace tools**.
+3. You may edit \`NEWBRAIN.md\`, \`docs/**\`, and normal project source files.
+4. Do **not** use tools to create or edit \`.newbrain\`, \`.codebuddy\`, skill \`references/\`, memory, or session-summary files — the runtime owns those after each turn.
 
 ## ${SCENE_TOOLS_TEMPLATE_MARKER}
 
@@ -663,9 +663,9 @@ This skill is the always-on shadow for ${projectName}. It combines Claude Code�
 
 ## Required Workflow (PAHF)
 
-1. The CodeCN runtime injects preference references (\`user-output-rules\`, open questions) and Project OS text into context.
+1. The NewBrain runtime injects preference references (\`user-output-rules\`, open questions) and Project OS text into context.
 2. **Pre-Action Clarification**: If the request is ambiguous or subjective AND preference memory does not answer it, ask ONE clarifying question BEFORE editing, generating, or committing.
-3. **Preference Grounding**: Apply injected user rules and \`CODECN.md\`. Once a preference exists, act directly and do not re-ask.
+3. **Preference Grounding**: Apply injected user rules and \`NEWBRAIN.md\`. Once a preference exists, act directly and do not re-ask.
 4. **Post-Action Learning**: When the user corrects you or answers a learning question, state the durable preference clearly; the runtime distills it into references. Do not wait for "记住/以后".
 5. Do not call tools merely to re-read injected preference references.
 6. Ask at most one preference question per turn. Prefer completing the task when memory already covers the ambiguity.
@@ -685,7 +685,7 @@ When the user request edits, generates, completes, or documents source code—es
 - \`references/user-output-rules.md\`: distilled habits, preferences, and corrections.
 - \`references/learning-open-questions.md\`: open preference questions to ask before acting.
 - \`references/session-digest.md\`: append-only session summaries.
-- \`references/project-knowledge.md\`: short CODECN.md candidate index only (not the architecture source of truth).
+- \`references/project-knowledge.md\`: short NEWBRAIN.md candidate index only (not the architecture source of truth).
 - \`references/${SCENE_KNOWLEDGE_FILENAME}\`: BRAIN scene rules knowledge baseline for this project.
 - \`references/${SCENE_TOOLS_ROUTING_FILENAME}\`: mandatory right-side Tools sub-architecture routing.
 - \`references/programming-guardrails.md\`: coding reliability, encoding, Java safety, Spring structure, patch/recovery, evaluation.
@@ -700,7 +700,7 @@ export class UserShadow {
     this.projectName = input.projectName || path.basename(this.workspacePath);
     this.brainWorkspaceKey = normalizeSceneKey(input.brainWorkspaceKey);
     this.skillName = `${safeName(this.projectName)}-project-manager`;
-    this.skillPath = path.join(this.workspacePath, ".codecn", "skills", this.skillName);
+    this.skillPath = path.join(this.workspacePath, ".newbrain", "skills", this.skillName);
     this.referencesPath = path.join(this.skillPath, "references");
   }
 
@@ -717,11 +717,11 @@ export class UserShadow {
   }
 
   /**
-   * Ensure repo-root CODECN.md exists without clobbering user history.
+   * Ensure repo-root NEWBRAIN.md exists without clobbering user history.
    * Upgrade rules:
-   * - Never overwrite a hand-written CODECN.md
-   * - If CODECN is missing (or only the stock scaffold) and CLAUDE.md/AGENTS.md
-   *   already has real content, seed CODECN.md from that legacy file once
+   * - Never overwrite a hand-written NEWBRAIN.md
+   * - If NEWBRAIN is missing (or only the stock scaffold) and CLAUDE.md/AGENTS.md
+   *   already has real content, seed NEWBRAIN.md from that legacy file once
    * - Otherwise create the default scaffold
    */
   async ensureProjectOsFiles() {
@@ -764,7 +764,7 @@ export class UserShadow {
       || existingSkill.includes("Read `references/user-output-rules.md` before producing user-facing output.")
       || !existingSkill.includes("PAHF")
       || !existingSkill.includes("Pre-Action Clarification")
-      || !existingSkill.includes("CODECN.md")
+      || !existingSkill.includes("NEWBRAIN.md")
       || !existingSkill.includes("Project OS")
       || !existingSkill.includes(PROGRAMMING_SKILL_TEMPLATE_MARKER)
       || !existingSkill.includes("references/programming-guardrails.md")
@@ -785,7 +785,7 @@ export class UserShadow {
     await appendUnique(path.join(this.referencesPath, "project-knowledge.md"), "# Project Knowledge", [
       `Project path: ${this.workspacePath}`,
       `BRAIN scene: ${this.brainWorkspaceKey}`,
-      `Architecture and lasting conventions live in repo-root ${PROJECT_OS_FILENAME}; this file only keeps a short CODECN candidate index.`,
+      `Architecture and lasting conventions live in repo-root ${PROJECT_OS_FILENAME}; this file only keeps a short NEWBRAIN candidate index.`,
       `Scene Tools routing: see references/${SCENE_TOOLS_ROUTING_FILENAME} and references/${SCENE_KNOWLEDGE_FILENAME}.`
     ]);
     await appendUnique(path.join(this.referencesPath, "session-digest.md"), "# Session Digest", []);
@@ -835,7 +835,7 @@ export class UserShadow {
     if (await appendUnique(this.outputRulesPath(), "# User Output Rules", facts.outputRules)) {
       changed.push("user-output-rules");
     }
-    // Short CODECN candidate index only — avoid unbounded architecture dumps.
+    // Short NEWBRAIN candidate index only — avoid unbounded architecture dumps.
     const knowledgePath = path.join(this.referencesPath, "project-knowledge.md");
     const trimmedFacts = facts.projectFacts.slice(0, 2);
     if (trimmedFacts.length && await appendUnique(knowledgePath, "# Project Knowledge", trimmedFacts)) {
