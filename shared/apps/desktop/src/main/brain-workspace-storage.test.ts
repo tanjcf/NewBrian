@@ -441,6 +441,42 @@ test("imports unbound local workspaces and chats into the document scene only", 
   });
 });
 
+test("imports catalog threads for a second local owner without colliding on legacy ids", () => {
+  withStorage((storage) => {
+    const first = storage.importUnboundCatalog({
+      ownerId: "account:user-a",
+      workspaces: [
+        {
+          id: "workspace-shared",
+          name: "共享目录",
+          threads: [{ id: "thread-hello", title: "你好", updatedAt: "2026-09-12T00:00:00.000Z" }]
+        }
+      ]
+    });
+    const second = storage.importUnboundCatalog({
+      ownerId: "account:user-b",
+      workspaces: [
+        {
+          id: "workspace-shared",
+          name: "共享目录",
+          threads: [{ id: "thread-hello", title: "你好", updatedAt: "2026-09-12T00:00:00.000Z" }]
+        }
+      ]
+    });
+    assert.equal(first.importedConversations, 1);
+    assert.equal(second.importedConversations, 1);
+    const ownerA = storage.listProjects({ ownerId: "account:user-a" })[0];
+    const ownerB = storage.listProjects({ ownerId: "account:user-b" })[0];
+    assert.ok(ownerA);
+    assert.ok(ownerB);
+    const conversationsA = storage.listConversations({ ownerId: "account:user-a", projectId: ownerA.id });
+    const conversationsB = storage.listConversations({ ownerId: "account:user-b", projectId: ownerB.id });
+    assert.equal(conversationsA.some((item) => item.id === "conversation_legacy_thread-hello"), true);
+    assert.equal(conversationsB.some((item) => item.id === "conversation_legacy_account:user-b_thread-hello"), true);
+    assert.doesNotThrow(() => storage.listWorkspaces());
+  });
+});
+
 test("migrates unbound historical projects and conversations into the document workspace", () => {
   const root = mkdtempSync(join(tmpdir(), "brain-legacy-workspace-migration-"));
   let storage = new BrainWorkspaceStorage(root);

@@ -2052,12 +2052,91 @@ async function fetchDesktopSubscriptionCatalog() {
   return fetchJsonWithDesktopAuth("/api/subscription-plans/catalog", authState, device);
 }
 
-async function rechargeDesktopWallet(_input: { amount: number; payment_method?: string }) {
-  throw new Error("充值支付尚未开通，暂不支持在线充值。请使用兑换码获取权益。");
+async function rechargeDesktopWallet(input: { amount: number; payment_method?: string }) {
+  return openDesktopWalletPayment({
+    intent: "recharge",
+    amount: Number(input?.amount),
+    payment_method: input?.payment_method
+  });
 }
 
-async function purchaseDesktopPlan(_input: { plan_id: number; payment_method?: string }) {
-  throw new Error("套餐购买尚未开通，暂不支持在线购买。请使用兑换码获取权益。");
+async function purchaseDesktopPlan(input: { plan_id: number; payment_method?: string }) {
+  const method = String(input?.payment_method || "balance").trim().toLowerCase();
+  if (method === "wechat" || method === "alipay" || method === "微信" || method === "支付宝") {
+    return openDesktopWalletPayment({
+      intent: "purchase",
+      plan_id: Number(input?.plan_id),
+      payment_method: method === "支付宝" ? "alipay" : method === "微信" ? "wechat" : method
+    });
+  }
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再购买套餐。");
+  const device = collectDesktopDeviceFingerprint();
+  return postJsonWithDesktopAuth("/api/wallet/purchase-plan", authState, device, {
+    plan_id: Number(input?.plan_id),
+    payment_method: method || "balance"
+  });
+}
+
+async function openDesktopWalletPayment(input: {
+  intent?: string;
+  amount?: number;
+  plan_id?: number;
+  payment_method?: string;
+}) {
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再打开支付页。");
+  const device = collectDesktopDeviceFingerprint();
+  const gatewayOrigin = await readGatewayOrigin();
+  const intent = String(input?.intent || "recharge").trim().toLowerCase() === "purchase" ? "purchase" : "recharge";
+  const fallbackUrl = `${gatewayOrigin.replace(/\/+$/, "")}/app/dashboard?pay_intent=${encodeURIComponent(intent)}#redeem`;
+  const body: Record<string, unknown> = { intent };
+  const amount = Number(input?.amount);
+  if (Number.isFinite(amount) && amount >= 0.01) body.amount = Number(amount.toFixed(2));
+  const planId = Number(input?.plan_id);
+  if (Number.isFinite(planId) && planId > 0) body.plan_id = Math.trunc(planId);
+  const method = String(input?.payment_method || "").trim().toLowerCase();
+  if (method === "wechat" || method === "alipay") body.payment_method = method;
+  try {
+    const payload = await postJsonWithDesktopAuth("/api/desktop/auth/web-handoff", authState, device, body);
+    const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const nested =
+      record.data && typeof record.data === "object"
+        ? (record.data as Record<string, unknown>)
+        : record.result && typeof record.result === "object"
+          ? (record.result as Record<string, unknown>)
+          : record;
+    const code = String(nested.code || record.code || "").trim();
+    if (!code) throw new Error("spring-app 未返回支付交接码，请稍后重试。");
+    const consumeUrl = `${gatewayOrigin.replace(/\/+$/, "")}/api/desktop/auth/web-handoff/consume?code=${encodeURIComponent(code)}`;
+    await electronShell.openExternal(consumeUrl);
+    return {
+      ok: true,
+      opened: true,
+      payment_portal: true,
+      external_browser: true,
+      handoff: true,
+      gateway_origin: gatewayOrigin,
+      url: consumeUrl
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    // Production gateways that have not deployed web-handoff yet should still open the wallet page.
+    if (/处于开发中|HTTP 404|HTTP 501|ECONNREFUSED|ENOTFOUND|fetch failed|Failed to fetch/i.test(message)) {
+      await electronShell.openExternal(fallbackUrl);
+      return {
+        ok: true,
+        opened: true,
+        payment_portal: true,
+        external_browser: true,
+        handoff: false,
+        gateway_origin: gatewayOrigin,
+        url: fallbackUrl,
+        warning: "当前网关尚未开通桌面免登交接，已打开网页钱包；如未登录请在浏览器中登录后继续充值/升级。"
+      };
+    }
+    throw error;
+  }
 }
 
 async function setDesktopWalletOverageEnabled(input: { enabled: boolean }) {
@@ -5919,28 +5998,46 @@ function resolveThemePreference(preferences: DesktopPreferences) {
   }
   return nativeTheme.shouldUseDarkColors ? "dark" : "light";
 }
-async function ensurePreviewWindow(targetUrl: string) {
+async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?: boolean }) {
   const preferences = await getActiveDesktopPreferences();
+  const paymentPortal = options?.paymentPortal === true;
+  const partition = paymentPortal ? "newbrain-payment-preview" : "newbrain-browser-preview";
   if (previewWindowRef && !previewWindowRef.isDestroyed()) {
-    if (!preferences.browser.preserveTabs || previewWindowRef.webContents.getURL() !== targetUrl) {
-      await previewWindowRef.loadURL(targetUrl);
+    const currentPartition = String(previewWindowRef.webContents.session.partition || "");
+    const isPaymentWindow = currentPartition.includes("payment");
+    if (paymentPortal === isPaymentWindow) {
+      if (!preferences.browser.preserveTabs || previewWindowRef.webContents.getURL() !== targetUrl) {
+        await previewWindowRef.loadURL(targetUrl);
+      }
+      previewWindowRef.show();
+      return previewWindowRef;
     }
-    previewWindowRef.show();
-    return previewWindowRef;
+    previewWindowRef.close();
+    previewWindowRef = null;
   }
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: "NewBrain 浏览器预览",
+    title: paymentPortal ? "NewBrain 支付" : "NewBrain 浏览器预览",
     show: false,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      partition: "newbrain-browser-preview"
+      partition
     }
   });
-  previewWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  previewWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const normalized = requireWebUrl(url);
+      if (paymentPortal || isAllowedPaymentHost(normalized)) {
+        void previewWindow.loadURL(normalized);
+      }
+    } catch {
+      // deny non-http(s)
+    }
+    return { action: "deny" };
+  });
   previewWindow.webContents.on("will-navigate", (event, url) => {
     try {
       requireWebUrl(url);
@@ -5958,6 +6055,24 @@ async function ensurePreviewWindow(targetUrl: string) {
   previewWindow.show();
   return previewWindow;
 }
+
+function isAllowedPaymentHost(url: string) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === "alipay.com"
+      || host.endsWith(".alipay.com")
+      || host.endsWith(".alipayobjects.com")
+      || host === "weixin.qq.com"
+      || host.endsWith(".weixin.qq.com")
+      || host.endsWith(".tenpay.com")
+      || host.endsWith(".qq.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function requireWebUrl(value: unknown) {
   return normalizeBrowserPreviewUrl(value);
 }
@@ -8966,6 +9081,7 @@ function registerIpc() {
     getSubscriptionCatalog: fetchDesktopSubscriptionCatalog,
     rechargeWallet: rechargeDesktopWallet,
     purchasePlan: purchaseDesktopPlan,
+    openWalletPayment: openDesktopWalletPayment,
     setWalletOverageEnabled: setDesktopWalletOverageEnabled,
     redeemCode: redeemDesktopCode,
     listWalletInvoiceRecords: listDesktopWalletInvoiceRecords,

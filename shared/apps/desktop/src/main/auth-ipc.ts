@@ -16,6 +16,12 @@ interface AuthIpcServices {
   getSubscriptionCatalog: () => MaybePromise<unknown>;
   rechargeWallet: (input: { amount: number; payment_method?: string }) => MaybePromise<unknown>;
   purchasePlan: (input: { plan_id: number; payment_method?: string }) => MaybePromise<unknown>;
+  openWalletPayment: (input: {
+    intent?: string;
+    amount?: number;
+    plan_id?: number;
+    payment_method?: string;
+  }) => MaybePromise<unknown>;
   setWalletOverageEnabled: (input: { enabled: boolean }) => MaybePromise<unknown>;
   redeemCode: (input: { code: string }) => MaybePromise<unknown>;
   listWalletInvoiceRecords: (input?: { limit?: number }) => MaybePromise<unknown>;
@@ -42,6 +48,18 @@ export function registerAuthIpcHandlers(services: AuthIpcServices) {
     services.rechargeWallet(input));
   ipcMain.handle(desktopIpcChannels.auth.purchasePlan, (_event, input: { plan_id: number; payment_method?: string }) =>
     services.purchasePlan(input));
+  ipcMain.handle(
+    desktopIpcChannels.auth.openWalletPayment,
+    (
+      _event,
+      input: {
+        intent?: string;
+        amount?: number;
+        plan_id?: number;
+        payment_method?: string;
+      }
+    ) => services.openWalletPayment(input)
+  );
   ipcMain.handle(desktopIpcChannels.auth.setWalletOverageEnabled, (_event, input: { enabled: boolean }) =>
     services.setWalletOverageEnabled(input));
   ipcMain.handle(desktopIpcChannels.auth.redeemCode, (_event, input: { code: string }) => services.redeemCode(input));

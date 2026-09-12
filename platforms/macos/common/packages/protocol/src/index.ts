@@ -806,6 +806,7 @@ export const desktopIpcChannels = {
   auth: {
     getStatus: "phase1:get-auth-status",
     getBillingSubscription: "phase1:get-billing-subscription",
+    openWalletPayment: "phase1:open-wallet-payment",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
     changePassword: "phase1:change-auth-password",

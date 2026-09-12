@@ -981,8 +981,8 @@ export class BrainWorkspaceStorage {
       for (const thread of workspace.threads || []) {
         const threadId = String(thread.id || "").trim();
         if (!threadId) continue;
-        const conversationId = `conversation_legacy_${threadId}`;
-        if (knownIds.has(conversationId)) continue;
+        const conversationId = this.resolveLegacyConversationId(ownerId, threadId);
+        if (!conversationId || knownIds.has(conversationId)) continue;
         this.createConversation({
           ownerId,
           projectId: project.id,
@@ -997,6 +997,27 @@ export class BrainWorkspaceStorage {
       }
     }
     return { importedProjects, importedConversations };
+  }
+
+  /**
+   * Resolve a stable catalog-import conversation id that stays unique per local owner.
+   * Prefer the historical unscoped id when free or already owned by the current account.
+   */
+  private resolveLegacyConversationId(ownerId: string, threadId: string): string | null {
+    const legacyId = `conversation_legacy_${threadId}`;
+    const existing = this.database.prepare("SELECT owner_id FROM brain_conversation WHERE id = ?").get(legacyId) as
+      | { owner_id?: unknown }
+      | undefined;
+    if (!existing) return legacyId;
+    if (String(existing.owner_id) === ownerId) return legacyId;
+    const scopedOwner = ownerId.replace(/[^a-zA-Z0-9._:-]+/g, "_");
+    const scopedId = `conversation_legacy_${scopedOwner}_${threadId}`;
+    const scopedExisting = this.database.prepare("SELECT owner_id FROM brain_conversation WHERE id = ?").get(scopedId) as
+      | { owner_id?: unknown }
+      | undefined;
+    if (!scopedExisting) return scopedId;
+    if (String(scopedExisting.owner_id) === ownerId) return scopedId;
+    return null;
   }
 
   setProjectPrimaryWorkspaceKey(input: { ownerId: string; projectId: string; workspaceKey: string }): BrainProjectRecord {

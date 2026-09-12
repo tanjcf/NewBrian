@@ -369,6 +369,12 @@ declare global {
   getSubscriptionCatalog: () => Promise<unknown>;
   rechargeWallet: (input: { amount: number; payment_method?: string }) => Promise<Record<string, unknown>>;
   purchasePlan: (input: { plan_id: number; payment_method?: string }) => Promise<Record<string, unknown>>;
+  openWalletPayment: (input: {
+    intent?: string;
+    amount?: number;
+    plan_id?: number;
+    payment_method?: string;
+  }) => Promise<Record<string, unknown>>;
   setWalletOverageEnabled: (input: { enabled: boolean }) => Promise<Record<string, unknown>>;
   redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
   listWalletInvoiceRecords: (input?: { limit?: number }) => Promise<unknown>;

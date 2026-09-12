@@ -337,6 +337,12 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.auth.rechargeWallet, input),
   purchasePlan: (input: { plan_id: number; payment_method?: string }): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke(desktopIpcChannels.auth.purchasePlan, input),
+  openWalletPayment: (input: {
+    intent?: string;
+    amount?: number;
+    plan_id?: number;
+    payment_method?: string;
+  }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.openWalletPayment, input),
   setWalletOverageEnabled: (input: { enabled: boolean }): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke(desktopIpcChannels.auth.setWalletOverageEnabled, input),
   redeemCode: (input: { code: string }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.redeemCode, input),

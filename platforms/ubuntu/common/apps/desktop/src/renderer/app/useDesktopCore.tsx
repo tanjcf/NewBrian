@@ -30,6 +30,18 @@ function writeClipboard(text: string) {
   });
 }
 
+function relativeLuminance(color: unknown): number | null {
+  const hex = String(color || "").trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!hex) return null;
+  let value = hex[1];
+  if (value.length === 3) value = value.split("").map((part) => part + part).join("");
+  const channel = (start: number) => {
+    const raw = Number.parseInt(value.slice(start, start + 2), 16) / 255;
+    return raw <= 0.03928 ? raw / 12.92 : ((raw + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
 function applyVisualPreferences(preferences: DesktopPreferencesState) {
   const resolvedTheme =
     preferences.appearance.theme === "system"
@@ -45,8 +57,27 @@ function applyVisualPreferences(preferences: DesktopPreferencesState) {
   document.documentElement.dataset.pointerCursor = preferences.appearance.pointerCursor ? "true" : "false";
   document.documentElement.dataset.diffMarks = preferences.appearance.diffMarks;
   document.documentElement.style.setProperty("--accent", preferences.appearance.accentColor);
-  document.documentElement.style.setProperty("--bg", preferences.appearance.backgroundColor);
-  document.documentElement.style.setProperty("--text", preferences.appearance.foregroundColor);
+  // Appearance stores a single bg/fg pair (defaults are light). Do not force those onto dark theme,
+  // or input areas become dark while text stays near-black and unreadable.
+  const backgroundColor = preferences.appearance.backgroundColor;
+  const foregroundColor = preferences.appearance.foregroundColor;
+  const backgroundLuminance = relativeLuminance(backgroundColor);
+  const foregroundLuminance = relativeLuminance(foregroundColor);
+  if (resolvedTheme === "dark") {
+    if (backgroundLuminance != null && backgroundLuminance < 0.45) {
+      document.documentElement.style.setProperty("--bg", backgroundColor);
+    } else {
+      document.documentElement.style.removeProperty("--bg");
+    }
+    if (foregroundLuminance != null && foregroundLuminance > 0.55) {
+      document.documentElement.style.setProperty("--text", foregroundColor);
+    } else {
+      document.documentElement.style.removeProperty("--text");
+    }
+  } else {
+    document.documentElement.style.setProperty("--bg", backgroundColor);
+    document.documentElement.style.setProperty("--text", foregroundColor);
+  }
   document.documentElement.style.setProperty("--sans", preferences.appearance.uiFontFamily);
   document.documentElement.style.setProperty("--mono", preferences.appearance.codeFontFamily);
   document.documentElement.style.setProperty("--text-base", `${preferences.appearance.uiFontSize}px`);

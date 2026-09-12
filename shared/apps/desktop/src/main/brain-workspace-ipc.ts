@@ -934,11 +934,16 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
   dependencies.storage.pruneRetention();
   ipcMain.handle(brainWorkspaceIpcChannels.workspaceList, async () => {
     if (dependencies.readWorkspaceCatalog) {
-      const catalog = await dependencies.readWorkspaceCatalog();
-      dependencies.storage.importUnboundCatalog({
-        ownerId: await ownerId(),
-        workspaces: catalog.workspaces || []
-      });
+      try {
+        const catalog = await dependencies.readWorkspaceCatalog();
+        dependencies.storage.importUnboundCatalog({
+          ownerId: await ownerId(),
+          workspaces: catalog.workspaces || []
+        });
+      } catch {
+        // Catalog import must not block listing workspace types. Cross-owner
+        // legacy conversation ids are handled inside importUnboundCatalog.
+      }
     }
     return dependencies.storage.listWorkspaces();
   });

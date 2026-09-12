@@ -2,14 +2,17 @@
 import { useEffect, useRef, useState } from "react";
 
 const FEATURE_UNDER_DEVELOPMENT_MESSAGE = "该接口处于开发中，暂时无法使用。";
-const PAYMENT_UNAVAILABLE_MESSAGE = "在线充值/购买尚未开通，暂不支持支付到账。请使用兑换码获取权益。";
 
 function formatFeatureAvailabilityError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   // Electron IPC wraps remote errors; prefer the trailing business message.
   const message = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "").trim() || raw;
   if (!message.trim()) return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
-  if (/充值支付尚未开通|套餐购买尚未开通|支付通道尚未接通|暂不支持在线|spring-app 未返回|spring-app 未确认|超额扣款开关未接入/i.test(message)) {
+  if (
+    /充值支付尚未开通|套餐购买尚未开通|支付通道尚未接通|暂不支持在线|spring-app 未返回|spring-app 未确认|超额扣款开关未接入|支付交接码|handoff|请先登录/i.test(
+      message
+    )
+  ) {
     return message;
   }
   if (/ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed/i.test(message)) {
@@ -24,7 +27,6 @@ function formatFeatureAvailabilityError(error: unknown): string {
     if (/wallet overage debit is disabled|enable wallet overage debit/i.test(message)) {
       return "套餐额度已用尽。请开启「超出额度用钱包余额扣款」，或充值/升级套餐后再试。";
     }
-    if (/not implemented|501/i.test(message)) return PAYMENT_UNAVAILABLE_MESSAGE;
     return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
   }
   return message;
@@ -57,9 +59,6 @@ export function WalletSettingsPage(props: {
   const [walletMessage, setWalletMessage] = useState("");
   const [walletError, setWalletError] = useState("");
   const [wallet, setWallet] = useState<any>(null);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [rechargeAmount, setRechargeAmount] = useState("50");
-  const [rechargeMethod, setRechargeMethod] = useState("wechat");
   const [overageEnabled, setOverageEnabled] = useState(false);
   const [overageBusy, setOverageBusy] = useState(false);
   const [invoiceRecords, setInvoiceRecords] = useState<any[]>([]);
@@ -102,10 +101,6 @@ export function WalletSettingsPage(props: {
       if (!settledRef.current) setWalletError("");
       const next = await api.getBillingSubscription();
       applyWalletPayload(next);
-      if (api.getSubscriptionCatalog) {
-        const catalog = await api.getSubscriptionCatalog().catch(() => []);
-        setPlans(unwrapList(catalog));
-      }
       if (typeof api?.listWalletInvoiceRecords === "function") {
         const records = await api.listWalletInvoiceRecords({ limit: 50 }).catch(() => []);
         setInvoiceRecords(unwrapList(records));
@@ -146,6 +141,46 @@ export function WalletSettingsPage(props: {
   const planName = String(subscription.plan_name || summary.plan_name || "").trim();
   const expiresText = String(subscription.expires_at_display || summary.expires_at_display || subscription.expires_at || summary.expires_at || "").trim();
   const concurrency = Number(subscription.concurrency_limit ?? summary.concurrency_limit ?? 0);
+  const usageSubscriptions = (subscriptions.length ? subscriptions : planName ? [subscription] : []).filter((item: any) => {
+    const name = String(item?.plan_name || item?.plan_code || "").trim();
+    return Boolean(name);
+  });
+  const usagePercent = (used: unknown, quota: unknown) => {
+    const usedNum = Number(used ?? 0);
+    const quotaNum = Number(quota ?? 0);
+    if (!Number.isFinite(usedNum) || !Number.isFinite(quotaNum) || quotaNum <= 0) return 0;
+    return Math.max(0, Math.min(100, Math.round((usedNum / quotaNum) * 100)));
+  };
+  const usageStatusLabel = (item: any) => {
+    const raw = String(item?.status_label || item?.status || "").trim();
+    const normalized = raw.toLowerCase();
+    if (["active", "valid", "有效"].includes(normalized) || normalized.includes("active")) return "有效";
+    if (["expired", "已过期"].includes(normalized) || normalized.includes("expir")) return "已过期";
+    return raw || "有效";
+  };
+
+  const openWalletPortal = async () => {
+    if (busy) return;
+    if (typeof api?.openWalletPayment !== "function") {
+      setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      return;
+    }
+    setBusy(true);
+    setWalletError("");
+    setWalletMessage("");
+    try {
+      const result = await api.openWalletPayment({ intent: "recharge" });
+      const warning = String(result?.warning || "").trim();
+      setWalletMessage(
+        warning ||
+          "已在系统浏览器打开钱包页（已带入桌面登录状态）。充值或购买套餐完成后，可返回点击刷新余额。"
+      );
+    } catch (error) {
+      setWalletError(formatFeatureAvailabilityError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const redeem = async () => {
     if (!code.trim() || redeeming) return;
@@ -167,18 +202,6 @@ export function WalletSettingsPage(props: {
     } finally {
       setRedeeming(false);
     }
-  };
-
-  const recharge = async () => {
-    if (busy) return;
-    setWalletError(PAYMENT_UNAVAILABLE_MESSAGE);
-    setWalletMessage("");
-  };
-
-  const purchase = async (_planId: number, _paymentMethod: string) => {
-    if (busy) return;
-    setWalletError(PAYMENT_UNAVAILABLE_MESSAGE);
-    setWalletMessage("");
   };
 
   const toggleOverage = async () => {
@@ -292,22 +315,12 @@ export function WalletSettingsPage(props: {
     return status ? String(status) : "处理中";
   };
 
-  // 只展示接口返回的可购套餐；禁止本地占位目录（曾导致先闪 Starter/Pro/Team 再消失）。
-  const catalog = Array.isArray(plans)
-    ? plans.filter((plan: any) => {
-        const id = Number(plan?.id || 0);
-        const price = Number(plan?.price ?? 0);
-        const isDefault = Boolean(plan?.is_default_for_new_users ?? plan?.isDefaultForNewUsers);
-        return id > 0 && Number.isFinite(price) && price > 0 && !isDefault;
-      })
-    : [];
-
   return (
     <div className="wallet-settings-page">
       <div className="settings-page-head">
         <div>
           <h3>钱包</h3>
-          <p>公测阶段请使用兑换码获取权益；在线充值与购买尚未开通。</p>
+          <p>充值与升级套餐将在系统浏览器中的钱包页完成，并自动带入当前桌面登录状态。</p>
         </div>
         <button
           type="button"
@@ -340,6 +353,80 @@ export function WalletSettingsPage(props: {
           </div>
         </dl>
       </section>
+
+      <section className="wallet-usage-section">
+        <div className="settings-card-head">
+          <div>
+            <strong>费用与用量</strong>
+            <p>展示当前套餐的每日 / 月度费用额度使用情况。</p>
+          </div>
+        </div>
+        {usageSubscriptions.length ? (
+          <div className="wallet-usage-list">
+            {usageSubscriptions.map((item: any, index: number) => {
+              const name = String(item.plan_name || item.plan_code || `套餐 ${index + 1}`);
+              const provider = String(item.provider_name || item.vendor_name || item.provider || "").trim();
+              const dailyUsed = Number(item.daily_cost_used ?? item.daily_used ?? 0);
+              const dailyQuota = Number(item.daily_quota ?? 0);
+              const monthlyUsed = Number(item.monthly_cost_used ?? item.monthly_used ?? 0);
+              const monthlyQuota = Number(item.monthly_quota ?? 0);
+              const dailyPct = usagePercent(dailyUsed, dailyQuota);
+              const monthlyPct = usagePercent(monthlyUsed, monthlyQuota);
+              const status = usageStatusLabel(item);
+              return (
+                <article key={`${name}-${String(item.expires_at || item.id || index)}`} className="wallet-usage-card">
+                  <div className="wallet-usage-card-head">
+                    <div className="wallet-usage-title-row">
+                      <strong>{name}</strong>
+                      {provider ? <span className="wallet-usage-provider">{provider}</span> : null}
+                    </div>
+                    <em className={status === "有效" ? "on" : ""}>{status}</em>
+                  </div>
+                  <div className="wallet-usage-meter">
+                    <div className="wallet-usage-meter-row">
+                      <span>每日</span>
+                      <b>
+                        ¥{money(dailyUsed)} / ¥{money(dailyQuota)}
+                      </b>
+                    </div>
+                    <div className="wallet-usage-meter-bar" aria-hidden="true">
+                      <i style={{ width: `${dailyPct}%` }} />
+                    </div>
+                  </div>
+                  <div className="wallet-usage-meter">
+                    <div className="wallet-usage-meter-row">
+                      <span>月度</span>
+                      <b>
+                        ¥{money(monthlyUsed)} / ¥{money(monthlyQuota)}
+                      </b>
+                    </div>
+                    <div className="wallet-usage-meter-bar" aria-hidden="true">
+                      <i style={{ width: `${monthlyPct}%` }} />
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <small className="wallet-usage-empty">暂无套餐用量数据，请点击刷新余额后重试。</small>
+        )}
+      </section>
+
+      <section className="settings-card wallet-portal-card">
+        <div className="settings-card-head">
+          <div>
+            <strong>充值 / 升级套餐</strong>
+            <p>点击后打开网页钱包；无需再次登录，可在网页中完成充值与购买套餐。</p>
+          </div>
+        </div>
+        <div className="wallet-recharge-actions">
+          <button type="button" className="wallet-portal-btn" disabled={busy} onClick={() => void openWalletPortal()}>
+            {busy ? "正在打开…" : "充值 / 升级套餐"}
+          </button>
+        </div>
+      </section>
+
       <section className="settings-card wallet-overage-card">
         <div className="settings-card-head">
           <div>
@@ -358,81 +445,7 @@ export function WalletSettingsPage(props: {
         </div>
         <small>{overageEnabled ? "当前允许超额扣钱包余额。" : "当前禁止超额扣钱包余额（默认）。"}</small>
       </section>
-      <section className="settings-card wallet-recharge-card">
-        <div className="settings-card-head">
-          <div>
-            <strong>充值</strong>
-            <p>在线充值支付尚未开通；公测阶段不会模拟到账，请使用兑换码。</p>
-          </div>
-        </div>
-        <div className="wallet-recharge-actions">
-          <input
-            aria-label="充值金额"
-            placeholder="充值金额"
-            inputMode="decimal"
-            value={rechargeAmount}
-            onChange={(event) => setRechargeAmount(event.target.value)}
-            disabled
-          />
-          <select
-            aria-label="支付方式"
-            value={rechargeMethod}
-            onChange={(event) => setRechargeMethod(event.target.value)}
-            disabled
-          >
-            <option value="wechat">微信支付</option>
-            <option value="alipay">支付宝</option>
-          </select>
-          <button type="button" onClick={() => void recharge()} disabled={busy}>
-            立即充值
-          </button>
-        </div>
-        <small>支付通道未接通前，充值与购买均不可到账，避免误发权益。</small>
-      </section>
-      <section className="wallet-package-section">
-        <div className="settings-card-head">
-          <div>
-            <strong>套餐</strong>
-            <p>在线购买尚未开通；请使用兑换码获取套餐权益。</p>
-          </div>
-          <button type="button" onClick={() => document.getElementById("wallet-redeem-code")?.focus()}>
-            输入兑换码
-          </button>
-        </div>
-        <div className="wallet-package-list">
-          {catalog.map((plan: any, index: number) => {
-            const id = Number(plan.id || 0);
-            const title = String(plan.plan_name || plan.name || `套餐 ${index + 1}`);
-            const priceLabel = String(plan.price_display || `¥${money(plan.price)}`);
-            const meta = `余额 ¥${money(plan.balance_delta)} · 并发 ${Number(plan.concurrency_limit || 1)} 路${
-              plan.duration_days ? ` · ${plan.duration_days} 天` : ""
-            }`;
-            return (
-              <article key={`${id}-${title}-${index}`} className={plan.recommended ? "recommended" : undefined}>
-                <strong>{title}</strong>
-                <b>{priceLabel}</b>
-                <span>{meta}</span>
-                <div>
-                  <button type="button" disabled={busy || id <= 0} onClick={() => void purchase(id, "balance")}>
-                    余额购买
-                  </button>
-                  <button type="button" disabled={busy || id <= 0} onClick={() => void purchase(id, "wechat")}>
-                    微信购买
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => document.getElementById("wallet-redeem-code")?.focus()}
-                  >
-                    兑换
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-        {!catalog.length ? <small>暂无可购买套餐（免费保底档不在目录中）。请刷新，或先在管理端上线付费套餐。</small> : null}
-      </section>
+
       <section className="settings-card wallet-redeem-card">
         <strong>兑换码</strong>
         <p>输入 spring-app 发放的兑换码。</p>

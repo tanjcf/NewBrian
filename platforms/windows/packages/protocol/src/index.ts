@@ -809,6 +809,7 @@ export const desktopIpcChannels = {
     getSubscriptionCatalog: "phase1:get-subscription-catalog",
     rechargeWallet: "phase1:recharge-wallet",
     purchasePlan: "phase1:purchase-plan",
+    openWalletPayment: "phase1:open-wallet-payment",
     setWalletOverageEnabled: "phase1:set-wallet-overage-enabled",
     redeemCode: "phase1:redeem-code",
     listWalletInvoiceRecords: "phase1:list-wallet-invoice-records",
