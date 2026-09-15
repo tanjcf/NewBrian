@@ -30,3 +30,10 @@ __pycache__/
 
 # Local temporary diagnostic / E2E helper scripts and captures
 /tmp-*
+
+# Software copyright (软著) materials — keep local only
+/BRAIN智能工作台*.docx
+/BRAIN智能工作台*.txt
+/build_softcode.py
+/verify_softcode.py
+/qa-softcode-*/
