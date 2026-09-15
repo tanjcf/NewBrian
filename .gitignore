@@ -16,3 +16,10 @@ coverage/
 __pycache__/
 *.pyc
 
+# Local Electron/UI E2E evidence dumps (do not commit)
+/evidence-*.png
+/evidence-*.json
+/evidence-*.jpg
+/evidence-*.jpeg
+/evidence-*.webp
+
