@@ -3,7 +3,7 @@
 ## CASE-ID: HOLON-GAME-001 通过 Holon 开发并验收 Windows 桌面贪吃蛇
 
 - Requirement: 用户在 Windows 桌面版 NewBrain 的 Holon 页面领取任务，经显式确认和工具审批后，生成可独立运行的桌面贪吃蛇游戏；自动化程序用真实鼠标、键盘事件验证玩法、持久化和重启恢复。
-- Source paths: `windows/apps/desktop/src/renderer/app/HolonWorkspace.tsx`、`windows/apps/desktop/src/main/holon-work-item-service.ts`、`windows/apps/desktop/src/main/index.ts`、`windows/apps/desktop/scripts/`。
+- Source paths: `shared/apps/desktop/src/renderer/app/HolonWorkspace.tsx`、`shared/apps/desktop/src/main/holon-work-item-service.ts`、`platforms/windows/apps/desktop/src/main/index.ts`、`platforms/windows/apps/desktop/scripts/`。
 - Risk: 审批绕过、模型假完成、只生成网页、程序不可启动、键盘无响应、重复执行、工作区逃逸、重启后状态丢失。
 - Execution tier: 可见 Electron E2E + 真实 Windows 子进程 + 确定性模型契约测试；发布前追加 MSI 安装版和真实模型 smoke。
 

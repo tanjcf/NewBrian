@@ -1,6 +1,7 @@
 # BRAIN Expert Marketplace v1
 
-> Status: **implemented baseline (Windows-first)**  
+> Status: **implemented baseline (cross-platform shared core)**   
+
 > Parent: [brain-product-architecture.md](./brain-product-architecture.md)  
 > Related: [unified-capability-runtime-v1.md](./unified-capability-runtime-v1.md), [brain-scene-tools-v1.md](./brain-scene-tools-v1.md)
 
@@ -58,9 +59,10 @@ flowchart LR
 - `shared/apps/desktop/src/main/agent-collaboration.ts`
 - `shared/apps/desktop/src/main/auto-orchestrator-policy.ts`
 - `shared/apps/desktop/src/main/model-chat-service.ts` / `model-chat-prompt-policy.ts`
-- UI：`ExpertsMarketplace.tsx` + Composer 专家芯片
+- Holon 运行时核心（跨平台）：`shared/apps/desktop/src/main/holon-*.ts|js`、`learning-ipc.ts`、`remote-event-sanitizer.js`
+- UI：`ExpertsMarketplace.tsx` + `HolonWorkspace.tsx` + Composer 专家芯片
 
-IPC（三端 protocol）：`experts:list|install|set-enabled|summon|clear-summon|get-summon`
+IPC（三端 protocol）：`experts:list|install|set-enabled|summon|clear-summon|get-summon`；Holon/learning 通道同属 protocol，平台入口接线仍在各 OS `main/index.ts` / preload。
 
 ## 3.1 Skill ↔ 专家桥接
 

@@ -16,7 +16,7 @@ const taskFiles = [
   "platforms/windows/apps/desktop/src/main/clawhub-client.ts",
   "platforms/windows/apps/desktop/src/main/bounded-extractor.ts",
   "platforms/windows/apps/desktop/src/main/growth-control-plane-service.ts",
-  "platforms/windows/apps/desktop/src/main/holon-control-plane-service.ts",
+  "shared/apps/desktop/src/main/holon-control-plane-service.ts",
   "platforms/windows/apps/desktop/src/main/index.ts",
   "platforms/windows/apps/desktop/src/main/novel-tts-service.ts",
   "platforms/macos/common/apps/desktop/src/main/index.ts",

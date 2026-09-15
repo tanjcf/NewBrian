@@ -206,7 +206,7 @@ spring-app 管：租户、授权、模型网关、任务协调、包版本、活
 - [Spring 分发接口](../../../spring-app/src/main/java/com/demo/tokensystem/controller/DesktopSkillDistributionController.java)
 - [Spring 学习流水线](../../../spring-app/src/main/java/com/demo/tokensystem/service/HolonLearningPipelineService.java)
 - [BRAIN 专家包](../../shared/apps/desktop/src/main/expert-marketplace.ts)
-- [BRAIN Outbox](../../platforms/windows/apps/desktop/src/main/holon-outbox-service.ts)
+- [BRAIN Outbox](../../shared/apps/desktop/src/main/holon-outbox-service.ts)
 - [BRAIN Skill 解析器](../../platforms/windows/apps/desktop/src/main/openclaw-skill-package.ts)
 - [BRAIN 视频音频绑定](../../shared/apps/desktop/src/renderer/app/video-pipeline-audio-resolve.ts)
 - [BRAIN 视频混音](../../shared/apps/desktop/src/main/video-layered-ffmpeg.ts)
