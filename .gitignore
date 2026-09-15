@@ -23,3 +23,7 @@ __pycache__/
 /evidence-*.jpeg
 /evidence-*.webp
 
+
+# Local E2E run artifacts under /evidence/ (keep docs/evidence/)
+/evidence/
+
