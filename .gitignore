@@ -27,3 +27,6 @@ __pycache__/
 # Local E2E run artifacts under /evidence/ (keep docs/evidence/)
 /evidence/
 
+
+# Local temporary diagnostic / E2E helper scripts and captures
+/tmp-*

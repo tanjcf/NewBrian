@@ -1,2 +1,0 @@
-import { createSceneTestCdpClient } from './platforms/windows/apps/desktop/scripts/scene-test-cdp-client.mjs';
-const c=await createSceneTestCdpClient(9566); await c.mouseClickButtonText('新对话'); await new Promise(r=>setTimeout(r,500)); console.log(await c.evaluate(`JSON.stringify({text:document.body.innerText.slice(-1600),areas:[...document.querySelectorAll('textarea,input')].map(x=>({tag:x.tagName,ph:x.placeholder,aria:x.getAttribute('aria-label')}))})`)); c.close();

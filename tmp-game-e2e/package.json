@@ -1,5 +1,0 @@
-{
-  "name": "game-e2e-fixture",
-  "private": true,
-  "scripts": { "start": "node -e \"require('http').createServer((req,res)=>res.end('game-e2e')).listen(4173)\"" }
-}
