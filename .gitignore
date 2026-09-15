@@ -37,3 +37,14 @@ __pycache__/
 /build_softcode.py
 /verify_softcode.py
 /qa-softcode-*/
+
+# Local diagnostic / one-off helper junk (never commit)
+/_install_*.txt
+/_fix_*.txt
+/_uninstall_*.txt
+/_soft_remove_*.txt
+/inspect_*.py
+/check_builder_*.py
+/verify_header_*.py
+/verify_softcode.py
+/命令.txt
