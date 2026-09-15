@@ -377,14 +377,6 @@ declare global {
   }) => Promise<Record<string, unknown>>;
   setWalletOverageEnabled: (input: { enabled: boolean }) => Promise<Record<string, unknown>>;
   redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
-  listWalletInvoiceRecords: (input?: { limit?: number }) => Promise<unknown>;
-  listWalletInvoiceRequests: (input?: { limit?: number }) => Promise<unknown>;
-  createWalletInvoiceRequest: (input: {
-    invoice_title: string;
-    tax_no?: string;
-    contact_email?: string;
-    redeem_log_ids: number[];
-  }) => Promise<Record<string, unknown>>;
       listRepositoryPlugins: (input?: PluginCatalogQuery) => Promise<PluginCatalogSnapshot>;
       getRepositoryPlugin: (input: PluginKeyInput) => Promise<Record<string, unknown>>;
       installRepositoryPlugin: (input: PluginInstallInput) => Promise<PluginOperationResult>;
@@ -400,6 +392,7 @@ declare global {
         agreement_accepted: boolean;
         captcha?: string;
       }) => Promise<DesktopAuthStatusState>;
+      loginWithAlipayQr: (input: { agreement_accepted: boolean }) => Promise<DesktopAuthStatusState>;
       changeAuthPassword: (input: {
         currentPassword: string;
         newPassword: string;
@@ -690,6 +683,36 @@ declare global {
       showInputContextMenu: () => Promise<{ ok: boolean }>;
       getPathForFile: (file: File) => string;
       saveComposerClipboardFile: (input: { name: string; mimeType: string; data: ArrayBuffer }) => Promise<{ name: string; path: string; url: string }>;
+      getDeliveryPreferences: () => Promise<{
+        visible: boolean;
+        hasStyle: boolean;
+        scope: "thread" | "project" | null;
+        scopeLabel: string;
+        summary: string;
+        canClear: boolean;
+        canPin: boolean;
+        styleGapQuestion: string;
+      }>;
+      clearDeliveryPreferences: (input?: { scope?: "thread" | "project" | "both" } | "thread" | "project" | "both") => Promise<{
+        visible: boolean;
+        hasStyle: boolean;
+        scope: "thread" | "project" | null;
+        scopeLabel: string;
+        summary: string;
+        canClear: boolean;
+        canPin: boolean;
+        styleGapQuestion: string;
+      }>;
+      pinDeliveryPreferences: () => Promise<{
+        visible: boolean;
+        hasStyle: boolean;
+        scope: "thread" | "project" | null;
+        scopeLabel: string;
+        summary: string;
+        canClear: boolean;
+        canPin: boolean;
+        styleGapQuestion: string;
+      }>;
       renameWorkspace: (input: { workspaceId: string; name: string }) => Promise<WorkspaceCatalogItem[]>;
       removeWorkspace: (input: { workspaceId: string }) => Promise<WorkspaceCatalogItem[]>;
       openWorkspaceLocation: (input: { workspaceId: string; target: "explorer" | "vscode" }) => Promise<{ ok: boolean; detail: string }>;

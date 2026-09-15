@@ -54,6 +54,7 @@ import type {
 } from "@codex-forge/protocol";
 import { desktopIpcChannels, isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { normalizeDesktopBillingPayload } from "./desktop-billing-policy.js";
+import { buildWalletPaymentUrl } from "./wallet-payment-url.js";
 import {
   createBootstrapTaskDefinitions,
   createBootstrapStatusPayload,
@@ -326,6 +327,7 @@ import {
 import { MobileBridgeService } from "./mobile-bridge-service.js";
 import { registerResearchWritingIpcHandlers } from "./research-writing-ipc.js";
 import { registerComposerIpcHandlers } from "./composer-ipc.js";
+import { registerDeliveryPreferencesIpcHandlers } from "./delivery-preferences-ipc.js";
 import { registerCollaborationIpcHandlers } from "./collaboration-ipc.js";
 import { RuntimeCommandService } from "./runtime-command-service.js";
 import { registerModelChatIpcHandlers } from "./model-chat-ipc.js";
@@ -2078,7 +2080,7 @@ async function purchaseDesktopPlan(input: { plan_id: number; payment_method?: st
   });
 }
 
-async function openDesktopWalletPayment(input: {
+async function openDesktopWalletPayment(_input: {
   intent?: string;
   amount?: number;
   plan_id?: number;
@@ -2086,57 +2088,24 @@ async function openDesktopWalletPayment(input: {
 }) {
   const authState = await readDesktopAuthState();
   if (!authState) throw new Error("请先登录后再打开支付页。");
-  const device = collectDesktopDeviceFingerprint();
   const gatewayOrigin = await readGatewayOrigin();
-  const intent = String(input?.intent || "recharge").trim().toLowerCase() === "purchase" ? "purchase" : "recharge";
-  const fallbackUrl = `${gatewayOrigin.replace(/\/+$/, "")}/app/dashboard?pay_intent=${encodeURIComponent(intent)}#redeem`;
-  const body: Record<string, unknown> = { intent };
-  const amount = Number(input?.amount);
-  if (Number.isFinite(amount) && amount >= 0.01) body.amount = Number(amount.toFixed(2));
-  const planId = Number(input?.plan_id);
-  if (Number.isFinite(planId) && planId > 0) body.plan_id = Math.trunc(planId);
-  const method = String(input?.payment_method || "").trim().toLowerCase();
-  if (method === "wechat" || method === "alipay") body.payment_method = method;
-  try {
-    const payload = await postJsonWithDesktopAuth("/api/desktop/auth/web-handoff", authState, device, body);
-    const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-    const nested =
-      record.data && typeof record.data === "object"
-        ? (record.data as Record<string, unknown>)
-        : record.result && typeof record.result === "object"
-          ? (record.result as Record<string, unknown>)
-          : record;
-    const code = String(nested.code || record.code || "").trim();
-    if (!code) throw new Error("spring-app 未返回支付交接码，请稍后重试。");
-    const consumeUrl = `${gatewayOrigin.replace(/\/+$/, "")}/api/desktop/auth/web-handoff/consume?code=${encodeURIComponent(code)}`;
-    await electronShell.openExternal(consumeUrl);
-    return {
-      ok: true,
-      opened: true,
-      payment_portal: true,
-      external_browser: true,
-      handoff: true,
-      gateway_origin: gatewayOrigin,
-      url: consumeUrl
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error ?? "");
-    // Production gateways that have not deployed web-handoff yet should still open the wallet page.
-    if (/处于开发中|HTTP 404|HTTP 501|ECONNREFUSED|ENOTFOUND|fetch failed|Failed to fetch/i.test(message)) {
-      await electronShell.openExternal(fallbackUrl);
-      return {
-        ok: true,
-        opened: true,
-        payment_portal: true,
-        external_browser: true,
-        handoff: false,
-        gateway_origin: gatewayOrigin,
-        url: fallbackUrl,
-        warning: "当前网关尚未开通桌面免登交接，已打开网页钱包；如未登录请在浏览器中登录后继续充值/升级。"
-      };
-    }
-    throw error;
-  }
+  const preferences = await getActiveDesktopPreferences().catch(() => defaultDesktopPreferences);
+  const webOrigin = app.isPackaged
+    ? new URL(preferences.browser.previewUrl).origin
+    : gatewayOrigin;
+  const fallbackUrl = buildWalletPaymentUrl(webOrigin);
+  await electronShell.openExternal(fallbackUrl);
+  return {
+    ok: true,
+    opened: true,
+    payment_portal: true,
+    external_browser: true,
+    handoff: false,
+    gateway_origin: gatewayOrigin,
+    web_origin: webOrigin,
+    url: fallbackUrl,
+    warning: "已在系统默认浏览器打开钱包页；如未登录，请在网页中登录后继续充值或升级套餐。"
+  };
 }
 
 async function setDesktopWalletOverageEnabled(input: { enabled: boolean }) {
@@ -2179,59 +2148,6 @@ async function setDesktopWalletOverageEnabled(input: { enabled: boolean }) {
     walletOverageEnabled: confirmed,
     ok: true
   };
-}
-
-function unwrapDesktopListPayload(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    if (Array.isArray(record.items)) return record.items;
-    if (Array.isArray(record.data)) return record.data;
-    if (Array.isArray(record.records)) return record.records;
-    if (Array.isArray(record.result)) return record.result;
-  }
-  return [];
-}
-
-async function listDesktopWalletInvoiceRecords(input?: { limit?: number }) {
-  const authState = await readDesktopAuthState();
-  if (!authState) throw new Error("请先登录后再查看可开票记录。");
-  const device = collectDesktopDeviceFingerprint();
-  const limit = Math.max(1, Math.min(Number(input?.limit || 50) || 50, 50));
-  const payload = await fetchJsonWithDesktopAuth(`/api/wallet/invoice-records?limit=${limit}`, authState, device);
-  return unwrapDesktopListPayload(payload);
-}
-
-async function listDesktopWalletInvoiceRequests(input?: { limit?: number }) {
-  const authState = await readDesktopAuthState();
-  if (!authState) throw new Error("请先登录后再查看开票申请。");
-  const device = collectDesktopDeviceFingerprint();
-  const limit = Math.max(1, Math.min(Number(input?.limit || 20) || 20, 50));
-  const payload = await fetchJsonWithDesktopAuth(`/api/wallet/invoice-requests?limit=${limit}`, authState, device);
-  return unwrapDesktopListPayload(payload);
-}
-
-async function createDesktopWalletInvoiceRequest(input: {
-  invoice_title: string;
-  tax_no?: string;
-  contact_email?: string;
-  redeem_log_ids: number[];
-}) {
-  const title = String(input?.invoice_title || "").trim();
-  if (!title) throw new Error("请填写发票抬头。");
-  const redeemLogIds = Array.isArray(input?.redeem_log_ids)
-    ? input.redeem_log_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
-    : [];
-  if (!redeemLogIds.length) throw new Error("请选择至少一条可开票记录。");
-  const authState = await readDesktopAuthState();
-  if (!authState) throw new Error("请先登录后再申请开票。");
-  const device = collectDesktopDeviceFingerprint();
-  return postJsonWithDesktopAuth("/api/wallet/invoice-requests", authState, device, {
-    invoice_title: title,
-    tax_no: String(input?.tax_no || "").trim() || undefined,
-    contact_email: String(input?.contact_email || "").trim() || undefined,
-    redeem_log_ids: redeemLogIds
-  });
 }
 
 async function fetchDesktopBillingSubscription() {
@@ -2846,6 +2762,99 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
   await appendAuthAuditLog("login_failed", `${maskEmail(email)} ${lastMessage}`);
   throw new Error(lastMessage);
 }
+
+function readAlipayQrField(payload: unknown, field: string): unknown {
+  if (!payload || typeof payload !== "object") return undefined;
+  const record = payload as Record<string, unknown>;
+  if (record[field] !== undefined) return record[field];
+  const data = record.data;
+  return data && typeof data === "object" ? (data as Record<string, unknown>)[field] : undefined;
+}
+
+async function loginDesktopWithAlipayQr(input: { agreement_accepted: boolean }): Promise<DesktopAuthStatus> {
+  const agreement = await fetchAgreementConfig();
+  if (agreement.enabled && !input.agreement_accepted) {
+    throw new Error("请先勾选并同意服务协议与使用政策。");
+  }
+  const gatewayOrigin = await readGatewayOrigin();
+  const device = collectDesktopDeviceFingerprint();
+  const createResponse = await fetch(`${gatewayOrigin}/api/desktop/auth/alipay/qr`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...createDesktopAuthHeaders({ device })
+    },
+    body: JSON.stringify({ device })
+  });
+  const createPayload = await readJsonResponse(createResponse);
+  if (!createResponse.ok) {
+    throw new Error(extractDesktopAuthErrorMessage(createPayload, createResponse.status));
+  }
+  const state = String(readAlipayQrField(createPayload, "state") || "").trim();
+  const authorizationUrl = String(readAlipayQrField(createPayload, "authorization_url") || "").trim();
+  if (!state || !authorizationUrl) {
+    throw new Error("支付宝二维码登录服务返回的数据不完整。");
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(authorizationUrl);
+  } catch {
+    throw new Error("支付宝授权地址无效。");
+  }
+  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "openauth.alipay.com") {
+    throw new Error("支付宝授权地址不受信任。");
+  }
+  await electronShell.openExternal(parsedUrl.toString());
+
+  const deadline = Date.now() + 120_000;
+  let exchangeCode = "";
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const statusResponse = await fetch(
+      `${gatewayOrigin}/api/desktop/auth/alipay/qr/status?state=${encodeURIComponent(state)}`,
+      { method: "GET", headers: createDesktopAuthHeaders({ device }) }
+    );
+    const statusPayload = await readJsonResponse(statusResponse);
+    if (!statusResponse.ok) {
+      throw new Error(extractDesktopAuthErrorMessage(statusPayload, statusResponse.status));
+    }
+    const status = String(readAlipayQrField(statusPayload, "status") || "").trim().toLowerCase();
+    if (status === "unbound") {
+      throw new Error("该支付宝账号尚未绑定平台账号，请先在网页端完成绑定。");
+    }
+    if (status === "expired") {
+      throw new Error("支付宝二维码已过期，请重新扫码登录。");
+    }
+    if (status === "approved") {
+      exchangeCode = String(readAlipayQrField(statusPayload, "exchange_code") || "").trim();
+      break;
+    }
+  }
+  if (!exchangeCode) {
+    throw new Error("等待支付宝扫码超时，请重试。");
+  }
+
+  const exchangeResponse = await fetch(`${gatewayOrigin}/api/desktop/auth/alipay/qr/exchange`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...createDesktopAuthHeaders({ device })
+    },
+    body: JSON.stringify({
+      state,
+      exchange_code: exchangeCode,
+      agreement_accepted: input.agreement_accepted,
+      device
+    })
+  });
+  const exchangePayload = await readJsonResponse(exchangeResponse) as DesktopAuthApiResponse | null;
+  if (!exchangeResponse.ok || !exchangePayload?.ok) {
+    throw new Error(extractDesktopAuthErrorMessage(exchangePayload, exchangeResponse.status));
+  }
+  const userEmail = String(exchangePayload.user?.email || exchangePayload.data?.user?.email || "支付宝用户");
+  return finalizeDesktopAuthLogin(userEmail, exchangePayload);
+}
+
 function normalizeDesktopLoginError(payload: unknown, status: number, loginWithCode: boolean) {
   const rawMessage = extractDesktopAuthErrorMessage(payload, status).toLowerCase();
   if (status === 401 || rawMessage.includes("unauthorized") || rawMessage.includes("invalid username/email or password")) {
@@ -9084,11 +9093,9 @@ function registerIpc() {
     openWalletPayment: openDesktopWalletPayment,
     setWalletOverageEnabled: setDesktopWalletOverageEnabled,
     redeemCode: redeemDesktopCode,
-    listWalletInvoiceRecords: listDesktopWalletInvoiceRecords,
-    listWalletInvoiceRequests: listDesktopWalletInvoiceRequests,
-    createWalletInvoiceRequest: createDesktopWalletInvoiceRequest,
     sendLoginCode: sendDesktopLoginCode,
     login: loginDesktopAuth,
+    loginWithAlipayQr: loginDesktopWithAlipayQr,
     changePassword: changeDesktopAuthPassword,
     changeEmail: changeDesktopAuthEmail,
     logout: logoutDesktopAuth
@@ -9364,6 +9371,61 @@ function registerIpc() {
     selectAttachments: () => composerAttachmentService.select(),
     openAttachment: (input) => composerAttachmentService.open(input),
     saveClipboardFile: (input) => composerAttachmentService.saveClipboard(input)
+  });
+  registerDeliveryPreferencesIpcHandlers({
+    get: async () => {
+      if (typeof runtime?.getDeliveryPreferenceUiState === "function") {
+        return runtime.getDeliveryPreferenceUiState();
+      }
+      return {
+        visible: false,
+        hasStyle: false,
+        scope: null,
+        scopeLabel: "",
+        summary: "",
+        values: {},
+        canClear: false,
+        canPin: false,
+        canUnpin: false,
+        styleGapQuestion: ""
+      };
+    },
+    clear: async (scope) => {
+      if (typeof runtime?.clearDeliveryPreferences !== "function") {
+        throw new Error("当前运行时不支持清除交付版式。");
+      }
+      const result = await runtime.clearDeliveryPreferences(scope);
+      if (activeWorkspaceId && activeThreadId) {
+        const catalog = await readWorkspaceCatalog();
+        const workspace = catalog.workspaces.find((item) => item.id === activeWorkspaceId);
+        const thread = workspace?.threads.find((item) => item.id === activeThreadId);
+        if (workspace && thread) {
+          const state = await readThreadState(workspace, thread);
+          state.deliveryPreferences = result.threadDeliveryPreferences;
+          await writeThreadState(workspace, thread, state);
+          runtime.setThreadState(state);
+        }
+      }
+      return result.ui;
+    },
+    pin: async () => {
+      if (typeof runtime?.pinDeliveryPreferencesToProject !== "function") {
+        throw new Error("当前运行时不支持钉选交付版式。");
+      }
+      const result = await runtime.pinDeliveryPreferencesToProject();
+      if (activeWorkspaceId && activeThreadId) {
+        const catalog = await readWorkspaceCatalog();
+        const workspace = catalog.workspaces.find((item) => item.id === activeWorkspaceId);
+        const thread = workspace?.threads.find((item) => item.id === activeThreadId);
+        if (workspace && thread) {
+          const state = await readThreadState(workspace, thread);
+          state.deliveryPreferences = result.threadDeliveryPreferences;
+          await writeThreadState(workspace, thread, state);
+          runtime.setThreadState(state);
+        }
+      }
+      return result.ui;
+    }
   });
   registerWindowIpcHandlers({
     control: controlWindow,

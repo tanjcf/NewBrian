@@ -172,6 +172,39 @@ test("absorbExchange persists active preference and digest", async () => {
   }
 });
 
+test("absorbExchange persists document.style delivery preferences", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-delivery-style-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "DocStyle" });
+    const result = await shadow.absorbExchange({
+      user: "以后默认正文宋体小四、行距1.5",
+      assistant: "已记住交付版式。"
+    });
+    assert.ok(result.changed.includes("delivery-preferences"));
+    assert.ok(result.changed.includes("thread-delivery-preferences"));
+    assert.equal(result.threadDeliveryPreferences.domains["document.style"].values.fontFamily, "SimSun");
+    assert.equal(result.threadDeliveryPreferences.domains["document.style"].values.lineSpacing, 1.5);
+    const file = JSON.parse(readFileSync(join(result.skillPath, "references", "delivery-preferences.json"), "utf8"));
+    assert.equal(file.domains["document.style"].values.fontFamily, "SimSun");
+    const rules = readFileSync(join(result.skillPath, "references", "user-output-rules.md"), "utf8");
+    assert.match(rules, /交付版式:/);
+
+    const pinned = await shadow.pinThreadStyleToProject(result.threadDeliveryPreferences);
+    assert.equal(pinned.pinned, true);
+    const ui = await shadow.getDeliveryPreferenceUiState(result.threadDeliveryPreferences);
+    assert.equal(ui.canPin, false);
+    assert.equal(ui.canClear, true);
+
+    const cleared = await shadow.clearDocumentStyle("both", result.threadDeliveryPreferences);
+    assert.ok(cleared.changed.includes("thread-delivery-preferences"));
+    assert.ok(cleared.changed.includes("delivery-preferences"));
+    const clearedUi = await shadow.getDeliveryPreferenceUiState(cleared.threadDeliveryPreferences);
+    assert.equal(clearedUi.hasStyle, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("ensureProjectSkill clears stale lock left by dead pid", async () => {
   const root = mkdtempSync(join(tmpdir(), "newbrain-stale-lock-"));
   try {

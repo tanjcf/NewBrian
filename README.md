@@ -75,7 +75,7 @@ valid Authenticode signature. Override service endpoints with
 `NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL` / `NEWBRAIN_PRODUCTION_PREVIEW_URL`.
 Defaults: Test uses `http://120.48.151.202:8790/v1` and
 `http://120.48.151.202:3000`; Production uses `https://api.sinnauze.cn/v1` and
-`https://api.sinnauze.cn`. Do not use the retired `*.wangjietech.com` hosts —
+`https://www.sinnauze.cn`. Do not use the retired `*.wangjietech.com` hosts —
 they are parked/blocked and cannot reach the model gateway.
 
 Create architecture-specific macOS installers with:

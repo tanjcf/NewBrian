@@ -62,6 +62,7 @@ import type {
   DesktopAuthChangeEmailInput,
   DesktopAuthChangePasswordInput,
   DesktopAuthLoginInput,
+  DesktopAuthAlipayQrLoginInput,
   DesktopAuthSendCodeInput,
   DesktopAuthStatus,
   DesktopPreferences,
@@ -346,18 +347,9 @@ contextBridge.exposeInMainWorld("newbrain", {
   setWalletOverageEnabled: (input: { enabled: boolean }): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke(desktopIpcChannels.auth.setWalletOverageEnabled, input),
   redeemCode: (input: { code: string }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.redeemCode, input),
-  listWalletInvoiceRecords: (input?: { limit?: number }): Promise<unknown> =>
-    ipcRenderer.invoke(desktopIpcChannels.auth.listWalletInvoiceRecords, input),
-  listWalletInvoiceRequests: (input?: { limit?: number }): Promise<unknown> =>
-    ipcRenderer.invoke(desktopIpcChannels.auth.listWalletInvoiceRequests, input),
-  createWalletInvoiceRequest: (input: {
-    invoice_title: string;
-    tax_no?: string;
-    contact_email?: string;
-    redeem_log_ids: number[];
-  }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.createWalletInvoiceRequest, input),
   sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
   loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
+  loginWithAlipayQr: (input: DesktopAuthAlipayQrLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.loginWithAlipayQr, input),
   changeAuthPassword: (input: DesktopAuthChangePasswordInput): Promise<{ ok: boolean; detail: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),
   changeAuthEmail: (input: DesktopAuthChangeEmailInput): Promise<{ ok: boolean; detail: string; email: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changeEmail, input),
   logoutAuth: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.logout),
@@ -481,6 +473,10 @@ contextBridge.exposeInMainWorld("newbrain", {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   saveComposerClipboardFile: (input: SaveComposerClipboardFileInput): Promise<ComposerAttachment> =>
     ipcRenderer.invoke(desktopIpcChannels.composer.saveClipboardFile, input),
+  getDeliveryPreferences: () => ipcRenderer.invoke(desktopIpcChannels.deliveryPreferences.get),
+  clearDeliveryPreferences: (input?: { scope?: "thread" | "project" | "both" } | "thread" | "project" | "both") =>
+    ipcRenderer.invoke(desktopIpcChannels.deliveryPreferences.clear, input ?? "both"),
+  pinDeliveryPreferences: () => ipcRenderer.invoke(desktopIpcChannels.deliveryPreferences.pin),
   renameWorkspace: (input: RenameWorkspaceInput): Promise<WorkspaceCatalogItem[]> =>
     ipcRenderer.invoke(desktopIpcChannels.workspace.rename, input),
   removeWorkspace: (input: WorkspaceIdInput): Promise<WorkspaceCatalogItem[]> =>

@@ -263,6 +263,14 @@ test("localizes ASCII double quotes to Chinese curly quotes in Chinese prose", a
     'He said "hello" then left.'
   );
   assert.equal(
+    localizeChineseDoubleQuotes("各地坚持\uFF02创新驱动\uFF02不动摇。"),
+    "各地坚持\u201c创新驱动\u201d不动摇。"
+  );
+  assert.equal(
+    localizeChineseDoubleQuotes("他已说\u201c你好\"然后离开。"),
+    "他已说\u201c你好\u201d然后离开。"
+  );
+  assert.equal(
     stripInlineMarkdown('各地应**坚持**"创新驱动"。'),
     "各地应坚持\u201c创新驱动\u201d。"
   );
@@ -273,6 +281,50 @@ test("document.create_docx writes Chinese curly quotes into Word XML", async (t)
   const result = await createBuiltinToolRegistry().invoke("document.create_docx", {
     title: "工作总结",
     sections: [{ heading: "概述", body: '全年坚持"稳中求进"工作总基调。' }]
+  }, { workspacePath: root, shellEnv: process.env });
+  assert.equal(result.ok, true, result.output);
+  const bytes = await fs.readFile(path.join(root, result.artifact.path));
+  const archive = await JSZip.loadAsync(bytes);
+  const xml = await archive.file("word/document.xml").async("string");
+  assert.match(xml, /\u201c稳中求进\u201d/);
+  assert.doesNotMatch(xml, /"稳中求进"/);
+});
+
+test("document.create_docx merges thread delivery style into Word XML", async (t) => {
+  const root = await workspace(t);
+  const result = await createBuiltinToolRegistry().invoke("document.create_docx", {
+    title: "版式报告",
+    sections: [{ heading: "正文", body: "第二轮仍应使用记住的版式。" }]
+  }, {
+    workspacePath: root,
+    shellEnv: process.env,
+    deliveryPreferences: {
+      thread: {
+        version: 1,
+        domains: {
+          "document.style": {
+            scope: "thread",
+            values: { fontFamily: "宋体", fontSizePt: 12, lineSpacing: 1.5 },
+            summary: "宋体 12pt 行距1.5"
+          }
+        }
+      }
+    }
+  });
+  assert.equal(result.ok, true, result.output);
+  assert.match(result.output, /Applied delivery style/);
+  assert.equal(result.artifact.style?.fontFamily, "SimSun");
+  const bytes = await fs.readFile(path.join(root, result.artifact.path));
+  const archive = await JSZip.loadAsync(bytes);
+  const xml = await archive.file("word/document.xml").async("string");
+  assert.match(xml, /w:ascii="SimSun"|w:eastAsia="SimSun"|SimSun/);
+});
+
+test("document.create_docx localizes ASCII quotes inside structured table rows", async (t) => {
+  const root = await workspace(t);
+  const result = await createBuiltinToolRegistry().invoke("document.create_docx", {
+    title: "对照表",
+    rows: [["层次", "要点"], ["前瞻性", '坚持"稳中求进"']]
   }, { workspacePath: root, shellEnv: process.env });
   assert.equal(result.ok, true, result.output);
   const bytes = await fs.readFile(path.join(root, result.artifact.path));

@@ -4,7 +4,18 @@ import path from "node:path";
 import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { localizeChineseDoubleQuotes } from "./chinese-typography.js";
+import {
+  fontFileCandidates,
+  lineSpacingToDocxLine,
+  lineSpacingToPdfLineGap,
+  mmToPdfPoints,
+  normalizeDocumentStyleValues,
+  normalizeFontFamily
+} from "./delivery-preferences.js";
 import { writeHtmlDeck, writePptxDeck } from "./presentation-deck.js";
+
+export { containsCjkText, localizeChineseDoubleQuotes } from "./chinese-typography.js";
 
 const SUPPORTED_FORMATS = new Set(["pdf", "pptx", "xlsx", "docx", "html"]);
 const PAGE_SIZE_ALIASES = new Set(["a3", "a4", "a5", "letter", "legal", "tabloid"]);
@@ -22,7 +33,11 @@ function text(value, fallback = "") {
 
 function rows(value) {
   if (!Array.isArray(value)) return [];
-  return value.map((row) => Array.isArray(row) ? row.map((cell) => cell == null || ["string", "number", "boolean"].includes(typeof cell) ? (cell ?? "") : String(cell)) : []);
+  return value.map((row) => Array.isArray(row) ? row.map((cell) => {
+    if (cell == null) return "";
+    if (typeof cell === "number" || typeof cell === "boolean") return cell;
+    return localizeChineseDoubleQuotes(typeof cell === "string" ? cell : String(cell));
+  }) : []);
 }
 
 /**
@@ -82,27 +97,6 @@ function buildDocxTable(tableRows) {
         })]
       }))
     }))
-  });
-}
-
-/** True when the text contains CJK ideographs (Chinese prose context). */
-export function containsCjkText(value) {
-  return /[\u3400-\u9fff\uf900-\ufaff]/u.test(String(value ?? ""));
-}
-
-/**
- * Normalize ASCII straight double quotes to Chinese curly quotes in Chinese prose.
- * Chat replies often already use “…”; Word tool payloads frequently still use "...".
- * Leave English-only strings unchanged so code/identifiers keep ASCII quotes.
- */
-export function localizeChineseDoubleQuotes(value) {
-  const source = String(value ?? "");
-  if (!source || !containsCjkText(source) || !source.includes('"')) return source;
-  let opening = true;
-  return source.replace(/"/g, () => {
-    const quote = opening ? "\u201c" : "\u201d";
-    opening = !opening;
-    return quote;
   });
 }
 
@@ -240,14 +234,41 @@ async function firstExisting(paths) {
   return null;
 }
 
+function readInputStyle(input) {
+  return normalizeDocumentStyleValues(input?.style || {});
+}
+
+async function resolvePdfFontPath(style) {
+  const preferred = style.fontFamily
+    ? fontFileCandidates(style.fontFamily)
+    : (process.platform === "win32"
+      ? ["C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simsun.ttc"]
+      : ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]);
+  return firstExisting(preferred);
+}
+
+function pdfMarginsFromStyle(style) {
+  const defaults = { top: 54, right: 54, bottom: 54, left: 54 };
+  if (!style.marginsMm) return defaults;
+  const next = { ...defaults };
+  for (const edge of ["top", "right", "bottom", "left"]) {
+    const points = mmToPdfPoints(style.marginsMm[edge]);
+    if (points != null) next[edge] = points;
+  }
+  return next;
+}
+
 async function generatePdf(input, target) {
-  const font = await firstExisting(process.platform === "win32" ? [
-    "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simsun.ttc"
-  ] : ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]);
+  const style = readInputStyle(input);
+  const font = await resolvePdfFontPath(style);
+  const bodySize = style.fontSizePt || 11;
+  const titleSize = style.titleFontSizePt || 22;
+  const headingSize = Math.max(bodySize + 3, 14);
+  const lineGap = lineSpacingToPdfLineGap(style.lineSpacing, bodySize);
   await new Promise((resolve, reject) => {
     const document = new PDFDocument({
       size: "A4",
-      margins: { top: 54, right: 54, bottom: 54, left: 54 },
+      margins: pdfMarginsFromStyle(style),
       info: { Title: text(input.title, "Document") },
       ...(font ? { font } : {})
     });
@@ -256,17 +277,19 @@ async function generatePdf(input, target) {
     stream.on("error", reject);
     document.on("error", reject);
     if (font) document.font(font);
-    document.fontSize(22).fillColor("#17365D").text(stripInlineMarkdown(normalizeArtifactMarkup(text(input.title, "Document"))), { align: "center" });
+    document.fontSize(titleSize).fillColor("#17365D").text(stripInlineMarkdown(normalizeArtifactMarkup(text(input.title, "Document"))), { align: "center" });
     document.moveDown(1.2);
     for (const section of sections(input)) {
-      if (section.heading) document.fontSize(15).fillColor("#1F4E78").text(section.heading).moveDown(0.35);
+      if (section.heading) document.fontSize(headingSize).fillColor("#1F4E78").text(section.heading).moveDown(0.35);
       if (section.body) {
         for (const paragraph of section.body.split(/\n{2,}/).map((part) => part.replace(/\n+/g, "").trim()).filter(Boolean)) {
-          document.fontSize(11).fillColor("#202124").text(paragraph, { lineGap: 4, align: "justify" }).moveDown(0.45);
+          document.fontSize(bodySize).fillColor("#202124").text(paragraph, { lineGap, align: "justify" }).moveDown(0.45);
         }
         document.moveDown(0.2);
       }
-      for (const bullet of section.bullets) document.fontSize(11).fillColor("#202124").text(`• ${bullet}`, { indent: 14, lineGap: 3 });
+      for (const bullet of section.bullets) {
+        document.fontSize(bodySize).fillColor("#202124").text(`• ${bullet}`, { indent: 14, lineGap: Math.max(2, lineGap - 1) });
+      }
       if (section.bullets.length) document.moveDown(0.5);
     }
     document.end();
@@ -318,15 +341,67 @@ async function generateXlsx(input, target) {
   await workbook.xlsx.writeFile(target);
 }
 
+function docxRunOptions(textValue, style, extras = {}) {
+  const options = {
+    text: textValue,
+    ...extras
+  };
+  if (style.fontFamily) options.font = normalizeFontFamily(style.fontFamily);
+  if (style.fontSizePt) options.size = Math.round(style.fontSizePt * 2); // half-points
+  return options;
+}
+
+function appendDocxBodyStyled(children, body, style) {
+  const { text: remainder, tables } = splitMarkdownTables(body);
+  const line = lineSpacingToDocxLine(style.lineSpacing);
+  for (const paragraph of remainder.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)) {
+    for (const lineText of paragraph.split("\n").map((item) => item.trim()).filter(Boolean)) {
+      children.push(new Paragraph({
+        spacing: { after: 120, line, lineRule: "auto" },
+        children: [new TextRun(docxRunOptions(lineText, style))]
+      }));
+    }
+  }
+  for (const tableRows of tables) {
+    children.push(buildDocxTable(tableRows));
+  }
+}
+
 async function generateDocx(input, target) {
-  const children = [new Paragraph({ heading: HeadingLevel.TITLE, alignment: "center", children: [new TextRun({ text: stripInlineMarkdown(normalizeArtifactMarkup(text(input.title, "Document"))), bold: true })] })];
+  const style = readInputStyle(input);
+  const titleSize = style.titleFontSizePt
+    ? Math.round(style.titleFontSizePt * 2)
+    : (style.fontSizePt ? Math.round((style.fontSizePt + 6) * 2) : undefined);
+  const titleRun = {
+    text: stripInlineMarkdown(normalizeArtifactMarkup(text(input.title, "Document"))),
+    bold: true,
+    ...(style.fontFamily ? { font: normalizeFontFamily(style.fontFamily) } : {}),
+    ...(titleSize ? { size: titleSize } : {})
+  };
+  const children = [new Paragraph({ heading: HeadingLevel.TITLE, alignment: "center", children: [new TextRun(titleRun)] })];
   if (Array.isArray(input.rows) && input.rows.length) {
     children.push(buildDocxTable(input.rows));
   }
+  const line = lineSpacingToDocxLine(style.lineSpacing);
   for (const section of sections(input)) {
-    if (section.heading) children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(section.heading)] }));
-    if (section.body) appendDocxBody(children, section.body);
-    for (const bullet of section.bullets) children.push(new Paragraph({ text: bullet, bullet: { level: 0 } }));
+    if (section.heading) {
+      children.push(new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 120, line, lineRule: "auto" },
+        children: [new TextRun(docxRunOptions(section.heading, style, {
+          bold: style.headingBold !== false,
+          ...(style.fontSizePt ? { size: Math.round((style.fontSizePt + 2) * 2) } : {})
+        }))]
+      }));
+    }
+    if (section.body) appendDocxBodyStyled(children, section.body, style);
+    for (const bullet of section.bullets) {
+      children.push(new Paragraph({
+        bullet: { level: 0 },
+        spacing: { line, lineRule: "auto" },
+        children: [new TextRun(docxRunOptions(bullet, style))]
+      }));
+    }
   }
   const document = new Document({ creator: "NewBrain", title: text(input.title, "Document"), sections: [{ properties: {}, children }] });
   await fs.writeFile(target, await Packer.toBuffer(document));
@@ -360,7 +435,7 @@ export function validateArtifactCreateInput(input) {
   if (resolvedExtension !== format) {
     throw new Error(`targetPath extension must be .${format} (got .${resolvedExtension || "none"}). Example: outputs/report.${format}`);
   }
-  return { ...input, targetPath, format, title: title || undefined };
+  return { ...input, targetPath, format, title: title || undefined, ...(Object.keys(normalizeDocumentStyleValues(input?.style || {})).length ? { style: normalizeDocumentStyleValues(input.style) } : {}) };
 }
 
 /**
@@ -416,13 +491,15 @@ export function validateDocumentCreateInput(input, format) {
 
   const tableRows = rows(input?.rows);
 
+  const style = normalizeDocumentStyleValues(input?.style || {});
   return {
     title: title || "Document",
     content: content ? normalizeArtifactMarkup(content) : "",
     sections: normalizedSections,
     rows: tableRows.length ? tableRows : undefined,
     targetPath,
-    format: resolvedFormat
+    format: resolvedFormat,
+    ...(Object.keys(style).length ? { style } : {})
   };
 }
 

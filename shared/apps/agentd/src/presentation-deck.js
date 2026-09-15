@@ -6,6 +6,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import PptxGenJS from "pptxgenjs";
+import { localizeChineseDoubleQuotes } from "./chinese-typography.js";
 
 const FONT = "Microsoft YaHei";
 
@@ -28,7 +29,7 @@ export const DECK_THEME = Object.freeze({
 const text = (value, fallback = "") => (typeof value === "string" ? value.trim() : fallback);
 
 function strip(value) {
-  return String(value ?? "")
+  return localizeChineseDoubleQuotes(String(value ?? "")
     .replace(/!\[[^\]]*]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
@@ -36,7 +37,7 @@ function strip(value) {
     .replace(/__([^_]+)__/g, "$1")
     .replace(/(?<![\w*])\*([^*\n]+)\*(?![\w*])/g, "$1")
     .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, "$1")
-    .trim();
+    .trim());
 }
 
 const LAYOUTS = ["title", "section", "bullets", "columns", "cards", "closing", "stat", "chart", "timeline", "process", "image"];

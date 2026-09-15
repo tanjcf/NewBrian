@@ -32,6 +32,19 @@ import {
   readServerEstimatedTokens
 } from "./context-meter-policy";
 import { ComposerTextarea, type ComposerTextareaHandle } from "./ComposerTextarea";
+import { DeliveryPreferenceChip } from "./DeliveryPreferenceChip";
+import {
+  EMPTY_DELIVERY_PREFERENCE_CHIP,
+  normalizeDeliveryPreferenceChip,
+  type DeliveryPreferenceChipState
+} from "./delivery-preference-chip.ts";
+import {
+  COMPOSER_TEXTAREA_DEFAULT_HEIGHT,
+  COMPOSER_TEXTAREA_HEIGHT_STORAGE_KEY,
+  COMPOSER_TEXTAREA_MAX_HEIGHT,
+  nextComposerTextareaHeight,
+  readStoredComposerTextareaHeight
+} from "./composer-resize.ts";
 import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
@@ -634,10 +647,42 @@ export function WorkspaceModules(ctx: any) {
   const activatedBrainThreadRef = useRef("");
   const legacySidebarRowHydratedRef = useRef(false);
   const composerTextareaRef = useRef<ComposerTextareaHandle | null>(null);
+  const [composerDraftHistoryCaps, setComposerDraftHistoryCaps] = useState({ canUndo: false, canRedo: false });
   const textPreviewShellRef = useRef<HTMLDivElement | null>(null);
   const imagePreviewShellRef = useRef<HTMLDivElement | null>(null);
   const composerLayoutDraftTimerRef = useRef<number | null>(null);
   const [composerLayoutDraft, setComposerLayoutDraft] = useState("");
+  const [composerTextareaHeight, setComposerTextareaHeight] = useState(() =>
+    readStoredComposerTextareaHeight(typeof localStorage === "undefined" ? null : localStorage)
+  );
+  const [deliveryPreferenceChip, setDeliveryPreferenceChip] = useState<DeliveryPreferenceChipState>(EMPTY_DELIVERY_PREFERENCE_CHIP);
+  const [deliveryPreferenceBusy, setDeliveryPreferenceBusy] = useState(false);
+  const composerTextareaHeightRef = useRef(composerTextareaHeight);
+  useEffect(() => {
+    composerTextareaHeightRef.current = composerTextareaHeight;
+    try { localStorage.setItem(COMPOSER_TEXTAREA_HEIGHT_STORAGE_KEY, String(composerTextareaHeight)); } catch { /* ignore */ }
+  }, [composerTextareaHeight]);
+  const startComposerTextareaResize = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const handle = event.currentTarget;
+    const startY = event.clientY;
+    const startHeight = composerTextareaHeightRef.current;
+    handle.setPointerCapture?.(event.pointerId);
+    const onMove = (moveEvent: PointerEvent) => {
+      setComposerTextareaHeight(nextComposerTextareaHeight(startHeight, startY, moveEvent.clientY));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      try { handle.releasePointerCapture?.(event.pointerId); } catch { /* ignore */ }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("pointercancel", onUp, { once: true });
+  }, []);
   const [brainDraft, setBrainDraft] = useState("");
   const [brainMessageBusy, setBrainMessageBusy] = useState(false);
   const [brainFiles, setBrainFiles] = useState<any[]>([]);
@@ -1367,7 +1412,7 @@ export function WorkspaceModules(ctx: any) {
   const reasoningPickerWrapRef = useRef<HTMLDivElement | null>(null);
   const [composerSpeed, setComposerSpeed] = useState<"standard" | "fast">("standard");
   const [skillsView, setSkillsView] = useState<"list" | "detail" | "new">("list");
-  const [skillsTab, setSkillsTab] = useState<"installed" | "recommended">("installed");
+  const [skillsTab, setSkillsTab] = useState<"installed" | "recommended">("recommended");
   const [skillSearchText, setSkillSearchText] = useState("");
   const [summonedExpert, setSummonedExpert] = useState<null | {
     expertId: string;
@@ -1375,12 +1420,46 @@ export function WorkspaceModules(ctx: any) {
     displayName: string;
     preferredWorkspaceKey?: string;
   }>(null);
-  const [clawhubQuery, setClawhubQuery] = useState("");
   const [clawhubResults, setClawhubResults] = useState<any[]>([]);
   const [clawhubBusy, setClawhubBusy] = useState(false);
-  const [clawhubAckRisk, setClawhubAckRisk] = useState(false);
-  const [clawhubInstallRef, setClawhubInstallRef] = useState("");
+  const [clawhubInstallingRef, setClawhubInstallingRef] = useState("");
   const [automationView, setAutomationView] = useState<"list" | "detail" | "new">("list");
+  useEffect(() => {
+    if (activeFeature === "skills") {
+      setSkillsTab("recommended");
+    }
+  }, [activeFeature]);
+  useEffect(() => {
+    if (activeFeature !== "skills" || skillsTab !== "recommended") return;
+    if (desktopPreferences?.market?.directClawhubAllowed !== true) return;
+    if (!api?.searchOpenClawSkills) {
+      setErrorMessage("当前桌面版本尚未启用 ClawHub 搜索。");
+      return;
+    }
+    let cancelled = false;
+    setClawhubBusy(true);
+    void api
+      .searchOpenClawSkills({ query: "*", limit: 20 })
+      .then((results: unknown) => {
+        if (cancelled) return;
+        const list = Array.isArray(results) ? [...results] : [];
+        list.sort((a: any, b: any) => Number(b?.score ?? 0) - Number(a?.score ?? 0));
+        setClawhubResults(list);
+        if (typeof setChatStatus === "function") {
+          setChatStatus(`已加载 ${list.length} 个 OpenClaw 高排行技能`);
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setClawhubBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFeature, skillsTab, api, desktopPreferences?.market?.directClawhubAllowed]);
   useEffect(() => {
     let cancelled = false;
     const threadId = String(selectedThread?.id || "").trim();
@@ -1654,6 +1733,47 @@ export function WorkspaceModules(ctx: any) {
     showJumpToLatestRef.current = false;
     setShowJumpToLatest(false);
   }, [selectedThread?.id]);
+
+  const refreshDeliveryPreferenceChip = useCallback(async () => {
+    if (!api?.getDeliveryPreferences || isComposingNewThread || !selectedThread?.id) {
+      setDeliveryPreferenceChip(EMPTY_DELIVERY_PREFERENCE_CHIP);
+      return;
+    }
+    try {
+      setDeliveryPreferenceChip(normalizeDeliveryPreferenceChip(await api.getDeliveryPreferences()));
+    } catch {
+      setDeliveryPreferenceChip(EMPTY_DELIVERY_PREFERENCE_CHIP);
+    }
+  }, [api, isComposingNewThread, selectedThread?.id]);
+
+  useEffect(() => {
+    void refreshDeliveryPreferenceChip();
+  }, [refreshDeliveryPreferenceChip, isAskingModel]);
+
+  const clearDeliveryPreferenceChip = useCallback(async () => {
+    if (!api?.clearDeliveryPreferences || deliveryPreferenceBusy) return;
+    setDeliveryPreferenceBusy(true);
+    try {
+      setDeliveryPreferenceChip(normalizeDeliveryPreferenceChip(await api.clearDeliveryPreferences("both")));
+    } catch {
+      /* keep current chip */
+    } finally {
+      setDeliveryPreferenceBusy(false);
+    }
+  }, [api, deliveryPreferenceBusy]);
+
+  const pinDeliveryPreferenceChip = useCallback(async () => {
+    if (!api?.pinDeliveryPreferences || deliveryPreferenceBusy) return;
+    setDeliveryPreferenceBusy(true);
+    try {
+      setDeliveryPreferenceChip(normalizeDeliveryPreferenceChip(await api.pinDeliveryPreferences()));
+    } catch {
+      /* keep current chip */
+    } finally {
+      setDeliveryPreferenceBusy(false);
+    }
+  }, [api, deliveryPreferenceBusy]);
+
   useEffect(() => {
     if (!goalExecution?.pendingQuestion?.questionId || isAskingModel) return;
     if (!stickToBottomRef.current) return;
@@ -6478,7 +6598,11 @@ function renderChatModule() {
             </button>
           ) : null}
           <div
-            className={`composer-card${isGlobalModelBusy || brainMessageBusy ? " busy" : ""}${composerDragActive ? " drag-active" : ""}${String(composerLayoutDraft || question || "").includes("\n") || String(composerLayoutDraft || question || "").length > 80 ? " composer-card--expanded" : ""}`}
+            className={`composer-card${isGlobalModelBusy || brainMessageBusy ? " busy" : ""}${composerDragActive ? " drag-active" : ""}${composerTextareaHeight > COMPOSER_TEXTAREA_DEFAULT_HEIGHT || String(composerLayoutDraft || question || "").includes("\n") || String(composerLayoutDraft || question || "").length > 80 ? " composer-card--expanded" : ""}${composerTextareaHeight !== COMPOSER_TEXTAREA_DEFAULT_HEIGHT ? " composer-card--manual-height" : ""}`}
+            style={{
+              ["--composer-textarea-height" as string]: `${composerTextareaHeight}px`,
+              ["--composer-textarea-max-height" as string]: `${COMPOSER_TEXTAREA_MAX_HEIGHT}px`
+            }}
             onDragEnter={(event) => {
               if (!Array.from(event.dataTransfer.types).includes("Files")) return;
               event.preventDefault();
@@ -6501,11 +6625,27 @@ function renderChatModule() {
               void addComposerFiles(Array.from(event.dataTransfer.files));
             }}
           >
+            <button
+              type="button"
+              className="composer-resize-handle"
+              data-testid="composer-resize-handle"
+              aria-label="拖动调整输入框高度"
+              title="向上拖动可拉高输入框"
+              onPointerDown={startComposerTextareaResize}
+            >
+              <span aria-hidden="true" />
+            </button>
             <div className="composer-heading">
               <span>{isBrainConversationSelection
                 ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息`
                 : "向 NewBrain 描述你要继续完成的工作"}</span>
             </div>
+            <DeliveryPreferenceChip
+              state={deliveryPreferenceChip}
+              busy={deliveryPreferenceBusy || isAskingModel}
+              onClear={() => void clearDeliveryPreferenceChip()}
+              onPin={() => void pinDeliveryPreferenceChip()}
+            />
             {showDelegatedAgentStrip ? (
               <button
                 type="button"
@@ -6662,6 +6802,7 @@ function renderChatModule() {
                     : "要求后续变更"
               }
               onDraftChange={handleComposerDraftChange}
+              onHistoryChange={setComposerDraftHistoryCaps}
               onEnter={handleComposerEnter}
               onAltEnter={() => composerTextareaRef.current?.insertNewlineAtCursor()}
               onContextMenu={(event) => {
@@ -7045,6 +7186,40 @@ function renderChatModule() {
                   </div>
                 ) : null}
               </div>
+              <button
+                type="button"
+                className="composer-icon-button composer-history-button"
+                data-testid="composer-undo-button"
+                title="撤销写入 (Ctrl+Z)"
+                aria-label="撤销写入"
+                disabled={
+                  !composerDraftHistoryCaps.canUndo
+                  || (researchWritingSession.enabled && Boolean(researchWritingSession.requestText))
+                }
+                onClick={() => {
+                  composerTextareaRef.current?.undo();
+                  composerTextareaRef.current?.focus();
+                }}
+              >
+                <SidebarIcon name="undo" />
+              </button>
+              <button
+                type="button"
+                className="composer-icon-button composer-history-button"
+                data-testid="composer-redo-button"
+                title="重做写入 (Ctrl+Y)"
+                aria-label="重做写入"
+                disabled={
+                  !composerDraftHistoryCaps.canRedo
+                  || (researchWritingSession.enabled && Boolean(researchWritingSession.requestText))
+                }
+                onClick={() => {
+                  composerTextareaRef.current?.redo();
+                  composerTextareaRef.current?.focus();
+                }}
+              >
+                <SidebarIcon name="redo" />
+              </button>
               <button
                 className={`send-btn${(isGlobalModelBusy || brainMessageBusy) && !readComposerQuestion().trim() && composerImages.length === 0 ? " stop-btn" : ""}`}
                 data-testid="composer-send-button"
@@ -7954,66 +8129,62 @@ function renderSkillsModule() {
       if (typeof setChatStatus === "function") setChatStatus(`已填入技能试用提示：${skill.name}`);
     }
 
-    async function searchClawHub() {
-      if (desktopPreferences?.market?.directClawhubAllowed !== true) {
-        setErrorMessage("ClawHub 直连已关闭。请在设置 → 配置中开启，或使用本地 zip 导入。");
-        return;
-      }
-      if (!api?.searchOpenClawSkills) {
-        setErrorMessage("当前桌面版本尚未启用 ClawHub 搜索。");
-        return;
-      }
-      setClawhubBusy(true);
-      try {
-        const results = await api.searchOpenClawSkills({ query: clawhubQuery || "*", limit: 20 });
-        setClawhubResults(Array.isArray(results) ? results : []);
-        if (typeof setChatStatus === "function") setChatStatus(`ClawHub 返回 ${Array.isArray(results) ? results.length : 0} 条技能`);
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : String(error));
-      } finally {
-        setClawhubBusy(false);
-      }
-    }
-
     async function installClawHubRef(ref: string) {
+      const skillRef = String(ref || "").trim();
+      if (!skillRef) return;
       if (desktopPreferences?.market?.directClawhubAllowed !== true) {
         setErrorMessage("ClawHub 直连已关闭。请在设置 → 配置中开启，或使用本地 zip 导入。");
         return;
       }
-      if (!api?.installOpenClawSkillFromClawHub) return;
-      if (!clawhubAckRisk) {
-        setErrorMessage("安装 ClawHub 社区技能前，请先勾选风险确认。技能脚本不会自动执行。");
+      if (!api?.installOpenClawSkillFromClawHub) {
+        setErrorMessage("当前桌面版本尚未启用 ClawHub 安装。");
         return;
       }
+      const confirmed = window.confirm(
+        `即将安装社区技能 ${skillRef}。\n\n脚本不会自动执行；请确认已了解风险后再继续。`
+      );
+      if (!confirmed) return;
       setClawhubBusy(true);
+      setClawhubInstallingRef(skillRef);
       try {
         const result = await api.installOpenClawSkillFromClawHub({
-          ref,
+          ref: skillRef,
           acknowledgeRisk: true,
           force: true
         });
         const nextConfig = await api.getFeatureConfig();
         setFeatureConfig(nextConfig);
         if (typeof setChatStatus === "function") {
-          setChatStatus(`已安装 OpenClaw 技能：${result?.skill?.name || ref}`);
+          setChatStatus(`已安装 OpenClaw 技能：${result?.skill?.name || skillRef}`);
         }
         setSkillsTab("installed");
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error));
       } finally {
         setClawhubBusy(false);
+        setClawhubInstallingRef("");
       }
     }
 
     async function installOpenClawZip() {
-      if (!api?.selectAndInstallOpenClawSkill) return;
+      if (!api?.selectAndInstallOpenClawSkill) {
+        setErrorMessage("当前桌面版本尚未启用 OpenClaw zip 安装。");
+        return;
+      }
+      const confirmed = window.confirm(
+        "即将从本地 zip 安装 OpenClaw 技能。\n\n脚本不会自动执行；请确认已了解风险后再继续。"
+      );
+      if (!confirmed) return;
       setClawhubBusy(true);
       try {
         const result = await api.selectAndInstallOpenClawSkill({
-          acknowledgeRisk: clawhubAckRisk,
+          acknowledgeRisk: true,
           force: true
         });
-        if (!result) return;
+        if (!result) {
+          if (typeof setChatStatus === "function") setChatStatus("已取消 zip 安装");
+          return;
+        }
         const nextConfig = await api.getFeatureConfig();
         setFeatureConfig(nextConfig);
         if (typeof setChatStatus === "function") setChatStatus(`已从 zip 安装技能：${result.skill?.name}`);
@@ -8073,69 +8244,18 @@ function renderSkillsModule() {
     const directClawhubAllowed = desktopPreferences?.market?.directClawhubAllowed === true;
     const clawhubPanel = skillsTab === "recommended" ? (
       <section className="skills-clawhub-panel" style={{ marginBottom: 16 }}>
-        <div className="skills-detail-head">
-          <div>
-            <h2>OpenClaw / ClawHub 技能</h2>
-            <p>
-              {directClawhubAllowed
-                ? "直接连接 https://clawhub.ai 搜索并安装兼容 OpenClaw 的社区技能（SKILL.md）。脚本不会自动执行，安装前需确认风险。可在设置 → 配置中关闭直连。"
-                : "ClawHub 直连已关闭。可从本地 zip 离线导入；需要联网安装时请在设置 → 配置中开启「ClawHub 直连」。"}
-            </p>
-          </div>
+        <div className="skills-detail-actions" style={{ marginBottom: 12 }}>
+          <button type="button" disabled={clawhubBusy} onClick={() => void installOpenClawZip()}>
+            {clawhubBusy && !clawhubInstallingRef ? "处理中…" : "从 zip 安装"}
+          </button>
         </div>
-        <div className="skills-detail-form">
-          {directClawhubAllowed ? (
-            <>
-              <label>
-                <span>搜索 ClawHub</span>
-                <input
-                  value={clawhubQuery}
-                  onChange={(event) => setClawhubQuery(event.target.value)}
-                  placeholder="例如 calendar / code review / skill-hunter"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void searchClawHub();
-                  }}
-                />
-              </label>
-              <div className="skills-detail-actions">
-                <button type="button" disabled={clawhubBusy} onClick={() => void searchClawHub()}>{clawhubBusy ? "处理中…" : "搜索"}</button>
-                <button type="button" disabled={clawhubBusy} onClick={() => void installOpenClawZip()}>从 zip 安装</button>
-              </div>
-              <label>
-                <span>或直接安装 slug（支持 @owner/slug）</span>
-                <input
-                  value={clawhubInstallRef}
-                  onChange={(event) => setClawhubInstallRef(event.target.value)}
-                  placeholder="@owner/skill-slug"
-                />
-              </label>
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="checkbox" checked={clawhubAckRisk} onChange={(event) => setClawhubAckRisk(event.target.checked)} />
-                <span>我确认这是社区技能，已了解不会自动执行 scripts/，并接受安装风险</span>
-              </label>
-              <div className="skills-detail-actions">
-                <button
-                  type="button"
-                  disabled={clawhubBusy || !clawhubInstallRef.trim()}
-                  onClick={() => void installClawHubRef(clawhubInstallRef.trim())}
-                >
-                  安装 OpenClaw 技能
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="skills-empty-state" role="status">ClawHub 直连已关闭，仅支持本地 zip 导入</div>
-              <div className="skills-detail-actions">
-                <button type="button" disabled={clawhubBusy} onClick={() => void installOpenClawZip()}>从 zip 安装（离线导入）</button>
-              </div>
-            </>
-          )}
-        </div>
-        {directClawhubAllowed ? (
+        {!directClawhubAllowed ? (
+          <div className="skills-empty-state" role="status">ClawHub 直连已关闭，仅支持本地 zip 导入。可在设置 → 配置中开启。</div>
+        ) : (
           <div className="skills-market-list">
             {clawhubResults.length ? clawhubResults.map((item: any, index: number) => {
               const ref = item.ownerHandle ? `@${item.ownerHandle}/${item.slug}` : item.slug;
+              const installing = clawhubInstallingRef === ref;
               return (
                 <article className="skills-market-card" key={`${ref}-${index}`}>
                   <div className="skills-market-icon" aria-hidden="true">{String(item.displayName || item.slug || "S").slice(0, 1).toUpperCase()}</div>
@@ -8144,13 +8264,19 @@ function renderSkillsModule() {
                     <p>{item.summary || ref}</p>
                   </div>
                   <div className="skills-market-actions">
-                    <button type="button" disabled={clawhubBusy} onClick={() => void installClawHubRef(ref)}>安装</button>
+                    <button type="button" disabled={clawhubBusy} onClick={() => void installClawHubRef(ref)}>
+                      {installing ? "安装中…" : "安装"}
+                    </button>
                   </div>
                 </article>
               );
-            }) : <div className="skills-empty-state">搜索 ClawHub 或从 zip 安装 OpenClaw 技能包</div>}
+            }) : (
+              <div className="skills-empty-state" role="status">
+                {clawhubBusy ? "正在加载 OpenClaw 高排行技能…" : "暂无可用技能，可从 zip 安装"}
+              </div>
+            )}
           </div>
-        ) : null}
+        )}
       </section>
     ) : null;
 

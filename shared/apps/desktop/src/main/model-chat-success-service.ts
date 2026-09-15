@@ -13,7 +13,11 @@ const MAX_REPLAYABLE_THREAD_EVENTS = 5_000;
 
 interface RememberedExchange {
   memory?: MemoryRecord | null;
-  shadow: { changed: string[]; skillName: string };
+  shadow: {
+    changed: string[];
+    skillName: string;
+    threadDeliveryPreferences?: ThreadStateFile["deliveryPreferences"];
+  };
 }
 
 export interface ModelChatSuccessDependencies {
@@ -146,6 +150,9 @@ export class ModelChatSuccessService {
           scope: memory.scope,
           summary: memory.summary
         }, input.turnId)]);
+      }
+      if (shadow.threadDeliveryPreferences) {
+        state.deliveryPreferences = shadow.threadDeliveryPreferences;
       }
       await this.dependencies.updateMetadata({
         workspaceId: input.workspace.id,

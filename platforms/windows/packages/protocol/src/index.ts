@@ -812,11 +812,9 @@ export const desktopIpcChannels = {
     openWalletPayment: "phase1:open-wallet-payment",
     setWalletOverageEnabled: "phase1:set-wallet-overage-enabled",
     redeemCode: "phase1:redeem-code",
-    listWalletInvoiceRecords: "phase1:list-wallet-invoice-records",
-    listWalletInvoiceRequests: "phase1:list-wallet-invoice-requests",
-    createWalletInvoiceRequest: "phase1:create-wallet-invoice-request",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
+    loginWithAlipayQr: "phase1:login-with-alipay-qr",
     changePassword: "phase1:change-auth-password",
     changeEmail: "phase1:change-auth-email",
     logout: "phase1:logout-auth"
@@ -1034,6 +1032,11 @@ export const desktopIpcChannels = {
     openAttachment: "phase1:open-composer-attachment",
     saveClipboardFile: "phase1:save-composer-clipboard-file"
   },
+  deliveryPreferences: {
+    get: "phase1:get-delivery-preferences",
+    clear: "phase1:clear-delivery-preferences",
+    pin: "phase1:pin-delivery-preferences"
+  },
   policy: {
     getRules: "phase1:get-policy-rules",
     saveRules: "phase1:save-policy-rules"
@@ -1106,6 +1109,10 @@ export interface DesktopAuthLoginInput {
   password?: string;
   agreement_accepted: boolean;
   captcha?: string;
+}
+
+export interface DesktopAuthAlipayQrLoginInput {
+  agreement_accepted: boolean;
 }
 
 export interface DesktopAuthSendCodeInput { email: string }
@@ -1675,6 +1682,11 @@ export interface PhaseOneSnapshot {
   modelRoutes?: ModelRoute[];
   memories?: MemoryRecord[];
   timeline?: WorkspaceTimelineEvent[];
+  /** Thread-scoped Delivery Preference OS profile (document.style, etc.). */
+  deliveryPreferences?: {
+    version: number;
+    domains: Record<string, unknown>;
+  };
   /** Durable, user-visible execution history. Private model reasoning is never stored here. */
   events?: Array<{
     id: string;

@@ -59,6 +59,8 @@ test("requires artifact verification and CJK-safe PDF output when requested", ()
   assert.match(instruction, /must create it inside the attached workspace/);
   assert.match(instruction, /artifact\.inspect/);
   assert.match(instruction, /real CJK font/);
+  assert.match(instruction, /Chinese curly double quotes/);
+  assert.match(instruction, /U\+201C/);
 });
 
 test("forces on-disk write tools when user asks for real implementation", async () => {

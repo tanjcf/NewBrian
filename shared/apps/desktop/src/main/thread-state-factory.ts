@@ -12,6 +12,11 @@ export interface ThreadStateFile {
   events?: ThreadEventRecord[];
   context?: ThreadContextState;
   agentCheckpoint?: AgentLoopSnapshot & { savedAt: string };
+  /** Thread-scoped Delivery Preference OS profile (document.style, etc.). */
+  deliveryPreferences?: {
+    version: number;
+    domains: Record<string, unknown>;
+  };
 }
 
 export type ThreadAgentCheckpoint = NonNullable<ThreadStateFile["agentCheckpoint"]>;
@@ -134,6 +139,7 @@ export function mergeThreadStateForPersistence(
     runs: mergeById(persistedState.runs ?? [], exportedState.runs ?? []),
     timeline: mergeById(persistedState.timeline ?? [], exportedState.timeline ?? []),
     events: persistedState.events ?? [],
-    context: persistedState.context ?? exportedState.context
+    context: persistedState.context ?? exportedState.context,
+    deliveryPreferences: exportedState.deliveryPreferences ?? persistedState.deliveryPreferences
   };
 }

@@ -1014,6 +1014,11 @@ export const desktopIpcChannels = {
     openAttachment: "phase1:open-composer-attachment",
     saveClipboardFile: "phase1:save-composer-clipboard-file"
   },
+  deliveryPreferences: {
+    get: "phase1:get-delivery-preferences",
+    clear: "phase1:clear-delivery-preferences",
+    pin: "phase1:pin-delivery-preferences"
+  },
   policy: {
     getRules: "phase1:get-policy-rules",
     saveRules: "phase1:save-policy-rules"
@@ -1638,6 +1643,11 @@ export interface PhaseOneSnapshot {
   modelRoutes?: ModelRoute[];
   memories?: MemoryRecord[];
   timeline?: WorkspaceTimelineEvent[];
+  /** Thread-scoped Delivery Preference OS profile (document.style, etc.). */
+  deliveryPreferences?: {
+    version: number;
+    domains: Record<string, unknown>;
+  };
   /** Durable, user-visible execution history. Private model reasoning is never stored here. */
   events?: Array<{
     id: string;

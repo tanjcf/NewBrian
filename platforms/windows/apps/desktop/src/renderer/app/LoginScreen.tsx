@@ -9,6 +9,7 @@ interface LoginScreenProps {
   isSubmittingLogin: boolean;
   loginCodeCooldownSeconds: number;
   loginForm: LoginFormState;
+  onAlipayQrLogin: () => void;
   onLoginSubmit: (agreementChecked?: boolean) => void;
   onSendLoginCode: () => void;
   setAgreementDialog: Dispatch<SetStateAction<null | "tos" | "policy">>;
@@ -23,6 +24,7 @@ export function LoginScreen({
   isSubmittingLogin,
   loginCodeCooldownSeconds,
   loginForm,
+  onAlipayQrLogin,
   onLoginSubmit,
   onSendLoginCode,
   setAgreementDialog,
@@ -164,6 +166,16 @@ export function LoginScreen({
                 onClick={() => onLoginSubmit(agreementEnabled ? (document.querySelector("[data-login-agreement]") as HTMLInputElement | null)?.checked ?? loginForm.agreementAccepted : true)}
               >
                 {isSubmittingLogin ? "登录中..." : "登录"}
+              </button>
+            </div>
+            <div className="login-actions">
+              <button
+                className="login-submit-btn"
+                disabled={isSubmittingLogin || (agreementEnabled && !loginForm.agreementAccepted)}
+                type="button"
+                onClick={onAlipayQrLogin}
+              >
+                {isSubmittingLogin ? "等待支付宝扫码..." : "支付宝扫码登录"}
               </button>
             </div>
             <div className="login-hints login-service-hints">

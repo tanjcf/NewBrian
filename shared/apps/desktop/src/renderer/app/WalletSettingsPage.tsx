@@ -37,17 +37,6 @@ function money(value: unknown): string {
   return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
 }
 
-function unwrapList(payload: unknown): any[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    if (Array.isArray(record.items)) return record.items as any[];
-    if (Array.isArray(record.data)) return record.data as any[];
-    if (Array.isArray(record.records)) return record.records as any[];
-  }
-  return [];
-}
-
 export function WalletSettingsPage(props: {
   api: any;
   displayUserEmail?: string;
@@ -61,12 +50,6 @@ export function WalletSettingsPage(props: {
   const [wallet, setWallet] = useState<any>(null);
   const [overageEnabled, setOverageEnabled] = useState(false);
   const [overageBusy, setOverageBusy] = useState(false);
-  const [invoiceRecords, setInvoiceRecords] = useState<any[]>([]);
-  const [invoiceRequests, setInvoiceRequests] = useState<any[]>([]);
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
-  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
-  const [invoiceBusy, setInvoiceBusy] = useState(false);
-  const [invoiceForm, setInvoiceForm] = useState({ title: "", taxId: "", email: displayUserEmail || "" });
   const loadingRef = useRef(false);
   const settledRef = useRef(false);
 
@@ -101,14 +84,6 @@ export function WalletSettingsPage(props: {
       if (!settledRef.current) setWalletError("");
       const next = await api.getBillingSubscription();
       applyWalletPayload(next);
-      if (typeof api?.listWalletInvoiceRecords === "function") {
-        const records = await api.listWalletInvoiceRecords({ limit: 50 }).catch(() => []);
-        setInvoiceRecords(unwrapList(records));
-      }
-      if (typeof api?.listWalletInvoiceRequests === "function") {
-        const requests = await api.listWalletInvoiceRequests({ limit: 20 }).catch(() => []);
-        setInvoiceRequests(unwrapList(requests));
-      }
       if (next?.under_development) {
         setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
       } else {
@@ -173,7 +148,7 @@ export function WalletSettingsPage(props: {
       const warning = String(result?.warning || "").trim();
       setWalletMessage(
         warning ||
-          "已在系统浏览器打开钱包页（已带入桌面登录状态）。充值或购买套餐完成后，可返回点击刷新余额。"
+          "已在系统默认浏览器打开钱包页。充值或购买套餐完成后，可返回点击刷新余额。"
       );
     } catch (error) {
       setWalletError(formatFeatureAvailabilityError(error));
@@ -249,78 +224,11 @@ export function WalletSettingsPage(props: {
     }
   };
 
-  const toggleInvoiceRecord = (id: number) => {
-    setSelectedInvoiceIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-    );
-  };
-
-  const openInvoiceDialog = () => {
-    if (!selectedInvoiceIds.length) {
-      setWalletError("请先勾选至少一条可开票记录。");
-      return;
-    }
-    setWalletError("");
-    setInvoiceForm((current) => ({
-      ...current,
-      email: current.email || displayUserEmail || ""
-    }));
-    setInvoiceDialogOpen(true);
-  };
-
-  const submitInvoiceRequest = async () => {
-    if (invoiceBusy) return;
-    if (typeof api?.createWalletInvoiceRequest !== "function") {
-      setWalletError("开票接口未接入 spring-app，无法提交。");
-      return;
-    }
-    const title = String(invoiceForm.title || "").trim();
-    if (!title) {
-      setWalletError("请填写发票抬头。");
-      return;
-    }
-    if (!selectedInvoiceIds.length) {
-      setWalletError("请先勾选至少一条可开票记录。");
-      return;
-    }
-    setInvoiceBusy(true);
-    setWalletError("");
-    setWalletMessage("");
-    try {
-      await api.createWalletInvoiceRequest({
-        invoice_title: title,
-        tax_no: String(invoiceForm.taxId || "").trim() || undefined,
-        contact_email: String(invoiceForm.email || "").trim() || undefined,
-        redeem_log_ids: selectedInvoiceIds
-      });
-      setInvoiceDialogOpen(false);
-      setSelectedInvoiceIds([]);
-      setInvoiceForm((current) => ({ ...current, title: "", taxId: "" }));
-      setWalletMessage("开票申请已提交到 spring-app，请等待开票处理。");
-      settledRef.current = false;
-      await loadWallet(true);
-    } catch (error) {
-      setWalletError(formatFeatureAvailabilityError(error));
-    } finally {
-      setInvoiceBusy(false);
-    }
-  };
-
-  const invoiceStatusText = (status: unknown) => {
-    const normalized = String(status || "").toLowerCase();
-    if (normalized === "issued") return "已开票";
-    if (normalized === "processing") return "开票中";
-    if (normalized === "rejected") return "已驳回";
-    if (normalized === "requested") return "已申请";
-    return status ? String(status) : "处理中";
-  };
-
   return (
     <div className="wallet-settings-page">
       <div className="settings-page-head">
         <div>
           <h3>钱包</h3>
-          <p>充值与升级套餐将在系统浏览器中的钱包页完成，并自动带入当前桌面登录状态。</p>
         </div>
         <button
           type="button"
@@ -466,149 +374,8 @@ export function WalletSettingsPage(props: {
         </div>
       </section>
 
-      <section className="invoice-center">
-        <div className="invoice-center-head">
-          <div>
-            <h4>开发票</h4>
-            <p>勾选可开票兑换记录，提交后调用 spring-app 开票接口。</p>
-          </div>
-          <button
-            type="button"
-            className="invoice-primary-button"
-            disabled={invoiceBusy || !selectedInvoiceIds.length}
-            onClick={openInvoiceDialog}
-          >
-            申请开票
-          </button>
-        </div>
-
-        <div className="invoice-section-title">可开票记录</div>
-        <div className="invoice-record-list">
-          {invoiceRecords.length === 0 ? (
-            <div className="invoice-empty">暂无可开票记录（需有入账金额且未申请过开票的兑换记录）。</div>
-          ) : (
-            invoiceRecords.map((item: any) => {
-              const id = Number(item.id || 0);
-              const checked = selectedInvoiceIds.includes(id);
-              const title = String(item.title || item.plan_name || `兑换记录 #${id}`);
-              const createdAt = String(item.created_at || "--");
-              return (
-                <label key={id} className="invoice-record-row" style={{ cursor: "pointer" }}>
-                  <span style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleInvoiceRecord(id)}
-                      disabled={invoiceBusy || id <= 0}
-                    />
-                    <span>
-                      <strong>{title}</strong>
-                      <span>
-                        {createdAt} · ¥{money(item.amount)}
-                      </span>
-                    </span>
-                  </span>
-                </label>
-              );
-            })
-          )}
-        </div>
-
-        <div className="invoice-section-title">开票申请</div>
-        <div className="invoice-record-list">
-          {invoiceRequests.length === 0 ? (
-            <div className="invoice-empty">暂无开票申请。</div>
-          ) : (
-            invoiceRequests.map((item: any) => (
-              <div key={String(item.id)} className="invoice-record-row">
-                <div>
-                  <strong>{String(item.invoice_title || "未命名抬头")}</strong>
-                  <span>
-                    ¥{money(item.amount)} · {String(item.contact_email || "--")}
-                  </span>
-                </div>
-                <div className="invoice-record-meta">
-                  <em className={String(item.status || "") === "issued" ? "issued" : "pending"}>
-                    {invoiceStatusText(item.status)}
-                  </em>
-                  <span>{String(item.created_at || "")}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
       {walletMessage ? <small className="wallet-success">{walletMessage}</small> : null}
       {walletError ? <small className="wallet-error">{walletError}</small> : null}
-
-      {invoiceDialogOpen ? (
-        <div
-          className="invoice-dialog-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="wallet-invoice-title"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !invoiceBusy) setInvoiceDialogOpen(false);
-          }}
-        >
-          <div className="invoice-dialog">
-            <div className="invoice-dialog-head">
-              <div>
-                <h4 id="wallet-invoice-title">申请电子发票</h4>
-                <p>已选 {selectedInvoiceIds.length} 条记录，将提交到 spring-app。</p>
-              </div>
-              <button type="button" onClick={() => setInvoiceDialogOpen(false)} disabled={invoiceBusy}>
-                ×
-              </button>
-            </div>
-            <label>
-              <span>发票抬头</span>
-              <input
-                value={invoiceForm.title}
-                onChange={(event) => setInvoiceForm({ ...invoiceForm, title: event.target.value })}
-                placeholder="请输入企业或个人抬头"
-                disabled={invoiceBusy}
-              />
-            </label>
-            <label>
-              <span>
-                纳税人识别号 <em>选填</em>
-              </span>
-              <input
-                value={invoiceForm.taxId}
-                onChange={(event) => setInvoiceForm({ ...invoiceForm, taxId: event.target.value })}
-                placeholder="请输入统一社会信用代码"
-                disabled={invoiceBusy}
-              />
-            </label>
-            <label>
-              <span>接收邮箱</span>
-              <input
-                type="email"
-                value={invoiceForm.email}
-                onChange={(event) => setInvoiceForm({ ...invoiceForm, email: event.target.value })}
-                placeholder="invoice@example.com"
-                disabled={invoiceBusy}
-              />
-            </label>
-            {walletError ? <div className="invoice-form-error">{walletError}</div> : null}
-            <div className="invoice-dialog-actions">
-              <button type="button" onClick={() => setInvoiceDialogOpen(false)} disabled={invoiceBusy}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="invoice-primary-button"
-                onClick={() => void submitInvoiceRequest()}
-                disabled={invoiceBusy}
-              >
-                {invoiceBusy ? "提交中…" : "提交申请"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Brain Composer 写入回滚 · 双状态原型</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --panel: #ffffff;
+      --ink: #1f2328;
+      --muted: #8b949e;
+      --line: #e5e7eb;
+      --soft: #f3f4f6;
+      --blue: #3b82f6;
+      --blue-deep: #2563eb;
+      --approval: #c2410c;
+      --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
+      --shadow-lg: 0 16px 34px rgba(24, 31, 42, 0.09);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    /* —— prototype chrome —— */
+    .proto-bar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(255,255,255,.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+    }
+    .proto-bar h1 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+    }
+    .proto-tabs {
+      display: inline-flex;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fafc;
+      gap: 2px;
+    }
+    .proto-tabs button {
+      border: 0;
+      background: transparent;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font: inherit;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+    }
+    .proto-tabs button.active {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      font-weight: 600;
+    }
+    .proto-note {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* —— shell —— */
+    .app {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      min-height: calc(100vh - 45px);
+    }
+    .rail {
+      border-right: 1px solid var(--line);
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px 0;
+      gap: 14px;
+      color: #9aa3af;
+      font-size: 16px;
+    }
+    .rail .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #111;
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .main {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* —— state A: new chat —— */
+    .state-new {
+      display: none;
+      height: 100%;
+      padding: 72px 24px 40px;
+      align-content: start;
+      justify-items: center;
+    }
+    body[data-state="new"] .state-new { display: grid; }
+    body[data-state="new"] .state-thread { display: none; }
+
+    .new-title {
+      margin: 0 0 28px;
+      font-size: 34px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      text-align: center;
+    }
+
+    .composer-shell {
+      width: min(728px, 100%);
+    }
+
+    .composer-card {
+      position: relative;
+      background: #fff;
+      border: 1px solid #e1e3e7;
+      border-radius: 17px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .composer-card textarea {
+      width: 100%;
+      border: 0;
+      outline: none;
+      resize: none;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--ink);
+      padding: 14px 14px 6px;
+      min-height: 72px;
+    }
+    .composer-card textarea::placeholder { color: #9aa3af; }
+
+    .composer-tools {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 8px 8px 10px;
+    }
+    .tools-left, .tools-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .icon-btn, .chip-btn, .history-btn, .send-btn {
+      border: 0;
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: #4b5563;
+    }
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      font-size: 20px;
+      color: #6b7280;
+    }
+    .icon-btn:hover, .chip-btn:hover, .history-btn:hover:not(:disabled) {
+      background: #f3f4f6;
+    }
+    .chip-btn {
+      height: 30px;
+      border-radius: 10px;
+      padding: 0 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .chip-btn.approval { color: var(--approval); font-weight: 600; }
+    .chip-btn.model { color: #6b7280; }
+    .chip-btn .chev { font-size: 10px; opacity: .7; margin-left: 2px; }
+    .chip-btn svg, .history-btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
+
+    /* history buttons — placed before send, matching real toolbar density */
+    .history-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      color: #6b7280;
+    }
+    .history-btn:disabled {
+      opacity: .32;
+      cursor: not-allowed;
+    }
+    .history-btn:focus-visible,
+    .icon-btn:focus-visible,
+    .chip-btn:focus-visible,
+    .send-btn:focus-visible {
+      outline: 2px solid rgba(59,130,246,.45);
+      outline-offset: 1px;
+    }
+
+    .send-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 16px;
+      box-shadow: 0 4px 10px rgba(59,130,246,.28);
+    }
+    .send-btn:hover { background: var(--blue-deep); }
+    .send-btn:disabled {
+      background: #c7d2fe;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    .project-row {
+      margin-top: -1px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 14px;
+      background: #f3f4f6;
+      border: 1px solid #e1e3e7;
+      border-top: 0;
+      border-radius: 0 0 14px 14px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .project-row strong { font-weight: 500; color: #4b5563; }
+    .project-row .chev { margin-left: auto; opacity: .6; font-size: 11px; }
+
+    .integrations {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: min(728px, 100%);
+    }
+    .integ {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 14px 16px;
+      min-height: 88px;
+    }
+    .integ .ico {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .integ .ico.g { background: #ecfdf5; color: #059669; }
+    .integ .ico.b { background: #111; color: #fff; }
+    .integ .ico.p { background: #f3e8ff; color: #7c3aed; }
+    .integ strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .integ span {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* —— state B: thread —— */
+    .state-thread {
+      display: none;
+      height: 100%;
+      position: relative;
+    }
+    body[data-state="thread"] .state-thread { display: block; }
+
+    .thread-scroll {
+      height: 100%;
+      overflow: auto;
+      padding: 28px 28px 180px;
+    }
+    .msg {
+      max-width: 760px;
+      margin: 0 auto 22px;
+      font-size: 14px;
+      line-height: 1.65;
+      color: #374151;
+    }
+    .msg .file {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .msg h3 {
+      margin: 14px 0 8px;
+      font-size: 15px;
+    }
+    .msg ol {
+      margin: 0;
+      padding-left: 1.2em;
+    }
+    .msg li { margin: 4px 0; }
+
+    .thread-composer-dock {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 18px;
+      display: flex;
+      justify-content: center;
+      padding: 0 20px;
+      pointer-events: none;
+    }
+    .thread-composer-dock .composer-shell {
+      width: min(760px, 100%);
+      pointer-events: auto;
+    }
+    .thread-composer-dock .composer-card {
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: visible;
+    }
+    .resize-handle {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: -5px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .resize-handle span {
+      width: 36px;
+      height: 4px;
+      border-radius: 999px;
+      background: #d0d5dd;
+    }
+    .thread-composer-dock textarea {
+      min-height: 56px;
+      padding-top: 18px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      background: #111827;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: .18s ease;
+      z-index: 60;
+    }
+    .toast.show { opacity: 1; }
+
+    @media (max-width: 900px) {
+      .integrations { grid-template-columns: 1fr; }
+      .proto-note { display: none; }
+    }
+  </style>
+</head>
+<body data-state="new">
+  <div class="proto-bar">
+    <h1>Brain 输入框双状态 · 写入回滚原型</h1>
+    <div class="proto-tabs" role="tablist" aria-label="输入框状态">
+      <button type="button" class="active" data-switch="new" role="tab" aria-selected="true">状态一 · 新对话</button>
+      <button type="button" data-switch="thread" role="tab" aria-selected="false">状态二 · 对话中</button>
+    </div>
+    <div class="proto-note">Ctrl+Z 撤销 · Ctrl+Y / Ctrl+Shift+Z 重做 · 最近 5 次</div>
+  </div>
+
+  <div class="app">
+    <aside class="rail" aria-hidden="true">
+      <div class="dot">N</div>
+      <span>⌂</span>
+      <span>⌕</span>
+      <span style="margin-top:auto">⚙</span>
+    </aside>
+
+    <main class="main">
+      <!-- ===== State 1: New chat ===== -->
+      <section class="state-new" aria-label="新对话输入框">
+        <h2 class="new-title">我们该聊什么？</h2>
+        <div class="composer-shell">
+          <div class="composer-card" data-composer="new">
+            <textarea
+              id="inputNew"
+              rows="3"
+              placeholder="可向 NewBrain 询问任何事。输入 @ 使用插件或提及文件"
+            ></textarea>
+            <div class="composer-tools">
+              <div class="tools-left">
+                <button type="button" class="icon-btn" title="添加文件等内容" aria-label="添加">＋</button>
+                <button type="button" class="chip-btn approval" title="权限模式">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5 2v4.2c0 3.1-2.1 5.9-5 6.8-2.9-.9-5-3.7-5-6.8V3.5l5-2z" stroke="currentColor" stroke-width="1.4"/><path d="M6.2 8.1l1.3 1.3 2.5-2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  替我审批<span class="chev">▾</span>
+                </button>
+              </div>
+              <div class="tools-right">
+                <button type="button" class="history-btn" data-act="undo" title="撤销写入 Ctrl+Z" aria-label="撤销" disabled>
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 6.5H12a3 3 0 010 6H9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6.5 4.5L4 6.5l2.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button type="button" class="history-btn" data-act="redo" title="重做 Ctrl+Y" aria-label="重做" disabled>
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11.5 6.5H4a3 3 0 000 6h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.5 4.5L12 6.5l-2.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button type="button" class="chip-btn model" title="模型">
+                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>
+                  Auto·均衡中<span class="chev">▾</span>
+                </button>
+                <button type="button" class="send-btn" data-act="send" title="发送" aria-label="发送">↑</button>
+              </div>
+            </div>
+          </div>
+          <div class="project-row">
+            <span aria-hidden="true">📁</span>
+            <strong>Choose project</strong>
+            <span class="chev">▾</span>
+          </div>
+        </div>
+
+        <div class="integrations" aria-label="连接常用应用">
+          <div class="integ"><div class="ico g">＋</div><strong>连接消息传送</strong><span>了解工程对话线程动态</span></div>
+          <div class="integ"><div class="ico b">●</div><strong>连接 GitHub</strong><span>审查 PR、代码和 CI 检查项</span></div>
+          <div class="integ"><div class="ico p">◐</div><strong>连接 Linear</strong><span>跟踪缺陷和实施工作</span></div>
+        </div>
+      </section>
+
+      <!-- ===== State 2: In-thread ===== -->
+      <section class="state-thread" aria-label="对话中输入框">
+        <div class="thread-scroll">
+          <div class="msg">
+            <p>已生成文档：<a class="file" href="#">📄 outputs/demo.docx</a></p>
+            <h3>目录</h3>
+            <ol>
+              <li>欢迎 — 简要介绍</li>
+              <li>文档用途</li>
+              <li>下一步建议</li>
+            </ol>
+            <p style="margin-top:14px;color:#6b7280">（背景仅为示意；真实对话内容在输入框后方）</p>
+          </div>
+        </div>
+
+        <div class="thread-composer-dock">
+          <div class="composer-shell">
+            <div class="composer-card" data-composer="thread">
+              <div class="resize-handle" aria-hidden="true"><span></span></div>
+              <textarea
+                id="inputThread"
+                rows="2"
+                placeholder="要求后续变更"
+              ></textarea>
+              <div class="composer-tools">
+                <div class="tools-left">
+                  <button type="button" class="icon-btn" title="添加文件等内容" aria-label="添加">＋</button>
+                  <button type="button" class="chip-btn approval" title="权限模式">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5 2v4.2c0 3.1-2.1 5.9-5 6.8-2.9-.9-5-3.7-5-6.8V3.5l5-2z" stroke="currentColor" stroke-width="1.4"/><path d="M6.2 8.1l1.3 1.3 2.5-2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    替我审批<span class="chev">▾</span>
+                  </button>
+                </div>
+                <div class="tools-right">
+                  <button type="button" class="history-btn" data-act="undo" title="撤销写入 Ctrl+Z" aria-label="撤销" disabled>
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 6.5H12a3 3 0 010 6H9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6.5 4.5L4 6.5l2.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button type="button" class="history-btn" data-act="redo" title="重做 Ctrl+Y" aria-label="重做" disabled>
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11.5 6.5H4a3 3 0 000 6h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.5 4.5L12 6.5l-2.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button type="button" class="chip-btn model" title="模型">
+                    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>
+                    Auto·均衡中<span class="chev">▾</span>
+                  </button>
+                  <button type="button" class="send-btn" data-act="send" title="发送" aria-label="发送">↑</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const MAX = 5;
+    const IDLE_MS = 450;
+
+    /** Shared history across both visual states (same composer draft session). */
+    let past = [];
+    let future = [];
+    let lastCommitted = "";
+    let idleTimer = null;
+    let applying = false;
+    let toastTimer = null;
+
+    const toastEl = document.getElementById("toast");
+
+    function activeInput() {
+      return document.body.dataset.state === "thread"
+        ? document.getElementById("inputThread")
+        : document.getElementById("inputNew");
+    }
+
+    function syncInputs(text) {
+      document.getElementById("inputNew").value = text;
+      document.getElementById("inputThread").value = text;
+    }
+
+    function snapshot(label) {
+      const input = activeInput();
+      return {
+        text: input.value,
+        cursor: input.selectionStart ?? input.value.length,
+        label
+      };
+    }
+
+    function commit(label, { force = false } = {}) {
+      const text = activeInput().value;
+      if (!force && text === lastCommitted) return;
+      past.push({ text: lastCommitted, cursor: lastCommitted.length, label });
+      if (past.length > MAX) past.shift();
+      future = [];
+      lastCommitted = text;
+      render();
+    }
+
+    function scheduleCommit() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => commit("连续输入"), IDLE_MS);
+    }
+
+    function restore(entry) {
+      applying = true;
+      syncInputs(entry.text);
+      const input = activeInput();
+      const c = Math.min(entry.cursor, entry.text.length);
+      input.focus();
+      input.setSelectionRange(c, c);
+      lastCommitted = entry.text;
+      applying = false;
+      render();
+    }
+
+    function undo() {
+      if (!past.length) return;
+      clearTimeout(idleTimer);
+      const current = snapshot("当前位置");
+      const prev = past.pop();
+      future.unshift(current);
+      if (future.length > MAX) future.pop();
+      restore(prev);
+      flash("已撤销 → " + (prev.label || "上一写入"));
+    }
+
+    function redo() {
+      if (!future.length) return;
+      clearTimeout(idleTimer);
+      const current = snapshot("当前位置");
+      const next = future.shift();
+      past.push(current);
+      if (past.length > MAX) past.shift();
+      restore(next);
+      flash("已重做");
+    }
+
+    function send() {
+      clearTimeout(idleTimer);
+      past = [];
+      future = [];
+      lastCommitted = "";
+      syncInputs("");
+      flash("已发送，写入历史已清空");
+      render();
+      activeInput().focus();
+    }
+
+    function flash(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1200);
+    }
+
+    function render() {
+      document.querySelectorAll('[data-act="undo"]').forEach((btn) => {
+        btn.disabled = past.length === 0;
+      });
+      document.querySelectorAll('[data-act="redo"]').forEach((btn) => {
+        btn.disabled = future.length === 0;
+      });
+    }
+
+    function bindInput(input) {
+      input.addEventListener("input", (e) => {
+        if (applying) return;
+        syncInputs(input.value);
+        const type = e.inputType || "";
+        if (type === "insertFromPaste" || type === "deleteByCut") {
+          commit(type.includes("Paste") ? "粘贴" : "剪切", { force: true });
+          return;
+        }
+        scheduleCommit();
+      });
+      input.addEventListener("paste", () => {
+        setTimeout(() => {
+          syncInputs(input.value);
+          commit("粘贴", { force: true });
+        }, 0);
+      });
+      input.addEventListener("keydown", (e) => {
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
+          e.preventDefault();
+          undo();
+          return;
+        }
+        if (mod && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
+          e.preventDefault();
+          redo();
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          send();
+        }
+      });
+    }
+
+    bindInput(document.getElementById("inputNew"));
+    bindInput(document.getElementById("inputThread"));
+
+    document.querySelectorAll('[data-act="undo"]').forEach((btn) => btn.addEventListener("click", undo));
+    document.querySelectorAll('[data-act="redo"]').forEach((btn) => btn.addEventListener("click", redo));
+    document.querySelectorAll('[data-act="send"]').forEach((btn) => btn.addEventListener("click", send));
+
+    document.querySelectorAll("[data-switch]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const state = btn.getAttribute("data-switch");
+        document.body.dataset.state = state;
+        document.querySelectorAll("[data-switch]").forEach((b) => {
+          const on = b === btn;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        // keep draft when switching visual states
+        const text = lastCommitted || activeInput().value;
+        syncInputs(text);
+        render();
+        activeInput().focus();
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -58,13 +58,13 @@ $rustCorePackagePath = Join-Path $desktopRoot "build\rust-core\brain-core.exe"
 $sourceRoot = if ([string]::IsNullOrWhiteSpace($env:NEWBRAIN_SOURCE_ROOT)) { $repoRoot } else { $env:NEWBRAIN_SOURCE_ROOT }
 $gatewayBaseUrl = if ($isProduction) { $env:NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL } else { $env:NEWBRAIN_TEST_GATEWAY_BASE_URL }
 $previewUrl = if ($isProduction) { $env:NEWBRAIN_PRODUCTION_PREVIEW_URL } else { $env:NEWBRAIN_TEST_PREVIEW_URL }
-# Test keeps the known-live Spring IP. Production defaults to the HTTPS api.sinnauze.cn
-# gateway; retired *.wangjietech.com hosts stay in rewrite lists for legacy asar cleanup only.
+# Test keeps the known-live Spring IP. Production uses separate API and web domains;
+# retired *.wangjietech.com hosts stay in rewrite lists for legacy asar cleanup only.
 if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
   $gatewayBaseUrl = if ($isProduction) { "https://api.sinnauze.cn/v1" } else { "http://120.48.151.202:8790/v1" }
 }
 if ([string]::IsNullOrWhiteSpace($previewUrl)) {
-  $previewUrl = if ($isProduction) { "https://api.sinnauze.cn" } else { "http://120.48.151.202:3000" }
+  $previewUrl = if ($isProduction) { "https://www.sinnauze.cn" } else { "http://120.48.151.202:3000" }
 }
 $allowUnsigned = $AllowUnsigned -or ($env:NEWBRAIN_ALLOW_UNSIGNED -eq "true")
 $requireSignature = ($isProduction -or ($env:NEWBRAIN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned

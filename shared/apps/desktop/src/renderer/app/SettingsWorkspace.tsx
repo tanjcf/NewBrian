@@ -296,10 +296,6 @@ function PrototypeBillingSettingsPage() {
     const [billing, setBilling] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState("");
-    const [invoiceBill, setInvoiceBill] = useState<any>(null);
-    const [invoiceForm, setInvoiceForm] = useState({ title: "", taxId: "", email: displayUserEmail || "" });
-    const [invoiceError, setInvoiceError] = useState("");
-    const [invoiceRequests] = useState<any[]>([]);
     useEffect(() => {
       try {
         const saved = JSON.parse(localStorage.getItem(billingCacheKey) || "null");
@@ -384,16 +380,6 @@ function PrototypeBillingSettingsPage() {
       status: String(item.status || item.payment_status || "paid"),
       downloadUrl: String(item.invoice_url || item.download_url || item.receipt_url || "")
     }));
-    const invoiceRequestForBill = (billId: string) => invoiceRequests.find((item) => item.billId === billId);
-    const openInvoiceRequest = (bill: any) => {
-      setInvoiceBill(bill);
-      setInvoiceError("");
-      setInvoiceForm((current) => ({ ...current, email: current.email || displayUserEmail || "" }));
-    };
-    const submitInvoiceRequest = () => {
-      if (!invoiceBill) return;
-      setInvoiceError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
-    };
     const statusText = (status: string) => {
       const normalized = status.toLowerCase();
       if (["paid", "success", "succeeded", "completed"].includes(normalized)) return "已支付";
@@ -450,41 +436,13 @@ function PrototypeBillingSettingsPage() {
                 <span>
                   <strong>{bill.amount}</strong>
                   {bill.downloadUrl ? (
-                    <button type="button" onClick={() => window.open(bill.downloadUrl, "_blank", "noopener")}>查看发票</button>
-                  ) : invoiceRequestForBill(bill.id) ? (
-                    <button type="button" disabled>开票中</button>
-                  ) : (
-                    <button type="button" onClick={() => openInvoiceRequest(bill)}>申请开票</button>
-                  )}
+                    <button type="button" onClick={() => window.open(bill.downloadUrl, "_blank", "noopener")}>查看收据</button>
+                  ) : null}
                 </span>
               </article>
             ))}
           </div>
         </section>
-
-        {invoiceBill ? (
-          <div className="invoice-dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="prototype-invoice-title" onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setInvoiceBill(null);
-          }}>
-            <div className="invoice-dialog">
-              <div className="invoice-dialog-head">
-                <div>
-                  <h4 id="prototype-invoice-title">申请电子发票</h4>
-                  <p>{invoiceBill.date} / {invoiceBill.amount}</p>
-                </div>
-                <button type="button" onClick={() => setInvoiceBill(null)}>×</button>
-              </div>
-              <label><span>发票抬头</span><input value={invoiceForm.title} onChange={(event) => setInvoiceForm({ ...invoiceForm, title: event.target.value })} placeholder="请输入企业或个人抬头" /></label>
-              <label><span>纳税人识别号 <em>选填</em></span><input value={invoiceForm.taxId} onChange={(event) => setInvoiceForm({ ...invoiceForm, taxId: event.target.value })} placeholder="请输入统一社会信用代码" /></label>
-              <label><span>接收邮箱</span><input type="email" value={invoiceForm.email} onChange={(event) => setInvoiceForm({ ...invoiceForm, email: event.target.value })} placeholder="invoice@example.com" /></label>
-              {invoiceError ? <div className="invoice-form-error">{invoiceError}</div> : null}
-              <div className="invoice-dialog-actions">
-                <button type="button" onClick={() => setInvoiceBill(null)}>取消</button>
-                <button type="button" className="invoice-primary-button" onClick={submitInvoiceRequest}>提交申请</button>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         {loading ? <div className="billing-prototype-sync">正在同步线上订阅信息...</div> : null}
       </div>

@@ -14,6 +14,11 @@ import { ToolHostClient } from "./tool-host-client.js";
 import { UserShadow } from "./user-shadow.js";
 import { enrichShellEnvForTools } from "./shell-env.js";
 import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
+import {
+  emptyDeliveryPreferences,
+  parseDeliveryPreferences
+} from "./delivery-preferences.js";
+import { extractDeliveryPreferenceUpdate } from "./delivery-preference-extract.js";
 
 function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -125,6 +130,9 @@ export class LocalAgentRuntime {
     }
     this.policyEngine = input.policyEngine ?? new PolicyEngine({ rules: input.policyRules ?? [] });
     this.memoryIndex = new MemoryIndex({ maxRecords: input.maxMemoryRecords ?? 100 });
+    this.threadDeliveryPreferences = emptyDeliveryPreferences();
+    this.projectDeliveryPreferences = emptyDeliveryPreferences();
+    this.turnDeliveryPreferences = null;
     this.userShadow = new UserShadow({
       workspacePath: this.workspacePath,
       brainWorkspaceKey: this.brainWorkspaceKey
@@ -204,6 +212,7 @@ export class LocalAgentRuntime {
       this.capabilitySystemRestored = true;
     }
     await this.userShadow.ensureProjectSkill();
+    await this.refreshProjectDeliveryPreferences();
     await this.skillRegistry.discover();
     const scan = await this.invokeTool("workspace.scan", {});
     if (!scan.ok) throw new Error(scan.output || "Workspace scan failed.");
@@ -302,6 +311,25 @@ export class LocalAgentRuntime {
     return this.skillRegistry.discover();
   }
 
+  buildToolContext(extra = {}) {
+    return {
+      workspacePath: this.workspacePath,
+      shellEnv: this.shellEnv,
+      abortSignal: this.abortController?.signal,
+      deliveryPreferences: {
+        project: this.projectDeliveryPreferences,
+        thread: this.threadDeliveryPreferences,
+        turn: this.turnDeliveryPreferences || undefined
+      },
+      ...extra
+    };
+  }
+
+  async refreshProjectDeliveryPreferences() {
+    this.projectDeliveryPreferences = await this.userShadow.readDeliveryPreferences().catch(() => emptyDeliveryPreferences());
+    return this.projectDeliveryPreferences;
+  }
+
   async invokeTool(name, input, options = {}) {
     let descriptor = this.toolRegistry.get(name);
     if (!descriptor && this.capabilityResolver) {
@@ -328,11 +356,14 @@ export class LocalAgentRuntime {
         policy
       };
     }
-    const toolContext = {
-      workspacePath: this.workspacePath,
-      shellEnv: this.shellEnv,
-      abortSignal: this.abortController?.signal
-    };
+    const projectDelivery = await this.refreshProjectDeliveryPreferences();
+    const toolContext = this.buildToolContext({
+      deliveryPreferences: {
+        project: projectDelivery,
+        thread: this.threadDeliveryPreferences,
+        turn: this.turnDeliveryPreferences || undefined
+      }
+    });
     const capabilityResult = descriptor.external
       ? null
       : await this.capabilityRuntime.invoke(name, input, { ...toolContext, approved: true });
@@ -387,7 +418,7 @@ export class LocalAgentRuntime {
     this.abortController = options.abortController ?? new AbortController();
     this.agentLoop = new AgentLoop({
       toolRegistry: this.toolRegistry,
-      toolContext: { workspacePath: this.workspacePath, shellEnv: this.shellEnv, abortSignal: this.abortController.signal },
+      toolContext: this.buildToolContext(),
       abortSignal: this.abortController.signal,
       maxSteps: options.maxSteps,
       allowedToolNames: options.allowedToolNames,
@@ -585,6 +616,9 @@ export class LocalAgentRuntime {
     this.memoryIndex.hydrate(this.sessionMachine.snapshot.memories);
     this.sessionMachine.snapshot.runs = Array.isArray(input.runs) ? clone(input.runs) : [];
     this.sessionMachine.snapshot.timeline = Array.isArray(input.timeline) ? clone(input.timeline) : [];
+    this.threadDeliveryPreferences = parseDeliveryPreferences(input.deliveryPreferences);
+    this.sessionMachine.snapshot.deliveryPreferences = clone(this.threadDeliveryPreferences);
+    this.turnDeliveryPreferences = null;
     this.sessionMachine.snapshot.session.status = "idle";
   }
 
@@ -593,7 +627,8 @@ export class LocalAgentRuntime {
       messages: clone(this.sessionMachine.snapshot.messages),
       memories: clone(this.sessionMachine.snapshot.memories ?? []),
       runs: clone(this.sessionMachine.snapshot.runs ?? []),
-      timeline: clone(this.sessionMachine.snapshot.timeline ?? [])
+      timeline: clone(this.sessionMachine.snapshot.timeline ?? []),
+      deliveryPreferences: clone(this.threadDeliveryPreferences)
     };
   }
 
@@ -608,7 +643,17 @@ export class LocalAgentRuntime {
   }
 
   async prepareShadowLearning(user) {
-    const prepared = await this.userShadow.prepareLearningTurn(user);
+    const earlyUpdate = extractDeliveryPreferenceUpdate({ user, assistant: "" });
+    if (earlyUpdate?.clear) {
+      this.turnDeliveryPreferences = null;
+    } else if (earlyUpdate?.values) {
+      // Same-turn tool calls need style before post-turn absorb.
+      this.turnDeliveryPreferences = earlyUpdate.values;
+    }
+    await this.refreshProjectDeliveryPreferences();
+    const prepared = await this.userShadow.prepareLearningTurn(user, {
+      threadDeliveryPreferences: this.threadDeliveryPreferences
+    });
     await this.skillRegistry.discover();
     if (prepared.changed?.length) {
       this.sessionMachine.events.push({
@@ -623,7 +668,21 @@ export class LocalAgentRuntime {
 
   async rememberExchangeWithShadow(input) {
     const memory = this.rememberExchange(input);
-    const shadow = await this.userShadow.absorbExchange(input);
+    const shadow = await this.userShadow.absorbExchange({
+      ...input,
+      threadDeliveryPreferences: this.threadDeliveryPreferences
+    });
+    if (shadow.threadDeliveryPreferences) {
+      this.threadDeliveryPreferences = parseDeliveryPreferences(shadow.threadDeliveryPreferences);
+      this.sessionMachine.snapshot.deliveryPreferences = clone(this.threadDeliveryPreferences);
+    }
+    if (shadow.projectDeliveryPreferences) {
+      this.projectDeliveryPreferences = parseDeliveryPreferences(shadow.projectDeliveryPreferences);
+    } else {
+      await this.refreshProjectDeliveryPreferences();
+    }
+    // Turn overlay was for this turn's tools only; clear after absorb.
+    this.turnDeliveryPreferences = null;
     await this.skillRegistry.discover();
     this.sessionMachine.events.push({
       id: makeId("shadow-event"),
@@ -632,6 +691,43 @@ export class LocalAgentRuntime {
       payload: shadow
     });
     return { memory, shadow };
+  }
+
+  getDeliveryPreferences() {
+    return clone(this.threadDeliveryPreferences);
+  }
+
+  async getDeliveryPreferenceUiState() {
+    return this.userShadow.getDeliveryPreferenceUiState(this.threadDeliveryPreferences);
+  }
+
+  async clearDeliveryPreferences(scope = "both") {
+    const result = await this.userShadow.clearDocumentStyle(scope, this.threadDeliveryPreferences);
+    if (result.threadDeliveryPreferences) {
+      this.threadDeliveryPreferences = parseDeliveryPreferences(result.threadDeliveryPreferences);
+      this.sessionMachine.snapshot.deliveryPreferences = clone(this.threadDeliveryPreferences);
+    }
+    if (result.projectDeliveryPreferences) {
+      this.projectDeliveryPreferences = parseDeliveryPreferences(result.projectDeliveryPreferences);
+    }
+    this.turnDeliveryPreferences = null;
+    await this.skillRegistry.discover();
+    return {
+      ...result,
+      ui: await this.getDeliveryPreferenceUiState()
+    };
+  }
+
+  async pinDeliveryPreferencesToProject() {
+    const result = await this.userShadow.pinThreadStyleToProject(this.threadDeliveryPreferences);
+    if (result.projectDeliveryPreferences) {
+      this.projectDeliveryPreferences = parseDeliveryPreferences(result.projectDeliveryPreferences);
+    }
+    await this.skillRegistry.discover();
+    return {
+      ...result,
+      ui: await this.getDeliveryPreferenceUiState()
+    };
   }
 
   getMemories() {

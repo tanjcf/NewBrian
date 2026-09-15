@@ -23,7 +23,7 @@
 | 渠道 | 网关 | 预览 | 输出 |
 |------|------|------|------|
 | test | `http://120.48.151.202:8790/v1` | `http://120.48.151.202:3000` | `.materialized/windows/apps/desktop/release/test/` |
-| production | `https://api.sinnauze.cn/v1` | `https://api.sinnauze.cn` | `.materialized/windows/apps/desktop/release/production/` |
+| production | `https://api.sinnauze.cn/v1` | `https://www.sinnauze.cn` | `.materialized/windows/apps/desktop/release/production/` |
 
 test 产物：`NewBrain <版本号>-test-unsigned.msi`（默认不签名）。
 production 有签名证书时产出已签名 MSI；本机未配置 `CSC_LINK` / `WINDOWS_CSC_LINK` 时自动打未签名包：

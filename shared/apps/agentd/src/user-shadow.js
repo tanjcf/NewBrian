@@ -11,6 +11,24 @@ import {
   ensureSceneProjectInit,
   normalizeSceneKey
 } from "./scene-knowledge-seed.js";
+import {
+  DELIVERY_PREFERENCES_FILENAME,
+  DOCUMENT_STYLE_DOMAIN,
+  applyDocumentStyleDomain,
+  buildDeliveryPreferenceUiState,
+  clearDocumentStyleDomain,
+  deliveryRulesSummaryLine,
+  emptyDeliveryPreferences,
+  formatDeliveryPreferencesPromptBlock,
+  hasDocumentStyle,
+  parseDeliveryPreferences,
+  summarizeDocumentStyle
+} from "./delivery-preferences.js";
+import {
+  extractDeliveryPreferenceUpdate,
+  isDocumentDeliveryIntent,
+  isDocumentStyleSensitive
+} from "./delivery-preference-extract.js";
 
 /**
  * Hermes/PAHF-style active user-shadow learning for project-manager.
@@ -363,7 +381,7 @@ export function buildPersonalizationGuidance(input = {}) {
   const lines = [
     "Personalization loop (Hermes/PAHF-style):",
     "1. Pre-Action: if the current request is ambiguous/subjective and injected preferences do not cover it, ask ONE clarifying question BEFORE acting. Do not guess lasting taste.",
-    "2. Grounding: apply injected user-output-rules and repo Project OS (NEWBRAIN.md); once a preference exists, act directly and do not re-ask the same topic.",
+    "2. Grounding: apply injected user-output-rules, delivery preferences, and repo Project OS (NEWBRAIN.md); once a preference exists, act directly and do not re-ask the same topic.",
     "3. Post-Action: when the user corrects you or answers a learning question, treat it as durable preference learning (runtime will distill it).",
     "Ask at most one preference question per turn. Prefer executing when memory already answers the ambiguity.",
     "Durable architecture and project conventions belong in repo-root NEWBRAIN.md (agent may edit). Runtime preference files under .newbrain must not be edited with tools."
@@ -372,7 +390,43 @@ export function buildPersonalizationGuidance(input = {}) {
     lines.push("Open learning questions for this project (ask before acting if still unresolved):");
     for (const question of openQuestions) lines.push(`- ${question}`);
   }
+  const deliveryBlock = String(input.deliveryPreferencesText || "").trim();
+  if (deliveryBlock) lines.push(deliveryBlock);
   return lines.join("\n");
+}
+
+/** Pre-turn gap for document.style when the user wants a document but no style memory exists. */
+export function detectDocumentStyleLearningGap(user, hasStyleMemory, existingOpenQuestions = []) {
+  if (!isDocumentDeliveryIntent(user)) {
+    return { shouldAsk: false, question: "", openQuestions: [...existingOpenQuestions] };
+  }
+  if (isDocumentStyleSensitive(user) || hasStyleMemory) {
+    return { shouldAsk: false, question: "", openQuestions: [...existingOpenQuestions] };
+  }
+  if (includesAny(user, ONE_SHOT_MARKERS)) {
+    return { shouldAsk: false, question: "", openQuestions: [...existingOpenQuestions] };
+  }
+  const question = "待确认交付版式: 正文用什么字体和行距？（例如宋体、小四、行距1.5；也可说仅本次）";
+  const openQuestions = [...existingOpenQuestions];
+  uniquePush(openQuestions, question);
+  return { shouldAsk: true, question, openQuestions };
+}
+
+async function upsertDeliveryRulesSummary(filePath, summaryLine) {
+  const line = cleanLine(summaryLine);
+  if (!line) return false;
+  return withFileQueue(filePath, async () => {
+    let source = await readText(filePath);
+    if (!source) source = "# User Output Rules\n\n";
+    const nextLines = source.split(/\r?\n/).filter((entry) => !/^- 交付版式:/.test(entry.trim()));
+    if (!nextLines[nextLines.length - 1]?.trim()) nextLines.pop();
+    nextLines.push(`- ${line}`, "");
+    const next = nextLines.join("\n");
+    if (next === source) return false;
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, next, "utf8");
+    return true;
+  });
 }
 
 function isDurableLearnedRuleLine(line) {
@@ -380,7 +434,7 @@ function isDurableLearnedRuleLine(line) {
   if (!text) return false;
   if (DEFAULT_OUTPUT_RULES.includes(text)) return true;
   if (isReusableRuleRequest(text)) return true;
-  if (/^(规则|偏好|修正)[:：]/.test(text)) return true;
+  if (/^(规则|偏好|修正|交付版式)[:：]/.test(text)) return true;
   if (isCorrectionOrPreference(text)) return true;
   return false;
 }
@@ -683,6 +737,7 @@ When the user request edits, generates, completes, or documents source code—es
 ## Runtime knowledge files (do not edit with tools)
 
 - \`references/user-output-rules.md\`: distilled habits, preferences, and corrections.
+- \`references/${DELIVERY_PREFERENCES_FILENAME}\`: typed delivery preferences (document.style); runtime-owned JSON.
 - \`references/learning-open-questions.md\`: open preference questions to ask before acting.
 - \`references/session-digest.md\`: append-only session summaries.
 - \`references/project-knowledge.md\`: short NEWBRAIN.md candidate index only (not the architecture source of truth).
@@ -712,8 +767,112 @@ export class UserShadow {
     return path.join(this.referencesPath, "user-output-rules.md");
   }
 
+  deliveryPreferencesPath() {
+    return path.join(this.referencesPath, DELIVERY_PREFERENCES_FILENAME);
+  }
+
   projectOsPath() {
     return path.join(this.workspacePath, PROJECT_OS_FILENAME);
+  }
+
+  async readDeliveryPreferences() {
+    try {
+      const raw = JSON.parse(await readText(this.deliveryPreferencesPath()) || "{}");
+      return parseDeliveryPreferences(raw);
+    } catch {
+      return emptyDeliveryPreferences();
+    }
+  }
+
+  async writeDeliveryPreferences(file) {
+    const next = parseDeliveryPreferences(file);
+    await fs.mkdir(this.referencesPath, { recursive: true });
+    await fs.writeFile(this.deliveryPreferencesPath(), `${JSON.stringify(next, null, 2)}\n`, "utf8");
+    return next;
+  }
+
+  /**
+   * Clear document.style from thread and/or project.
+   * @param {"thread"|"project"|"both"} scope
+   */
+  async clearDocumentStyle(scope = "both", threadFile = null) {
+    await this.ensureProjectSkill();
+    const changed = [];
+    let threadDeliveryPreferences = parseDeliveryPreferences(threadFile);
+    let projectDeliveryPreferences = await this.readDeliveryPreferences();
+    if (scope === "thread" || scope === "both") {
+      threadDeliveryPreferences = clearDocumentStyleDomain(threadDeliveryPreferences);
+      changed.push("thread-delivery-preferences");
+    }
+    if (scope === "project" || scope === "both") {
+      projectDeliveryPreferences = clearDocumentStyleDomain(projectDeliveryPreferences);
+      await this.writeDeliveryPreferences(projectDeliveryPreferences);
+      changed.push("delivery-preferences");
+    }
+    if (changed.length) {
+      const projectStyle = projectDeliveryPreferences.domains?.[DOCUMENT_STYLE_DOMAIN]?.values;
+      await upsertDeliveryRulesSummary(
+        this.outputRulesPath(),
+        scope === "thread" && projectStyle && Object.keys(projectStyle).length
+          ? deliveryRulesSummaryLine(projectStyle)
+          : "交付版式: （已清除）"
+      );
+      await sanitizeOutputRules(this.outputRulesPath());
+    }
+    return {
+      changed,
+      threadDeliveryPreferences,
+      projectDeliveryPreferences,
+      deliveryPreferencesText: formatDeliveryPreferencesPromptBlock({
+        project: projectDeliveryPreferences,
+        thread: threadDeliveryPreferences
+      })
+    };
+  }
+
+  /** Promote current thread document.style into project defaults. */
+  async pinThreadStyleToProject(threadFile) {
+    await this.ensureProjectSkill();
+    const threadDeliveryPreferences = parseDeliveryPreferences(threadFile);
+    const style = threadDeliveryPreferences.domains[DOCUMENT_STYLE_DOMAIN];
+    if (!style?.values || !Object.keys(style.values).length) {
+      return {
+        changed: [],
+        pinned: false,
+        threadDeliveryPreferences,
+        projectDeliveryPreferences: await this.readDeliveryPreferences()
+      };
+    }
+    const projectDeliveryPreferences = applyDocumentStyleDomain(await this.readDeliveryPreferences(), {
+      ...style,
+      scope: "project",
+      source: style.source || "user_explicit",
+      confidence: Math.max(Number(style.confidence) || 0.9, 0.9),
+      summary: style.summary || summarizeDocumentStyle(style.values),
+      updatedAt: new Date().toISOString()
+    });
+    await this.writeDeliveryPreferences(projectDeliveryPreferences);
+    await upsertDeliveryRulesSummary(this.outputRulesPath(), deliveryRulesSummaryLine(style.values));
+    await sanitizeOutputRules(this.outputRulesPath());
+    return {
+      changed: ["delivery-preferences", "user-output-rules"],
+      pinned: true,
+      threadDeliveryPreferences,
+      projectDeliveryPreferences,
+      deliveryPreferencesText: formatDeliveryPreferencesPromptBlock({
+        project: projectDeliveryPreferences,
+        thread: threadDeliveryPreferences
+      })
+    };
+  }
+
+  async getDeliveryPreferenceUiState(threadFile = null) {
+    const openQuestions = await this.readOpenQuestions();
+    return buildDeliveryPreferenceUiState({
+      thread: threadFile,
+      project: await this.readDeliveryPreferences(),
+      openQuestions
+    });
   }
 
   /**
@@ -789,6 +948,9 @@ export class UserShadow {
       `Scene Tools routing: see references/${SCENE_TOOLS_ROUTING_FILENAME} and references/${SCENE_KNOWLEDGE_FILENAME}.`
     ]);
     await appendUnique(path.join(this.referencesPath, "session-digest.md"), "# Session Digest", []);
+    if (!(await readText(this.deliveryPreferencesPath()))) {
+      await this.writeDeliveryPreferences(emptyDeliveryPreferences());
+    }
     const openPath = this.openQuestionsPath();
     if (!(await readText(openPath))) {
       await writeOpenQuestionsFile(openPath, []);
@@ -805,25 +967,41 @@ export class UserShadow {
    * Pre-turn hook: open learning questions when the request is preference-sensitive
    * and durable preference memory does not cover it.
    */
-  async prepareLearningTurn(user) {
+  async prepareLearningTurn(user, options = {}) {
     await this.ensureProjectSkill();
     const rulesText = await readText(this.outputRulesPath());
     const existingOpen = await this.readOpenQuestions();
+    const projectDelivery = await this.readDeliveryPreferences();
+    const threadHasStyle = hasDocumentStyle(options.threadDeliveryPreferences);
+    const projectHasStyle = hasDocumentStyle(projectDelivery);
     const gap = detectLearningGap(user, rulesText, existingOpen);
+    const styleGap = detectDocumentStyleLearningGap(
+      user,
+      threadHasStyle || projectHasStyle,
+      gap.shouldAsk ? gap.openQuestions : existingOpen
+    );
+    const shouldAsk = gap.shouldAsk || styleGap.shouldAsk;
+    const openQuestions = shouldAsk
+      ? (styleGap.shouldAsk ? styleGap.openQuestions : gap.openQuestions)
+      : existingOpen;
     const changed = [];
-    if (gap.shouldAsk) {
-      if (await writeOpenQuestionsFile(this.openQuestionsPath(), gap.openQuestions)) {
+    if (shouldAsk) {
+      if (await writeOpenQuestionsFile(this.openQuestionsPath(), openQuestions)) {
         changed.push("learning-open-questions");
       }
     }
-    const openQuestions = gap.shouldAsk ? gap.openQuestions : existingOpen;
+    const deliveryPreferencesText = formatDeliveryPreferencesPromptBlock({
+      project: projectDelivery,
+      thread: options.threadDeliveryPreferences
+    });
     return {
       skillName: this.skillName,
       skillPath: this.skillPath,
       changed,
-      shouldAsk: gap.shouldAsk,
+      shouldAsk,
       openQuestions,
-      personalizationGuidance: buildPersonalizationGuidance({ openQuestions })
+      deliveryPreferencesText,
+      personalizationGuidance: buildPersonalizationGuidance({ openQuestions, deliveryPreferencesText })
     };
   }
 
@@ -860,13 +1038,63 @@ export class UserShadow {
       changed.push("learning-open-questions");
     }
 
+    const deliveryUpdate = extractDeliveryPreferenceUpdate({
+      user: input.user,
+      assistant: input.assistant,
+      openQuestions: priorOpen
+    });
+    let threadDeliveryPreferences = parseDeliveryPreferences(input.threadDeliveryPreferences);
+    let projectDeliveryPreferences = await this.readDeliveryPreferences();
+    if (deliveryUpdate?.clear) {
+      if (deliveryUpdate.promoteToProject || deliveryUpdate.scope === "project") {
+        projectDeliveryPreferences = clearDocumentStyleDomain(projectDeliveryPreferences);
+        await this.writeDeliveryPreferences(projectDeliveryPreferences);
+        changed.push("delivery-preferences");
+      }
+      threadDeliveryPreferences = clearDocumentStyleDomain(threadDeliveryPreferences);
+      changed.push("thread-delivery-preferences");
+      await upsertDeliveryRulesSummary(this.outputRulesPath(), "交付版式: （已清除）");
+    } else if (deliveryUpdate && deliveryUpdate.scope !== "turn") {
+      const domain = {
+        scope: deliveryUpdate.promoteToProject ? "project" : "thread",
+        values: deliveryUpdate.values,
+        source: deliveryUpdate.source,
+        confidence: deliveryUpdate.confidence,
+        summary: deliveryUpdate.summary
+      };
+      threadDeliveryPreferences = applyDocumentStyleDomain(threadDeliveryPreferences, {
+        ...domain,
+        scope: "thread"
+      });
+      changed.push("thread-delivery-preferences");
+      if (deliveryUpdate.promoteToProject || deliveryUpdate.scope === "project") {
+        projectDeliveryPreferences = applyDocumentStyleDomain(projectDeliveryPreferences, {
+          ...domain,
+          scope: "project"
+        });
+        await this.writeDeliveryPreferences(projectDeliveryPreferences);
+        changed.push("delivery-preferences");
+      }
+      if (await upsertDeliveryRulesSummary(this.outputRulesPath(), deliveryRulesSummaryLine(deliveryUpdate.values))) {
+        changed.push("user-output-rules");
+      }
+    }
+
     await sanitizeOutputRules(this.outputRulesPath());
+    const deliveryPreferencesText = formatDeliveryPreferencesPromptBlock({
+      project: projectDeliveryPreferences,
+      thread: threadDeliveryPreferences
+    });
     return {
       skillName: this.skillName,
       skillPath: this.skillPath,
       changed,
       openQuestions: nextOpen,
-      personalizationGuidance: buildPersonalizationGuidance({ openQuestions: nextOpen })
+      deliveryPreferenceUpdate: deliveryUpdate,
+      threadDeliveryPreferences,
+      projectDeliveryPreferences,
+      deliveryPreferencesText,
+      personalizationGuidance: buildPersonalizationGuidance({ openQuestions: nextOpen, deliveryPreferencesText })
     };
   }
 }

@@ -69,7 +69,7 @@ try {
   $env:NEWBRAIN_SOURCE_ROOT = $sourceRoot
   if ($isProduction) {
     $env:NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL = "https://api.sinnauze.cn/v1"
-    $env:NEWBRAIN_PRODUCTION_PREVIEW_URL = "https://api.sinnauze.cn"
+    $env:NEWBRAIN_PRODUCTION_PREVIEW_URL = "https://www.sinnauze.cn"
     $gateway = $env:NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL
   } else {
     $env:NEWBRAIN_TEST_GATEWAY_BASE_URL = "http://120.48.151.202:8790/v1"

@@ -76,15 +76,22 @@ interface ModelChatRuntime extends ModelChatGoalRuntime {
   getAgentLoopSnapshot(): { status: string } | null;
   rememberExchangeWithShadow(input: { user: string; assistant: string; scope: "session" }): Promise<{
     memory?: MemoryRecord | null;
-    shadow: { changed: string[]; skillName: string };
+    shadow: {
+      changed: string[];
+      skillName: string;
+      threadDeliveryPreferences?: ThreadStateFile["deliveryPreferences"];
+      deliveryPreferencesText?: string;
+    };
   }>;
   prepareShadowLearning?(user: string): Promise<{
     shouldAsk?: boolean;
     openQuestions?: string[];
     personalizationGuidance?: string;
+    deliveryPreferencesText?: string;
     changed?: string[];
   }>;
   getMemories(): MemoryRecord[];
+  getDeliveryPreferences?(): ThreadStateFile["deliveryPreferences"];
 }
 
 interface ModelChatResult {
@@ -721,6 +728,7 @@ export class ModelChatService {
         loadedSkills: loadedSkillResult.loadedLocalSkills,
         availableModels: this.dependencies.getAuthorizedModels?.() ?? [],
         personalizationGuidance: shadowLearning?.personalizationGuidance,
+        deliveryPreferencesText: shadowLearning?.deliveryPreferencesText,
         localKnowledgeText,
         sceneKnowledgeText,
         brainWorkspaceKey: workspace.brainWorkspaceKey,

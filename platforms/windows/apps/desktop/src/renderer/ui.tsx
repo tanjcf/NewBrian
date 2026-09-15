@@ -1378,6 +1378,27 @@ export function App() {
     }
   }
 
+  async function handleAlipayQrLogin() {
+    if (!api || isSubmittingLogin) return;
+    const agreementAccepted = authStatus.agreement?.enabled ? loginForm.agreementAccepted : true;
+    if (!agreementAccepted) {
+      setErrorMessage("请先勾选并同意服务协议与使用政策。");
+      return;
+    }
+    setErrorMessage("");
+    setIsSubmittingLogin(true);
+    try {
+      const nextAuthStatus = await api.loginWithAlipayQr({ agreement_accepted: agreementAccepted });
+      setAuthStatus(nextAuthStatus);
+      setChatStatus("支付宝扫码登录成功，已接入真实会话。");
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(normalizeLoginErrorMessage(error));
+    } finally {
+      setIsSubmittingLogin(false);
+    }
+  }
+
   function handleLoginFormChange(updater: React.SetStateAction<LoginFormState>) {
     setErrorMessage("");
     setLoginForm(updater);
@@ -2971,6 +2992,7 @@ export function App() {
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
         onLoginSubmit={(agreementChecked) => void handleLoginSubmit(agreementChecked)}
+        onAlipayQrLogin={() => void handleAlipayQrLogin()}
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}
         setLoginForm={handleLoginFormChange}

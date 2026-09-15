@@ -31,6 +31,8 @@ export interface ModelChatPromptInput {
   availableModels?: ModelEconomicsOption[];
   /** Hermes/PAHF-style personalization guidance from project-manager shadow. */
   personalizationGuidance?: string;
+  /** Typed delivery preferences prompt block (document.style). */
+  deliveryPreferencesText?: string;
   /** Disk-cached global + project knowledge (manual sync; inject every turn from local cache). */
   localKnowledgeText?: string;
   /** Current scene capability knowledge retrieved for this turn. */
@@ -215,6 +217,7 @@ export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
     memoryInstruction,
     buildProjectOsPromptBlock(input.projectOs ?? ""),
     buildPersonalizationInstruction(input.loadedSkills, input.personalizationGuidance),
+    input.deliveryPreferencesText?.trim() || "",
     input.localKnowledgeText?.trim()
       ? [
           "User knowledge space (local cache; global + current project; sync manually from Settings when needed):",

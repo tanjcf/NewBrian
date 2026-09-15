@@ -67,6 +67,12 @@ export function SidebarIcon({ name }: { name: string }) {
   if (name === "refresh") {
     return <svg {...common}><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>;
   }
+  if (name === "undo") {
+    return <svg {...common}><path d="M9 14H4.5V9.5" /><path d="M4.5 14A7.5 7.5 0 1 0 7 7.2" /></svg>;
+  }
+  if (name === "redo") {
+    return <svg {...common}><path d="M15 14h4.5V9.5" /><path d="M19.5 14A7.5 7.5 0 1 1 17 7.2" /></svg>;
+  }
   if (name === "download") {
     return <svg {...common}><path d="M12 3v12" /><path d="m6 11 6 6 6-6" /><path d="M4 21h16" /></svg>;
   }

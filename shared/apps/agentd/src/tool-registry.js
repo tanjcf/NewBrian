@@ -2,6 +2,10 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { generateArtifact, validateArtifactCreateInput, validateDocumentCreateInput } from "./artifact-generator.js";
+import {
+  attachResolvedStyleToInput,
+  resolveDocumentStyle
+} from "./delivery-preferences.js";
 import { analyzeSpreadsheet, inspectSpreadsheet, updateSpreadsheet, verifySpreadsheetArtifact } from "./spreadsheet-workbook.js";
 import {
   COMMAND_OUTPUT_LIMITS,
@@ -1169,6 +1173,29 @@ const documentSectionSchema = {
   additionalProperties: false
 };
 
+const documentStyleSchema = {
+  type: "object",
+  description: "Optional document.style overrides (fontFamily, fontSizePt, lineSpacing, headingBold, marginsMm)",
+  properties: {
+    fontFamily: { type: "string" },
+    fontSizePt: { type: "number" },
+    lineSpacing: { type: "number" },
+    headingBold: { type: "boolean" },
+    titleFontSizePt: { type: "number" },
+    marginsMm: {
+      type: "object",
+      properties: {
+        top: { type: "number" },
+        right: { type: "number" },
+        bottom: { type: "number" },
+        left: { type: "number" }
+      },
+      additionalProperties: false
+    }
+  },
+  additionalProperties: false
+};
+
 function createStructuredDocumentTool(format) {
   const extension = format;
   const properties = {
@@ -1186,7 +1213,8 @@ function createStructuredDocumentTool(format) {
       type: "array",
       description: "Preferred structured body",
       items: documentSectionSchema
-    }
+    },
+    style: documentStyleSchema
   };
   if (format === "docx") {
     properties.rows = {
@@ -1224,27 +1252,38 @@ function createStructuredDocumentTool(format) {
 }
 
 async function executeArtifactCreate(input, context) {
-  const outputPath = projectArtifactPath(input.targetPath);
+  const resolvedStyle = resolveDocumentStyle({
+    project: context?.deliveryPreferences?.project,
+    thread: context?.deliveryPreferences?.thread,
+    turn: context?.deliveryPreferences?.turn,
+    explicit: input?.style
+  });
+  const styledInput = attachResolvedStyleToInput(input, resolvedStyle.values);
+  const outputPath = projectArtifactPath(styledInput.targetPath);
   const resolved = await resolveSafeWorkspaceTarget(context.workspacePath, outputPath);
   const previousStat = await fs.stat(resolved.target).catch(() => null);
-  const metadata = await generateArtifact(input, resolved.target, { workspacePath: context.workspacePath });
-  const companionNote = input.format === "pptx"
+  const metadata = await generateArtifact(styledInput, resolved.target, { workspacePath: context.workspacePath });
+  const companionNote = styledInput.format === "pptx"
     ? ` Companion web deck: ${resolved.relativePath.replace(/\.pptx$/i, ".slides.html")}.`
-    : input.format === "html"
+    : styledInput.format === "html"
       ? " Open the HTML in a browser and use arrow keys to present."
       : "";
+  const styleNote = Object.keys(resolvedStyle.values).length
+    ? ` Applied delivery style: ${resolvedStyle.summary}.`
+    : "";
   return {
     ok: true,
     exitCode: 0,
-    output: `Created ${input.format.toUpperCase()} ${resolved.relativePath} (${metadata.size} bytes).${companionNote}`,
+    output: `Created ${styledInput.format.toUpperCase()} ${resolved.relativePath} (${metadata.size} bytes).${companionNote}${styleNote}`,
     command: `create ${resolved.relativePath}`,
     artifact: {
       path: resolved.relativePath,
       size: metadata.size,
       type: metadata.type,
-      format: input.format,
+      format: styledInput.format,
       verified: true,
-      changeType: previousStat?.isFile() ? "modified" : "created"
+      changeType: previousStat?.isFile() ? "modified" : "created",
+      ...(Object.keys(resolvedStyle.values).length ? { style: resolvedStyle.values } : {})
     }
   };
 }
