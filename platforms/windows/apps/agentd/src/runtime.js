@@ -71,8 +71,10 @@ function buildPatchPreview(originalText, nextText) {
   };
 }
 
-function approvalMessageForTool(descriptor, call) {
+function approvalMessageForTool(descriptor, call, authorization) {
   const command = call.name === "shell.exec" ? String(call.arguments?.command ?? "").trim() : "";
+  const reason = String(authorization?.reason || "").trim();
+  if (reason) return reason;
   if (command) return `是否允许 NewBrain 执行这条命令？`;
   return `是否允许 NewBrain 使用工具：${descriptor.title || descriptor.name}？`;
 }
@@ -571,7 +573,7 @@ export class LocalAgentRuntime {
 
   syncAgentLoopState(snapshot) {
     if (snapshot.status === "awaiting-approval" && snapshot.pending) {
-      const { descriptor, call } = snapshot.pending;
+      const { descriptor, call, authorization } = snapshot.pending;
       const existingApproval = this.sessionMachine.snapshot.approval;
       const existingTool = this.sessionMachine.snapshot.pendingTool;
       // Keep a stable approval id when the same pending call is synced again
@@ -580,17 +582,22 @@ export class LocalAgentRuntime {
         this.sessionMachine.snapshot.session.status = "awaiting-approval";
         return;
       }
+      const policyReason = String(authorization?.reason || "").trim();
       this.sessionMachine.snapshot.pendingTool = {
         id: call.id,
+        name: call.name,
+        arguments: clone(call.arguments ?? {}),
         kind: descriptor.kind,
-        reason: descriptor.description,
+        reason: policyReason || descriptor.description,
         risk: descriptor.risk,
+        ruleId: authorization?.ruleId || "",
+        policySource: authorization?.source || "",
         command: call.name === "shell.exec" ? String(call.arguments.command ?? "") : undefined
       };
       this.sessionMachine.snapshot.approval = {
         id: makeId("approval"),
         toolRequestId: call.id,
-        message: approvalMessageForTool(descriptor, call),
+        message: approvalMessageForTool(descriptor, call, authorization),
         requiresConfirmation: true
       };
       this.sessionMachine.snapshot.session.status = "awaiting-approval";
@@ -861,14 +868,16 @@ export class LocalAgentRuntime {
       arguments: clone(input),
       permissionMode,
       kind: descriptor.kind,
-      reason: descriptor.description,
+      reason: policy.reason || descriptor.description,
       risk: descriptor.risk,
+      ruleId: policy.ruleId || "",
+      policySource: policy.source || "",
       command
     };
     this.sessionMachine.snapshot.approval = {
       id: makeId("approval"),
       toolRequestId: this.sessionMachine.snapshot.pendingTool.id,
-      message: approvalMessageForTool(descriptor, { name, arguments: input }),
+      message: approvalMessageForTool(descriptor, { name, arguments: input }, policy),
       requiresConfirmation: descriptor.requiresApproval !== false
     };
     this.sessionMachine.snapshot.session.status = "awaiting-approval";

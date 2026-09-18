@@ -436,6 +436,8 @@ contextBridge.exposeInMainWorld("newbrain", {
   summonExpertFromSkill: (input: { threadId: string; skillName: string }): Promise<Record<string, unknown> | null> =>
     ipcRenderer.invoke(desktopIpcChannels.experts.summonFromSkill, input),
   searchWorkspaces: (query: string): Promise<SearchResultSpec[]> => ipcRenderer.invoke(desktopIpcChannels.search.workspaces, query),
+  previewConversationRef: (input: import("@codex-forge/protocol").ConversationRefPreviewInput): Promise<import("@codex-forge/protocol").ConversationRefPreviewResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.search.conversationRefPreview, input),
   readWorkspaceFile: (input: WorkspaceFileInput): Promise<{
     path: string;
     name: string;

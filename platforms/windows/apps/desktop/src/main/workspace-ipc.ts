@@ -38,6 +38,7 @@ interface WorkspaceIpcServices {
   activateThread: (input: WorkspaceThreadInput) => MaybePromise<unknown>;
   exportThreadHtml: (input: ExportWorkspaceThreadHtmlInput) => MaybePromise<unknown>;
   search: (query: string) => MaybePromise<SearchResultSpec[]>;
+  previewConversationRef?: (input: import("@codex-forge/protocol").ConversationRefPreviewInput) => MaybePromise<import("@codex-forge/protocol").ConversationRefPreviewResult>;
   readFile: (input: WorkspaceFileInput) => MaybePromise<unknown>;
   previewFile: (input: WorkspaceFileInput) => MaybePromise<unknown>;
   openFile: (input: WorkspaceFileInput) => MaybePromise<unknown>;
@@ -182,6 +183,22 @@ export function registerWorkspaceIpcHandlers(services: WorkspaceIpcServices) {
     if (typeof query !== "string") throw new TypeError("Workspace search query must be a string.");
     return services.search(query);
   });
+  if (typeof services.previewConversationRef === "function") {
+    ipcMain.handle(desktopIpcChannels.search.conversationRefPreview, (_event, input: unknown) => {
+      if (!isRecord(input)) throw new TypeError("Conversation ref preview input must be an object.");
+      const kind = String(input.kind || "").trim();
+      if (kind !== "thread" && kind !== "brain_conversation") {
+        throw new TypeError("Conversation ref preview kind must be thread or brain_conversation.");
+      }
+      return services.previewConversationRef!({
+        kind,
+        workspaceId: typeof input.workspaceId === "string" ? input.workspaceId : undefined,
+        threadId: typeof input.threadId === "string" ? input.threadId : undefined,
+        conversationId: typeof input.conversationId === "string" ? input.conversationId : undefined,
+        turnLimit: typeof input.turnLimit === "number" ? input.turnLimit : undefined
+      });
+    });
+  }
   ipcMain.handle(desktopIpcChannels.workspaceFiles.read, async (_event, input: unknown) => {
     try {
       return await services.readFile(parseWorkspaceFile(input));

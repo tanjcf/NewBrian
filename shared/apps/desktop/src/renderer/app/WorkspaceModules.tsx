@@ -32,6 +32,17 @@ import {
   readServerEstimatedTokens
 } from "./context-meter-policy";
 import { ComposerTextarea, type ComposerTextareaHandle } from "./ComposerTextarea";
+import { buildApprovalUx } from "./approval-ux.ts";
+import {
+  conversationRefKey,
+  filterConversationRefCandidates,
+  injectConversationRefsIntoQuestion,
+  mergeConversationRef,
+  replaceComposerMentionRange,
+  selectRecentConversationTurns,
+  type ConversationRef,
+  type ConversationRefCandidate
+} from "./conversation-refs.ts";
 import { DeliveryPreferenceChip } from "./DeliveryPreferenceChip";
 import {
   EMPTY_DELIVERY_PREFERENCE_CHIP,
@@ -648,6 +659,10 @@ export function WorkspaceModules(ctx: any) {
   const legacySidebarRowHydratedRef = useRef(false);
   const composerTextareaRef = useRef<ComposerTextareaHandle | null>(null);
   const [composerDraftHistoryCaps, setComposerDraftHistoryCaps] = useState({ canUndo: false, canRedo: false });
+  const [composerConversationRefs, setComposerConversationRefs] = useState<ConversationRef[]>([]);
+  const [composerMentionQuery, setComposerMentionQuery] = useState<{ start: number; query: string; cursor: number } | null>(null);
+  const [composerMentionIndex, setComposerMentionIndex] = useState(0);
+  const [composerMentionBusy, setComposerMentionBusy] = useState(false);
   const textPreviewShellRef = useRef<HTMLDivElement | null>(null);
   const imagePreviewShellRef = useRef<HTMLDivElement | null>(null);
   const composerLayoutDraftTimerRef = useRef<number | null>(null);
@@ -3894,16 +3909,25 @@ export function WorkspaceModules(ctx: any) {
       kind: liveApproval.toolName || "command",
       reason: liveApproval.detail || "需要确认后继续执行",
       risk: "medium",
-      command: liveApproval.command || liveApproval.detail || ""
+      command: liveApproval.command || liveApproval.detail || "",
+      ruleId: "",
+      policySource: ""
     };
   })();
   const approvalCommand = approvalTool?.command || "";
   const [approvalCommandExpanded, setApprovalCommandExpanded] = useState(false);
   useEffect(() => setApprovalCommandExpanded(false), [snapshot?.approval?.id, approvalCommand]);
-  const approvalRiskLabel = approvalTool?.risk === "high" ? "高风险" : approvalTool?.risk === "medium" ? "中风险" : approvalTool?.risk === "low" ? "低风险" : "需要确认";
-  const approvalScopeLabel = composerPermission === "full"
-    ? "完全访问"
-    : "替我审批";
+  const approvalUx = buildApprovalUx({
+    toolName: approvalTool?.name || approvalTool?.kind,
+    command: approvalCommand,
+    risk: approvalTool?.risk,
+    reason: approvalTool?.reason || effectiveApproval?.message,
+    ruleId: approvalTool?.ruleId,
+    policySource: approvalTool?.policySource,
+    permissionMode: composerPermission
+  });
+  const approvalRiskLabel = approvalUx.riskLabel;
+  const approvalScopeLabel = approvalUx.scopeLabel;
   const handleApprovalResponse = async (approved: boolean) => {
     if (!api) return;
     setApprovalResponding(true);
@@ -5064,13 +5088,15 @@ function renderSidebarModule() {
 
   function buildComposerSendDraft(draft?: Parameters<typeof askModel>[0]) {
     const text = readComposerQuestion(draft);
+    const withRefs = injectConversationRefsIntoQuestion(text, composerConversationRefs);
     return {
-      question: text,
+      question: withRefs,
       images: draft?.images ?? composerImages,
       tools: draft?.tools ?? selectedComposerTools,
       skill: draft?.skill ?? selectedComposerSkill,
       skillContext: draft?.skillContext ?? composerSkillContext,
-      modes: draft?.modes ?? composerModes
+      modes: draft?.modes ?? composerModes,
+      conversationRefs: composerConversationRefs
     };
   }
 
@@ -5079,6 +5105,150 @@ function renderSidebarModule() {
     composerLayoutDraftTimerRef.current = window.setTimeout(() => {
       setComposerLayoutDraft(value);
     }, 120);
+  };
+
+  const composerMentionCandidates = (() => {
+    if (!composerMentionQuery) return [] as ConversationRefCandidate[];
+    const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
+    const threadCandidates: ConversationRefCandidate[] = catalog.flatMap((workspace: any) =>
+      (workspace.threads || []).map((thread: any) => ({
+        id: `thread-${workspace.id}-${thread.id}`,
+        kind: "thread" as const,
+        title: String(thread.title || "未命名线程"),
+        detail: String(thread.summary || workspace.name || ""),
+        workspaceId: workspace.id,
+        threadId: thread.id,
+        archived: thread.status === "archived",
+        updatedAt: thread.updatedAt
+      }))
+    );
+    const brainCandidates: ConversationRefCandidate[] = (brainConversations || []).map((conversation: any) => ({
+      id: `brain-${conversation.id}`,
+      kind: "brain_conversation" as const,
+      title: String(conversation.title || "未命名会话"),
+      detail: String(conversation.workspaceSnapshot || selectedBrainWorkspaceKey || "BRAIN"),
+      conversationId: conversation.id,
+      archived: String(conversation.status || "").toUpperCase() === "ARCHIVED",
+      updatedAt: conversation.updatedAt || conversation.lastMessageAt
+    }));
+    const currentThreadId = selectedThread?.id || "";
+    const currentBrainId = selectedBrainConversationId || "";
+    const combined = [...threadCandidates, ...brainCandidates].filter((item) => {
+      if (item.kind === "thread" && item.threadId && item.threadId === currentThreadId) return false;
+      if (item.kind === "brain_conversation" && item.conversationId && item.conversationId === currentBrainId) return false;
+      return true;
+    });
+    return filterConversationRefCandidates(combined, composerMentionQuery.query, 12);
+  })();
+
+  useEffect(() => {
+    setComposerMentionIndex(0);
+  }, [composerMentionQuery?.query, composerMentionCandidates.length]);
+
+  const hydrateConversationRefCandidate = async (candidate: ConversationRefCandidate): Promise<ConversationRef> => {
+    if (api?.previewConversationRef) {
+      const preview = await api.previewConversationRef({
+        kind: candidate.kind,
+        workspaceId: candidate.workspaceId,
+        threadId: candidate.threadId,
+        conversationId: candidate.conversationId,
+        turnLimit: 5
+      });
+      return {
+        id: preview.id,
+        kind: preview.kind,
+        title: preview.title || candidate.title,
+        summary: preview.summary || candidate.detail,
+        workspaceId: preview.workspaceId || candidate.workspaceId,
+        threadId: preview.threadId || candidate.threadId,
+        conversationId: preview.conversationId || candidate.conversationId,
+        archived: preview.archived ?? candidate.archived,
+        turns: preview.turns,
+        truncated: preview.truncated
+      };
+    }
+    if (candidate.kind === "brain_conversation" && candidate.conversationId && window.newbrain?.listBrainMessages) {
+      const messages = await window.newbrain.listBrainMessages({ conversationId: candidate.conversationId });
+      const { turns, truncated } = selectRecentConversationTurns(messages, 5);
+      return {
+        id: candidate.id,
+        kind: "brain_conversation",
+        title: candidate.title,
+        summary: candidate.detail,
+        conversationId: candidate.conversationId,
+        archived: candidate.archived,
+        turns,
+        truncated
+      };
+    }
+    return {
+      id: candidate.id,
+      kind: candidate.kind,
+      title: candidate.title,
+      summary: candidate.detail,
+      workspaceId: candidate.workspaceId,
+      threadId: candidate.threadId,
+      conversationId: candidate.conversationId,
+      archived: candidate.archived,
+      turns: [],
+      truncated: false
+    };
+  };
+
+  const selectComposerMentionCandidate = async (candidate: ConversationRefCandidate) => {
+    if (!composerMentionQuery || composerMentionBusy) return;
+    setComposerMentionBusy(true);
+    try {
+      const hydrated = await hydrateConversationRefCandidate(candidate);
+      setComposerConversationRefs((current) => mergeConversationRef(current, hydrated));
+      const draftText = composerTextareaRef.current?.getValue() ?? "";
+      const { next, cursor } = replaceComposerMentionRange(
+        draftText,
+        composerMentionQuery.start,
+        composerMentionQuery.cursor,
+        ""
+      );
+      composerTextareaRef.current?.setValue(next);
+      setQuestion(next);
+      setComposerLayoutDraft(next);
+      setComposerMentionQuery(null);
+      window.requestAnimationFrame(() => {
+        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]');
+        if (!input) return;
+        input.focus();
+        input.selectionStart = cursor;
+        input.selectionEnd = cursor;
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "引用对话失败");
+    } finally {
+      setComposerMentionBusy(false);
+    }
+  };
+
+  const handleComposerMentionNavigate = (direction: "up" | "down" | "enter" | "escape") => {
+    if (!composerMentionQuery || !composerMentionCandidates.length) {
+      if (direction === "escape" && composerMentionQuery) {
+        setComposerMentionQuery(null);
+        return true;
+      }
+      return false;
+    }
+    if (direction === "escape") {
+      setComposerMentionQuery(null);
+      return true;
+    }
+    if (direction === "up") {
+      setComposerMentionIndex((current) => (current - 1 + composerMentionCandidates.length) % composerMentionCandidates.length);
+      return true;
+    }
+    if (direction === "down") {
+      setComposerMentionIndex((current) => (current + 1) % composerMentionCandidates.length);
+      return true;
+    }
+    const candidate = composerMentionCandidates[composerMentionIndex] || composerMentionCandidates[0];
+    if (candidate) void selectComposerMentionCandidate(candidate);
+    return true;
   };
 
   const handleComposerEnter = () => {
@@ -5121,6 +5291,15 @@ function renderSidebarModule() {
       const attachmentNote = hasAttachments
         ? `\n\n[附件：${(draft?.images ?? composerImages).map((item: any) => item.name).join("、")}]`
         : "";
+      const contentWithRefs = injectConversationRefsIntoQuestion(content, composerConversationRefs);
+      const sourceRefsJson = JSON.stringify(composerConversationRefs.map((ref) => ({
+        type: ref.kind,
+        id: ref.id,
+        title: ref.title,
+        workspaceId: ref.workspaceId,
+        threadId: ref.threadId,
+        conversationId: ref.conversationId
+      })));
       // The native NewBrain Thread is the execution source of truth.  Do not
       // persist the user turn into the separate BRAIN conversation before
       // sending it, otherwise one turn is written to two message stores.
@@ -5130,15 +5309,17 @@ function renderSidebarModule() {
         id: `brain-local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         conversationId: selectedBrainConversationId,
         role: "user" as const,
-        content: content + attachmentNote,
+        content: contentWithRefs + attachmentNote,
         createdAt: new Date().toISOString(),
-        sourceRefsJson: "[]",
+        sourceRefsJson,
         requestId: ""
       };
       const history = [...brainMessages, userMessage];
       setBrainMessages(history);
       setBrainDraft("");
       setQuestion("");
+      setComposerConversationRefs([]);
+      setComposerMentionQuery(null);
       setComposerImages([]);
       await window.newbrain.saveBrainDraft?.({
         projectId: selectedBrainProjectId,
@@ -5255,6 +5436,8 @@ function renderSidebarModule() {
     if (questionRef) questionRef.current = "";
     setComposerLayoutDraft("");
     setComposerImages([]);
+    setComposerConversationRefs([]);
+    setComposerMentionQuery(null);
   }
 
   function submitComposerRequest(draft?: Parameters<typeof askModel>[0]) {
@@ -6043,8 +6226,14 @@ function renderChatModule() {
                             <span>需要批准</span>
                             <em data-risk={approvalTool?.risk || "unknown"}>{approvalRiskLabel}</em>
                           </header>
-                          <strong>{approvalTool?.reason || effectiveApproval.message || "运行此命令需要你的确认"}</strong>
-                          <small>请在当前对话中批准后继续；仅批准本次操作</small>
+                          <strong>{approvalUx.reasonText}</strong>
+                          <small>请在当前对话中批准后继续；仅批准本次操作 · 权限范围：{approvalScopeLabel}</small>
+                          {approvalUx.categoryLabels.length ? (
+                            <div className="approval-category-tags" data-testid="conversation-approval-tags">
+                              {approvalUx.categoryLabels.map((label) => <span key={label}>{label}</span>)}
+                            </div>
+                          ) : null}
+                          {approvalUx.memoryHint ? <small className="approval-memory-hint">{approvalUx.memoryHint}</small> : null}
                           {approvalCommand ? (
                             <div className={`approval-command-shell${approvalCommandExpanded ? " expanded" : ""}`}>
                               <code className="approval-command-preview">{approvalCommand}</code>
@@ -6646,6 +6835,49 @@ function renderChatModule() {
               onClear={() => void clearDeliveryPreferenceChip()}
               onPin={() => void pinDeliveryPreferenceChip()}
             />
+            {composerConversationRefs.length ? (
+              <div className="composer-conversation-refs" data-testid="composer-conversation-refs">
+                {composerConversationRefs.map((ref) => (
+                  <button
+                    key={conversationRefKey(ref)}
+                    type="button"
+                    className="composer-conversation-ref-chip"
+                    title={ref.summary || ref.title}
+                    onClick={() => setComposerConversationRefs((current) => current.filter((item) => conversationRefKey(item) !== conversationRefKey(ref)))}
+                  >
+                    <em>{ref.kind === "brain_conversation" ? "BRAIN" : "线程"}</em>
+                    <strong>{ref.title}</strong>
+                    <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {composerMentionQuery && composerMentionCandidates.length ? (
+              <div className="composer-mention-picker" role="listbox" aria-label="引用对话" data-testid="composer-mention-picker">
+                <div className="composer-mention-picker-title">引用其它对话（摘要 + 最近 5 轮）</div>
+                {composerMentionCandidates.map((candidate, index) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    role="option"
+                    aria-selected={index === composerMentionIndex}
+                    className={`composer-mention-option${index === composerMentionIndex ? " active" : ""}`}
+                    disabled={composerMentionBusy}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      void selectComposerMentionCandidate(candidate);
+                    }}
+                  >
+                    <em>{candidate.kind === "brain_conversation" ? "BRAIN" : "线程"}</em>
+                    <span>
+                      <strong>{candidate.title}</strong>
+                      <small>{candidate.detail}</small>
+                    </span>
+                    {candidate.archived ? <i>已归档</i> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {showDelegatedAgentStrip ? (
               <button
                 type="button"
@@ -6666,8 +6898,14 @@ function renderChatModule() {
                     <span>需要批准</span>
                     <em data-risk={approvalTool?.risk || "unknown"}>{approvalRiskLabel}</em>
                   </header>
-                  <strong>{approvalTool?.reason || effectiveApproval.message || "运行此命令需要你的确认"}</strong>
+                  <strong>{approvalUx.reasonText}</strong>
                   <small>权限范围：{approvalScopeLabel} · 仅批准本次操作</small>
+                  {approvalUx.categoryLabels.length ? (
+                    <div className="approval-category-tags" data-testid="composer-approval-tags">
+                      {approvalUx.categoryLabels.map((label) => <span key={label}>{label}</span>)}
+                    </div>
+                  ) : null}
+                  {approvalUx.memoryHint ? <small className="approval-memory-hint">{approvalUx.memoryHint}</small> : null}
                   {approvalCommand ? (
                     <div className={`approval-command-shell${approvalCommandExpanded ? " expanded" : ""}`}>
                       <code className="approval-command-preview">{approvalCommand}</code>
@@ -6796,14 +7034,16 @@ function renderChatModule() {
                 selectedComposerSkill?.name === RESEARCH_WRITING_SKILL
                   ? "描述您撰写或修改的文档，也可以上传材料..."
                   : isBrainConversationSelection
-                    ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息。输入 @ 使用插件或提及文件`
+                    ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息。输入 @ 引用其它对话`
                   : isNewChatMode
-                    ? "可向 NewBrain 询问任何事。输入 @ 使用插件或提及文件"
-                    : "要求后续变更"
+                    ? "可向 NewBrain 询问任何事。输入 @ 引用其它对话"
+                    : "要求后续变更。输入 @ 引用其它对话"
               }
               onDraftChange={handleComposerDraftChange}
               onHistoryChange={setComposerDraftHistoryCaps}
               onEnter={handleComposerEnter}
+              onMentionQueryChange={setComposerMentionQuery}
+              onMentionNavigate={handleComposerMentionNavigate}
               onAltEnter={() => composerTextareaRef.current?.insertNewlineAtCursor()}
               onContextMenu={(event) => {
                 event.preventDefault();

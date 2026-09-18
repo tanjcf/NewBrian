@@ -307,18 +307,24 @@ try {
         $utf8 = [System.Text.Encoding]::UTF8
         $text = $utf8.GetString($bytes)
         if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202") -or $text.Contains("wangjietech.com") -or $text.Contains("sinnauze.cn")) {
-          $updated = $text.Replace("http://127.0.0.1:8790/v1", $gatewayBaseUrl).
-            Replace("http://120.48.151.202:8790/v1", $gatewayBaseUrl).
-            Replace("https://api.sinnauze.cn/v1", $gatewayBaseUrl).
-            Replace("https://test.wangjietech.com/v1", $gatewayBaseUrl).
-            Replace("https://api.wangjietech.com/v1", $gatewayBaseUrl).
-            Replace("http://test.wangjietech.com/v1", $gatewayBaseUrl).
-            Replace("http://api.wangjietech.com/v1", $gatewayBaseUrl).
+          # Tokenize gateway URLs first so later preview host rewrites cannot turn
+          # https://api.sinnauze.cn/v1 into https://www.sinnauze.cn/v1.
+          $gatewayToken = "__NEWBRAIN_GATEWAY_BASE_URL__"
+          $updated = $text.
+            Replace("http://127.0.0.1:8790/v1", $gatewayToken).
+            Replace("http://120.48.151.202:8790/v1", $gatewayToken).
+            Replace("https://api.sinnauze.cn/v1", $gatewayToken).
+            Replace("https://test.wangjietech.com/v1", $gatewayToken).
+            Replace("https://api.wangjietech.com/v1", $gatewayToken).
+            Replace("http://test.wangjietech.com/v1", $gatewayToken).
+            Replace("http://api.wangjietech.com/v1", $gatewayToken).
             Replace("http://127.0.0.1:3000", $previewUrl).
             Replace("http://120.48.151.202:3000", $previewUrl).
+            Replace("https://www.sinnauze.cn", $previewUrl).
             Replace("https://api.sinnauze.cn", $previewUrl).
             Replace("https://test.wangjietech.com", $previewUrl).
-            Replace("https://api.wangjietech.com", $previewUrl)
+            Replace("https://api.wangjietech.com", $previewUrl).
+            Replace($gatewayToken, $gatewayBaseUrl)
           [System.IO.File]::WriteAllText($_.FullName, $updated, [System.Text.UTF8Encoding]::new($false))
           $rewrittenFiles += 1
         }

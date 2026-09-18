@@ -306,9 +306,26 @@ export class AgentLoop {
       }
       if (authorization.decision === "ask") {
         this.assertNotCancelled();
-        this.pending = { descriptor, call, remainingCalls: structuredClone(calls.slice(index + 1)) };
+        this.pending = {
+          descriptor,
+          call,
+          remainingCalls: structuredClone(calls.slice(index + 1)),
+          authorization
+        };
         this.status = "awaiting-approval";
-        this.onEvent({ type: "approval_requested", payload: { call, risk: descriptor.risk } });
+        this.onEvent({
+          type: "approval_requested",
+          payload: {
+            call,
+            risk: descriptor.risk,
+            authorization: {
+              decision: authorization.decision,
+              source: authorization.source,
+              ruleId: authorization.ruleId,
+              reason: authorization.reason
+            }
+          }
+        });
         return true;
       }
       this.assertNotCancelled();

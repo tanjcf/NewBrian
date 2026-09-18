@@ -7924,6 +7924,51 @@ async function searchWorkspaceThreads(query: string) {
     .sort((left, right) => new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime())
     .slice(0, 40);
 }
+
+async function previewConversationRef(input: {
+  kind: "thread" | "brain_conversation";
+  workspaceId?: string;
+  threadId?: string;
+  conversationId?: string;
+  turnLimit?: number;
+}) {
+  const { buildConversationRefPreview } = await import("./conversation-ref-preview.js");
+  if (input.kind === "brain_conversation") {
+    const conversationId = String(input.conversationId || "").trim();
+    if (!conversationId) throw new TypeError("conversationId is required for brain_conversation preview.");
+    const ownerId = await resolveBrainLocalOwnerId();
+    const conversation = brainWorkspaceStorage.getConversation(ownerId, conversationId);
+    const messages = brainWorkspaceStorage.listMessages(ownerId, conversationId);
+    return buildConversationRefPreview({
+      kind: "brain_conversation",
+      title: conversation.title,
+      summary: conversation.title,
+      conversationId,
+      archived: String(conversation.status || "").toUpperCase() === "ARCHIVED",
+      turnLimit: input.turnLimit,
+      messages
+    });
+  }
+  const workspaceId = String(input.workspaceId || "").trim();
+  const threadId = String(input.threadId || "").trim();
+  if (!workspaceId || !threadId) throw new TypeError("workspaceId and threadId are required for thread preview.");
+  const catalog = await readWorkspaceCatalog();
+  const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+  const thread = workspace?.threads.find((item) => item.id === threadId);
+  if (!workspace || !thread) throw new Error("Referenced workspace thread was not found.");
+  const threadState = await readThreadState(workspace, thread);
+  return buildConversationRefPreview({
+    kind: "thread",
+    title: thread.title,
+    summary: thread.summary || "",
+    workspaceId,
+    threadId,
+    archived: Boolean((thread as { archived?: boolean; status?: string }).archived)
+      || String((thread as { status?: string }).status || "").toLowerCase() === "archived",
+    turnLimit: input.turnLimit,
+    messages: threadState.messages ?? []
+  });
+}
 async function runScheduledAutomation(automation: AutomationSpec) {
   if (!runtime) throw new Error("Automation runtime is not available.");
   const startedAt = nowIso();
@@ -9270,6 +9315,7 @@ function registerIpc() {
     activateThread: activateWorkspaceThread,
     exportThreadHtml: exportWorkspaceThreadHtml,
     search: searchWorkspaceThreads,
+    previewConversationRef: previewConversationRef,
     readFile: (input) => workspaceFileService.read(input),
     previewFile: (input) => workspaceFileService.preview(input),
     openFile: (input) => workspaceFileService.open(input),

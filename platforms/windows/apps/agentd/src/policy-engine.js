@@ -13,6 +13,9 @@ const MUTATING_COMMAND = /\b(?:remove-item|del|erase|rd|rmdir|rm|move-item|move|
 const NETWORK_COMMAND = /\b(?:curl|wget|irm|iwr|invoke-webrequest|invoke-restmethod|certutil|bitsadmin|start-bitstransfer|ftp|tftp|nc|ncat|netcat|ssh|scp|sftp|git\s+(?:clone|pull|push|fetch)|npm\s+(?:install|i|publish)|pnpm\s+(?:install|add|publish)|yarn\s+(?:install|add|publish)|pip\s+install|(?:new-object\s+)?(?:system\.net\.)?webclient)\b/i;
 const ENCODED_EXECUTION = /(?:^|\s)(?:powershell(?:\.exe)?|pwsh(?:\.exe)?)\b[^\r\n]*(?:-(?:e|en|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)\b)|\bfrombase64string\b/i;
 const DYNAMIC_EXECUTION = /\b(?:invoke-expression|iex)\b/i;
+/** Download / pipe-to-shell patterns that must never auto-run without a human. */
+const DOWNLOAD_EXECUTE = /(?:\b(?:irm|iwr|invoke-webrequest|invoke-restmethod|curl|wget)\b[^\r\n]*\|\s*(?:iex|invoke-expression)\b)|\b(?:start-bitstransfer|bitsadmin)\b[^\r\n]*\.(?:ps1|bat|cmd|exe)\b|\bcertutil\b[^\r\n]*-urlcache/i;
+const REMOTE_SCRIPT_LAUNCH = /\b(?:start-process)\b[^\r\n]*(?:https?:\/\/|\\\\)|\bstart(?:\.exe)?\b(?![-\w])[^\r\n]*(?:https?:\/\/|\\\\)/i;
 const READ_ONLY_COMMANDS = new Set([
   "cat",
   "dir",
@@ -212,7 +215,7 @@ export class PolicyEngine {
           reason: "该命令被系统硬性安全护栏拦截（不可覆盖），例如关机、格式化或删除系统盘。"
         };
       }
-      if (ENCODED_EXECUTION.test(command) || (permissionMode === "full" && DYNAMIC_EXECUTION.test(command))) {
+      if (ENCODED_EXECUTION.test(command) || DYNAMIC_EXECUTION.test(command)) {
         return {
           decision: "deny",
           source: "builtin",
@@ -220,13 +223,22 @@ export class PolicyEngine {
           reason: "编码或动态求值的 Shell 命令无法静态审计，已被安全策略拒绝。"
         };
       }
+      if (DOWNLOAD_EXECUTE.test(command) || REMOTE_SCRIPT_LAUNCH.test(command)) {
+        return {
+          decision: "deny",
+          source: "builtin",
+          ruleId: "download-execute",
+          reason: "下载后直接执行或远程拉起脚本的命令无法安全审计，已被安全策略拒绝。"
+        };
+      }
       const explicit = this.rules.find((rule) => matchesRule(rule, "shell.exec", command));
       if (explicit) {
+        // Remembered / custom allow rules must never weaken hard denies above.
         return {
           decision: explicit.decision,
           source: "rule",
           ruleId: explicit.id,
-          reason: explicit.reason || `Matched policy rule ${explicit.id}.`
+          reason: explicit.reason || `已匹配策略规则 ${explicit.id}。`
         };
       }
       if (permissionMode === "full") {
@@ -234,15 +246,25 @@ export class PolicyEngine {
           decision: "allow",
           source: "permission",
           ruleId: ":danger-full-access",
-          reason: "Full-access mode permits non-critical shell commands."
+          reason: "完全访问模式允许执行非关键 Shell 命令。"
         };
       }
-      if (NETWORK_COMMAND.test(command) && permissionMode !== "full") {
+      if (NETWORK_COMMAND.test(command)) {
         return {
           decision: "ask",
           source: "builtin",
           ruleId: "network-access",
-          reason: "Network access is outside the default workspace scope and requires approval."
+          reason: "该命令会访问网络，超出默认工作区范围，需要你确认。"
+        };
+      }
+      // Read-only allow must run before mutating heuristics: patterns like `\bmd\b`
+      // otherwise false-positive on `file.md` path suffixes.
+      if (isWorkspaceReadOnlyShellCommand(command, workspacePath)) {
+        return {
+          decision: "allow",
+          source: "permission",
+          ruleId: ":workspace-readonly-shell",
+          reason: "工作区模式下允许只读 Shell 检查。"
         };
       }
       if (MUTATING_COMMAND.test(command)) {
@@ -261,16 +283,14 @@ export class PolicyEngine {
             decision: "ask",
             source: "builtin",
             ruleId: "workspace-boundary-dynamic-path",
-            reason: "Mutating command uses a dynamic path expression that cannot be statically verified."
+            reason: "写操作使用了无法静态校验的动态路径表达式，需要你确认。"
           };
         }
-      }
-      if (isWorkspaceReadOnlyShellCommand(command, workspacePath)) {
         return {
-          decision: "allow",
-          source: "permission",
-          ruleId: ":workspace-readonly-shell",
-          reason: "Workspace mode permits read-only shell inspection inside the workspace."
+          decision: "ask",
+          source: "builtin",
+          ruleId: "workspace-mutating-shell",
+          reason: "该命令会修改工作区文件，需要你确认。"
         };
       }
     }

@@ -267,6 +267,33 @@ export interface SearchResultSpec {
   createdAt?: string;
 }
 
+export interface ConversationRefPreviewInput {
+  kind: "thread" | "brain_conversation";
+  workspaceId?: string;
+  threadId?: string;
+  conversationId?: string;
+  turnLimit?: number;
+}
+
+export interface ConversationRefPreviewTurn {
+  role: string;
+  content: string;
+  createdAt?: string;
+}
+
+export interface ConversationRefPreviewResult {
+  id: string;
+  kind: "thread" | "brain_conversation";
+  title: string;
+  summary: string;
+  workspaceId?: string;
+  threadId?: string;
+  conversationId?: string;
+  archived?: boolean;
+  turns: ConversationRefPreviewTurn[];
+  truncated: boolean;
+}
+
 export interface MobilePairingState {
   status: "stopped" | "waiting" | "connected";
   url: string;
@@ -1042,7 +1069,8 @@ export const desktopIpcChannels = {
     saveRules: "phase1:save-policy-rules"
   },
   search: {
-    workspaces: "phase1:search-workspaces"
+    workspaces: "phase1:search-workspaces",
+    conversationRefPreview: "phase1:preview-conversation-ref"
   },
   mcp: {
     getServers: "phase1:get-mcp-servers",

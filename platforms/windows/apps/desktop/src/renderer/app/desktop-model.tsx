@@ -540,6 +540,24 @@ declare global {
       updateFeatureItem: (input: UpdateFeatureItemInput) => Promise<FeatureConfigPayload>;
       deleteFeatureItem: (input: DeleteFeatureItemInput) => Promise<FeatureConfigPayload>;
       searchWorkspaces: (query: string) => Promise<SearchResultSpec[]>;
+      previewConversationRef?: (input: {
+        kind: "thread" | "brain_conversation";
+        workspaceId?: string;
+        threadId?: string;
+        conversationId?: string;
+        turnLimit?: number;
+      }) => Promise<{
+        id: string;
+        kind: "thread" | "brain_conversation";
+        title: string;
+        summary: string;
+        workspaceId?: string;
+        threadId?: string;
+        conversationId?: string;
+        archived?: boolean;
+        turns: Array<{ role: string; content: string; createdAt?: string }>;
+        truncated: boolean;
+      }>;
       readWorkspaceFile: (input: { workspaceId: string; filePath: string }) => Promise<{
         path: string;
         name: string;
