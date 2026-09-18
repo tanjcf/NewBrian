@@ -36,7 +36,8 @@ export function SettingsWorkspace(ctx: any) {
     shortcuts: { ...initialDesktopPreferences.shortcuts, ...(ctx.desktopPreferences?.shortcuts || {}) },
     worktree: { ...initialDesktopPreferences.worktree, ...(ctx.desktopPreferences?.worktree || {}) },
     browser: { ...initialDesktopPreferences.browser, ...(ctx.desktopPreferences?.browser || {}) },
-    market: { ...initialDesktopPreferences.market, ...(ctx.desktopPreferences?.market || {}) }
+    market: { ...initialDesktopPreferences.market, ...(ctx.desktopPreferences?.market || {}) },
+    brain: { ...initialDesktopPreferences.brain, ...(ctx.desktopPreferences?.brain || {}) }
   };
   const visibleProjectWorkspaces = projectWorkspaces(workspaceCatalog ?? []);
   const authorizedModelOptions = [

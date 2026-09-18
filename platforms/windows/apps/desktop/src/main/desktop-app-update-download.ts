@@ -63,12 +63,16 @@ export async function sha256FileStreaming(path: string): Promise<string> {
   return digest.digest("hex");
 }
 
-function buildDownloadHeaders(existingBytes: number): Record<string, string> {
+function buildDownloadHeaders(existingBytes: number, url = ""): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: "application/octet-stream,*/*"
   };
   if (existingBytes > 0) {
     headers.Range = `bytes=${existingBytes}-`;
+  }
+  // Prefer NSIS when hitting Spring dual-pack download without an explicit package query.
+  if (/\/api\/desktop\/v1\/app-releases\/[^/]+\/download/i.test(url) && !/[?&]package=/i.test(url)) {
+    headers["X-Desktop-Package-Preference"] = "nsis";
   }
   return headers;
 }
@@ -88,7 +92,7 @@ async function fetchInstallerResponse(
 ): Promise<Response> {
   return fetchImpl(url, {
     method: "GET",
-    headers: buildDownloadHeaders(existingBytes)
+    headers: buildDownloadHeaders(existingBytes, url)
   });
 }
 

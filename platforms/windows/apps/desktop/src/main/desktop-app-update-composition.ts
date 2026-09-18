@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { BrowserWindow, app, shell } from "electron";
 import { desktopIpcChannels, type DesktopAppUpdateProgress } from "@codex-forge/protocol";
 import {
+  buildDeferredSilentNsisScript,
   controlPlaneCacheRelease,
   DesktopAppUpdateService,
   parseDesktopAppRelease
@@ -38,10 +39,6 @@ function broadcastAppUpdateProgress(progress: DesktopAppUpdateProgress) {
   }
 }
 
-/**
- * Schedule silent msiexec after the app exits so LocalAppData/.newbrain files unlock.
- * Returns immediately so the UI can show「安装完成即将重启」and quit.
- */
 async function scheduleDeferredSilentMsiexec(input: {
   expectedVersion?: string;
   fullMsi?: boolean;
@@ -80,6 +77,29 @@ async function scheduleDeferredSilentMsiexec(input: {
     child.once("error", error => resolve({ exitCode: null, error: error.message }));
     child.once("spawn", () => { child.unref(); resolve({ exitCode: 0 }); });
   });
+}
+
+async function scheduleDeferredSilentNsis(input: {
+  setupPath: string;
+  executablePath: string;
+  downloadDir: string;
+}): Promise<{ exitCode: number | null; error?: string }> {
+  const scriptPath = join(input.downloadDir, `nsis-upgrade-${Date.now()}.cmd`);
+  const script = buildDeferredSilentNsisScript({
+    setupPath: input.setupPath,
+    executablePath: input.executablePath,
+    processImageName: "NewBrain.exe",
+    maxWaitSeconds: 90
+  });
+  try {
+    await writeFile(scriptPath, script, "utf8");
+  } catch (error) {
+    return {
+      exitCode: null,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+  return await spawnDetachedCmd(scriptPath);
 }
 
 async function scheduleDeferredUlitZipApply(input: {
@@ -143,6 +163,10 @@ function spawnDetachedCmd(scriptPath: string): Promise<{ exitCode: number | null
   });
 }
 
+function skippedVersionPath() {
+  return join(app.getPath("userData"), "updates", "skipped-version.txt");
+}
+
 /** Wire cached/refreshed control-plane release offers into click-to-upgrade IPC. */
 export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompositionDeps) {
   const downloadDir = () => join(app.getPath("userData"), "updates");
@@ -175,6 +199,11 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
       fullMsi,
       downloadDir: downloadDir()
     }),
+    runSilentNsisInstall: async ({ setupPath, executablePath }) => scheduleDeferredSilentNsis({
+      setupPath,
+      executablePath,
+      downloadDir: downloadDir()
+    }),
     runUlitZipApply: async ({ zipPath, installRoot }) => scheduleDeferredUlitZipApply({
       zipPath,
       installRoot,
@@ -185,7 +214,6 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
       return error || "";
     },
     afterSilentSuccess: () => {
-      // Detached msiexec waits for exit; quit so files unlock and LaunchNewbrainAfterInstall can relaunch.
       setTimeout(() => {
         try {
           app.quit();
@@ -195,11 +223,31 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
       }, 600);
     },
     onProgress: broadcastAppUpdateProgress,
-    verifyUpdate: deps.verifyAppUpdate
+    verifyUpdate: deps.verifyAppUpdate,
+    readSkippedVersion: async () => {
+      try {
+        const text = (await readFile(skippedVersionPath(), "utf8")).trim();
+        return text || null;
+      } catch {
+        return null;
+      }
+    },
+    writeSkippedVersion: async (version) => {
+      await mkdir(downloadDir(), { recursive: true });
+      if (!version) {
+        await rm(skippedVersionPath(), { force: true }).catch(() => undefined);
+        return;
+      }
+      await writeFile(skippedVersionPath(), version, "utf8");
+    }
   });
   registerDesktopAppUpdateIpc({
     getStatus: () => service.getStatus({ refresh: true }),
     start: () => service.startUpdate(),
+    apply: () => service.applyStagedUpdate(),
+    getApplied: () => service.getAppliedUpdate(),
+    dismissApplied: () => service.dismissAppliedUpdate(),
+    skipVersion: (version) => service.skipVersion(version),
     verify: (input) => service.verifyUpdate(input)
   });
   return service;

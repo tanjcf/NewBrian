@@ -92,6 +92,7 @@ test("sanitizes non-ASCII device names so Electron fetch headers stay ByteString
   });
   assert.equal(headers["X-Desktop-Device-Name"], "desktop");
   assert.match(headers["X-Desktop-Device-Name"], /^[\x20-\x7E]+$/);
+  assert.equal(headers["X-Desktop-Package-Preference"], "nsis");
 });
 
 test("builds a fingerprint while exposing only hashed hardware identifiers", () => {

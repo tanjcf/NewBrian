@@ -41,6 +41,8 @@ export function defaultBrainWorkspaceSelection(): BrainWorkspaceSelection {
 export function restoreBrainWorkspaceSelection(input: {
   serialized?: string | null;
   legacyWorkspaceKey?: string | null;
+  /** Disk-backed preference (e.g. DesktopPreferences.brain); wins over localStorage when set. */
+  preferredWorkspaceKey?: string | null;
   availableWorkspaceKeys?: readonly BrainWorkspaceKey[];
 }): RestoredBrainWorkspaceSelection {
   const available = input.availableWorkspaceKeys?.length
@@ -66,20 +68,25 @@ export function restoreBrainWorkspaceSelection(input: {
     }
   }
 
+  const preferredKey = isBrainWorkspaceKey(input.preferredWorkspaceKey)
+    ? input.preferredWorkspaceKey
+    : null;
   const persistedKey = isBrainWorkspaceKey(parsed?.selectedWorkspaceKey)
     ? parsed.selectedWorkspaceKey
     : null;
   const legacyKey = isBrainWorkspaceKey(input.legacyWorkspaceKey)
     ? input.legacyWorkspaceKey
     : null;
-  const requestedKey = persistedKey ?? legacyKey ?? "explore";
+  // Prefer durable desktop preferences over renderer localStorage so the last
+  // scene survives packaged ↔ dev origin changes and login remounts.
+  const requestedKey = preferredKey ?? persistedKey ?? legacyKey ?? "explore";
   const selectedWorkspaceKey = available.includes(requestedKey)
     ? requestedKey
     : (available.includes("explore") ? "explore" : available[0] ?? "explore");
 
   return {
     selection: { version: 2, selectedWorkspaceKey, catalogs },
-    migrated: parsed?.version !== 2 || persistedKey === null
+    migrated: parsed?.version !== 2 || (persistedKey === null && preferredKey === null)
   };
 }
 

@@ -162,5 +162,9 @@ export function createDesktopAuthHeaders(input: {
     "X-Desktop-Platform": mapDesktopReleasePlatform(input.platform ?? input.device.os_name)
   };
   if (input.accessToken?.trim()) headers.Authorization = `Bearer ${input.accessToken.trim()}`;
+  // Windows NSIS-capable clients ask Spring for setup.exe when dual MSI+NSIS are registered.
+  if (headers["X-Desktop-Platform"] === "windows") {
+    headers["X-Desktop-Package-Preference"] = "nsis";
+  }
   return headers;
 }

@@ -508,6 +508,14 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.appUpdate.getStatus),
   startAppUpdate: (): Promise<DesktopAppUpdateStartResult> =>
     ipcRenderer.invoke(desktopIpcChannels.appUpdate.start),
+  applyAppUpdate: (): Promise<DesktopAppUpdateStartResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.apply),
+  getAppliedAppUpdate: (): Promise<import("@codex-forge/protocol").DesktopAppUpdateAppliedInfo | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.getApplied),
+  dismissAppliedAppUpdate: (): Promise<void> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.dismissApplied),
+  skipAppUpdateVersion: (version?: string): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.skipVersion, version),
   verifyAppUpdate: (input?: DesktopAppUpdateVerifyInput): Promise<DesktopAppUpdateVerifyResult> =>
     ipcRenderer.invoke(desktopIpcChannels.appUpdate.verify, input),
   onAppUpdateProgress: (

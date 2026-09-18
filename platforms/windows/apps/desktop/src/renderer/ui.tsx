@@ -73,9 +73,12 @@ import {
   initialMcpServer,
   initialModelConfig,
   initialPatchForm,
+  isCnMobile,
   optionalLoad,
   parseEnvText,
+  resolveLoginIdentifier,
   settingsFeatureItem,
+  shouldUseLoginCode,
   withTimeout
 } from "./app/desktop-model";
 import { projectModelChatFailure } from "./app/model-chat-failure-projection";
@@ -207,15 +210,26 @@ export function App() {
     channel?: string;
     notes?: string;
     mandatory?: boolean;
+    staged?: boolean;
+    stagedPath?: string;
+    skippedVersion?: string;
     detail: string;
   }>(null);
   const [appUpdateBusy, setAppUpdateBusy] = useState(false);
+  const [appUpdateDiscoverOpen, setAppUpdateDiscoverOpen] = useState(false);
+  const [appUpdateApplied, setAppUpdateApplied] = useState<null | {
+    fromVersion: string;
+    toVersion: string;
+    notes: string;
+  }>(null);
   const [appUpdateProgress, setAppUpdateProgress] = useState<null | {
     phase: string;
     percent: number;
     detail: string;
     latestVersion?: string;
-    installMode?: "silent" | "wizard" | "patch";
+    currentVersion?: string;
+    notes?: string;
+    installMode?: "silent" | "wizard" | "patch" | "nsis";
     preservesUserData: true;
   }>(null);
   const questionRef = useRef("");
@@ -859,14 +873,39 @@ export function App() {
     if (!api?.onAppUpdateProgress) return;
     return api.onAppUpdateProgress((progress) => {
       setAppUpdateProgress(progress);
-      if (progress.phase === "done" || progress.phase === "error") {
+      setAppUpdateDiscoverOpen(false);
+      if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
         setAppUpdateBusy(false);
       }
-      if (progress.phase === "done" || progress.phase === "error") {
+      if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
         void api.getAppUpdateStatus?.().then((status) => setAppUpdateStatus(status)).catch(() => undefined);
       }
     });
   }, [api]);
+  useEffect(() => {
+    if (!api?.getAppliedAppUpdate) return;
+    void api.getAppliedAppUpdate().then((applied) => {
+      if (applied) setAppUpdateApplied(applied);
+    }).catch(() => undefined);
+  }, [api]);
+  useEffect(() => {
+    if (!appUpdateStatus?.available) return;
+    if (appUpdateStatus.skippedVersion && appUpdateStatus.skippedVersion === appUpdateStatus.latestVersion) return;
+    if (appUpdateProgress || appUpdateApplied) return;
+    if (appUpdateStatus.staged) {
+      setAppUpdateProgress({
+        phase: "ready",
+        percent: 100,
+        detail: appUpdateStatus.detail,
+        latestVersion: appUpdateStatus.latestVersion,
+        currentVersion: appUpdateStatus.currentVersion,
+        notes: appUpdateStatus.notes,
+        preservesUserData: true
+      });
+      return;
+    }
+    setAppUpdateDiscoverOpen(true);
+  }, [appUpdateStatus?.available, appUpdateStatus?.latestVersion, appUpdateStatus?.staged, appUpdateStatus?.skippedVersion]);
   useEffect(() => {
     // App/control-plane status is refreshed only by an explicit update action.
     // Automatic polling is disabled while the remote control plane is not a
@@ -876,11 +915,14 @@ export function App() {
   async function startDesktopAppUpdate() {
     if (!api?.startAppUpdate || appUpdateBusy) return;
     setAppUpdateBusy(true);
+    setAppUpdateDiscoverOpen(false);
     setAppUpdateProgress({
       phase: "preparing",
       percent: 1,
       detail: "正在准备更新。聊天记录、项目与本地历史会保留。",
       latestVersion: appUpdateStatus?.latestVersion,
+      currentVersion: appUpdateStatus?.currentVersion,
+      notes: appUpdateStatus?.notes,
       preservesUserData: true
     });
     try {
@@ -899,6 +941,16 @@ export function App() {
           preservesUserData: true
         });
         setErrorMessage(result.detail || "更新失败");
+      } else if (result.staged) {
+        setAppUpdateProgress((current) => ({
+          phase: "ready",
+          percent: 100,
+          detail: result.detail || `v${appUpdateStatus?.latestVersion || ""} 已就绪，重启后生效。`,
+          latestVersion: current?.latestVersion || appUpdateStatus?.latestVersion,
+          currentVersion: current?.currentVersion || appUpdateStatus?.currentVersion,
+          notes: current?.notes || appUpdateStatus?.notes,
+          preservesUserData: true
+        }));
       }
       const status = await api.getAppUpdateStatus().catch(() => null);
       if (status) setAppUpdateStatus(status);
@@ -915,8 +967,49 @@ export function App() {
       setAppUpdateBusy(false);
     }
   }
+  async function applyDesktopAppUpdate() {
+    if (!api?.applyAppUpdate || appUpdateBusy) return;
+    setAppUpdateBusy(true);
+    try {
+      const result = await api.applyAppUpdate();
+      setChatStatus(result.detail || "");
+      if (!result.ok) {
+        setAppUpdateProgress({
+          phase: "error",
+          percent: 0,
+          detail: result.detail || "安装失败",
+          preservesUserData: true
+        });
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setAppUpdateProgress({
+        phase: "error",
+        percent: 0,
+        detail,
+        preservesUserData: true
+      });
+    } finally {
+      setAppUpdateBusy(false);
+    }
+  }
+  async function skipDesktopAppUpdate() {
+    const version = appUpdateStatus?.latestVersion;
+    if (api?.skipAppUpdateVersion) {
+      await api.skipAppUpdateVersion(version).catch(() => undefined);
+    }
+    const status = await api?.getAppUpdateStatus?.().catch(() => null);
+    if (status) setAppUpdateStatus(status);
+  }
   function dismissAppUpdateProgress() {
     setAppUpdateProgress(null);
+  }
+  function dismissAppUpdateDiscover() {
+    setAppUpdateDiscoverOpen(false);
+  }
+  async function dismissAppliedAppUpdate() {
+    setAppUpdateApplied(null);
+    await api?.dismissAppliedAppUpdate?.().catch(() => undefined);
   }
   const isBootstrapBlocking = false;
   const activeThreadRequestIds = useMemo(
@@ -1304,16 +1397,37 @@ export function App() {
       return;
     }
 
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const identifier = resolveLoginIdentifier(loginForm);
+    const password = loginForm.password.trim();
+    const captcha = loginForm.captcha.trim();
     const emailCodeRequired = Boolean(
       (authStatus as DesktopAuthStatusState & { email_code_login_enabled?: boolean }).email_code_login_enabled
     );
-    if (emailCodeRequired && !loginForm.captcha.trim()) {
-      setErrorMessage("已启用邮箱验证码，请先获取并填写验证码后再登录。");
-      return;
-    }
-    if (!loginForm.password.trim() && !loginForm.captcha.trim()) {
-      setErrorMessage("请输入密码或验证码。");
-      return;
+    const useCode = shouldUseLoginCode(loginForm, "password", emailCodeRequired);
+
+    if (channel === "phone") {
+      if (!isCnMobile(identifier)) {
+        setErrorMessage("请填写 11 位手机号。");
+        return;
+      }
+      if (!captcha) {
+        setErrorMessage("请填写短信验证码。");
+        return;
+      }
+    } else {
+      if (!identifier) {
+        setErrorMessage("请输入邮箱。");
+        return;
+      }
+      if (useCode && !captcha) {
+        setErrorMessage("请先获取并填写邮箱验证码后再登录。");
+        return;
+      }
+      if (!useCode && !password) {
+        setErrorMessage("请输入密码。");
+        return;
+      }
     }
 
     if (authStatus.agreement?.enabled && !agreementChecked) {
@@ -1326,9 +1440,9 @@ export function App() {
     setIsSubmittingLogin(true);
     try {
       const nextAuthStatus = await api.loginAuth({
-        email: loginForm.email,
-        password: loginForm.password.trim(),
-        captcha: loginForm.captcha,
+        email: identifier,
+        password: useCode ? "" : password,
+        captcha: useCode ? captcha : "",
         agreement_accepted: authStatus.agreement?.enabled ? agreementChecked : true
       });
       setAuthStatus(nextAuthStatus);
@@ -1355,7 +1469,13 @@ export function App() {
       return;
     }
 
-    if (!loginForm.email.trim()) {
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    if (channel === "phone") {
+      if (!isCnMobile(loginForm.phone)) {
+        setErrorMessage("请先填写 11 位手机号。");
+        return;
+      }
+    } else if (!loginForm.email.trim()) {
       setErrorMessage("请先输入邮箱。");
       return;
     }
@@ -1363,13 +1483,17 @@ export function App() {
     setErrorMessage("");
     setIsSendingLoginCode(true);
     try {
-      const result = await api.sendLoginCode({ email: loginForm.email.trim() });
+      const result = await api.sendLoginCode(
+        channel === "phone"
+          ? { phone: loginForm.phone.trim() }
+          : { email: loginForm.email.trim() }
+      );
       const resendAfter =
         typeof (result.data as Record<string, unknown> | undefined)?.resend_after_seconds === "number"
           ? Number((result.data as Record<string, unknown>).resend_after_seconds)
           : 60;
       setLoginCodeCooldownSeconds(Math.max(1, resendAfter));
-      setChatStatus("验证码已发送，请查收邮箱。");
+      setChatStatus(channel === "phone" ? "验证码已发送，请查收短信。" : "验证码已发送，请查收邮箱。");
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
@@ -2781,6 +2905,8 @@ export function App() {
         appUpdateStatus={appUpdateStatus}
         appUpdateBusy={appUpdateBusy}
         startDesktopAppUpdate={startDesktopAppUpdate}
+        applyDesktopAppUpdate={applyDesktopAppUpdate}
+        skipDesktopAppUpdate={skipDesktopAppUpdate}
       />
     );
   }
@@ -2868,8 +2994,14 @@ export function App() {
         appUpdateStatus={appUpdateStatus}
         appUpdateBusy={appUpdateBusy}
         appUpdateProgress={appUpdateProgress}
+        appUpdateDiscoverOpen={appUpdateDiscoverOpen}
+        appUpdateApplied={appUpdateApplied}
         startDesktopAppUpdate={startDesktopAppUpdate}
+        applyDesktopAppUpdate={applyDesktopAppUpdate}
+        skipDesktopAppUpdate={skipDesktopAppUpdate}
         dismissAppUpdateProgress={dismissAppUpdateProgress}
+        dismissAppUpdateDiscover={dismissAppUpdateDiscover}
+        dismissAppliedAppUpdate={dismissAppliedAppUpdate}
         title={title}
         previewPlacement={previewPlacement}
         setPreviewPlacement={setPreviewPlacement}
@@ -2965,6 +3097,7 @@ export function App() {
         chatUsesProject={chatUsesProject}
         setChatUsesProject={setChatUsesProject}
         desktopPreferences={desktopPreferences}
+        saveDesktopPreferences={saveDesktopPreferences}
         featureConfig={featureConfig}
         setFeatureConfig={setFeatureConfig}
         skillDraft={skillDraft}

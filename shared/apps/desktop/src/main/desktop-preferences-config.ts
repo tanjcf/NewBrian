@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
-import type { DesktopPreferences } from "@codex-forge/protocol";
+import { isBrainWorkspaceKey, type DesktopPreferences } from "@codex-forge/protocol";
 
 export interface DesktopPreferencesNormalizationContext {
   defaults: DesktopPreferences;
@@ -105,6 +105,10 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
   // Desktop searches/installs OpenClaw skills directly from ClawHub (clawhub.ai).
   market: {
     directClawhubAllowed: true
+  },
+  // Empty = unset; first launch still defaults to 场景学习探索 via workspace-selection.
+  brain: {
+    selectedWorkspaceKey: ""
   },
   shortcuts: {}
   };
@@ -343,6 +347,11 @@ export function normalizeDesktopPreferencesValue(
         typeof input?.market?.directClawhubAllowed === "boolean"
           ? input.market.directClawhubAllowed
           : context.defaults.market.directClawhubAllowed
+    },
+    brain: {
+      selectedWorkspaceKey: isBrainWorkspaceKey(input?.brain?.selectedWorkspaceKey)
+        ? input.brain.selectedWorkspaceKey
+        : context.defaults.brain.selectedWorkspaceKey
     },
     shortcuts:
       input?.shortcuts && typeof input.shortcuts === "object"

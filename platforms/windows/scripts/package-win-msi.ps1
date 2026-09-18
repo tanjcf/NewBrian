@@ -447,6 +447,16 @@ process.stdout.write(asar.extractFile(archive, file));
         $builderLog = Join-Path $builderOut "electron-builder-msi.log"
         & node $electronBuilder @msiArgs 2>&1 | Tee-Object -FilePath $builderLog
         $lastBuilderExit = $LASTEXITCODE
+        if ($lastBuilderExit -eq 0) {
+          $nsisArgs = @("--win", "nsis", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
+          $nsisArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
+          if (-not $requireSignature) { $nsisArgs += "--config.win.signAndEditExecutable=false" }
+          $builderStage = "nsis"
+          $builderLog = Join-Path $builderOut "electron-builder-nsis.log"
+          Write-Host "Packaging NSIS setup (electron-builder)..." -ForegroundColor Cyan
+          & node $electronBuilder @nsisArgs 2>&1 | Tee-Object -FilePath $builderLog
+          $lastBuilderExit = $LASTEXITCODE
+        }
       }
     } finally {
       Remove-Item Env:\NEWBRAIN_MSI_INSTALL_DIR -ErrorAction SilentlyContinue
@@ -523,6 +533,45 @@ if (Test-Path -LiteralPath $generatedMsi) {
   Write-Host "MSI signature status: $($signature.Status)" -ForegroundColor DarkGray
   Write-Host "MSI generated: $msiOut" -ForegroundColor Green
   Write-Host "Builder artifacts kept at: $builderOut" -ForegroundColor DarkGray
+
+  $generatedNsis = Get-ChildItem -LiteralPath $builderOut -Filter "*-setup.exe" -File -Recurse |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if ($null -eq $generatedNsis) {
+    $generatedNsis = Get-ChildItem -LiteralPath $builderOut -Filter "*.exe" -File -Recurse |
+      Where-Object { $_.Name -match 'setup' -or $_.Name -match '\.exe$' } |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+  }
+  $nsisOut = $null
+  if ($null -ne $generatedNsis) {
+    $unsignedSuffix = if ($isProduction) { "production-unsigned" } else { "test-unsigned" }
+    $nsisName = if ($requireSignature) {
+      "{0} {1}-setup.exe" -f $productName, $desktopPackage.version
+    } else {
+      "{0} {1}-setup-{2}.exe" -f $productName, $desktopPackage.version, $unsignedSuffix
+    }
+    $nsisOut = Join-Path $releaseRoot $nsisName
+    Copy-Item -LiteralPath $generatedNsis.FullName -Destination $nsisOut -Force
+    $nsisHash = (Get-FileHash -LiteralPath $nsisOut -Algorithm SHA256).Hash.ToLowerInvariant()
+    Write-Host "NSIS setup generated: $nsisOut" -ForegroundColor Green
+    Write-Host "NSIS SHA-256: $nsisHash" -ForegroundColor Cyan
+    $springSummary = [ordered]@{
+      available = $true
+      latest_version = $desktopPackage.version
+      download_url = "<upload-and-paste-public-url>"
+      sha256 = $nsisHash
+      notes = "<paste release notes markdown>"
+      package_kind = "nsis"
+      channel = $channelSlug
+      local_path = $nsisOut
+    }
+    $springSummaryPath = Join-Path $releaseRoot ("app-update-spring-{0}.json" -f $desktopPackage.version)
+    $springSummary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $springSummaryPath -Encoding UTF8
+    Write-Host "Spring app-update summary: $springSummaryPath" -ForegroundColor Cyan
+  } else {
+    Write-Host "NSIS setup artifact not found under builder output; MSI-only release." -ForegroundColor Yellow
+  }
 
 # -Ulit no longer renames the full Electron MSI. Real small patches are produced by
 # windows/scripts/package-win-ulit-patch.ps1 (bsdiff of app.asar + tiny applicator).

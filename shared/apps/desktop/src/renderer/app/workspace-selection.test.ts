@@ -32,6 +32,28 @@ test("defaults a fresh Brain profile to the scene learning workspace", () => {
   assert.deepEqual(restored.selection.catalogs, {});
 });
 
+test("prefers durable desktop preference over localStorage for the last scene", () => {
+  const serialized = JSON.stringify({
+    version: 2,
+    selectedWorkspaceKey: "explore",
+    catalogs: { quant: { projectId: "q1", conversationId: "c1" } }
+  });
+  const restored = restoreBrainWorkspaceSelection({
+    serialized,
+    preferredWorkspaceKey: "quant"
+  });
+  assert.equal(restored.selection.selectedWorkspaceKey, "quant");
+  assert.deepEqual(restored.selection.catalogs.quant, { projectId: "q1", conversationId: "c1" });
+});
+
+test("ignores invalid preferred workspace keys", () => {
+  const restored = restoreBrainWorkspaceSelection({
+    preferredWorkspaceKey: "not-a-scene",
+    legacyWorkspaceKey: "music"
+  });
+  assert.equal(restored.selection.selectedWorkspaceKey, "music");
+});
+
 test("switchBrainWorkspace restores sidebar selection from target scene catalog", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /setSelectedSidebarRow\(`brain-conversation:\$\{nextCatalog\.conversationId\}`\)/);
@@ -271,6 +293,14 @@ test("startup hydrates persisted sidebar thread rows before brain conversation s
   assert.match(source, /shouldPreferSidebarRowThreadRestore/);
   assert.match(source, /resolveSidebarRowThreadTarget/);
   assert.match(source, /parseLegacyConversationThreadId\(selectedBrainConversationId\)/);
+});
+
+test("remembers the last scene via desktop preferences and does not wipe restore when workspace list is empty", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /preferredWorkspaceKey:\s*desktopPreferences\?\.brain\?\.selectedWorkspaceKey/);
+  assert.match(source, /saveDesktopPreferences\(\{[\s\S]*selectedWorkspaceKey:\s*key/);
+  assert.match(source, /if \(!enabled\.length\) return;/);
+  assert.match(source, /selectedBrainWorkspaceKeyRef/);
 });
 
 test("switching scenes restores the right-hand scene panel instead of the generic files side preview", () => {

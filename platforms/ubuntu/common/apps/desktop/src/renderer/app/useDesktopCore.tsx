@@ -1288,6 +1288,8 @@ async function saveDesktopPreferences(nextPreferences = desktopPreferences, opti
       dictation: { ...initialDesktopPreferences.dictation, ...nextPreferences.dictation },
       notifications: { ...initialDesktopPreferences.notifications, ...nextPreferences.notifications },
       shortcuts: { ...(initialDesktopPreferences.shortcuts || {}), ...(nextPreferences.shortcuts || {}) },
+      market: { ...initialDesktopPreferences.market, ...nextPreferences.market },
+      brain: { ...initialDesktopPreferences.brain, ...nextPreferences.brain },
       environment: {
         ...initialDesktopPreferences.environment,
         ...nextPreferences.environment,

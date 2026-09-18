@@ -120,6 +120,7 @@ import { WorkspaceSectionEditor } from "./WorkspaceSectionEditor";
 import {
   INTERNAL_CHAT_WORKSPACE_ID,
   brainWorkspaceModes,
+  isBrainWorkspaceKey,
   type BrainWorkspaceKey
 } from "@codex-forge/protocol";
 import {
@@ -194,10 +195,9 @@ import { mergeRefreshedModelConfig } from "./model-config-refresh";
 import { combineComposerQuote } from "./composer-quote";
 import { normalizeComposerAttachmentError } from "./composer-attachment-errors";
 import {
-  resolveAppUpdateProgressLabel,
-  resolveAppUpdateProgressTitle,
   shouldShowAppUpdateAutoPrompt
 } from "./app-update-progress-copy";
+import { AppUpdateDialog } from "./AppUpdateDialog";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -535,8 +535,8 @@ function formatLiveProcessSteps(activities: any[] = []) {
 
 export function WorkspaceModules(ctx: any) {
   const { previewMode } = ctx;
-  const { WorkspaceTree, isSettingsFeature, activeFeature, setActiveFeature, featureItems, showsFeaturePanel, activeFeatureItem, renderFeaturePanel, projectsCollapsed, setProjectsCollapsed, workspaceCatalog, setWorkspaceCatalog, expandedWorkspaceIds, setExpandedWorkspaceIds, sortProjectsAscending, setSortProjectsAscending, showAddWorkspacePanel, setShowAddWorkspacePanel, newWorkspaceName, setNewWorkspaceName, newWorkspacePath, setNewWorkspacePath, api, createWorkspace, createBlankProject, addExistingProject, visibleWorkspaceCatalog, selectedWorkspace, workspaceHeaderStatus, snapshot, setSnapshot, syncSnapshot, expandedThreadListWorkspaceIds, setExpandedThreadListWorkspaceIds, sortThreadsForMenu, setSelectedWorkspaceId, setSelectedThreadId, selectWorkspaceThread, setArchivedThreadIds, setUnreadThreadIds, pinnedThreadIds, unreadThreadIds, threadContextMenu, setThreadContextMenu, handleThreadMenuAction, formatRelativeTimeLabel, formatSearchKind, reviewDrawerOpen, setReviewDrawerOpen, treeNodes, expandedPaths, activeTreePath, searchFilePreview, setSearchFilePreview, setExpandedPaths, setActiveTreePath, setPatchForm, setPreviewMode, setPreviewPlacement, runAction, displayUserAvatar, displayUserName, displayUserPlan, showAccountMenu, setShowAccountMenu, setActiveSettingsSection, handleLogout, title, previewPlacement, renderPreviewHeaderActions, errorMessage, setErrorMessage, conversationTurns, writeClipboard, setQuestion, composerImages, setComposerImages, queuedComposerDraft, setQueuedComposerDraft, queuedComposerDraftRef, questionRef, timelineItems, assistantActivities, assistantStartedAt, lastAssistantElapsedSeconds, selectedThread, activeThreadIds = [], activeThreadRequestIds = {}, liveModelContent = {}, liveReasoningSummaries = {}, settleApprovalRequest, settleLiveApprovalActivities, updateThreadMessages, selectedWorkspaceId, selectedThreadId, forkCurrentAnswer, selectedComposerTools, handleRemoveComposerTool, renderComposerToolFields, question, isAskingModel, isGlobalModelBusy, composerPermission, setComposerPermission, composerWorkspaceContext, setComposerWorkspaceContext, setShowMcpToolPicker, showMcpToolPicker, mcpDiscoveredTools, mcpServers, mcpDraft, setMcpDraft, editingMcpId, mcpHealth, mcpInspection, testingMcpId, resetMcpDraft, loadMcpDraft, handleSaveMcpServer, handleDeleteMcpServer, handleToggleMcpServer, handleTestMcpServer, handleInspectMcpServer, handleInsertMcpTool, modelConfig, setModelConfig, askModel, cancelCurrentModelRequest, shellCommand, setShellCommand, chatStatus, setChatStatus, renderPreviewPanel, renderSettingsWorkspace, searchQuery, setSearchQuery, searchResults, showSearchDialog, setShowSearchDialog, isComposingNewThread, setIsComposingNewThread, newThreadScope, setNewThreadScope, chatUsesProject, setChatUsesProject, desktopPreferences, featureConfig, setFeatureConfig, skillDraft, setSkillDraft, pluginDraft, setPluginDraft, automationDraft, setAutomationDraft, resetFeatureDraft, loadFeatureDraft, saveFeature, editingFeatureId } = ctx;
-  const { selectedComposerSkill, setSelectedComposerSkill, bindThreadComposerSkill, setSelectedComposerTools, composerSkillContext, setComposerSkillContext, composerModes, setComposerModes, usageExceptionFeedbackPreview, usageExceptionFeedbackBusy, cancelUsageExceptionFeedback, confirmUsageExceptionFeedback, reportGenerationFailureFeedback, appUpdateStatus, appUpdateBusy, appUpdateProgress, startDesktopAppUpdate, dismissAppUpdateProgress } = ctx;
+  const { WorkspaceTree, isSettingsFeature, activeFeature, setActiveFeature, featureItems, showsFeaturePanel, activeFeatureItem, renderFeaturePanel, projectsCollapsed, setProjectsCollapsed, workspaceCatalog, setWorkspaceCatalog, expandedWorkspaceIds, setExpandedWorkspaceIds, sortProjectsAscending, setSortProjectsAscending, showAddWorkspacePanel, setShowAddWorkspacePanel, newWorkspaceName, setNewWorkspaceName, newWorkspacePath, setNewWorkspacePath, api, createWorkspace, createBlankProject, addExistingProject, visibleWorkspaceCatalog, selectedWorkspace, workspaceHeaderStatus, snapshot, setSnapshot, syncSnapshot, expandedThreadListWorkspaceIds, setExpandedThreadListWorkspaceIds, sortThreadsForMenu, setSelectedWorkspaceId, setSelectedThreadId, selectWorkspaceThread, setArchivedThreadIds, setUnreadThreadIds, pinnedThreadIds, unreadThreadIds, threadContextMenu, setThreadContextMenu, handleThreadMenuAction, formatRelativeTimeLabel, formatSearchKind, reviewDrawerOpen, setReviewDrawerOpen, treeNodes, expandedPaths, activeTreePath, searchFilePreview, setSearchFilePreview, setExpandedPaths, setActiveTreePath, setPatchForm, setPreviewMode, setPreviewPlacement, runAction, displayUserAvatar, displayUserName, displayUserPlan, showAccountMenu, setShowAccountMenu, setActiveSettingsSection, handleLogout, title, previewPlacement, renderPreviewHeaderActions, errorMessage, setErrorMessage, conversationTurns, writeClipboard, setQuestion, composerImages, setComposerImages, queuedComposerDraft, setQueuedComposerDraft, queuedComposerDraftRef, questionRef, timelineItems, assistantActivities, assistantStartedAt, lastAssistantElapsedSeconds, selectedThread, activeThreadIds = [], activeThreadRequestIds = {}, liveModelContent = {}, liveReasoningSummaries = {}, settleApprovalRequest, settleLiveApprovalActivities, updateThreadMessages, selectedWorkspaceId, selectedThreadId, forkCurrentAnswer, selectedComposerTools, handleRemoveComposerTool, renderComposerToolFields, question, isAskingModel, isGlobalModelBusy, composerPermission, setComposerPermission, composerWorkspaceContext, setComposerWorkspaceContext, setShowMcpToolPicker, showMcpToolPicker, mcpDiscoveredTools, mcpServers, mcpDraft, setMcpDraft, editingMcpId, mcpHealth, mcpInspection, testingMcpId, resetMcpDraft, loadMcpDraft, handleSaveMcpServer, handleDeleteMcpServer, handleToggleMcpServer, handleTestMcpServer, handleInspectMcpServer, handleInsertMcpTool, modelConfig, setModelConfig, askModel, cancelCurrentModelRequest, shellCommand, setShellCommand, chatStatus, setChatStatus, renderPreviewPanel, renderSettingsWorkspace, searchQuery, setSearchQuery, searchResults, showSearchDialog, setShowSearchDialog, isComposingNewThread, setIsComposingNewThread, newThreadScope, setNewThreadScope, chatUsesProject, setChatUsesProject, desktopPreferences, saveDesktopPreferences, featureConfig, setFeatureConfig, skillDraft, setSkillDraft, pluginDraft, setPluginDraft, automationDraft, setAutomationDraft, resetFeatureDraft, loadFeatureDraft, saveFeature, editingFeatureId } = ctx;
+  const { selectedComposerSkill, setSelectedComposerSkill, bindThreadComposerSkill, setSelectedComposerTools, composerSkillContext, setComposerSkillContext, composerModes, setComposerModes, usageExceptionFeedbackPreview, usageExceptionFeedbackBusy, cancelUsageExceptionFeedback, confirmUsageExceptionFeedback, reportGenerationFailureFeedback, appUpdateStatus, appUpdateBusy, appUpdateProgress, appUpdateDiscoverOpen, appUpdateApplied, startDesktopAppUpdate, applyDesktopAppUpdate, skipDesktopAppUpdate, dismissAppUpdateProgress, dismissAppUpdateDiscover, dismissAppliedAppUpdate } = ctx;
   const releaseInactiveModelRequest = ctx.releaseInactiveModelRequest;
   const [hoveredThread, setHoveredThread] = useState<any>(null);
   const [dismissedAppUpdateVersion, setDismissedAppUpdateVersion] = useState<string | null>(null);
@@ -720,7 +720,8 @@ export function WorkspaceModules(ctx: any) {
   const [documentAnnotationSnapshot, setDocumentAnnotationSnapshot] = useState<{ dataUrl: string } | null>(null);
   const initialBrainWorkspaceSelection = useRef(restoreBrainWorkspaceSelection({
     serialized: (() => { try { return localStorage.getItem(BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
-    legacyWorkspaceKey: (() => { try { return localStorage.getItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })()
+    legacyWorkspaceKey: (() => { try { return localStorage.getItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY); } catch { return null; } })(),
+    preferredWorkspaceKey: desktopPreferences?.brain?.selectedWorkspaceKey
   }));
   const initialWorkspaceSceneTab = brainWorkspaceCapabilityTabs[initialBrainWorkspaceSelection.current.selection.selectedWorkspaceKey]?.[0]?.key || "files";
   const [brainResourceTab, setBrainResourceTab] = useState<"files" | "artifacts" | "tasks" | "scene">(() =>
@@ -743,6 +744,14 @@ export function WorkspaceModules(ctx: any) {
   const [brainWorkspaceSelection, setBrainWorkspaceSelection] = useState(initialBrainWorkspaceSelection.current.selection);
   const [brainWorkspaceMigrated, setBrainWorkspaceMigrated] = useState(initialBrainWorkspaceSelection.current.migrated);
   const selectedBrainWorkspaceKey = brainWorkspaceSelection.selectedWorkspaceKey;
+  const selectedBrainWorkspaceKeyRef = useRef(selectedBrainWorkspaceKey);
+  selectedBrainWorkspaceKeyRef.current = selectedBrainWorkspaceKey;
+  const brainPrefsHydratedRef = useRef(Boolean(isBrainWorkspaceKey(desktopPreferences?.brain?.selectedWorkspaceKey)));
+  const persistedBrainPrefsKeyRef = useRef(
+    isBrainWorkspaceKey(desktopPreferences?.brain?.selectedWorkspaceKey)
+      ? desktopPreferences.brain.selectedWorkspaceKey
+      : ""
+  );
   const initialBrainCatalog = brainWorkspaceSelection.catalogs[selectedBrainWorkspaceKey];
   const [selectedBrainProjectId, setSelectedBrainProjectId] = useState(initialBrainCatalog?.projectId || "");
   const [selectedBrainConversationId, setSelectedBrainConversationId] = useState(initialBrainCatalog?.conversationId || "");
@@ -1007,9 +1016,15 @@ export function WorkspaceModules(ctx: any) {
         const enabled = (Array.isArray(workspaces) ? workspaces : []).filter((item) => item?.enabled);
         setBrainWorkspaces(enabled);
         setBrainWorkspaceAvailability(enabled.length ? "ready" : "unavailable");
-        const selectedExists = enabled.some((item) => item.workspaceKey === selectedBrainWorkspaceKey);
-        const nextKey = selectedExists ? selectedBrainWorkspaceKey : (enabled[0]?.workspaceKey || "software");
-        if (nextKey !== selectedBrainWorkspaceKey) switchBrainWorkspace(nextKey);
+        // Do not wipe a restored last-scene when the catalog is still empty.
+        if (!enabled.length) return;
+        const currentKey = selectedBrainWorkspaceKeyRef.current;
+        const selectedExists = enabled.some((item) => item.workspaceKey === currentKey);
+        if (selectedExists) return;
+        const nextKey = enabled.find((item) => item.workspaceKey === "explore")?.workspaceKey
+          || enabled[0]?.workspaceKey
+          || "explore";
+        if (nextKey !== currentKey) switchBrainWorkspace(nextKey);
       } catch (error) {
         if (!disposed) {
           setBrainWorkspaceAvailability("unavailable");
@@ -1020,12 +1035,38 @@ export function WorkspaceModules(ctx: any) {
     return () => { disposed = true; };
   }, []);
   useEffect(() => {
+    const preferred = desktopPreferences?.brain?.selectedWorkspaceKey;
+    if (!isBrainWorkspaceKey(preferred)) return;
+    if (brainPrefsHydratedRef.current) return;
+    brainPrefsHydratedRef.current = true;
+    persistedBrainPrefsKeyRef.current = preferred;
+    setBrainWorkspaceSelection((current) => {
+      if (current.selectedWorkspaceKey === preferred) return current;
+      return selectBrainWorkspace(current, preferred);
+    });
+  }, [desktopPreferences?.brain?.selectedWorkspaceKey]);
+  useEffect(() => {
     try {
       localStorage.setItem(BRAIN_WORKSPACE_SELECTION_KEY, JSON.stringify(brainWorkspaceSelection));
       localStorage.removeItem(LEGACY_BRAIN_WORKSPACE_SELECTION_KEY);
       if (brainWorkspaceMigrated) setBrainWorkspaceMigrated(false);
     } catch { /* session-only fallback */ }
-  }, [brainWorkspaceSelection, brainWorkspaceMigrated]);
+    const key = brainWorkspaceSelection.selectedWorkspaceKey;
+    if (!isBrainWorkspaceKey(key) || key === persistedBrainPrefsKeyRef.current) return;
+    if (typeof saveDesktopPreferences !== "function" || !desktopPreferences) return;
+    persistedBrainPrefsKeyRef.current = key;
+    brainPrefsHydratedRef.current = true;
+    void saveDesktopPreferences({
+      ...desktopPreferences,
+      brain: {
+        ...(desktopPreferences.brain || { selectedWorkspaceKey: "" }),
+        selectedWorkspaceKey: key
+      }
+    }, { statusMessage: null }).catch(() => {
+      // Disk preferences may be unavailable; localStorage remains the session fallback.
+      persistedBrainPrefsKeyRef.current = "";
+    });
+  }, [brainWorkspaceSelection, brainWorkspaceMigrated, desktopPreferences, saveDesktopPreferences]);
   useEffect(() => {
     setBrainWorkspaceBusy(true);
     void refreshBrainProjects(selectedBrainWorkspaceKey)
@@ -9592,59 +9633,38 @@ function renderWorkspaceModules() {
           </div>,
           document.body
         ) : null}
-        {appUpdateProgress && typeof document !== "undefined" ? createPortal(
-          <div
-            className="app-update-dialog-backdrop"
-            role="presentation"
-            onMouseDown={() => {
-              if (appUpdateProgress.phase === "done" || appUpdateProgress.phase === "error") {
-                dismissAppUpdateProgress?.();
-              }
+        {typeof document !== "undefined" && appUpdateApplied ? createPortal(
+          <AppUpdateDialog
+            mode="success"
+            applied={appUpdateApplied}
+            notes={appUpdateApplied.notes}
+            onAcknowledgeSuccess={() => dismissAppliedAppUpdate?.()}
+          />,
+          document.body
+        ) : null}
+        {typeof document !== "undefined" && (appUpdateProgress || appUpdateDiscoverOpen) ? createPortal(
+          <AppUpdateDialog
+            mode={appUpdateProgress ? "progress" : "discover"}
+            currentVersion={appUpdateStatus?.currentVersion || appUpdateProgress?.currentVersion}
+            latestVersion={appUpdateStatus?.latestVersion || appUpdateProgress?.latestVersion}
+            notes={appUpdateStatus?.notes || appUpdateProgress?.notes}
+            progress={appUpdateProgress}
+            busy={Boolean(appUpdateBusy)}
+            onClose={() => dismissAppUpdateProgress?.()}
+            onLater={() => {
+              dismissAppUpdateProgress?.();
+              dismissAppUpdateDiscover?.();
+              setDismissedAppUpdateVersion(String(appUpdateStatus?.latestVersion || ""));
             }}
-          >
-            <section
-              className="app-update-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-label={resolveAppUpdateProgressTitle(appUpdateProgress)}
-              onMouseDown={(event) => event.stopPropagation()}
-            >
-              <strong>
-                {resolveAppUpdateProgressTitle(appUpdateProgress)}
-              </strong>
-              <p>
-                {appUpdateProgress.phase === "error"
-                  ? appUpdateProgress.detail
-                  : appUpdateProgress.phase === "done"
-                    ? (appUpdateProgress.detail
-                      || (appUpdateProgress.installMode === "wizard"
-                        ? "请按安装向导完成升级；完成后 NewBrain 将重启。聊天记录、项目与本地历史不会删除。"
-                        : "安装完成即将重启。聊天记录、项目与本地历史会保留。"))
-                    : (appUpdateProgress.detail
-                      || "安装完成后，NewBrain 将重新启动。聊天记录、项目与本地历史会保留。")}
-              </p>
-              {appUpdateProgress.phase !== "error" ? (
-                <div className="app-update-progress-row">
-                  <div className="app-update-progress-track" aria-hidden="true">
-                    <i style={{ width: `${Math.max(0, Math.min(100, Number(appUpdateProgress.percent) || 0))}%` }} />
-                  </div>
-                  <span>
-                    {resolveAppUpdateProgressLabel(appUpdateProgress)}
-                  </span>
-                </div>
-              ) : null}
-              {appUpdateProgress.latestVersion ? (
-                <em className="app-update-version">目标版本 {appUpdateProgress.latestVersion}</em>
-              ) : null}
-              {(appUpdateProgress.phase === "done" || appUpdateProgress.phase === "error") ? (
-                <div className="app-update-dialog-actions">
-                  <button type="button" className="primary" onClick={() => dismissAppUpdateProgress?.()}>
-                    知道了
-                  </button>
-                </div>
-              ) : null}
-            </section>
-          </div>,
+            onSkip={() => {
+              void skipDesktopAppUpdate?.();
+              dismissAppUpdateProgress?.();
+              dismissAppUpdateDiscover?.();
+              setDismissedAppUpdateVersion(String(appUpdateStatus?.latestVersion || ""));
+            }}
+            onUpdateNow={() => void startDesktopAppUpdate?.()}
+            onRestartNow={() => void applyDesktopAppUpdate?.()}
+          />,
           document.body
         ) : null}
         {shouldShowAppUpdateAutoPrompt({
@@ -9652,12 +9672,14 @@ function renderWorkspaceModules() {
           latestVersion: appUpdateStatus?.latestVersion,
           busy: Boolean(appUpdateBusy),
           dismissedVersion: dismissedAppUpdateVersion,
-          progressVisible: Boolean(appUpdateProgress)
+          skippedVersion: appUpdateStatus?.skippedVersion,
+          progressVisible: Boolean(appUpdateProgress || appUpdateDiscoverOpen || appUpdateApplied),
+          staged: Boolean(appUpdateStatus?.staged)
         }) && typeof document !== "undefined" ? createPortal(
           <div className="app-update-auto-prompt" role="status" aria-live="polite">
             <div className="app-update-auto-prompt-body">
               <strong>发现新版本 {appUpdateStatus.latestVersion}</strong>
-              <span>一键更新，无需安装向导；聊天与项目数据会保留。</span>
+              <span>一键更新，下载完成后重启即可生效；聊天与项目数据会保留。</span>
             </div>
             <div className="app-update-auto-prompt-actions">
               <button

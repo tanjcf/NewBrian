@@ -168,6 +168,9 @@ export interface DesktopPreferencesState {
   market: {
     directClawhubAllowed: boolean;
   };
+  brain: {
+    selectedWorkspaceKey: string;
+  };
 }
 
 export type ChatMessageRole = "user" | "assistant";
@@ -197,12 +200,16 @@ export interface DesktopAuthStatusState {
   last_checked_at?: string;
 }
 
-export interface LoginFormState {
-  email: string;
-  password: string;
-  captcha: string;
-  agreementAccepted: boolean;
-}
+export type { LoginFormState, LoginChannel, LoginEmailAuthMode } from "./login-form";
+export {
+  initialLoginForm,
+  isCnMobile,
+  normalizeCnMobileInput,
+  resolveLoginIdentifier,
+  shouldUseLoginCode,
+  canSubmitLoginForm,
+  authServiceStatusLabel
+} from "./login-form";
 
 export interface ModelChatMessage {
   id: string;
@@ -477,7 +484,8 @@ declare global {
       getAuthStatus: () => Promise<DesktopAuthStatusState>;
       getBillingSubscription: () => Promise<Record<string, unknown>>;
       sendLoginCode: (input: {
-        email: string;
+        email?: string;
+        phone?: string;
       }) => Promise<Record<string, unknown>>;
       loginAuth: (input: {
         email: string;
@@ -890,6 +898,9 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
   },
   market: {
     directClawhubAllowed: true
+  },
+  brain: {
+    selectedWorkspaceKey: ""
   }
 };
 
@@ -952,13 +963,6 @@ export async function optionalLoad<T>(promise: Promise<T>, fallback: T, label: s
     return fallback;
   }
 }
-
-export const initialLoginForm: LoginFormState = {
-  email: "",
-  password: "",
-  captcha: "",
-  agreementAccepted: false
-};
 
 export const initialDraft: ManagedFeatureDraft = {
   name: "",

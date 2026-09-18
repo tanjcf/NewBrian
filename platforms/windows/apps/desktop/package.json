@@ -167,9 +167,23 @@
       "signAndEditExecutable": true,
       "target": [
         {
+          "target": "nsis"
+        },
+        {
           "target": "msi"
         }
       ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NewBrain",
+      "artifactName": "${productName} ${version}-setup.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
     },
     "msi": {
       "upgradeCode": "2D97097C-03A2-54F7-B1D4-7E34233F7A65",

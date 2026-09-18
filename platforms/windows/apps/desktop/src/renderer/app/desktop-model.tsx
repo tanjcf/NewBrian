@@ -109,12 +109,16 @@ export type ChatMessageRole = "user" | "assistant";
 export type { DesktopAgreementConfig, FeatureConfigPayload };
 export type DesktopAuthStatusState = DesktopAuthStatus;
 
-export interface LoginFormState {
-  email: string;
-  password: string;
-  captcha: string;
-  agreementAccepted: boolean;
-}
+export type { LoginFormState, LoginChannel, LoginEmailAuthMode } from "./login-form";
+export {
+  initialLoginForm,
+  isCnMobile,
+  normalizeCnMobileInput,
+  resolveLoginIdentifier,
+  shouldUseLoginCode,
+  canSubmitLoginForm,
+  authServiceStatusLabel
+} from "./login-form";
 
 export interface ModelChatMessage {
   id: string;
@@ -384,7 +388,8 @@ declare global {
       removeRepositoryPlugin: (input: PluginKeyInput) => Promise<PluginOperationResult>;
       reconcileRepositoryPlugins: () => Promise<Record<string, unknown>>;
       sendLoginCode: (input: {
-        email: string;
+        email?: string;
+        phone?: string;
       }) => Promise<Record<string, unknown>>;
       loginAuth: (input: {
         email: string;
@@ -507,9 +512,21 @@ declare global {
         notes?: string;
         mandatory?: boolean;
         downloadUrl?: string;
+        staged?: boolean;
+        stagedPath?: string;
+        skippedVersion?: string;
         detail: string;
       }>;
-      startAppUpdate: () => Promise<{ ok: boolean; path?: string; detail: string }>;
+      startAppUpdate: () => Promise<{ ok: boolean; path?: string; detail: string; staged?: boolean }>;
+      applyAppUpdate: () => Promise<{ ok: boolean; path?: string; detail: string }>;
+      getAppliedAppUpdate: () => Promise<{
+        fromVersion: string;
+        toVersion: string;
+        notes: string;
+        appliedAt: string;
+      } | null>;
+      dismissAppliedAppUpdate: () => Promise<void>;
+      skipAppUpdateVersion: (version?: string) => Promise<{ ok: boolean; detail: string }>;
       verifyAppUpdate: (input?: { releaseId?: string; ok?: boolean }) => Promise<{
         ok: boolean;
         releaseId?: string;
@@ -519,10 +536,13 @@ declare global {
         detail: string;
       }>;
       onAppUpdateProgress?: (listener: (progress: {
-        phase: "preparing" | "downloading" | "verifying" | "installing" | "opening" | "done" | "error";
+        phase: string;
         percent: number;
         detail: string;
         latestVersion?: string;
+        currentVersion?: string;
+        notes?: string;
+        installMode?: "silent" | "wizard" | "patch" | "nsis";
         preservesUserData: true;
       }) => void) => () => void;
       getMcpServers: () => Promise<Array<{
@@ -990,6 +1010,9 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
   },
   market: {
     directClawhubAllowed: true
+  },
+  brain: {
+    selectedWorkspaceKey: ""
   }
 };
 
@@ -1087,13 +1110,6 @@ export async function optionalLoad<T>(promise: Promise<T>, fallback: T, label: s
     return fallback;
   }
 }
-
-export const initialLoginForm: LoginFormState = {
-  email: "",
-  password: "",
-  captcha: "",
-  agreementAccepted: false
-};
 
 export const initialDraft: ManagedFeatureDraft = {
   name: "",

@@ -108,14 +108,20 @@ test("development builds preserve an explicit loopback gateway", async () => {
 
 test("synchronizes the authenticated v1 control plane without persisting credentials", async () => {
   const { syncDesktopControlPlane } = await controlPlane;
-  const requested: Array<{ url: string; authorization: string | null; platform: string | null }> = [];
+  const requested: Array<{
+    url: string;
+    authorization: string | null;
+    platform: string | null;
+    packagePreference: string | null;
+  }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     const headers = new Headers(init?.headers);
     requested.push({
       url,
       authorization: headers.get("Authorization"),
-      platform: headers.get("X-Desktop-Platform")
+      platform: headers.get("X-Desktop-Platform"),
+      packagePreference: headers.get("X-Desktop-Package-Preference")
     });
     const body = url.endsWith("/bootstrap")
       ? { protocol_version: "1.0", minimum_client_version: "0.1.0", skills: [] }
@@ -138,6 +144,7 @@ test("synchronizes the authenticated v1 control plane without persisting credent
   assert.equal(requested.length, 4);
   assert.ok(requested.every((request) => request.authorization === "Bearer secret-token"));
   assert.ok(requested.every((request) => request.platform === "windows"));
+  assert.ok(requested.every((request) => request.packagePreference === "nsis"));
   assert.ok(requested.some((request) => request.url.endsWith("/api/desktop/v1/app-update")));
   assert.equal(state.gateway_origin, "http://120.48.151.202:8790");
   assert.equal(state.protocol_version, "1.0");

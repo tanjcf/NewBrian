@@ -640,6 +640,13 @@ export interface DesktopPreferences {
   market: {
     directClawhubAllowed: boolean;
   };
+  /**
+   * Last opened BRAIN scene workspace.
+   * Empty string means unset — fall back to localStorage / default `explore`.
+   */
+  brain: {
+    selectedWorkspaceKey: string;
+  };
 }
 
 export interface McpServerConfig {
@@ -1084,7 +1091,7 @@ export interface DesktopAuthLoginInput {
   captcha?: string;
 }
 
-export interface DesktopAuthSendCodeInput { email: string }
+export interface DesktopAuthSendCodeInput { email?: string; phone?: string }
 export interface DesktopAuthChangePasswordInput { currentPassword: string; newPassword: string }
 export interface DesktopAuthChangeEmailInput { email: string; code: string }
 

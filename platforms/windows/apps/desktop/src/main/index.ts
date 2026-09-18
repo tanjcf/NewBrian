@@ -2869,11 +2869,16 @@ function normalizeDesktopLoginError(payload: unknown, status: number, loginWithC
   return extractDesktopAuthErrorMessage(payload, status);
 }
 async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
-  const email = input.email.trim().toLowerCase();
+  const phone = input.phone?.trim() || "";
+  const email = input.email?.trim().toLowerCase() || "";
+  const identifier = phone || email;
   const device = collectDesktopDeviceFingerprint();
   const gatewayOrigin = await readGatewayOrigin();
-  if (!email) {
-    throw new Error("邮箱不能为空。");
+  if (!identifier) {
+    throw new Error(phone ? "手机号不能为空。" : "邮箱或手机号不能为空。");
+  }
+  if (phone && !/^1\d{10}$/.test(phone)) {
+    throw new Error("请填写 11 位手机号。");
   }
   let response: Response;
   try {
@@ -2884,7 +2889,7 @@ async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
         ...createDesktopAuthHeaders({ device })
       },
       body: JSON.stringify({
-        identifier: email,
+        identifier,
         device_id: device.device_id,
         device_name: device.device_name
       })

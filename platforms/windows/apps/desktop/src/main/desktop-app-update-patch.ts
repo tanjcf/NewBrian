@@ -4,7 +4,7 @@
  * and documents how tiny ulit applicator MSIs are still installed via msiexec.
  */
 
-export type DesktopUpdatePackageKind = "full-msi" | "ulit-msi" | "ulit-zip";
+export type DesktopUpdatePackageKind = "full-msi" | "full-nsis" | "ulit-msi" | "ulit-zip";
 
 /** Strip confusing admin suffixes such as `.ulit` / `-ulit` from a release version. */
 export function normalizeDesktopUpdateVersionLabel(version: string): string {
@@ -45,7 +45,19 @@ export function resolveDesktopUpdatePackageKind(input: {
     || fileName.endsWith(".ulit.zip")
     || /\.ulit$/i.test(version);
 
-  if (!looksUlit) return "full-msi";
+  if (!looksUlit) {
+    if (
+      declared === "nsis"
+      || declared === "full-nsis"
+      || declared === "setup"
+      || fileName.endsWith("-setup.exe")
+      || fileName.endsWith("setup.exe")
+      || (fileName.endsWith(".exe") && !fileName.endsWith(".msi"))
+    ) {
+      return "full-nsis";
+    }
+    return "full-msi";
+  }
 
   // Prefer MSI applicator when the artifact is clearly an installer (1.2.7 path).
   if (
@@ -84,6 +96,7 @@ export function safeDesktopUpdateFileName(input: {
   });
   if (kind === "ulit-zip") return `${safeVersion}ulit.zip`;
   if (kind === "ulit-msi") return `${safeVersion}ulit.msi`;
+  if (kind === "full-nsis") return `NewBrain ${safeVersion}-setup.exe`;
   return `NewBrain-${safeVersion}.msi`;
 }
 

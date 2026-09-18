@@ -672,6 +672,13 @@ export interface DesktopPreferences {
   market: {
     directClawhubAllowed: boolean;
   };
+  /**
+   * Last opened BRAIN scene workspace.
+   * Empty string means unset — fall back to localStorage / default `explore`.
+   */
+  brain: {
+    selectedWorkspaceKey: string;
+  };
 }
 
 export interface McpServerConfig {
@@ -1005,6 +1012,10 @@ export const desktopIpcChannels = {
   appUpdate: {
     getStatus: "phase1:get-app-update-status",
     start: "phase1:start-app-update",
+    apply: "phase1:apply-app-update",
+    getApplied: "phase1:get-applied-app-update",
+    dismissApplied: "phase1:dismiss-applied-app-update",
+    skipVersion: "phase1:skip-app-update-version",
     verify: "phase1:verify-app-update",
     progress: "phase1:app-update-progress"
   },
@@ -1143,7 +1154,7 @@ export interface DesktopAuthAlipayQrLoginInput {
   agreement_accepted: boolean;
 }
 
-export interface DesktopAuthSendCodeInput { email: string }
+export interface DesktopAuthSendCodeInput { email?: string; phone?: string }
 export interface DesktopAuthChangePasswordInput { currentPassword: string; newPassword: string }
 export interface DesktopAuthChangeEmailInput { email: string; code: string }
 
@@ -1502,6 +1513,10 @@ export interface DesktopAppUpdateStatus {
   notes?: string;
   mandatory?: boolean;
   downloadUrl?: string;
+  /** True when the package is downloaded and waiting for restart apply. */
+  staged?: boolean;
+  stagedPath?: string;
+  skippedVersion?: string;
   detail: string;
 }
 
@@ -1509,15 +1524,35 @@ export interface DesktopAppUpdateStartResult {
   ok: boolean;
   path?: string;
   detail: string;
+  /** Download finished and staged; user should restart to apply. */
+  staged?: boolean;
+}
+
+export interface DesktopAppUpdateAppliedInfo {
+  fromVersion: string;
+  toVersion: string;
+  notes: string;
+  appliedAt: string;
 }
 
 export interface DesktopAppUpdateProgress {
-  phase: "preparing" | "downloading" | "verifying" | "installing" | "opening" | "done" | "error";
+  phase:
+    | "preparing"
+    | "downloading"
+    | "verifying"
+    | "ready"
+    | "installing"
+    | "opening"
+    | "done"
+    | "success"
+    | "error";
   percent: number;
   detail: string;
   latestVersion?: string;
-  /** Silent in-app path, MSI wizard fallback, or ulit.zip patch apply. */
-  installMode?: "silent" | "wizard" | "patch";
+  currentVersion?: string;
+  notes?: string;
+  /** Silent in-app path, MSI wizard fallback, NSIS, or ulit.zip patch apply. */
+  installMode?: "silent" | "wizard" | "patch" | "nsis";
   preservesUserData: true;
 }
 

@@ -33,6 +33,14 @@ test("resolves ulit zip/msi package kinds from metadata and filenames", () => {
     "full-msi"
   );
   assert.equal(
+    resolveDesktopUpdatePackageKind({ downloadUrl: "https://cdn/NewBrain%201.4.10-setup.exe" }),
+    "full-nsis"
+  );
+  assert.equal(
+    resolveDesktopUpdatePackageKind({ packageKind: "nsis", downloadUrl: "https://cdn/api/releases/x/download" }),
+    "full-nsis"
+  );
+  assert.equal(
     resolveDesktopUpdatePackageKind({
       version: "1.2.9.ulit",
       packageKind: "patch",
@@ -57,6 +65,13 @@ test("resolves ulit zip/msi package kinds from metadata and filenames", () => {
 });
 
 test("names local download artifacts for ulit packages without double ulit", () => {
+  assert.equal(
+    safeDesktopUpdateFileName({
+      version: "1.4.10",
+      downloadUrl: "https://cdn/NewBrain 1.4.10-setup.exe"
+    }),
+    "NewBrain 1.4.10-setup.exe"
+  );
   assert.equal(
     safeDesktopUpdateFileName({
       version: "1.2.8",

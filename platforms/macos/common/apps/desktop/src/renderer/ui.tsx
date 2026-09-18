@@ -44,9 +44,12 @@ import {
   initialMcpServer,
   initialModelConfig,
   initialPatchForm,
+  isCnMobile,
   optionalLoad,
   parseEnvText,
+  resolveLoginIdentifier,
   settingsFeatureItem,
+  shouldUseLoginCode,
   withTimeout
 } from "./app/desktop-model";
 import type {
@@ -1022,9 +1025,37 @@ export function App() {
       return;
     }
 
-    if (!loginForm.password.trim() && !loginForm.captcha.trim()) {
-      setErrorMessage("请输入密码或验证码。");
-      return;
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const identifier = resolveLoginIdentifier(loginForm);
+    const password = loginForm.password.trim();
+    const captcha = loginForm.captcha.trim();
+    const emailCodeRequired = Boolean(
+      (authStatus as DesktopAuthStatusState & { email_code_login_enabled?: boolean }).email_code_login_enabled
+    );
+    const useCode = shouldUseLoginCode(loginForm, "password", emailCodeRequired);
+
+    if (channel === "phone") {
+      if (!isCnMobile(identifier)) {
+        setErrorMessage("请填写 11 位手机号。");
+        return;
+      }
+      if (!captcha) {
+        setErrorMessage("请填写短信验证码。");
+        return;
+      }
+    } else {
+      if (!identifier) {
+        setErrorMessage("请输入邮箱。");
+        return;
+      }
+      if (useCode && !captcha) {
+        setErrorMessage("请先获取并填写邮箱验证码后再登录。");
+        return;
+      }
+      if (!useCode && !password) {
+        setErrorMessage("请输入密码。");
+        return;
+      }
     }
 
     if (authStatus.agreement?.enabled && !agreementChecked) {
@@ -1037,9 +1068,9 @@ export function App() {
     setIsSubmittingLogin(true);
     try {
       const nextAuthStatus = await api.loginAuth({
-        email: loginForm.email,
-        password: loginForm.password.trim(),
-        captcha: loginForm.captcha,
+        email: identifier,
+        password: useCode ? "" : password,
+        captcha: useCode ? captcha : "",
         agreement_accepted: authStatus.agreement?.enabled ? agreementChecked : true
       });
       setAuthStatus(nextAuthStatus);
@@ -1066,7 +1097,13 @@ export function App() {
       return;
     }
 
-    if (!loginForm.email.trim()) {
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    if (channel === "phone") {
+      if (!isCnMobile(loginForm.phone)) {
+        setErrorMessage("请先填写 11 位手机号。");
+        return;
+      }
+    } else if (!loginForm.email.trim()) {
       setErrorMessage("请先输入邮箱。");
       return;
     }
@@ -1074,13 +1111,17 @@ export function App() {
     setErrorMessage("");
     setIsSendingLoginCode(true);
     try {
-      const result = await api.sendLoginCode({ email: loginForm.email.trim() });
+      const result = await api.sendLoginCode(
+        channel === "phone"
+          ? { phone: loginForm.phone.trim() }
+          : { email: loginForm.email.trim() }
+      );
       const resendAfter =
         typeof (result.data as Record<string, unknown> | undefined)?.resend_after_seconds === "number"
           ? Number((result.data as Record<string, unknown>).resend_after_seconds)
           : 60;
       setLoginCodeCooldownSeconds(Math.max(1, resendAfter));
-      setChatStatus("验证码已发送，请查收邮箱。");
+      setChatStatus(channel === "phone" ? "验证码已发送，请查收短信。" : "验证码已发送，请查收邮箱。");
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
@@ -2422,6 +2463,7 @@ export function App() {
         chatUsesProject={chatUsesProject}
         setChatUsesProject={setChatUsesProject}
         desktopPreferences={desktopPreferences}
+        saveDesktopPreferences={saveDesktopPreferences}
         featureConfig={featureConfig}
         setFeatureConfig={setFeatureConfig}
         skillDraft={skillDraft}

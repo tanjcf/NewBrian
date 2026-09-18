@@ -47,3 +47,17 @@ test("defaults market.directClawhubAllowed to true (desktop ClawHub direct)", ()
   });
   assert.equal(closed.market.directClawhubAllowed, false);
 });
+
+test("keeps last brain scene workspace key when present and leaves it unset by default", () => {
+  const workspaceStateRoot = resolve("test-state");
+  const defaults = createDefaultDesktopPreferences(workspaceStateRoot, {});
+  assert.equal(defaults.brain.selectedWorkspaceKey, "");
+  const normalized = normalizeDesktopPreferencesValue({
+    brain: { selectedWorkspaceKey: "quant" }
+  } as never, { defaults, workspaceStateRoot, isPackaged: false });
+  assert.equal(normalized.brain.selectedWorkspaceKey, "quant");
+  const invalid = normalizeDesktopPreferencesValue({
+    brain: { selectedWorkspaceKey: "not-a-scene" }
+  } as never, { defaults, workspaceStateRoot, isPackaged: false });
+  assert.equal(invalid.brain.selectedWorkspaceKey, "");
+});

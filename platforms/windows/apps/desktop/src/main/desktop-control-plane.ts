@@ -160,12 +160,18 @@ export async function syncDesktopControlPlane(input: {
     "X-Desktop-App-Version": input.clientVersion,
     "X-Desktop-Platform": releasePlatform
   };
+  if (releasePlatform === "windows") {
+    headers["X-Desktop-Package-Preference"] = "nsis";
+  }
   if (input.deviceId?.trim()) {
     headers["X-Device-ID"] = input.deviceId.trim();
   }
   Object.assign(headers, input.headers ?? {});
   if (!headers["X-Desktop-Platform"]?.trim()) {
     headers["X-Desktop-Platform"] = releasePlatform;
+  }
+  if (headers["X-Desktop-Platform"] === "windows" && !headers["X-Desktop-Package-Preference"]?.trim()) {
+    headers["X-Desktop-Package-Preference"] = "nsis";
   }
 
   const fetchImpl = input.fetchImpl ?? fetch;

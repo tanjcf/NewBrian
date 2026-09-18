@@ -3,581 +3,862 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NewBrain 登录交互原型（定稿）</title>
+  <title>NewBrain · 登录</title>
+  <link rel="icon" href="../../assets/newbrain-icon-256.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --text: #111827;
-      --muted: #667085;
-      --body: #4b5563;
-      --line: #eaecf0;
-      --blue: #175cd3;
+      --ink: #0b0f14;
+      --mute: #6b7280;
+      --line: #e5e7eb;
+      --fill: #f3f4f6;
+      --blue: #2563eb;
+      --ok: #067647;
+      --danger: #b42318;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --poem: "Ma Shan Zheng", "STKaiti", "KaiTi", serif;
+      --display: "Noto Serif SC", "Songti SC", "SimSun", serif;
     }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
       min-height: 100%;
-      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      color: var(--text);
-      background: #fff;
+      font-family: var(--font);
+      color: var(--ink);
+      background: #f7f8fa;
+      -webkit-font-smoothing: antialiased;
     }
     button, input {
       font: inherit;
       border: 0;
       background: transparent;
       outline: none;
+      color: inherit;
     }
     button { cursor: pointer; }
-    button:disabled { opacity: 0.45; cursor: not-allowed; }
-    input[type="text"],
-    input[type="email"],
-    input[type="password"],
-    input[type="tel"] {
-      width: 100%;
-      min-height: 44px;
-      border: 1px solid #d0d5dd;
-      border-radius: 12px;
-      padding: 0 14px;
-      background: #fff;
-      color: var(--text);
-    }
-    input:focus {
-      border-color: #98a2b3;
-      box-shadow: 0 0 0 3px rgba(152, 162, 179, 0.18);
-    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .codex-shell.login-shell {
+    .shell {
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at top left, rgba(255, 214, 179, 0.52), transparent 28%),
-        radial-gradient(circle at top right, rgba(182, 232, 255, 0.55), transparent 26%),
-        linear-gradient(180deg, #f6f0e7 0%, #f9fafb 48%, #ffffff 100%);
-    }
-    .login-stage {
-      flex: 1;
-      min-height: 0;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: safe center;
-      overflow: auto;
-      overscroll-behavior: contain;
-      padding: clamp(12px, 3vh, 40px) clamp(12px, 3vw, 24px);
-    }
-    .stage-wrap {
-      width: min(560px, 100%);
       display: grid;
-      gap: 12px;
-      margin-block: auto;
-    }
-    .proto-note {
-      margin: 0;
-      color: var(--muted);
-      font-size: 12px;
-      text-align: center;
-      line-height: 1.5;
+      place-items: center;
+      padding: 24px 16px;
+      background: #f7f8fa;
+      position: relative;
+      overflow: hidden;
     }
 
-    .login-panel {
-      width: 100%;
-      position: relative;
-      display: grid;
-      gap: clamp(14px, 2.4vh, 28px);
-      border: 1px solid rgba(255, 255, 255, 0.85);
-      border-radius: 28px;
-      background: rgba(255, 255, 255, 0.94);
-      box-shadow: 0 24px 60px rgba(34, 46, 58, 0.12);
-      padding: clamp(18px, 3vh, 34px) clamp(16px, 3vw, 36px);
-      backdrop-filter: blur(14px);
-    }
-    .login-panel-close {
-      width: 34px;
-      height: 34px;
+    /* 隐藏彩蛋：极淡水墨影，需凑近细看 */
+    .easter-ink {
       position: absolute;
-      top: 16px;
-      right: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 10px;
-      color: var(--muted);
-      font-size: 20px;
-      line-height: 1;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      display: grid;
+      place-items: center;
+      opacity: 0.028;
+      filter: blur(0.8px) contrast(0.9) saturate(0.2);
     }
-    .login-panel-close:hover { background: #f1f3f5; color: var(--text); }
-    .login-panel-brand {
+    .easter-ink svg {
+      width: min(760px, 96vw);
+      height: auto;
+      max-height: 78vh;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .easter-ink {
+        animation: inkBreath 22s ease-in-out infinite alternate;
+      }
+      @keyframes inkBreath {
+        from { opacity: 0.022; transform: scale(1); }
+        to { opacity: 0.034; transform: scale(1.012); }
+      }
+    }
+
+    .panel {
+      width: min(420px, 100%);
+      padding: 32px 28px 24px;
+      border-radius: 20px;
+      background: #fff;
+      border: 1px solid var(--line);
+      position: relative;
+      z-index: 1;
+    }
+
+    .close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      color: var(--mute);
+      display: grid;
+      place-items: center;
+    }
+    .close:hover { background: var(--fill); color: var(--ink); }
+
+    /* 宣言式标题：简洁底，字要够硬、够大 */
+    .brand {
       display: flex;
       align-items: center;
       gap: 16px;
-      padding-right: 36px;
+      margin: 0 28px 28px 0;
     }
-    .login-panel-mark {
-      width: 58px;
-      height: 58px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 18px;
-      background: linear-gradient(145deg, #111827, #314158);
-      color: #fff;
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-    .login-panel-brand strong { display: block; font-size: 24px; }
-    .login-panel-brand span { display: block; margin-top: 4px; color: var(--muted); }
-    .login-panel-copy { display: grid; gap: 10px; }
-    .login-panel-copy h1 {
-      margin: 0;
-      font-size: clamp(22px, 3.6vw, 38px);
-      line-height: 1.08;
-      letter-spacing: -0.03em;
-    }
-    .login-panel-copy p { margin: 0; color: var(--body); line-height: 1.7; }
-    .login-panel-form { display: grid; gap: clamp(12px, 1.8vh, 18px); }
-
-    .login-tabs {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      padding: 4px;
+    .brand img {
+      width: 56px;
+      height: 56px;
       border-radius: 14px;
-      background: #f2f4f7;
+      flex-shrink: 0;
     }
-    .login-tab {
-      min-height: 40px;
-      border-radius: 11px;
-      color: #475467;
+    .brand h1 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(30px, 7vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      line-height: 1.12;
+      color: var(--ink);
+      text-wrap: balance;
+    }
+    .brand h1 em {
+      font-style: normal;
+      display: block;
+      font-family: var(--poem);
+      font-weight: 400;
+      font-size: 1.08em;
+      letter-spacing: 0.16em;
+      margin-top: 2px;
+    }
+
+    .segment {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      margin-bottom: 16px;
+      border-radius: 10px;
+      background: var(--fill);
+    }
+    .segment button {
+      min-height: 34px;
+      border-radius: 8px;
+      color: var(--mute);
+      font-size: 13px;
       font-weight: 600;
     }
-    .login-tab.active {
+    .segment button.active {
       background: #fff;
-      color: var(--text);
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+      color: var(--ink);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
 
-    .settings-field { display: grid; gap: 6px; }
-    .settings-field > span { color: var(--muted); font-size: 12px; }
-    .code-row { display: flex; gap: 10px; align-items: center; }
+    .fields { display: grid; gap: 12px; }
+    .field { display: grid; gap: 6px; }
+    .field > span {
+      color: var(--mute);
+      font-size: 12px;
+    }
+    .field input {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 0 12px;
+    }
+    .field input:focus {
+      border-color: #9ca3af;
+      box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.2);
+    }
+
+    .code-row { display: flex; gap: 8px; }
     .code-row input { flex: 1; }
     .code-row button {
-      min-width: 112px;
+      min-width: 96px;
       min-height: 44px;
-      border-radius: 12px;
-      background: #eef2f6;
-      color: #344054;
+      border-radius: 10px;
+      background: var(--fill);
+      color: #374151;
       font-weight: 600;
-      padding: 0 12px;
-      flex-shrink: 0;
+      font-size: 13px;
     }
 
-    .login-agreement-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      color: #475467;
-      line-height: 1.6;
+    .alt-link {
+      justify-self: start;
+      color: var(--blue);
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 0;
     }
-    .login-agreement-row input {
-      width: 18px;
-      height: 18px;
-      margin-top: 3px;
+
+    .agree {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 14px;
+      color: #4b5563;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .agree input {
+      width: 15px;
+      height: 15px;
+      margin-top: 2px;
       flex-shrink: 0;
     }
-    .login-inline-link {
+    .agree button {
       display: inline;
       color: var(--blue);
       font-weight: 600;
       padding: 0;
     }
-    .login-error-banner,
-    .login-success-banner {
-      border-radius: 14px;
-      padding: 12px 14px;
-      line-height: 1.6;
-    }
-    .login-error-banner {
-      border: 1px solid #fecaca;
-      background: #fff1f2;
-      color: #b42318;
-    }
-    .login-success-banner {
-      border: 1px solid #abefc6;
-      background: #ecfdf3;
-      color: #067647;
-    }
-    .login-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      position: sticky;
-      bottom: 0;
-      z-index: 2;
-      margin: 0 -4px;
-      padding: 8px 4px 0;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.96) 28%, #fff 100%);
-    }
-    .login-submit-btn {
-      min-width: 148px;
-      min-height: 48px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #111827, #344054);
-      color: #fff;
-      font-weight: 600;
-      padding: 0 22px;
-    }
-    .login-submit-btn.secondary {
-      background: #fff;
-      color: #344054;
-      border: 1px solid #d0d5dd;
-    }
-    .login-hints {
-      display: grid;
-      gap: 6px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .login-hints em {
-      font-style: normal;
-      color: #b42318;
-    }
-    .login-service-hints { color: #98a2b3; }
 
-    .alipay-box {
-      display: grid;
-      gap: 12px;
-      padding: 16px;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: #fafafa;
-    }
-    .alipay-open-card {
-      display: grid;
-      gap: 8px;
-      padding: 14px 16px;
-      border-radius: 12px;
-      border: 1px solid #d0d5dd;
-      background: #fff;
-    }
-    .alipay-open-card strong { font-size: 14px; }
-    .alipay-open-card p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    .alipay-open-card code {
-      display: block;
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: #f2f4f7;
-      color: #344054;
-      font-size: 12px;
-      word-break: break-all;
-    }
-    .alipay-steps {
-      margin: 0;
-      padding-left: 18px;
-      color: #475467;
-      line-height: 1.7;
-      font-size: 13px;
-    }
-
-    .spec-card {
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      border-radius: 18px;
-      background: rgba(255, 255, 255, 0.72);
-      padding: 14px 16px;
-      color: #475467;
-      font-size: 12px;
-      line-height: 1.7;
-    }
-    .spec-card strong {
-      display: block;
-      margin-bottom: 6px;
-      color: var(--text);
-      font-size: 13px;
-    }
-    .spec-card ul {
-      margin: 0;
-      padding-left: 18px;
-    }
-
-    .browser-toast {
-      position: fixed;
-      right: 20px;
-      bottom: 20px;
-      z-index: 60;
-      width: min(380px, calc(100vw - 32px));
-      border-radius: 14px;
-      border: 1px solid #d0d5dd;
-      background: #fff;
-      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-      padding: 14px 16px;
-    }
-    .browser-toast .eyebrow {
-      margin: 0 0 4px;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-    .browser-toast strong { display: block; margin-bottom: 6px; }
-    .browser-toast p { margin: 0; color: #475467; font-size: 13px; line-height: 1.6; }
-    .browser-toast .toast-actions {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 8px;
+    .banner {
       margin-top: 12px;
-    }
-    .browser-toast button {
-      min-height: 34px;
       border-radius: 10px;
-      padding: 0 12px;
-      background: #eef2f6;
-      color: #344054;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .banner.error {
+      background: #fff1f2;
+      color: var(--danger);
+      border: 1px solid #fecdd3;
+    }
+    .banner.ok {
+      background: #ecfdf3;
+      color: var(--ok);
+      border: 1px solid #a7f3d0;
+    }
+
+    .primary {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 16px;
+      border-radius: 12px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 15px;
       font-weight: 600;
     }
-    .browser-toast button.primary {
-      background: linear-gradient(135deg, #111827, #344054);
+
+    .divider {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 12px;
+      align-items: center;
+      margin: 16px 0 12px;
+      color: var(--mute);
+      font-size: 12px;
+    }
+    .divider::before,
+    .divider::after {
+      content: "";
+      height: 1px;
+      background: var(--line);
+    }
+
+    .oauth {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .oauth-mark {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: #1677ff;
       color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+    }
+
+    .status {
+      margin-top: 14px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 11.5px;
+    }
+
+    .wait {
+      display: grid;
+      justify-items: center;
+      text-align: center;
+      gap: 10px;
+      padding: 20px 8px 8px;
+    }
+    .wait-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: #1677ff;
+      color: #fff;
+      font-weight: 800;
+      font-size: 18px;
+      display: grid;
+      place-items: center;
+    }
+    .wait h2 {
+      margin: 4px 0 0;
+      font-size: 17px;
+      font-weight: 650;
+    }
+    .wait p {
+      margin: 0;
+      color: var(--mute);
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 28ch;
+    }
+    .ghost {
+      width: 100%;
+      min-height: 42px;
+      margin-top: 8px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      font-weight: 600;
+      font-size: 13.5px;
+      color: #374151;
     }
 
     .hidden { display: none !important; }
 
-    .login-modal-shell {
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 40;
+      width: min(300px, calc(100vw - 24px));
+      padding: 12px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+    .toast strong { display: block; font-size: 13px; margin-bottom: 4px; }
+    .toast p { margin: 0; color: var(--mute); font-size: 12px; }
+    .toast .row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .toast button {
+      min-height: 30px;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: var(--fill);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .toast button.main { background: var(--ink); color: #fff; }
+
+    .modal {
       position: fixed;
       inset: 0;
+      z-index: 50;
       display: grid;
       place-items: center;
-      z-index: 50;
       padding: 16px;
     }
-    .login-modal-backdrop {
+    .modal-bg {
       position: absolute;
       inset: 0;
-      background: rgba(15, 23, 42, 0.45);
+      background: rgba(17, 24, 39, 0.35);
     }
-    .login-modal-card {
+    .modal-card {
       position: relative;
-      z-index: 1;
-      width: min(840px, calc(100vw - 32px));
-      max-height: min(80vh, 860px);
+      width: min(600px, 100%);
+      max-height: min(70vh, 560px);
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
-      border-radius: 24px;
       background: #fff;
-      box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+      border-radius: 16px;
       overflow: hidden;
     }
-    .login-modal-head {
+    .modal-head {
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      padding: 18px 22px;
+      align-items: center;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--line);
     }
-    .login-modal-head strong { font-size: 18px; }
-    .login-modal-head button {
-      min-height: 36px;
-      border-radius: 10px;
-      background: #eef2f6;
-      padding: 0 14px;
+    .modal-head strong { font-size: 15px; }
+    .modal-head button {
+      min-height: 32px;
+      border-radius: 8px;
+      padding: 0 12px;
+      background: var(--fill);
+      font-weight: 600;
+      font-size: 13px;
     }
-    .login-modal-body {
+    .modal-body {
       overflow: auto;
-      padding: 22px 24px 28px;
-      color: #344054;
-      line-height: 1.75;
+      padding: 16px 18px 22px;
+      color: #4b5563;
+      line-height: 1.7;
+      font-size: 14px;
     }
 
-    @media (max-height: 760px) {
-      .login-panel-mark {
-        width: 44px;
-        height: 44px;
-        border-radius: 14px;
-        font-size: 22px;
-      }
-      .login-panel-brand strong { font-size: 20px; }
-      .login-panel-copy p {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .login-submit-btn { min-height: 42px; }
+    /* 指定隐藏热点：小五星红旗标注出发点 */
+    .easter-hotspot {
+      position: absolute;
+      width: 22px;
+      height: 15px;
+      left: 14px;
+      bottom: 14px;
+      z-index: 5;
+      padding: 0;
+      border-radius: 2px;
+      overflow: hidden;
+      opacity: 0.55;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+      transition: opacity 0.2s ease, transform 0.2s ease;
     }
-    @media (max-height: 620px) {
-      .login-panel {
-        border-radius: 18px;
-        gap: 12px;
-        padding: 14px 14px 16px;
-      }
-      .login-panel-copy h1 { font-size: 22px; }
-      .spec-card { display: none; }
+    .easter-hotspot:hover {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    .easter-hotspot svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 开国大典彩蛋：纪念碑式单构图 */
+    .ceremony {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      pointer-events: none;
+      opacity: 0;
+      display: grid;
+      place-items: center;
+      --cx: 50%;
+      --cy: 50%;
+      --reveal: 0px;
+      -webkit-mask-image: radial-gradient(
+        circle at var(--cx) var(--cy),
+        #000 0,
+        #000 var(--reveal),
+        transparent calc(var(--reveal) + 120px)
+      );
+      mask-image: radial-gradient(
+        circle at var(--cx) var(--cy),
+        #000 0,
+        #000 var(--reveal),
+        transparent calc(var(--reveal) + 120px)
+      );
+    }
+    .ceremony.is-on {
+      pointer-events: auto;
+      opacity: 1;
+    }
+    .ceremony-bg {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255, 196, 96, 0.16), transparent 52%),
+        radial-gradient(ellipse 70% 45% at 50% 100%, rgba(0, 0, 0, 0.45), transparent 55%),
+        linear-gradient(165deg, #5c0f0f 0%, #9e1c1c 32%, #c42828 58%, #7a1212 100%);
+    }
+    .ceremony-veil {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 236, 200, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 236, 200, 0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.35;
+      mix-blend-mode: soft-light;
+    }
+    .ceremony-rays {
+      position: absolute;
+      inset: -15%;
+      background: repeating-conic-gradient(
+        from -8deg at 50% 22%,
+        rgba(255, 220, 140, 0.05) 0deg 6deg,
+        transparent 6deg 14deg
+      );
+      opacity: 0.4;
+      animation: raySpin 120s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes raySpin {
+      to { transform: rotate(360deg); }
+    }
+    .ceremony-stage {
+      position: relative;
+      z-index: 1;
+      width: min(560px, calc(100% - 40px));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      padding: 28px 0 20px;
+      animation: ceremonyRise 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes ceremonyRise {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .ceremony-frame {
+      width: 100%;
+      padding: 10px;
+      background:
+        linear-gradient(180deg, rgba(255, 224, 150, 0.35), rgba(180, 120, 40, 0.2)),
+        rgba(40, 10, 8, 0.55);
+      border: 1px solid rgba(255, 214, 120, 0.55);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
+    }
+    .ceremony-photo {
+      display: block;
+      width: 100%;
+      height: min(38vh, 340px);
+      object-fit: cover;
+      object-position: center 30%;
+      filter: contrast(1.04) saturate(0.92);
+    }
+    .ceremony-caption {
+      margin: 14px 0 0;
+      width: 100%;
+      text-align: center;
+      font-family: var(--display);
+      font-size: clamp(12px, 1.8vw, 14px);
+      font-weight: 700;
+      letter-spacing: 0.36em;
+      text-indent: 0.36em;
+      color: rgba(255, 236, 190, 0.78);
+      pointer-events: none;
+    }
+    .ceremony-panel {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      margin-top: 22px;
+      padding: 22px 24px 20px;
+      border: 1px solid rgba(255, 214, 120, 0.4);
+      background: rgba(28, 6, 6, 0.55);
+      color: #fff8e7;
+      backdrop-filter: blur(10px);
+    }
+    .ceremony-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    .ceremony-brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 214, 120, 0.4);
+      background: #fff;
+    }
+    .ceremony-brand h1 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(30px, 5.5vw, 40px);
+      font-weight: 900;
+      letter-spacing: 0.36em;
+      text-indent: 0.36em;
+      line-height: 1;
+      color: #ffe9a8;
+    }
+    .ceremony-year {
+      margin: 0 0 18px;
+      font-family: var(--display);
+      font-size: 13px;
+      letter-spacing: 0.48em;
+      text-indent: 0.48em;
+      color: rgba(255, 228, 160, 0.68);
+      text-align: center;
+    }
+    .ceremony-panel .primary {
+      width: 100%;
+      min-height: 46px;
+      border-radius: 4px;
+      background: linear-gradient(180deg, #f0c45a, #c7922a);
+      color: #4a1c00;
+      font-family: var(--display);
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.28em;
+      text-indent: 0.28em;
+    }
+    .ceremony-panel .primary:hover {
+      filter: brightness(1.04);
+    }
+    .ceremony-exit {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      z-index: 3;
+      min-height: 34px;
+      padding: 0 14px;
+      border-radius: 2px;
+      border: 1px solid rgba(255, 214, 120, 0.35);
+      background: rgba(0, 0, 0, 0.22);
+      color: rgba(255, 233, 168, 0.88);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      pointer-events: auto;
+    }
+    .ceremony-tribute {
+      position: relative;
+      z-index: 2;
+      margin: 28px 0 0;
+      width: 100%;
+      text-align: center;
+      pointer-events: none;
+    }
+    .ceremony-tribute::before {
+      content: "";
+      display: block;
+      width: 56px;
+      height: 1px;
+      margin: 0 auto 18px;
+      background: linear-gradient(90deg, transparent, rgba(255, 214, 120, 0.7), transparent);
+    }
+    .ceremony-tribute strong {
+      display: block;
+      font-family: var(--display);
+      font-size: clamp(20px, 3.4vw, 26px);
+      font-weight: 900;
+      letter-spacing: 0.62em;
+      text-indent: 0.62em;
+      color: #ffe9a8;
+    }
+    .ceremony-tribute span {
+      display: block;
+      margin-top: 14px;
+      font-family: var(--poem);
+      font-size: clamp(22px, 4vw, 30px);
+      letter-spacing: 0.28em;
+      line-height: 1.35;
+      color: #fff4cc;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ceremony-rays { animation: none; }
+      .ceremony-stage { animation: none; }
+    }
+    @media (max-height: 740px) {
+      .ceremony-photo { height: min(30vh, 260px); }
+      .ceremony-tribute { margin-top: 18px; }
+      .ceremony-tribute span { font-size: clamp(18px, 3.2vw, 24px); }
     }
   </style>
 </head>
 <body>
-  <main class="codex-shell login-shell">
-    <section class="login-stage">
-      <div class="stage-wrap">
-        <p class="proto-note">
-          定稿原型 · 视觉对齐当前 BRAIN LoginScreen · 邮箱 / 手机短信 / 支付宝官方页扫码 · 无注册 · 无绑定引导
+  <main class="shell">
+    <!-- 隐藏彩蛋：开国大典意象水墨影（原创剪影，非名画翻拍） -->
+    <div class="easter-ink" aria-hidden="true" title="">
+      <svg viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" role="presentation">
+        <defs>
+          <radialGradient id="wash" cx="48%" cy="42%" r="55%">
+            <stop offset="0%" stop-color="#1a1f27" stop-opacity="0.2" />
+            <stop offset="55%" stop-color="#1a1f27" stop-opacity="0.07" />
+            <stop offset="100%" stop-color="#1a1f27" stop-opacity="0" />
+          </radialGradient>
+          <pattern id="inkLattice" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M0 0 H20 M0 10 H20 M10 0 V20" stroke="#111827" stroke-width="0.8" opacity="0.35" />
+          </pattern>
+          <filter id="softInk" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur stdDeviation="1.2" />
+          </filter>
+        </defs>
+        <ellipse cx="450" cy="250" rx="360" ry="200" fill="url(#wash)" />
+        <!-- 格扇门前读稿宣告的水墨意象（参照新闻照中近景） -->
+        <rect x="220" y="70" width="460" height="260" fill="url(#inkLattice)" opacity="0.25" filter="url(#softInk)" />
+        <g fill="#111827" opacity="0.36" filter="url(#softInk)">
+          <ellipse cx="450" cy="160" rx="28" ry="32" />
+          <path d="M415 190 Q450 175 485 190 L490 320 L410 320 Z" />
+          <rect x="432" y="210" width="22" height="28" rx="1" opacity="0.5" />
+          <ellipse cx="560" cy="175" rx="16" ry="18" opacity="0.55" />
+          <path d="M542 190 Q560 180 578 190 L582 300 L538 300 Z" opacity="0.5" />
+          <ellipse cx="610" cy="180" rx="14" ry="16" opacity="0.45" />
+          <path d="M594 194 Q610 184 626 194 L628 300 L592 300 Z" opacity="0.4" />
+        </g>
+        <!-- 话筒剪影 -->
+        <g fill="none" stroke="#111827" stroke-width="2.5" opacity="0.28" filter="url(#softInk)">
+          <line x1="340" y1="360" x2="355" y2="230" />
+          <line x1="300" y1="360" x2="320" y2="245" />
+          <circle cx="355" cy="215" r="22" />
+          <circle cx="320" cy="230" r="18" />
+        </g>
+      </svg>
+    </div>
+
+    <button type="button" class="easter-hotspot" id="easterHotspot" aria-label="彩蛋入口">
+      <svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="30" height="20" fill="#de2910" />
+        <g fill="#ffde00">
+          <polygon points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
+          <polygon transform="translate(8.2,1.6) scale(0.32) rotate(25)" points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
+          <polygon transform="translate(10.2,3.4) scale(0.32) rotate(-15)" points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
+          <polygon transform="translate(10.2,5.8) scale(0.32) rotate(-35)" points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
+          <polygon transform="translate(8.2,7.4) scale(0.32) rotate(-50)" points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
+        </g>
+      </svg>
+    </button>
+
+    <div class="ceremony" id="ceremony" aria-hidden="true">
+      <div class="ceremony-bg"></div>
+      <div class="ceremony-veil" aria-hidden="true"></div>
+      <div class="ceremony-rays" aria-hidden="true"></div>
+      <button type="button" class="ceremony-exit" id="ceremonyExit">收回</button>
+      <div class="ceremony-stage">
+        <figure class="ceremony-frame">
+          <img
+            class="ceremony-photo"
+            src="./assets/founding-ceremony-ref-alt.png"
+            alt="开国大典：天安门城楼宣告"
+            width="640"
+            height="380"
+          />
+        </figure>
+        <p class="ceremony-caption">天安门城楼 · 宣告成立</p>
+        <section class="ceremony-panel">
+          <div class="ceremony-brand">
+            <img src="../../assets/newbrain-icon-256.png" alt="" width="44" height="44" />
+            <h1>新脑子</h1>
+          </div>
+          <p class="ceremony-year">一 九 四 九 · 十 月 一 日</p>
+          <button type="button" class="primary" id="ceremonyContinue">继续登录</button>
+        </section>
+        <p class="ceremony-tribute">
+          <strong>为国献礼</strong>
+          <span>以智启程 · 不负山河</span>
         </p>
+      </div>
+    </div>
 
-        <div class="login-panel">
-          <button class="login-panel-close" id="closeBtn" type="button" aria-label="关闭" title="关闭">×</button>
+    <section class="panel" aria-label="登录">
+      <button class="close" id="closeBtn" type="button" aria-label="关闭">×</button>
 
-          <div class="login-panel-brand">
-            <div class="login-panel-mark">C</div>
-            <div>
-              <strong>NewBrain</strong>
-              <span>Windows 桌面端</span>
-            </div>
-          </div>
+      <div class="brand">
+        <img src="../../assets/newbrain-icon-256.png" alt="" width="56" height="56" />
+        <h1>新脑子<em>就是好使</em></h1>
+      </div>
 
-          <div class="login-panel-copy">
-            <h1>登录 OmniRoute 账号</h1>
-            <p>启动时会先检查会话状态。登录成功后，桌面端将自动复用当前账号下可用的网关密钥。</p>
-          </div>
+      <div id="authView">
+        <div class="segment" role="tablist" aria-label="登录方式">
+          <button type="button" class="active" data-mode="email" role="tab" aria-selected="true">邮箱</button>
+          <button type="button" data-mode="phone" role="tab" aria-selected="false">手机</button>
+        </div>
 
-          <div class="login-tabs" role="tablist" aria-label="登录方式">
-            <button class="login-tab active" type="button" data-tab="email" role="tab" aria-selected="true">邮箱</button>
-            <button class="login-tab" type="button" data-tab="phone" role="tab" aria-selected="false">手机</button>
-            <button class="login-tab" type="button" data-tab="alipay" role="tab" aria-selected="false">支付宝</button>
-          </div>
-
-          <div class="login-panel-form">
-            <div id="pane-email">
-              <label class="settings-field">
-                <span>邮箱</span>
-                <input id="email" type="email" autocomplete="username" placeholder="请输入邮箱" />
-              </label>
-              <label class="settings-field">
-                <span>密码</span>
-                <input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
-              </label>
-              <label class="settings-field">
-                <span>验证码</span>
-                <div class="code-row">
-                  <input id="emailCode" type="text" inputmode="numeric" maxlength="6" placeholder="请输入 6 位验证码" />
-                  <button id="sendEmailCode" type="button">发送验证码</button>
-                </div>
-              </label>
-              <div class="login-hints">
-                <span>支持邮箱密码登录，也支持邮箱验证码登录</span>
-                <em>可填写密码直接登录，或先发送验证码后用验证码登录。</em>
-              </div>
-            </div>
-
-            <div id="pane-phone" class="hidden">
-              <label class="settings-field">
-                <span>手机号</span>
-                <input id="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入 11 位手机号" />
-              </label>
-              <label class="settings-field">
-                <span>短信验证码</span>
-                <div class="code-row">
-                  <input id="smsCode" type="text" inputmode="numeric" maxlength="6" placeholder="请输入 6 位验证码" />
-                  <button id="sendSmsCode" type="button">获取验证码</button>
-                </div>
-              </label>
-              <div class="login-hints">
-                <span>使用已注册手机号登录，仅短信验证码</span>
-                <em>桌面端不提供注册入口；未注册号码登录失败即可。</em>
-              </div>
-            </div>
-
-            <div id="pane-alipay" class="hidden">
-              <div class="alipay-box">
-                <div class="alipay-open-card">
-                  <strong>打开支付宝官方扫码页</strong>
-                  <p>应用内无法内嵌支付宝二维码。点击按钮后，系统浏览器会打开 openauth.alipay.com；请在官方网页中扫码。</p>
-                  <code id="alipayUrl">https://openauth.alipay.com/oauth2/publicAppAuthorize.htm?…</code>
-                </div>
-                <ol class="alipay-steps">
-                  <li>校验授权地址仅允许 openauth.alipay.com</li>
-                  <li>系统浏览器打开官方页（二维码只在官网页里）</li>
-                  <li>本窗口后台等待结果，成功后自动登录</li>
-                </ol>
-                <div class="login-hints">
-                  <span id="alipayStatus">等待打开官方扫码页</span>
-                  <em>未绑定账号直接失败，不弹绑定引导</em>
-                </div>
-              </div>
-            </div>
-
-            <label class="login-agreement-row">
-              <input id="agreement" type="checkbox" />
-              <span>
-                我已阅读并同意
-                <button type="button" class="login-inline-link" data-modal="tos">服务协议</button>
-                和
-                <button type="button" class="login-inline-link" data-modal="policy">使用政策</button>
-              </span>
+        <div id="pane-email" class="fields">
+          <label class="field">
+            <span>邮箱</span>
+            <input id="email" type="email" autocomplete="username" placeholder="请输入邮箱" />
+          </label>
+          <div id="emailPasswordBlock" class="fields">
+            <label class="field">
+              <span>密码</span>
+              <input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
             </label>
-
-            <div id="errorBanner" class="login-error-banner hidden" role="alert"></div>
-            <div id="successBanner" class="login-success-banner hidden" role="status"></div>
-
-            <div class="login-actions" id="primaryActions">
-              <button class="login-submit-btn" id="loginBtn" type="button" disabled>登录</button>
-            </div>
-            <div class="login-actions hidden" id="alipayActions">
-              <button class="login-submit-btn secondary" id="alipayResetBtn" type="button">取消等待</button>
-              <button class="login-submit-btn" id="alipayStartBtn" type="button">支付宝扫码登录</button>
-            </div>
-
-            <div class="login-hints login-service-hints">
-              <span id="serviceHint">认证服务已连接（原型模拟）</span>
-            </div>
+            <button class="alt-link" id="toCodeLogin" type="button">改用邮箱验证码登录</button>
+          </div>
+          <div id="emailCodeBlock" class="fields hidden">
+            <label class="field">
+              <span>邮箱验证码</span>
+              <div class="code-row">
+                <input id="emailCode" type="text" inputmode="numeric" maxlength="6" placeholder="6 位验证码" />
+                <button id="sendEmailCode" type="button">发送</button>
+              </div>
+            </label>
+            <button class="alt-link" id="toPasswordLogin" type="button">改用密码登录</button>
           </div>
         </div>
 
-        <aside class="spec-card" aria-label="定稿范围">
-          <strong>定稿范围</strong>
-          <ul>
-            <li>邮箱：密码或邮箱验证码（沿用现网能力）</li>
-            <li>手机：仅已注册号 + 短信验证码；无注册页</li>
-            <li>支付宝：openExternal 打开官方授权站；应用内不封装二维码；未绑定直接失败</li>
-            <li>落地需补 desktop SMS：<code>/api/desktop/auth/login-sms/send</code>、<code>/login/sms</code></li>
-          </ul>
-        </aside>
+        <div id="pane-phone" class="fields hidden">
+          <label class="field">
+            <span>手机号</span>
+            <input id="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="11 位手机号" />
+          </label>
+          <label class="field">
+            <span>短信验证码</span>
+            <div class="code-row">
+              <input id="smsCode" type="text" inputmode="numeric" maxlength="6" placeholder="6 位验证码" />
+              <button id="sendSmsCode" type="button">获取验证码</button>
+            </div>
+          </label>
+        </div>
+
+        <label class="agree">
+          <input id="agreement" type="checkbox" />
+          <span>
+            我已阅读并同意
+            <button type="button" data-modal="tos">服务协议</button>
+            和
+            <button type="button" data-modal="policy">使用政策</button>
+          </span>
+        </label>
+
+        <div id="errorBanner" class="banner error hidden" role="alert"></div>
+        <div id="successBanner" class="banner ok hidden" role="status"></div>
+
+        <button class="primary" id="loginBtn" type="button" disabled>继续</button>
+        <div class="divider">或</div>
+        <button class="oauth" id="alipayStartBtn" type="button">
+          <span class="oauth-mark" aria-hidden="true">支</span>
+          支付宝扫码登录
+        </button>
+        <div class="status" id="serviceHint">认证服务已连接</div>
       </div>
 
-      <div id="browserToast" class="browser-toast hidden" role="status">
-        <p class="eyebrow">Prototype only</p>
-        <strong>已打开系统浏览器</strong>
-        <p id="browserToastText">正在打开支付宝官方授权页…</p>
-        <div class="toast-actions">
-          <button type="button" id="simUnbound">模拟未绑定</button>
-          <button type="button" id="simExpire">模拟过期</button>
-          <button type="button" class="primary" id="simApproved">模拟扫码成功</button>
-        </div>
-      </div>
-
-      <div id="modal" class="login-modal-shell hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-        <button class="login-modal-backdrop" type="button" id="modalBackdrop" aria-label="关闭弹层"></button>
-        <div class="login-modal-card">
-          <div class="login-modal-head">
-            <strong id="modalTitle">服务协议</strong>
-            <button type="button" id="modalClose">关闭</button>
-          </div>
-          <div class="login-modal-body" id="modalBody"></div>
-        </div>
+      <div id="alipayView" class="wait hidden">
+        <div class="wait-icon" aria-hidden="true">支</div>
+        <h2>在浏览器中完成扫码</h2>
+        <p id="alipayStatus">已打开支付宝官方授权页。扫码成功后，此窗口会自动继续。</p>
+        <button class="ghost" id="alipayCancelBtn" type="button">取消</button>
       </div>
     </section>
+
+    <div id="browserToast" class="toast hidden">
+      <strong>原型调试</strong>
+      <p>模拟支付宝扫码结果</p>
+      <div class="row">
+        <button type="button" id="simUnbound">未绑定</button>
+        <button type="button" id="simExpire">过期</button>
+        <button type="button" class="main" id="simApproved">成功</button>
+      </div>
+    </div>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <button class="modal-bg" type="button" id="modalBackdrop"></button>
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="modalTitle">服务协议</strong>
+          <button type="button" id="modalClose">关闭</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
+    </div>
   </main>
 
   <script>
     const state = {
-      tab: "email",
+      mode: "email",
+      emailVia: "password",
       emailCd: 0,
       smsCd: 0,
       submitting: false,
@@ -586,24 +867,14 @@
     };
 
     const $ = (id) => document.getElementById(id);
-    const panes = {
-      email: $("pane-email"),
-      phone: $("pane-phone"),
-      alipay: $("pane-alipay")
-    };
 
     function showError(msg) {
       $("successBanner").classList.add("hidden");
       const el = $("errorBanner");
-      if (!msg) {
-        el.classList.add("hidden");
-        el.textContent = "";
-        return;
-      }
+      if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
       el.textContent = msg;
       el.classList.remove("hidden");
     }
-
     function showSuccess(msg) {
       $("errorBanner").classList.add("hidden");
       const el = $("successBanner");
@@ -611,74 +882,66 @@
       el.classList.remove("hidden");
     }
 
-    function isEmail(v) {
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim());
-    }
-    function isPhone(v) {
-      return /^1\d{10}$/.test(String(v || "").trim());
-    }
-    function isCode(v) {
-      return /^\d{6}$/.test(String(v || "").trim());
+    function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim()); }
+    function isPhone(v) { return /^1\d{10}$/.test(String(v || "").trim()); }
+    function isCode(v) { return /^\d{6}$/.test(String(v || "").trim()); }
+
+    function syncEmailVia() {
+      const code = state.emailVia === "code";
+      $("emailPasswordBlock").classList.toggle("hidden", code);
+      $("emailCodeBlock").classList.toggle("hidden", !code);
     }
 
-    function syncPrimaryButton() {
+    function syncPrimary() {
       const btn = $("loginBtn");
-      if (state.submitting) {
-        btn.disabled = true;
-        return;
-      }
+      if (state.submitting) { btn.disabled = true; return; }
       const agreed = $("agreement").checked;
-      if (state.tab === "email") {
-        const emailOk = isEmail($("email").value);
-        const credOk = $("password").value.trim().length > 0 || isCode($("emailCode").value);
-        btn.disabled = !(agreed && emailOk && credOk);
+      if (state.mode === "email") {
+        if (state.emailVia === "password") {
+          btn.disabled = !(agreed && isEmail($("email").value) && $("password").value.trim());
+        } else {
+          btn.disabled = !(agreed && isEmail($("email").value) && isCode($("emailCode").value));
+        }
         return;
       }
-      if (state.tab === "phone") {
-        btn.disabled = !(agreed && isPhone($("phone").value) && isCode($("smsCode").value));
-        return;
-      }
-      btn.disabled = true;
+      btn.disabled = !(agreed && isPhone($("phone").value) && isCode($("smsCode").value));
     }
 
-    function syncSendButtons() {
+    function syncSend() {
       $("sendEmailCode").disabled = state.emailCd > 0 || !isEmail($("email").value);
       $("sendSmsCode").disabled = state.smsCd > 0 || !isPhone($("phone").value);
-      $("alipayStartBtn").disabled =
-        state.alipayPhase === "polling" ||
-        state.alipayPhase === "success" ||
-        !$("agreement").checked;
-      $("alipayResetBtn").disabled = state.alipayPhase === "idle";
-      $("alipayResetBtn").textContent =
-        state.alipayPhase === "success" ? "再试一次" :
-        state.alipayPhase === "polling" ? "取消等待" : "取消等待";
+      $("alipayStartBtn").disabled = !$("agreement").checked || state.submitting;
     }
 
     function syncControls() {
-      syncPrimaryButton();
-      syncSendButtons();
+      syncEmailVia();
+      syncPrimary();
+      syncSend();
     }
 
-    function switchTab(tab) {
-      if (state.tab === "alipay" && tab !== "alipay" && state.alipayPhase === "polling") {
-        resetAlipay();
-      }
-      state.tab = tab;
-      document.querySelectorAll(".login-tab").forEach((btn) => {
-        const active = btn.dataset.tab === tab;
-        btn.classList.toggle("active", active);
-        btn.setAttribute("aria-selected", active ? "true" : "false");
+    function setMode(mode) {
+      state.mode = mode;
+      document.querySelectorAll(".segment button").forEach((btn) => {
+        const on = btn.dataset.mode === mode;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
       });
-      Object.entries(panes).forEach(([key, el]) => {
-        el.classList.toggle("hidden", key !== tab);
-      });
-      $("primaryActions").classList.toggle("hidden", tab === "alipay");
-      $("alipayActions").classList.toggle("hidden", tab !== "alipay");
-      if (tab !== "alipay") $("browserToast").classList.add("hidden");
+      $("pane-email").classList.toggle("hidden", mode !== "email");
+      $("pane-phone").classList.toggle("hidden", mode !== "phone");
       showError("");
-      if (tab !== "alipay") $("successBanner").classList.add("hidden");
-      if (!state.submitting) $("loginBtn").textContent = "登录";
+      $("successBanner").classList.add("hidden");
       syncControls();
+    }
+
+    function showAuth() {
+      $("authView").classList.remove("hidden");
+      $("alipayView").classList.add("hidden");
+      $("browserToast").classList.add("hidden");
+    }
+
+    function showAlipayWait() {
+      $("authView").classList.add("hidden");
+      $("alipayView").classList.remove("hidden");
     }
 
     function startCountdown(kind) {
@@ -686,30 +949,42 @@
       const btn = kind === "email" ? $("sendEmailCode") : $("sendSmsCode");
       state[key] = 60;
       btn.disabled = true;
-      btn.textContent = "60s 后重发";
+      btn.textContent = "60s";
       clearInterval(state.timers[key]);
       state.timers[key] = setInterval(() => {
         state[key] -= 1;
         if (state[key] <= 0) {
           clearInterval(state.timers[key]);
-          btn.textContent = kind === "email" ? "发送验证码" : "获取验证码";
+          btn.textContent = kind === "email" ? "发送" : "获取验证码";
           syncControls();
           return;
         }
-        btn.textContent = state[key] + "s 后重发";
+        btn.textContent = state[key] + "s";
       }, 1000);
     }
 
     function requireAgreement() {
       if (!$("agreement").checked) {
-        showError("请先勾选服务协议与使用政策");
+        showError("请先同意服务协议与使用政策");
         return false;
       }
       return true;
     }
 
-    document.querySelectorAll(".login-tab").forEach((btn) => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    document.querySelectorAll(".segment button").forEach((btn) => {
+      btn.addEventListener("click", () => setMode(btn.dataset.mode));
+    });
+    $("toCodeLogin").addEventListener("click", () => {
+      state.emailVia = "code";
+      showError("");
+      syncControls();
+      $("emailCode").focus();
+    });
+    $("toPasswordLogin").addEventListener("click", () => {
+      state.emailVia = "password";
+      showError("");
+      syncControls();
+      $("password").focus();
     });
 
     ["email", "password", "emailCode", "phone", "smsCode"].forEach((id) => {
@@ -721,168 +996,168 @@
       if (!isEmail($("email").value)) return showError("请先填写有效邮箱");
       if (state.emailCd > 0) return;
       showError("");
-      showSuccess("验证码已发送到邮箱（原型模拟）");
+      showSuccess("验证码已发送");
       startCountdown("email");
       syncControls();
     });
-
     $("sendSmsCode").addEventListener("click", () => {
-      if (!isPhone($("phone").value)) return showError("请先填写 11 位中国大陆手机号");
+      if (!isPhone($("phone").value)) return showError("请填写 11 位手机号");
       if (state.smsCd > 0) return;
       showError("");
-      showSuccess("短信验证码已发送（原型模拟）");
+      showSuccess("短信验证码已发送");
       startCountdown("sms");
       syncControls();
     });
 
     function submitLogin() {
-      if (state.submitting || state.tab === "alipay") return;
+      if (state.submitting) return;
       if (!requireAgreement()) return;
 
-      if (state.tab === "email") {
-        const email = $("email").value.trim();
-        const password = $("password").value.trim();
-        const code = $("emailCode").value.trim();
-        if (!isEmail(email)) return showError("请填写有效邮箱");
-        if (!password && !isCode(code)) return showError("请填写密码或 6 位邮箱验证码");
-        state.submitting = true;
-        $("loginBtn").textContent = "登录中...";
-        syncControls();
-        setTimeout(() => {
-          state.submitting = false;
-          $("loginBtn").textContent = "登录";
-          showSuccess("邮箱登录成功，已建立桌面会话（原型）");
-          $("serviceHint").textContent = "会话已建立（原型）";
-          syncControls();
-        }, 700);
-        return;
+      if (state.mode === "email") {
+        if (!isEmail($("email").value.trim())) return showError("请填写有效邮箱");
+        if (state.emailVia === "password" && !$("password").value.trim()) return showError("请填写密码");
+        if (state.emailVia === "code" && !isCode($("emailCode").value.trim())) return showError("请填写 6 位验证码");
+      } else {
+        if (!isPhone($("phone").value.trim())) return showError("请填写 11 位手机号");
+        if (!isCode($("smsCode").value.trim())) return showError("请填写 6 位验证码");
       }
 
-      if (state.tab === "phone") {
-        const phone = $("phone").value.trim();
-        const code = $("smsCode").value.trim();
-        if (!isPhone(phone)) return showError("请填写 11 位手机号");
-        if (!isCode(code)) return showError("请填写 6 位短信验证码");
-        state.submitting = true;
-        $("loginBtn").textContent = "登录中...";
+      state.submitting = true;
+      $("loginBtn").textContent = "登录中…";
+      syncControls();
+      setTimeout(() => {
+        state.submitting = false;
+        $("loginBtn").textContent = "继续";
+        showSuccess("登录成功");
+        $("serviceHint").textContent = "会话已建立";
         syncControls();
-        setTimeout(() => {
-          state.submitting = false;
-          $("loginBtn").textContent = "登录";
-          showSuccess("手机登录成功，已建立桌面会话（原型）");
-          $("serviceHint").textContent = "会话已建立（原型）";
-          syncControls();
-        }, 700);
-      }
+      }, 650);
     }
 
     $("loginBtn").addEventListener("click", submitLogin);
-    document.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || state.tab === "alipay") return;
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
       if (!$("modal").classList.contains("hidden")) return;
-      if (document.activeElement && document.activeElement.tagName === "INPUT") {
-        submitLogin();
-      }
+      if (!$("alipayView").classList.contains("hidden")) return;
+      if (document.activeElement && document.activeElement.tagName === "INPUT") submitLogin();
     });
-
-    function resetAlipay() {
-      clearInterval(state.timers.alipayPoll);
-      state.alipayPhase = "idle";
-      $("alipayStatus").textContent = "等待打开官方扫码页";
-      $("alipayStartBtn").textContent = "支付宝扫码登录";
-      $("browserToast").classList.add("hidden");
-      $("alipayUrl").textContent = "https://openauth.alipay.com/oauth2/publicAppAuthorize.htm?…";
-      showError("");
-      $("successBanner").classList.add("hidden");
-      syncControls();
-    }
 
     function finishAlipay(result) {
       clearInterval(state.timers.alipayPoll);
+      state.alipayPhase = "idle";
       $("browserToast").classList.add("hidden");
+      showAuth();
       if (result === "approved") {
-        state.alipayPhase = "success";
-        $("alipayStatus").textContent = "官方页扫码成功，已完成登录";
-        $("alipayStartBtn").textContent = "已完成";
-        showSuccess("支付宝登录成功（openExternal → 轮询 → exchange）");
-        $("serviceHint").textContent = "会话已建立（原型）";
-        syncControls();
+        showSuccess("支付宝登录成功");
+        $("serviceHint").textContent = "会话已建立";
         return;
       }
-      state.alipayPhase = "idle";
-      $("alipayStartBtn").textContent = "支付宝扫码登录";
-      if (result === "unbound") {
-        $("alipayStatus").textContent = "授权结束";
-        showError("该支付宝账号尚未绑定平台账号，请先在网页端完成绑定。");
-      } else if (result === "expired") {
-        $("alipayStatus").textContent = "二维码已过期，可重新打开官方页";
-        showError("支付宝二维码已过期，请重新扫码登录。");
-      } else {
-        $("alipayStatus").textContent = "已取消等待";
-        showError("等待支付宝扫码超时，请重试。");
-      }
+      if (result === "unbound") showError("该支付宝账号尚未绑定平台账号，请先在网页端完成绑定。");
+      else if (result === "expired") showError("二维码已过期，请重试。");
+      else showError("已取消支付宝登录");
       syncControls();
     }
 
     $("alipayStartBtn").addEventListener("click", () => {
       if (!requireAgreement()) return;
-      if (state.alipayPhase === "polling" || state.alipayPhase === "success") return;
-
       state.alipayPhase = "polling";
-      const fakeUrl =
-        "https://openauth.alipay.com/oauth2/publicAppAuthorize.htm?app_id=demo&scope=auth_user&state=nb_proto_" +
-        Date.now();
-      $("alipayUrl").textContent = fakeUrl;
-      $("alipayStatus").textContent = "已打开官方授权页，本窗口正在等待扫码结果…";
-      $("alipayStartBtn").textContent = "等待支付宝扫码...";
-      $("browserToastText").textContent =
-        "系统浏览器已打开官方授权页。二维码只在该网页中展示；应用内不封装二维码。可用下方按钮模拟结果。";
+      showAlipayWait();
+      $("alipayStatus").textContent = "已打开支付宝官方授权页。扫码成功后，此窗口会自动继续。";
       $("browserToast").classList.remove("hidden");
-      showSuccess("已打开支付宝官方扫码页");
-      syncControls();
-
       let ticks = 0;
       clearInterval(state.timers.alipayPoll);
       state.timers.alipayPoll = setInterval(() => {
         ticks += 1;
-        $("alipayStatus").textContent = "等待扫码结果中… (" + ticks * 2 + "s)";
+        $("alipayStatus").textContent = "等待扫码结果… " + (ticks * 2) + "s";
         if (ticks >= 60) finishAlipay("timeout");
       }, 2000);
     });
 
-    $("alipayResetBtn").addEventListener("click", () => {
-      if (state.alipayPhase === "polling") {
-        finishAlipay("timeout");
-        return;
-      }
-      if (state.alipayPhase === "success") {
-        resetAlipay();
-        return;
-      }
-      resetAlipay();
-    });
+    $("alipayCancelBtn").addEventListener("click", () => finishAlipay("timeout"));
     $("simApproved").addEventListener("click", () => finishAlipay("approved"));
     $("simUnbound").addEventListener("click", () => finishAlipay("unbound"));
     $("simExpire").addEventListener("click", () => finishAlipay("expired"));
 
     function openModal(kind) {
       $("modalTitle").textContent = kind === "policy" ? "使用政策" : "服务协议";
-      $("modalBody").innerHTML =
-        kind === "policy"
-          ? "<p>使用政策原型内容。正式版从认证配置接口拉取 HTML。</p><p>继续使用 NewBrain 桌面端即表示你理解并同意相关政策。</p>"
-          : "<p>服务协议原型内容。正式版从认证配置接口拉取 HTML。</p><p>登录前需勾选同意本协议与使用政策。</p>";
+      $("modalBody").innerHTML = "<p>正式版从桌面认证配置接口拉取协议内容。</p>";
       $("modal").classList.remove("hidden");
     }
-    function closeModal() {
-      $("modal").classList.add("hidden");
-    }
+    function closeModal() { $("modal").classList.add("hidden"); }
     document.querySelectorAll("[data-modal]").forEach((btn) => {
       btn.addEventListener("click", () => openModal(btn.dataset.modal));
     });
     $("modalClose").addEventListener("click", closeModal);
     $("modalBackdrop").addEventListener("click", closeModal);
-    $("closeBtn").addEventListener("click", () => {
-      showError("原型：此处对应关闭桌面窗口");
+    $("closeBtn").addEventListener("click", () => showError("关闭桌面窗口"));
+
+    /* 隐藏点：0 延迟，从鼠标位置径向展开开国大典风格界面 */
+    const ceremony = $("ceremony");
+    const hotspot = $("easterHotspot");
+    let ceremonyRaf = 0;
+    let ceremonyOpen = false;
+
+    function ceremonyMaxRadius() {
+      return Math.hypot(window.innerWidth, window.innerHeight) * 1.25;
+    }
+
+    function setCeremonyReveal(px) {
+      ceremony.style.setProperty("--reveal", Math.max(0, px) + "px");
+    }
+
+    function openCeremony(clientX, clientY) {
+      if (ceremonyOpen) return;
+      ceremonyOpen = true;
+      ceremony.classList.add("is-on");
+      ceremony.setAttribute("aria-hidden", "false");
+      ceremony.style.setProperty("--cx", clientX + "px");
+      ceremony.style.setProperty("--cy", clientY + "px");
+      setCeremonyReveal(0);
+      const start = performance.now();
+      const duration = 10000;
+      const maxR = ceremonyMaxRadius();
+      cancelAnimationFrame(ceremonyRaf);
+      const tick = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setCeremonyReveal(eased * maxR);
+        if (t < 1) {
+          ceremonyRaf = requestAnimationFrame(tick);
+        }
+      };
+      ceremonyRaf = requestAnimationFrame(tick);
+    }
+
+    function closeCeremony() {
+      if (!ceremonyOpen) return;
+      cancelAnimationFrame(ceremonyRaf);
+      const startR = parseFloat(getComputedStyle(ceremony).getPropertyValue("--reveal")) || ceremonyMaxRadius();
+      const start = performance.now();
+      const duration = 900;
+      const tick = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = Math.pow(1 - t, 2);
+        setCeremonyReveal(startR * eased);
+        if (t < 1) {
+          ceremonyRaf = requestAnimationFrame(tick);
+          return;
+        }
+        ceremonyOpen = false;
+        ceremony.classList.remove("is-on");
+        ceremony.setAttribute("aria-hidden", "true");
+        setCeremonyReveal(0);
+      };
+      ceremonyRaf = requestAnimationFrame(tick);
+    }
+
+    hotspot.addEventListener("mouseenter", (event) => {
+      const rect = hotspot.getBoundingClientRect();
+      openCeremony(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    $("ceremonyExit").addEventListener("click", closeCeremony);
+    $("ceremonyContinue").addEventListener("click", closeCeremony);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && ceremonyOpen) closeCeremony();
     });
 
     syncControls();
