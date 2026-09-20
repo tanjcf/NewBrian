@@ -17,6 +17,9 @@ interface ExternalToolRuntime {
 }
 
 const namespace = "web-search";
+const FETCH_WARNING_WITHOUT_READ = 3;
+const FETCH_BLOCK_WITHOUT_BODY = 5;
+const IDENTICAL_URL_BLOCK = 3;
 
 function toolResult(payload: Record<string, unknown>, isError = false) {
   return {
@@ -37,19 +40,23 @@ function toCitationItems(items: DesktopMarketNewsItem[]): DesktopWebSearchItem[]
   }));
 }
 
-/** Registers free-first market news search and explicit paid fallback tools. */
+/** Registers free-first market news search, paid fallback, and Search→Fetch page tool. */
 export function registerDesktopWebSearchTools(
   runtime: ExternalToolRuntime,
-  client: Pick<DesktopWebSearchClient, "search" | "searchMarketNews">
+  client: Pick<DesktopWebSearchClient, "search" | "searchMarketNews" | "fetchPage">
 ): void {
   runtime.unregisterExternalTools(namespace);
   runtime.unregisterExternalTools("web-paid");
+
+  let searchCallsWithoutFetch = 0;
+  let fetchCalls = 0;
+  const urlCounts = new Map<string, number>();
 
   runtime.registerExternalTool(
     {
       name: "news_search_free",
       title: "市场新闻搜索",
-      description: "Search market/finance news with free sources first through the company Spring orchestrator. Automatically upgrades to one paid web search only when free news is insufficient. Returns source URLs, searchedAt, and routing decision. Prefer this for latest stock news, announcements, and prices.",
+      description: "Search market/finance news with free sources first through the company Spring orchestrator. Automatically upgrades to one paid web search only when free news is insufficient. May include TopK page fetches. Prefer this for latest stock news, announcements, and prices. Never call for greetings or casual chat.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -80,14 +87,24 @@ export function registerDesktopWebSearchTools(
             searchedAt: result.searchedAt,
             decision: result.decision,
             query: result.query,
-            items: []
+            items: [],
+            fetches: [],
+            fetchAttempted: result.fetchAttempted
           }, true);
         }
+        searchCallsWithoutFetch += 1;
         const citationPreview = attachDesktopWebSearchCitations({
           answer: "",
           searchedAt: result.searchedAt,
           items: toCitationItems(result.items)
         }).trim();
+        const guidanceParts = [
+          "Cite returned URLs and searchedAt. Do not invent fresher facts than these sources support.",
+          "If status is degraded, say free news was used after paid search failed.",
+          result.fetches.length
+            ? "Orchestrator already attached TopK fetches; prefer those bodies before calling web.fetch_page again."
+            : "If snippets are thin, call web.fetch_page on the most relevant URLs (budget-limited)."
+        ];
         return toolResult({
           status: result.status,
           query: result.query,
@@ -99,8 +116,10 @@ export function registerDesktopWebSearchTools(
           sourceTypesUsed: result.sourceTypesUsed,
           message: result.message,
           items: result.items,
+          fetches: result.fetches,
+          fetchAttempted: result.fetchAttempted,
           citationBlock: citationPreview,
-          guidance: "Cite returned URLs and searchedAt. Do not invent fresher facts than these sources support. If status is degraded, say free news was used after paid search failed."
+          guidance: guidanceParts.join(" ")
         }, result.status !== "ok" && result.status !== "degraded");
       } catch (error) {
         const code = error instanceof DesktopWebSearchError ? error.code : "WEB_SEARCH_UNAVAILABLE";
@@ -109,7 +128,8 @@ export function registerDesktopWebSearchTools(
           status: "unavailable",
           code,
           message: formatDesktopWebSearchUnavailable(message),
-          items: []
+          items: [],
+          fetches: []
         }, true);
       }
     }
@@ -119,7 +139,7 @@ export function registerDesktopWebSearchTools(
     {
       name: "web.search_paid",
       title: "全网付费搜索",
-      description: "Paid company web search via Spring. Use only when the user explicitly asks for full-web search or news_search_free is insufficient. Company API keys stay server-side.",
+      description: "Paid company web search via Spring. Use only when the user explicitly asks for full-web search or news_search_free is insufficient. Company API keys stay server-side. Never call for greetings or casual chat.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -153,6 +173,7 @@ export function registerDesktopWebSearchTools(
             items: []
           }, true);
         }
+        searchCallsWithoutFetch += 1;
         const citationPreview = attachDesktopWebSearchCitations({
           answer: "",
           searchedAt: result.searchedAt,
@@ -165,7 +186,7 @@ export function registerDesktopWebSearchTools(
           searchedAt: result.searchedAt,
           items: result.items,
           citationBlock: citationPreview,
-          guidance: "Cite the returned URLs and searchedAt. Do not invent fresher facts than these sources support."
+          guidance: "Cite the returned URLs and searchedAt. Call web.fetch_page for TopK bodies before treating snippets as full evidence."
         });
       } catch (error) {
         const code = error instanceof DesktopWebSearchError ? error.code : "WEB_SEARCH_UNAVAILABLE";
@@ -175,6 +196,88 @@ export function registerDesktopWebSearchTools(
           code,
           message: formatDesktopWebSearchUnavailable(message),
           items: []
+        }, true);
+      }
+    }
+  );
+
+  runtime.registerExternalTool(
+    {
+      name: "web.fetch_page",
+      title: "抓取网页正文",
+      description: "Fetch visible page text for a search result URL via company Spring web-fetch. Does not consume paid search quota. Use after news_search_free/web.search_paid when snippets are insufficient. Never call for greetings.",
+      kind: "read",
+      risk: "medium",
+      requiresApproval: false,
+      namespace,
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", minLength: 1, maxLength: 2000 },
+          maxChars: { type: "integer", minimum: 200, maximum: 80000 }
+        },
+        required: ["url"],
+        additionalProperties: false
+      }
+    },
+    async (input) => {
+      const url = String(input.url || "").trim();
+      if (!url) {
+        return toolResult({
+          status: "unavailable",
+          code: "WEB_FETCH_URL_INVALID",
+          message: "URL is required."
+        }, true);
+      }
+
+      if (searchCallsWithoutFetch >= FETCH_BLOCK_WITHOUT_BODY && fetchCalls === 0) {
+        return toolResult({
+          status: "blocked",
+          code: "WEB_FETCH_LOOP_BLOCKED",
+          message: "CRITICAL: web.fetch_page blocked — too many searches without reading a page body. Fetch an existing URL or draft from current evidence."
+        }, true);
+      }
+
+      const identicalCount = (urlCounts.get(url) ?? 0) + 1;
+      if (identicalCount >= IDENTICAL_URL_BLOCK) {
+        return toolResult({
+          status: "blocked",
+          code: "WEB_FETCH_LOOP_BLOCKED",
+          message: `CRITICAL: web.fetch_page blocked after repeating URL ${identicalCount} times. Use existing body or continue drafting.`
+        }, true);
+      }
+
+      try {
+        const page = await client.fetchPage({
+          url,
+          maxChars: typeof input.maxChars === "number" ? input.maxChars : undefined
+        });
+        fetchCalls += 1;
+        searchCallsWithoutFetch = 0;
+        urlCounts.set(url, identicalCount);
+        const warning = fetchCalls === 0 && searchCallsWithoutFetch >= FETCH_WARNING_WITHOUT_READ
+          ? "Search budget pressure: prefer fetching existing URLs before more searches."
+          : undefined;
+        return toolResult({
+          status: page.status,
+          url: page.url,
+          title: page.title,
+          text: page.text,
+          statusCode: page.statusCode,
+          fetchedAt: page.fetchedAt,
+          truncated: page.truncated,
+          charCount: page.charCount,
+          guidance: "Use this body as evidence. Cite the URL. Do not invent facts beyond the fetched text.",
+          ...(warning ? { warning } : {})
+        }, page.status === "blocked" || page.status === "error");
+      } catch (error) {
+        const code = error instanceof DesktopWebSearchError ? error.code : "WEB_FETCH_UNAVAILABLE";
+        const message = error instanceof Error ? error.message : String(error);
+        return toolResult({
+          status: "unavailable",
+          code,
+          message,
+          url
         }, true);
       }
     }

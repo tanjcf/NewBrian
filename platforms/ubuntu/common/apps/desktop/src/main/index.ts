@@ -34,6 +34,7 @@ import { QuantSimulationService } from "./quant-simulation-service.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
+import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -209,6 +210,14 @@ const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({ accessToken, device: collectDesktopDeviceFingerprint() })
+});
+const desktopWebSearchClient = new DesktopWebSearchClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
 });
 const opsMarketDataUrl = resolveBrainMarketDataUrl();
 const quantSimulationService = new QuantSimulationService(
@@ -10533,6 +10542,7 @@ function registerIpc() {
       userSkillRoot,
       readFeatureSkills: async () => (await readFeatureConfig()).skills,
       officialGovernmentWebService,
+      desktopWebSearchClient,
       readWorkspaceCatalog,
       getActiveWorkspaceId: () => activeWorkspaceId,
       publishWorkspaceFilePreview: (event) => publishWorkspaceFilePreviewFromMain(mainWindowRef, event)

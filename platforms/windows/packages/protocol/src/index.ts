@@ -245,6 +245,12 @@ export interface AutomationSpec {
   title: string;
   status: "idle" | "scheduled" | "running" | "paused";
   trigger: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
   workspaceId?: string;
   threadId?: string;
   action?: "workspace_scan" | "git_status" | "error_remediation";
@@ -1141,6 +1147,17 @@ export interface DesktopAuthStatus {
   agreement?: DesktopAgreementConfig;
   last_error?: string;
   last_checked_at?: string;
+  email_code_login_enabled?: boolean;
+  password_login_enabled?: boolean;
+  /** ISO server clock from spring-app `/api/desktop/auth/config`. */
+  server_time?: string | null;
+  /** Asia/Shanghai `yyyy-MM-dd` from spring-app. */
+  server_date?: string | null;
+  /**
+   * National Day login ceremony. Packaged builds require spring-app Oct 1;
+   * local unpackaged builds stay enabled for preview.
+   */
+  login_ceremony_enabled?: boolean;
 }
 
 export interface DesktopAuthLoginInput {
@@ -1638,6 +1655,12 @@ export interface FeatureItemInput {
   action?: string;
   intervalMinutes?: string;
   dailyTime?: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
 }
 
 export interface FeatureConfigPayload {

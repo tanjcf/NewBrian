@@ -94,6 +94,7 @@ import {
   type DesktopAuthApiAccount,
   type DesktopAuthApiUser
 } from "./desktop-auth-policy.js";
+import { resolveLoginCeremonyAuthFields } from "../shared/login-ceremony-policy";
 import {
   createLocalRuntime,
   createStructuredAgentResult,
@@ -171,6 +172,8 @@ import { OfficialGovernmentWebService } from "./official-government-web-service.
 import { registerOfficialGovernmentWebTools } from "./official-government-web-tools.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
+import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
+import { registerDesktopWebSearchTools } from "./desktop-web-search-tools.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
 import { RustCoreService } from "./rust-core-service.js";
@@ -405,6 +408,8 @@ import { registerDesktopAppUpdateComposition } from "./desktop-app-update-compos
 import { registerGrowthComposition } from "./growth-composition.js";
 import { registerWorkspaceGitIpcHandlers } from "./workspace-git-ipc.js";
 import { registerWindowIpcHandlers } from "./window-ipc.js";
+import { DesktopWindowControl } from "./desktop-window-control.js";
+import { registerDesktopWindowControlIpc } from "./desktop-window-control-ipc.js";
 import { registerHolonIpcHandlers } from "./holon-ipc.js";
 import { registerLearningIpcHandlers } from "./learning-ipc.js";
 import { HolonControlPlaneService } from "./holon-control-plane-service.js";
@@ -667,6 +672,14 @@ async function ensureExpertSummonedFromSkills(input: {
 }
 const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".newbrain");
+const windowsUiScriptRoot = app.isPackaged
+  ? join(process.resourcesPath, "windows-ui-driver")
+  : join(app.getAppPath(), "scripts");
+const desktopWindowControl = new DesktopWindowControl({
+  driverPath: join(windowsUiScriptRoot, "windows-installed-ui-driver.ps1"),
+  scenarioPath: join(windowsUiScriptRoot, "native-ui-scenario.mjs"),
+  captureDirectory: join(workspaceStateRoot, "window-captures")
+});
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
@@ -907,6 +920,14 @@ const desktopMarketBarsClient = new DesktopMarketBarsClient({
   })
 });
 const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
+});
+const desktopWebSearchClient = new DesktopWebSearchClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
@@ -1905,9 +1926,23 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
 async function fetchDesktopAuthLoginFlags(): Promise<{
   emailCodeLoginEnabled: boolean;
   passwordLoginEnabled: boolean;
+  serverTime: string | null;
+  serverDate: string | null;
+  loginCeremonyEnabled: boolean;
 }> {
+  const ceremonyFallback = resolveLoginCeremonyAuthFields({
+    isPackaged: app.isPackaged,
+    serverTime: null,
+    serverDate: null
+  });
   if (isE2eEmailCaptchaBypassEnabled()) {
-    return { emailCodeLoginEnabled: false, passwordLoginEnabled: true };
+    return {
+      emailCodeLoginEnabled: false,
+      passwordLoginEnabled: true,
+      serverTime: null,
+      serverDate: null,
+      loginCeremonyEnabled: ceremonyFallback.login_ceremony_enabled
+    };
   }
   try {
     const gatewayOrigin = await readGatewayOrigin();
@@ -1925,13 +1960,42 @@ async function fetchDesktopAuthLoginFlags(): Promise<{
     const emailCodeLoginEnabled = Boolean(data.email_code_login_enabled);
     const passwordLoginEnabled =
       data.password_login_enabled === undefined ? !emailCodeLoginEnabled : Boolean(data.password_login_enabled);
-    return { emailCodeLoginEnabled, passwordLoginEnabled };
+    const serverTime = typeof data.server_time === "string" ? data.server_time : null;
+    const serverDate = typeof data.server_date === "string" ? data.server_date : null;
+    const ceremony = resolveLoginCeremonyAuthFields({
+      isPackaged: app.isPackaged,
+      serverTime,
+      serverDate
+    });
+    return {
+      emailCodeLoginEnabled,
+      passwordLoginEnabled,
+      serverTime: ceremony.server_time,
+      serverDate: ceremony.server_date,
+      loginCeremonyEnabled: ceremony.login_ceremony_enabled
+    };
   } catch (error) {
     await appendDesktopDebugLog(
       `desktop auth config fetch failed: ${error instanceof Error ? error.message : String(error)}`
     );
-    return { emailCodeLoginEnabled: false, passwordLoginEnabled: true };
+    return {
+      emailCodeLoginEnabled: false,
+      passwordLoginEnabled: true,
+      serverTime: null,
+      serverDate: null,
+      loginCeremonyEnabled: ceremonyFallback.login_ceremony_enabled
+    };
   }
+}
+
+function desktopLoginCeremonyStatusFields(loginFlags: Awaited<ReturnType<typeof fetchDesktopAuthLoginFlags>>) {
+  return {
+    email_code_login_enabled: loginFlags.emailCodeLoginEnabled,
+    password_login_enabled: loginFlags.passwordLoginEnabled,
+    server_time: loginFlags.serverTime,
+    server_date: loginFlags.serverDate,
+    login_ceremony_enabled: loginFlags.loginCeremonyEnabled
+  };
 }
 async function fetchAgreementConfig(): Promise<DesktopAgreementConfig> {
   try {
@@ -2331,8 +2395,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       base_url: gatewayOrigin,
       agreement,
       last_checked_at: checkedAt,
-      email_code_login_enabled: loginFlags.emailCodeLoginEnabled,
-      password_login_enabled: loginFlags.passwordLoginEnabled
+      ...desktopLoginCeremonyStatusFields(loginFlags)
     } as DesktopAuthStatus;
   }
   try {
@@ -2367,6 +2430,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
         await appendAuthAuditLog("session_expired", persisted.user?.email ? maskEmail(persisted.user.email) : "unknown");
         desktopControlPlaneHeartbeat.stop();
         await writeDesktopAuthState(null);
+        const loginFlags = await fetchDesktopAuthLoginFlags();
         return {
           authenticated: false,
           loading: false,
@@ -2374,7 +2438,8 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
           base_url: gatewayOrigin,
           agreement,
           last_checked_at: checkedAt,
-          last_error: extractDesktopAuthErrorMessage(payload, response.status)
+          last_error: extractDesktopAuthErrorMessage(payload, response.status),
+          ...desktopLoginCeremonyStatusFields(loginFlags)
         };
       }
       return {
@@ -6090,6 +6155,50 @@ function isAllowedPaymentHost(url: string) {
 function requireWebUrl(value: unknown) {
   return normalizeBrowserPreviewUrl(value);
 }
+function registerDesktopWindowControlAgentTools() {
+  runtime.unregisterExternalTools("desktop-window");
+  runtime.registerExternalTool({
+    name: "window.list",
+    title: "列出 Windows 桌面窗口",
+    description: "List visible top-level Windows desktop windows that can be targeted by processId.",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    namespace: "desktop-window",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => ({
+    ok: true,
+    exitCode: 0,
+    output: JSON.stringify(await desktopWindowControl.list())
+  }));
+  runtime.registerExternalTool({
+    name: "window.activate",
+    title: "激活 Windows 桌面窗口",
+    description: "Bring a visible Windows desktop window to the foreground. Prefer processId returned by window.list.",
+    kind: "write",
+    risk: "medium",
+    requiresApproval: true,
+    namespace: "desktop-window",
+    inputSchema: {
+      type: "object",
+      properties: {
+        processId: { type: "integer", minimum: 1 },
+        processName: { type: "string", minLength: 1 },
+        windowTitle: { type: "string", minLength: 1 }
+      },
+      anyOf: [
+        { required: ["processId"] },
+        { required: ["processName"] },
+        { required: ["windowTitle"] }
+      ],
+      additionalProperties: false
+    }
+  }, async (input: { processId?: number; processName?: string; windowTitle?: string }) => ({
+    ok: true,
+    exitCode: 0,
+    output: JSON.stringify(await desktopWindowControl.activate(input))
+  }));
+}
 function registerBrowserAgentTools() {
   runtime.unregisterExternalTools("browser");
   runtime.registerExternalTool({
@@ -7991,27 +8100,30 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     : workspace?.threads.find((item) => item.id === automation.threadId);
   if (!workspace || !thread) throw new Error("Automation target workspace/thread was not found.");
   const threadState = await readThreadState(workspace, thread);
-  if (automation.action === "error_remediation") {
+  const automationPrompt = String(automation.prompt || "").trim();
+  if (automation.action === "error_remediation" || automationPrompt) {
     if (!automationModelChatService || !mainWindowRef || mainWindowRef.isDestroyed()) {
-      throw new Error("Error remediation model runtime is not available.");
+      throw new Error("Automation model runtime is not available.");
     }
     const config = await readRootConfig();
-    const request = buildErrorRemediationRequest();
+    const request = automation.action === "error_remediation"
+      ? buildErrorRemediationRequest()
+      : automationPrompt || String(automation.trigger || automation.title);
     await automationModelChatService.chat(mainWindowRef.webContents, {
-      requestId: makeId("automation-error-remediation"),
+      requestId: makeId("automation-run"),
       workspaceId: workspace.id,
       threadId: thread.id,
       provider: config.llm.provider,
       baseUrl: config.llm.baseUrl,
       apiKey: config.llm.apiKey,
       wireApi: config.llm.wireApi,
-      model: config.llm.model,
+      model: automation.model || config.llm.model,
       reviewModel: config.llm.reviewModel,
-      reasoningEffort: config.llm.reasoningEffort,
+      reasoningEffort: automation.reasoning || config.llm.reasoningEffort,
       disableResponseStorage: config.llm.disableResponseStorage,
       permissionMode: "agent",
       systemPrompt: config.llm.systemPrompt,
-      selectedSkillNames: ["error-auto-remediation"],
+      selectedSkillNames: automation.action === "error_remediation" ? ["error-auto-remediation"] : [],
       composerModes: ["goal"],
       messages: [
         ...(threadState.messages ?? []).map((message) => ({
@@ -8847,6 +8959,7 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
+  registerDesktopWindowControlIpc(desktopWindowControl);
   const resolveBrainWorkspaceRoot = async (workspaceId: string) => {
     const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
     if (!workspace) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_AUTHORIZED");
@@ -10147,8 +10260,10 @@ function registerIpc() {
       // the official-evidence tools here as well as on the long-lived desktop
       // runtime, otherwise government-writing turns only see goal tools.
       registerOfficialGovernmentWebTools(targetRuntime, officialGovernmentWebService);
-      // Search is routed by Spring and must not be present in every ordinary
-      // model-chat runtime (otherwise a greeting can trigger a search).
+      // Spring-backed Search→Fetch tools. Greeting/short-chat paths must not call them
+      // (enforced by Auto companion SOP); researcher/Lead use news_search_free → web.fetch_page.
+      registerDesktopWebSearchTools(targetRuntime, desktopWebSearchClient);
+      // Search is routed by Spring; keep companion turns from inventing freshness without tools.
       await applyApplicationSkillPolicy(targetRuntime);
     },
     readPolicyRules,
@@ -10577,9 +10692,11 @@ app.whenReady().then(async () => {
     registerDesktopArtifactRenderer(runtime, initialWorkspace?.path ?? workspacePath);
     await applyApplicationSkillPolicy(runtime);
     runtime.setPolicyRules(await readPolicyRules());
+    registerDesktopWindowControlAgentTools();
     registerBrowserAgentTools();
     registerWorkspaceMediaAgentTools();
     registerOfficialGovernmentWebTools(runtime, officialGovernmentWebService);
+    registerDesktopWebSearchTools(runtime, desktopWebSearchClient);
     await activateConfiguredPlugins();
     await reconcileLocalRepositoryPlugins();
     await syncMcpToolsToRuntime();

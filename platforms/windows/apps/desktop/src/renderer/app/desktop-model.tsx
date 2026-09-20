@@ -85,6 +85,7 @@ import type {
   WorkspaceThreadRecord,
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
+import type { DesktopWindowControlApi } from "../../shared/desktop-window-control-contract.js";
 
 export interface BootstrapPayload {
   appName: string;
@@ -227,6 +228,7 @@ export interface ManagedFeatureDraft {
   threadId: string;
   action: string;
   intervalMinutes: string;
+  dailyTime: string;
   runtime: string;
   targetType: string;
   schedule: string;
@@ -276,6 +278,7 @@ export type SettingsNavIconName =
 declare global {
   interface Window {
     newbrain?: {
+      windowControl: DesktopWindowControlApi;
       listBrainWorkspaces: () => Promise<BrainWorkspaceDto[]>;
       listBrainProjects: (input?: BrainProjectListInput) => Promise<BrainProjectDto[]>;
       createBrainProject: (input: BrainProjectCreateInput) => Promise<BrainProjectDto>;
@@ -870,7 +873,9 @@ export const featureItems: FeatureItem[] = [
   { id: "extensions", label: "扩展", icon: "◇", description: "管理 GitHub、Jira、Slack 等外部服务集成。" },
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
-  { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" }
+  { id: "automation", label: "自动化", icon: "◔", description: "用自然语言创建定时任务，对齐 Codex 自动任务。" },
+  { id: "mobile", label: "NewBrain 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
+  { id: "mcp", label: "软件联动", icon: "↔", description: "开箱控制任意 Windows 窗口；MCP 仅作高级扩展。" }
 ];
 
 export const settingsFeatureItem: FeatureItem = {
@@ -1127,6 +1132,7 @@ export const initialDraft: ManagedFeatureDraft = {
   threadId: "",
   action: "workspace_scan",
   intervalMinutes: "30",
+  dailyTime: "",
   runtime: "worktree",
   targetType: "project",
   schedule: "daily",

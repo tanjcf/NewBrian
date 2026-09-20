@@ -1224,8 +1224,7 @@ export function App() {
         return;
       }
       if (command === "mcp") {
-        setActiveSettingsSection("mcp");
-        setActiveFeature("settings");
+        setActiveFeature("mcp");
       }
     };
     window.addEventListener("newbrain:app-command", handleAppCommand);

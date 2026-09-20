@@ -34,6 +34,7 @@ import { QuantSimulationService } from "./quant-simulation-service.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
+import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
@@ -91,6 +92,14 @@ import { scheduleUserKnowledgeSync } from "./user-knowledge-sync.js";
 import { selectModelRequestAuth } from "./model-request-auth-policy.js";
 import { NovelTtsService } from "./novel-tts-service.js";
 import { registerSystemIpcHandlers } from "./system-ipc.js";
+import {
+  createAutomationSpec,
+  markAutomationFailed,
+  markAutomationRunning,
+  markAutomationSucceeded,
+  selectDueAutomations,
+  updateAutomationSpec
+} from "./automation-schedule-policy.js";
 
 const appDirectory = dirname(fileURLToPath(import.meta.url));
 const documentWorkerProcess = new DocumentWorkerProcess({
@@ -205,6 +214,14 @@ const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({ accessToken, device: collectDesktopDeviceFingerprint() })
+});
+const desktopWebSearchClient = new DesktopWebSearchClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
 });
 const opsMarketDataUrl = resolveBrainMarketDataUrl();
 const quantSimulationService = new QuantSimulationService(
@@ -2074,6 +2091,13 @@ interface FeatureItemInput {
   threadId?: string;
   action?: string;
   intervalMinutes?: string;
+  dailyTime?: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
 }
 
 interface ThreadStateFile {
@@ -4869,34 +4893,15 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
     });
   }
 
-  const parsedInterval = Number.parseInt(input.intervalMinutes ?? "", 10);
-  const nextStatus =
-    input.status === "scheduled" ||
-    input.status === "running" ||
-    input.status === "paused"
-      ? input.status
-      : "idle";
-  const nextAutomation: AutomationSpec = {
-    id: input.id?.trim() || makeId("automation"),
-    title: input.title?.trim() || "未命名自动化",
-    status: nextStatus,
-    trigger: input.trigger?.trim() || "待配置触发说明",
-    workspaceId: input.workspaceId?.trim() || activeWorkspaceId || undefined,
-    threadId: input.threadId?.trim() || activeThreadId || undefined,
-    action:
-      input.action === "git_status" || input.action === "workspace_scan"
-        ? input.action
-        : "workspace_scan",
-    intervalMinutes: parsedInterval > 0 ? parsedInterval : undefined,
-    nextRunAt:
-      nextStatus === "scheduled" || nextStatus === "running"
-        ? computeNextRunAt(parsedInterval)
-        : undefined
-  };
+  const nextAutomation = createAutomationSpec(input, {
+    makeId: () => makeId("automation"),
+    activeWorkspaceId,
+    activeThreadId
+  });
 
   return writeFeatureConfig({
     ...config,
-    automations: [nextAutomation, ...config.automations]
+    automations: [nextAutomation, ...config.automations.filter((item) => item.id !== nextAutomation.id)]
   });
 }
 
@@ -4949,34 +4954,7 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
       if (item.id !== id) {
         return item;
       }
-
-      const parsedInterval = Number.parseInt(input.intervalMinutes ?? "", 10);
-      const nextInterval = parsedInterval > 0 ? parsedInterval : item.intervalMinutes;
-      const nextStatus =
-        input.status === "scheduled" ||
-        input.status === "running" ||
-        input.status === "paused" ||
-        input.status === "idle"
-          ? input.status
-          : item.status;
-
-      return {
-        ...item,
-        title: input.title?.trim() || item.title,
-        trigger: input.trigger?.trim() || item.trigger,
-        status: nextStatus,
-        workspaceId: input.workspaceId?.trim() || item.workspaceId,
-        threadId: input.threadId?.trim() || item.threadId,
-        action:
-          input.action === "git_status" || input.action === "workspace_scan"
-            ? input.action
-            : item.action,
-        intervalMinutes: nextInterval,
-        nextRunAt:
-          nextStatus === "scheduled" || nextStatus === "running"
-            ? computeNextRunAt(nextInterval)
-            : undefined
-      };
+      return updateAutomationSpec(item, input);
     })
   });
 }
@@ -8579,15 +8557,7 @@ async function runScheduledAutomation(automation: AutomationSpec) {
   const currentConfig = await readFeatureConfig();
   await writeFeatureConfig({
     ...currentConfig,
-    automations: currentConfig.automations.map((item) =>
-      item.id === automation.id
-        ? {
-            ...item,
-            status: "running",
-            lastRunAt: startedAt
-          }
-        : item
-    )
+    automations: markAutomationRunning(currentConfig.automations, automation.id, startedAt)
   });
 
   const catalog = await readWorkspaceCatalog();
@@ -8606,6 +8576,7 @@ async function runScheduledAutomation(automation: AutomationSpec) {
   automationRuntime.setPolicyRules(await readPolicyRules());
   automationRuntime.setThreadState(threadState);
   const eventOffset = automationRuntime.sessionMachine.events.length;
+  const automationPrompt = String(automation.prompt || "").trim();
   const snapshot = automation.action === "git_status"
     ? await automationRuntime.queueGitStatus({ permissionMode: "agent" })
     : await automationRuntime.queueWorkspaceScan({ permissionMode: "agent" });
@@ -8624,30 +8595,21 @@ async function runScheduledAutomation(automation: AutomationSpec) {
       recordType: event.type,
       threadId: thread.id,
       timestamp: event.timestamp,
-      payload: { automationId: automation.id, ...event.payload }
+      payload: { automationId: automation.id, prompt: automationPrompt || undefined, ...event.payload }
     }))
   );
   await updateThreadMetadata({
     workspaceId: workspace.id,
     threadId: thread.id,
-    lastEventSummary: `自动化执行：${automation.title}`
+    lastEventSummary: automationPrompt
+      ? `自动化执行：${automation.title}（${automationPrompt.slice(0, 80)}）`
+      : `自动化执行：${automation.title}`
   });
 
   const latestConfig = await readFeatureConfig();
   await writeFeatureConfig({
     ...latestConfig,
-    automations: latestConfig.automations.map((item) =>
-      item.id === automation.id
-        ? {
-            ...item,
-            status: "scheduled",
-            lastRunAt: startedAt,
-            nextRunAt: computeNextRunAt(item.intervalMinutes),
-            failureCount: 0,
-            lastError: undefined
-          }
-        : item
-    )
+    automations: markAutomationSucceeded(latestConfig.automations, automation.id, startedAt)
   });
 }
 
@@ -8656,15 +8618,7 @@ async function tickAutomations() {
   automationTickRunning = true;
   try {
   const config = await readFeatureConfig();
-  const dueItems = config.automations.filter((item) => {
-    if (item.status !== "scheduled" && item.status !== "running") {
-      return false;
-    }
-    if (!item.nextRunAt || !item.intervalMinutes || item.intervalMinutes <= 0) {
-      return false;
-    }
-    return new Date(item.nextRunAt).getTime() <= Date.now();
-  });
+  const dueItems = selectDueAutomations(config.automations);
 
   for (const automation of dueItems) {
     try {
@@ -8673,23 +8627,7 @@ async function tickAutomations() {
       const latestConfig = await readFeatureConfig();
       await writeFeatureConfig({
         ...latestConfig,
-        automations: latestConfig.automations.map((item) =>
-          item.id === automation.id
-            ? (() => {
-                const failureCount = (item.failureCount ?? 0) + 1;
-                const paused = failureCount >= 3;
-                return {
-                  ...item,
-                  status: paused ? "paused" as const : "scheduled" as const,
-                  failureCount,
-                  lastError: error instanceof Error ? error.message : String(error),
-                  nextRunAt: paused
-                    ? undefined
-                    : new Date(Date.now() + Math.min(60, 5 * 2 ** (failureCount - 1)) * 60_000).toISOString()
-                };
-              })()
-            : item
-        )
+        automations: markAutomationFailed(latestConfig.automations, automation.id, error)
       });
       safeConsoleError(`Automation failed: ${automation.title}`, error);
     }
@@ -10522,6 +10460,7 @@ function registerIpc() {
       userSkillRoot,
       readFeatureSkills: async () => (await readFeatureConfig()).skills,
       officialGovernmentWebService,
+      desktopWebSearchClient,
       readWorkspaceCatalog,
       getActiveWorkspaceId: () => activeWorkspaceId,
       publishWorkspaceFilePreview: (event) => publishWorkspaceFilePreviewFromMain(mainWindowRef, event)

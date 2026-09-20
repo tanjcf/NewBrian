@@ -66,6 +66,8 @@ export function LoginScreen({
       ? authStatus.agreement?.policy_content_html || "<p>暂无内容</p>"
       : authStatus.agreement?.tos_content_html || "<p>暂无内容</p>";
   const alipayEnabled = typeof onAlipayQrLogin === "function";
+  // Main process sets this from spring-app clock: packaged = Oct 1 only; local = always on.
+  const loginCeremonyEnabled = authStatus.login_ceremony_enabled === true;
 
   useEffect(() => {
     if (!isSubmittingLogin && panelView === "alipay") {
@@ -376,38 +378,40 @@ export function LoginScreen({
         ) : null}
       </section>
 
-      <button
-        type="button"
-        className="login-easter-hotspot"
-        aria-label="彩蛋入口"
-        title="移入展开"
-        onMouseEnter={(event) => openLoginCeremonyFromHotspot(event.currentTarget)}
-      >
-        <svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect width="30" height="20" fill="#de2910" />
-          <g fill="#ffde00">
-            <polygon points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
-            <polygon
-              transform="translate(8.2,1.6) scale(0.32) rotate(25)"
-              points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
-            />
-            <polygon
-              transform="translate(10.2,3.4) scale(0.32) rotate(-15)"
-              points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
-            />
-            <polygon
-              transform="translate(10.2,5.8) scale(0.32) rotate(-35)"
-              points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
-            />
-            <polygon
-              transform="translate(8.2,7.4) scale(0.32) rotate(-50)"
-              points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
-            />
-          </g>
-        </svg>
-      </button>
+      {loginCeremonyEnabled ? (
+        <button
+          type="button"
+          className="login-easter-hotspot"
+          aria-label="彩蛋入口"
+          title="移入展开"
+          onMouseEnter={(event) => openLoginCeremonyFromHotspot(event.currentTarget)}
+        >
+          <svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="30" height="20" fill="#de2910" />
+            <g fill="#ffde00">
+              <polygon points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3" />
+              <polygon
+                transform="translate(8.2,1.6) scale(0.32) rotate(25)"
+                points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
+              />
+              <polygon
+                transform="translate(10.2,3.4) scale(0.32) rotate(-15)"
+                points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
+              />
+              <polygon
+                transform="translate(10.2,5.8) scale(0.32) rotate(-35)"
+                points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
+              />
+              <polygon
+                transform="translate(8.2,7.4) scale(0.32) rotate(-50)"
+                points="5,2.2 5.7,4.3 8,4.3 6.15,5.6 6.85,7.8 5,6.5 3.15,7.8 3.85,5.6 2,4.3 4.3,4.3"
+              />
+            </g>
+          </svg>
+        </button>
+      ) : null}
 
-      <LoginCeremonyOverlay onContinue={() => undefined} />
+      <LoginCeremonyOverlay enabled={loginCeremonyEnabled} onContinue={() => undefined} />
     </main>
   );
 }

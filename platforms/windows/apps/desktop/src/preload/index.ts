@@ -166,8 +166,26 @@ import type {
   UsageExceptionFeedbackSubmissionResult
 } from "@codex-forge/protocol";
 import { brainWorkspaceIpcChannels, desktopIpcChannels } from "@codex-forge/protocol";
+import {
+  desktopWindowControlIpcChannels,
+  type DesktopWindowClickInput,
+  type DesktopWindowInfo,
+  type DesktopWindowTarget,
+  type DesktopWindowTypeTextInput
+} from "../shared/desktop-window-control-contract.js";
 
 contextBridge.exposeInMainWorld("newbrain", {
+  windowControl: {
+    list: (): Promise<DesktopWindowInfo[]> => ipcRenderer.invoke(desktopWindowControlIpcChannels.list),
+    activate: (input: DesktopWindowTarget): Promise<{ activated: true; targetWindow: number }> =>
+      ipcRenderer.invoke(desktopWindowControlIpcChannels.activate, input),
+    click: (input: DesktopWindowClickInput): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke(desktopWindowControlIpcChannels.click, input),
+    typeText: (input: DesktopWindowTypeTextInput): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke(desktopWindowControlIpcChannels.typeText, input),
+    screenshot: (input: DesktopWindowTarget): Promise<{ outputPath: string }> =>
+      ipcRenderer.invoke(desktopWindowControlIpcChannels.screenshot, input)
+  },
   listBrainWorkspaces: (): Promise<BrainWorkspaceDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceList),
   listBrainProjects: (input: BrainProjectListInput = {}): Promise<BrainProjectDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectList, input),
   createBrainProject: (input: BrainProjectCreateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectCreate, input),

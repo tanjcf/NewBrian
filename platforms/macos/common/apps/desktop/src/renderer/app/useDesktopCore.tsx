@@ -474,6 +474,7 @@ function loadFeatureDraft(kind: ManagedFeatureKind, item: SkillSpec | PluginSpec
     threadId: automation.threadId ?? selectedThread?.id ?? "",
     action: automation.action ?? "workspace_scan",
     intervalMinutes: String(automation.intervalMinutes ?? 30),
+    dailyTime: automation.dailyTime ?? "",
     runtime: automation.runtime ?? "worktree",
     targetType: automation.targetType ?? (automation.threadId ? "thread" : "project"),
     schedule: automation.schedule ?? "daily",
@@ -1130,29 +1131,40 @@ async function saveFeature(kind: ManagedFeatureKind) {
   }
 
   const draft = kind === "skills" ? skillDraft : kind === "plugins" ? pluginDraft : automationDraft;
+  const schedule = String(draft.schedule || "").trim();
+  let intervalMinutes = String(draft.intervalMinutes || "").trim();
+  const dailyTime = String((draft as { dailyTime?: string }).dailyTime || "").trim();
+  if (kind === "automations") {
+    if (!intervalMinutes || intervalMinutes === "30") {
+      if (schedule === "hourly") intervalMinutes = "60";
+      else if (schedule === "daily") intervalMinutes = "1440";
+      else if (schedule === "weekly") intervalMinutes = String(7 * 1440);
+    }
+  }
   const item: Record<string, string> = {
     name: draft.name,
     summary: draft.summary,
-    status: draft.status,
+    status: kind === "automations" ? (draft.status || "scheduled") : draft.status,
     version: draft.version ?? "",
     source: draft.source ?? "",
     manifestPath: draft.manifestPath ?? "",
     path: draft.path ?? "",
     icon: draft.icon ?? "",
     capabilities: Array.isArray(draft.capabilities) ? draft.capabilities.join(",") : "",
-    trigger: draft.trigger,
+    trigger: draft.trigger || draft.prompt,
     title: draft.title,
     workspaceId: draft.workspaceId,
     threadId: draft.threadId,
-    action: draft.action,
-    intervalMinutes: draft.intervalMinutes,
+    action: draft.action === "thread_follow_up" ? "workspace_scan" : draft.action,
+    intervalMinutes,
+    dailyTime,
     runtime: draft.runtime,
     targetType: draft.targetType,
-    schedule: draft.schedule,
+    schedule,
     model: draft.model,
     reasoning: draft.reasoning,
     template: draft.template,
-    prompt: draft.prompt,
+    prompt: draft.prompt || draft.trigger,
     sandboxRule: draft.sandboxRule
   };
 

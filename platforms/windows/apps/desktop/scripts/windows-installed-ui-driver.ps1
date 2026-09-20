@@ -243,8 +243,37 @@ function Type-UnicodeText([string]$Value) {
   }
 }
 
+if ($Action.ToLowerInvariant() -eq "list") {
+  $windows = foreach ($process in Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle }) {
+    try {
+      $element = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]$process.MainWindowHandle)
+      $bounds = $element.Current.BoundingRectangle
+      [ordered]@{
+        processId = $process.Id
+        processName = $process.ProcessName
+        title = $process.MainWindowTitle
+        handle = $process.MainWindowHandle.ToInt64()
+        bounds = @{
+          left = $bounds.Left
+          top = $bounds.Top
+          width = $bounds.Width
+          height = $bounds.Height
+        }
+      }
+    } catch {
+      # A protected process must not prevent other visible windows from being listed.
+    }
+  }
+  @($windows) | ConvertTo-Json -Depth 4 -Compress
+  exit 0
+}
+
 $window = Find-Window
 switch ($Action.ToLowerInvariant()) {
+  "activate" {
+    Activate-Window $window
+    @{ activated = $true; targetWindow = $window.Current.NativeWindowHandle } | ConvertTo-Json -Compress
+  }
   "maximize" {
     $handle = [IntPtr]$window.Current.NativeWindowHandle
     [void][NativeInput]::ShowWindow($handle, 3)

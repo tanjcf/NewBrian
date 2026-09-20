@@ -21,6 +21,17 @@ export interface DesktopMarketNewsItem extends DesktopWebSearchItem {
   sourceType?: string;
 }
 
+export interface DesktopFetchedPage {
+  url: string;
+  title: string;
+  text: string;
+  status: string;
+  statusCode: number;
+  fetchedAt?: string;
+  truncated?: boolean;
+  charCount?: number;
+}
+
 export interface DesktopMarketNewsResult {
   query: string;
   searchedAt: string;
@@ -32,6 +43,8 @@ export interface DesktopMarketNewsResult {
   paidSucceeded: boolean;
   sourceTypesUsed: string[];
   items: DesktopMarketNewsItem[];
+  fetches: DesktopFetchedPage[];
+  fetchAttempted: boolean;
 }
 
 export interface DesktopWebSearchClientDependencies {
@@ -204,6 +217,8 @@ export class DesktopWebSearchClient {
         paidSucceeded?: boolean;
         sourceTypesUsed?: unknown;
         items?: Array<Record<string, unknown>>;
+        fetches?: Array<Record<string, unknown>>;
+        fetchAttempted?: boolean;
       };
       message?: string;
       code?: string;
@@ -229,6 +244,23 @@ export class DesktopWebSearchClient {
       })).filter((item) => item.url)
       : [];
 
+    const fetches: DesktopFetchedPage[] = Array.isArray(payload.data.fetches)
+      ? payload.data.fetches.map((item) => ({
+        url: String(item.url || ""),
+        title: String(item.title || ""),
+        text: String(item.text || ""),
+        status: String(item.status || "empty"),
+        statusCode: typeof item.statusCode === "number" ? item.statusCode : Number(item.status_code || 0) || 0,
+        fetchedAt: item.fetched_at == null && item.fetchedAt == null ? undefined : String(item.fetched_at || item.fetchedAt),
+        truncated: Boolean(item.truncated),
+        charCount: typeof item.char_count === "number"
+          ? item.char_count
+          : typeof item.charCount === "number"
+            ? item.charCount
+            : undefined
+      })).filter((item) => item.url)
+      : [];
+
     return {
       query: String(payload.data.query || query),
       searchedAt: String(payload.data.searchedAt || new Date().toISOString()),
@@ -241,7 +273,76 @@ export class DesktopWebSearchClient {
       sourceTypesUsed: Array.isArray(payload.data.sourceTypesUsed)
         ? payload.data.sourceTypesUsed.map((value) => String(value))
         : [],
-      items
+      items,
+      fetches,
+      fetchAttempted: Boolean(payload.data.fetchAttempted) || fetches.length > 0
+    };
+  }
+
+  /** Fetch a single page body via Spring web-fetch (no paid search quota). */
+  async fetchPage(input: {
+    url: string;
+    maxChars?: number;
+  }): Promise<DesktopFetchedPage> {
+    const url = String(input.url || "").trim();
+    if (!url || url.length > 2000) {
+      throw new DesktopWebSearchError("WEB_FETCH_URL_INVALID", "URL must contain 1 to 2000 characters.");
+    }
+    if (!/^https?:\/\//iu.test(url)) {
+      throw new DesktopWebSearchError("WEB_FETCH_URL_INVALID", "Only http(s) URLs are allowed.");
+    }
+
+    const accessToken = (await this.dependencies.readAccessToken()).trim();
+    if (!accessToken) {
+      throw new DesktopWebSearchError("WEB_SEARCH_AUTH_REQUIRED", "Desktop session is required before web fetch.");
+    }
+
+    const gatewayOrigin = (await this.dependencies.readGatewayOrigin()).replace(/\/+$/u, "");
+    const body: Record<string, unknown> = { url };
+    if (typeof input.maxChars === "number" && Number.isInteger(input.maxChars)) {
+      body.maxChars = input.maxChars;
+    }
+
+    const response = await this.fetchImpl(`${gatewayOrigin}/api/desktop/v1/web-fetch`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        ...this.dependencies.createHeaders({ accessToken })
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new DesktopWebSearchError(
+        `WEB_FETCH_HTTP_${response.status}`,
+        `Web fetch failed with HTTP ${response.status}.`
+      );
+    }
+
+    const payload = await response.json() as {
+      ok?: boolean;
+      data?: Record<string, unknown>;
+      message?: string;
+      code?: string;
+    };
+
+    if (!payload?.ok || !payload.data) {
+      throw new DesktopWebSearchError(
+        String(payload?.code || "WEB_FETCH_UNAVAILABLE"),
+        String(payload?.message || "Web fetch is unavailable.")
+      );
+    }
+
+    const data = payload.data;
+    return {
+      url: String(data.url || data.final_url || url),
+      title: String(data.title || ""),
+      text: String(data.text || ""),
+      status: String(data.status || "empty"),
+      statusCode: typeof data.status_code === "number" ? data.status_code : Number(data.statusCode || 0) || 0,
+      fetchedAt: data.fetched_at == null ? undefined : String(data.fetched_at),
+      truncated: Boolean(data.truncated),
+      charCount: typeof data.char_count === "number" ? data.char_count : undefined
     };
   }
 }

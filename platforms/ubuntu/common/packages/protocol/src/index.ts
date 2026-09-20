@@ -240,6 +240,12 @@ export interface AutomationSpec {
   title: string;
   status: "idle" | "scheduled" | "running" | "paused";
   trigger: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
   workspaceId?: string;
   threadId?: string;
   action?: "workspace_scan" | "git_status" | "error_remediation";
@@ -1082,6 +1088,11 @@ export interface DesktopAuthStatus {
   agreement?: DesktopAgreementConfig;
   last_error?: string;
   last_checked_at?: string;
+  email_code_login_enabled?: boolean;
+  password_login_enabled?: boolean;
+  server_time?: string | null;
+  server_date?: string | null;
+  login_ceremony_enabled?: boolean;
 }
 
 export interface DesktopAuthLoginInput {
@@ -1507,6 +1518,12 @@ export interface FeatureItemInput {
   action?: string;
   intervalMinutes?: string;
   dailyTime?: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
 }
 
 export interface FeatureConfigPayload {

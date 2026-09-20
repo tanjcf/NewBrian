@@ -379,6 +379,7 @@ export interface ManagedFeatureDraft {
   threadId: string;
   action: string;
   intervalMinutes: string;
+  dailyTime: string;
   runtime: string;
   targetType: string;
   schedule: string;
@@ -761,7 +762,7 @@ export const featureItems: FeatureItem[] = [
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
   { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" },
   { id: "mobile", label: "NewBrain 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
-  { id: "mcp", label: "MCP 集成", icon: "↔", description: "管理 MCP 服务器、连接状态和工具能力。" }
+  { id: "mcp", label: "软件联动", icon: "↔", description: "开箱控制本机窗口；MCP 仅作高级扩展。" }
 ];
 
 export const settingsFeatureItem: FeatureItem = {
@@ -980,6 +981,7 @@ export const initialDraft: ManagedFeatureDraft = {
   threadId: "",
   action: "workspace_scan",
   intervalMinutes: "30",
+  dailyTime: "",
   runtime: "worktree",
   targetType: "project",
   schedule: "daily",

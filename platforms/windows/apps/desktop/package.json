@@ -157,6 +157,14 @@
         "to": "document-worker.js"
       },
       {
+        "from": "scripts/windows-installed-ui-driver.ps1",
+        "to": "windows-ui-driver/windows-installed-ui-driver.ps1"
+      },
+      {
+        "from": "scripts/native-ui-scenario.mjs",
+        "to": "windows-ui-driver/native-ui-scenario.mjs"
+      },
+      {
         "from": "build/rust-core/brain-core.exe",
         "to": "brain-core/brain-core.exe"
       }

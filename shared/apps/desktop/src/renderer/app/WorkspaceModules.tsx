@@ -5,6 +5,7 @@ import type { PreviewPlacement } from "./desktop-model";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { NovelTtsButton } from "./NovelTtsButton";
 import { AssistantThinkingPanel } from "./AssistantThinkingPanel";
+import { automationIntentExamples, parseAutomationIntent } from "./parseAutomationIntent";
 import {
   artifactPathsReferToSameFile,
   buildFilePreviewDiagnosticContext,
@@ -1480,6 +1481,14 @@ export function WorkspaceModules(ctx: any) {
   const [clawhubBusy, setClawhubBusy] = useState(false);
   const [clawhubInstallingRef, setClawhubInstallingRef] = useState("");
   const [automationView, setAutomationView] = useState<"list" | "detail" | "new">("list");
+  const [automationIntent, setAutomationIntent] = useState("");
+  const [automationCreateMode, setAutomationCreateMode] = useState<"intent" | "form">("intent");
+  const [desktopWindows, setDesktopWindows] = useState<any[]>([]);
+  const [selectedDesktopWindowKey, setSelectedDesktopWindowKey] = useState("");
+  const [windowControlBusy, setWindowControlBusy] = useState(false);
+  const [windowControlMessage, setWindowControlMessage] = useState("");
+  const [mcpAdvancedOpen, setMcpAdvancedOpen] = useState(false);
+  const windowControlSupported = Boolean(api?.windowControl?.list);
   useEffect(() => {
     if (activeFeature === "skills") {
       setSkillsTab("recommended");
@@ -8805,113 +8814,190 @@ function renderMcpModule() {
     const selectedTools = selectedServer
       ? mcpDiscoveredTools.filter((tool: any) => tool.serverId === selectedServer.id)
       : [];
+    const selectedWindow = desktopWindows.find((windowItem: any) => {
+      const key = `${windowItem.processId}:${windowItem.title}`;
+      return key === selectedDesktopWindowKey;
+    }) ?? desktopWindows[0];
+
+    async function refreshDesktopWindows() {
+      if (!api?.windowControl?.list) {
+        setWindowControlMessage("当前系统不支持本机窗口开箱操控（仅 Windows）。");
+        return;
+      }
+      setWindowControlBusy(true);
+      try {
+        const windows = await api.windowControl.list();
+        const list = Array.isArray(windows) ? windows : [];
+        setDesktopWindows(list);
+        if (list[0]) setSelectedDesktopWindowKey(`${list[0].processId}:${list[0].title}`);
+        setWindowControlMessage(list.length ? `已发现 ${list.length} 个可操作窗口。` : "未发现可操作窗口。");
+      } catch (error) {
+        setWindowControlMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        setWindowControlBusy(false);
+      }
+    }
+
+    async function activateSelectedWindow() {
+      if (!selectedWindow || !api?.windowControl?.activate) return;
+      setWindowControlBusy(true);
+      try {
+        await api.windowControl.activate({
+          processId: selectedWindow.processId,
+          processName: selectedWindow.processName,
+          windowTitle: selectedWindow.title
+        });
+        setWindowControlMessage(`已聚焦：${selectedWindow.title || selectedWindow.processName}`);
+      } catch (error) {
+        setWindowControlMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        setWindowControlBusy(false);
+      }
+    }
 
     return (
-      <section className="mcp-page prototype">
+      <section className="mcp-page prototype software-link-page">
         <header className="mcp-page-toolbar">
           <div className="mcp-page-title">
-            <h1>MCP 服务器</h1>
-            <p>管理服务器地址、连接状态和可供对话调用的工具。</p>
-          </div>
-          <div className="mcp-toolbar-actions">
-            <label className="mcp-search">
-              <span aria-hidden="true">⌕</span>
-              <input value={mcpSearchQuery} onChange={(event) => setMcpSearchQuery(event.target.value)} placeholder="搜索 MCP 服务器" />
-            </label>
-            <button type="button" onClick={() => resetMcpDraft()}>添加服务器</button>
+            <h1>软件联动</h1>
+            <p>开箱控制任意 Windows 窗口；无需先配置 MCP。MCP 仅作为高级扩展。</p>
           </div>
         </header>
 
-        <div className="mcp-page-content prototype">
-          <section className="mcp-list-pane">
-            <div className="mcp-pane-head">
+        <div className="software-link-main">
+          <section className="software-link-card">
+            <div className="software-link-card-head">
               <div>
-                <h2>服务器列表</h2>
-                <span>{visibleServers.length} / {servers.length} 个服务器</span>
+                <h2>本机窗口</h2>
+                <span>{windowControlSupported ? "列表 / 聚焦 / 输入 / 截屏" : "当前平台占位"}</span>
               </div>
-              <button type="button" onClick={() => resetMcpDraft()}>新建</button>
-            </div>
-            <div className="mcp-table" role="table" aria-label="MCP 服务器列表">
-              <div className="mcp-table-row head" role="row">
-                <span>名称</span>
-                <span>地址</span>
-                <span>状态</span>
-                <span>工具</span>
-              </div>
-              {visibleServers.map((server: any, index: number) => {
-                const health = mcpHealth[server.id];
-                const tools = mcpDiscoveredTools.filter((tool: any) => tool.serverId === server.id);
-                const active = (editingMcpId && editingMcpId === server.id) || (!editingMcpId && index === 0);
-                const endpoint = server.transport === "sse" ? server.url : server.command || "local";
-                return (
-                  <button key={server.id} type="button" role="row" className={`mcp-table-row${active ? " active" : ""}`} onClick={() => loadMcpDraft(server)}>
-                    <span><strong>{server.name}</strong><em>{server.transport}</em></span>
-                    <span>{endpoint}</span>
-                    <span><i className={`mcp-status ${health?.ok ? "ok" : server.enabled ? "pending" : "disabled"}`}>{health?.ok ? "OK" : server.enabled ? "待检测" : "Disabled"}</i></span>
-                    <span>{tools.length || mcpInspection[server.id]?.tools?.length || "?"}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="mcp-detail-pane">
-            <div className="mcp-pane-head">
-              <div>
-                <h2>服务器详情</h2>
-                <span>{draft?.name || "添加一个 MCP 服务器"}</span>
-              </div>
-              <button type="button" disabled={!selectedServer || testingMcpId === selectedServer.id} onClick={() => selectedServer && void handleTestMcpServer(selectedServer)}>
-                {selectedServer && testingMcpId === selectedServer.id ? "测试中" : "测试连接"}
+              <button type="button" disabled={!windowControlSupported || windowControlBusy} onClick={() => void refreshDesktopWindows()}>
+                {windowControlBusy ? "刷新中…" : "刷新窗口列表"}
               </button>
             </div>
-            <div className="mcp-detail-form">
-              <div className="mcp-detail-grid">
-                <label>
-                  <span>名称</span>
-                  <input value={draft?.name ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="node-repl" />
-                </label>
-                <label>
-                  <span>传输方式</span>
-                  <select value={draft?.transport ?? "stdio"} onChange={(event) => setMcpDraft((current: any) => ({ ...current, transport: event.target.value }))}>
-                    <option value="stdio">stdio</option>
-                    <option value="sse">sse</option>
-                  </select>
-                </label>
-              </div>
-              {(draft?.transport ?? "stdio") === "stdio" ? (
-                <div className="mcp-detail-grid">
-                  <label><span>启动命令</span><input value={draft?.command ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, command: event.target.value }))} placeholder="node" /></label>
-                  <label><span>参数</span><input value={draft?.args ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, args: event.target.value }))} placeholder="server.mjs" /></label>
+            {!windowControlSupported ? (
+              <p className="software-link-empty">macOS / Ubuntu 暂不提供本机窗口开箱操控；请在 Windows 桌面版使用。</p>
+            ) : (
+              <>
+                <div className="software-window-list" role="list">
+                  {desktopWindows.length === 0 ? (
+                    <p className="software-link-empty">点击「刷新窗口列表」发现当前桌面上的应用窗口。</p>
+                  ) : desktopWindows.map((windowItem: any) => {
+                    const key = `${windowItem.processId}:${windowItem.title}`;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        role="listitem"
+                        className={`software-window-item${key === selectedDesktopWindowKey ? " active" : ""}`}
+                        onClick={() => setSelectedDesktopWindowKey(key)}
+                      >
+                        <strong>{windowItem.title || windowItem.processName || "未命名窗口"}</strong>
+                        <em>{windowItem.processName} · PID {windowItem.processId}</em>
+                      </button>
+                    );
+                  })}
                 </div>
-              ) : (
-                <label><span>服务地址</span><input value={draft?.url ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, url: event.target.value }))} placeholder="http://127.0.0.1:9000" /></label>
-              )}
-              <label><span>环境变量</span><textarea value={draft?.env ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, env: event.target.value }))} rows={4} placeholder="KEY=value" /></label>
-
-              <div className="mcp-state-strip">
-                <span className={`mcp-status ${selectedHealth?.ok ? "ok" : "pending"}`}>{selectedHealth?.ok ? "Connected" : "未检测"}</span>
-                <strong>{selectedHealth?.detail || "测试连接后显示服务器状态"}</strong>
-              </div>
-
-              <div className="mcp-capabilities">
-                <span>能力与工具</span>
-                <div>
-                  {(selectedTools.length > 0 ? selectedTools : selectedInspection?.tools ?? []).map((tool: any) => (
-                    <button key={tool.id ?? tool.name} type="button" onClick={() => tool.id && handleInsertMcpTool(tool)}>{tool.name}</button>
-                  ))}
-                  {selectedTools.length === 0 && !(selectedInspection?.tools?.length) ? <em>读取能力后显示工具列表</em> : null}
+                <div className="software-link-actions">
+                  <button type="button" className="primary" disabled={!selectedWindow || windowControlBusy} onClick={() => void activateSelectedWindow()}>
+                    测试聚焦
+                  </button>
+                  <span>{windowControlMessage}</span>
                 </div>
-              </div>
-
-              <div className="mcp-detail-actions">
-                <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleInspectMcpServer(selectedServer)}>读取能力</button>
-                <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleToggleMcpServer(selectedServer.id)}>{selectedServer?.enabled ? "停用" : "启用"}</button>
-                <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleDeleteMcpServer(selectedServer.id)}>移除</button>
-                <button className="primary" type="button" onClick={() => void handleSaveMcpServer()}>{editingMcpId ? "保存服务器" : "添加服务器"}</button>
-              </div>
-            </div>
+              </>
+            )}
           </section>
+
+          <details className="software-link-advanced" open={mcpAdvancedOpen} onToggle={(event) => setMcpAdvancedOpen((event.target as HTMLDetailsElement).open)}>
+            <summary>高级：MCP 服务器</summary>
+            <div className="mcp-page-content prototype">
+              <section className="mcp-list-pane">
+                <div className="mcp-pane-head">
+                  <div>
+                    <h2>服务器列表</h2>
+                    <span>{visibleServers.length} / {servers.length} 个服务器</span>
+                  </div>
+                  <button type="button" onClick={() => resetMcpDraft()}>新建</button>
+                </div>
+                <div className="mcp-table" role="table" aria-label="MCP 服务器列表">
+                  <div className="mcp-table-row head" role="row">
+                    <span>名称</span>
+                    <span>地址</span>
+                    <span>状态</span>
+                    <span>工具</span>
+                  </div>
+                  {visibleServers.map((server: any, index: number) => {
+                    const health = mcpHealth[server.id];
+                    const tools = mcpDiscoveredTools.filter((tool: any) => tool.serverId === server.id);
+                    const active = (editingMcpId && editingMcpId === server.id) || (!editingMcpId && index === 0);
+                    const endpoint = server.transport === "sse" ? server.url : server.command || "local";
+                    return (
+                      <button key={server.id} type="button" role="row" className={`mcp-table-row${active ? " active" : ""}`} onClick={() => loadMcpDraft(server)}>
+                        <span><strong>{server.name}</strong><em>{server.transport}</em></span>
+                        <span>{endpoint}</span>
+                        <span><i className={`mcp-status ${health?.ok ? "ok" : server.enabled ? "pending" : "disabled"}`}>{health?.ok ? "OK" : server.enabled ? "待检测" : "Disabled"}</i></span>
+                        <span>{tools.length || mcpInspection[server.id]?.tools?.length || "?"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+              <section className="mcp-detail-pane">
+                <div className="mcp-pane-head">
+                  <div>
+                    <h2>服务器详情</h2>
+                    <span>{draft?.name || "添加一个 MCP 服务器"}</span>
+                  </div>
+                  <button type="button" disabled={!selectedServer || testingMcpId === selectedServer.id} onClick={() => selectedServer && void handleTestMcpServer(selectedServer)}>
+                    {selectedServer && testingMcpId === selectedServer.id ? "测试中" : "测试连接"}
+                  </button>
+                </div>
+                <div className="mcp-detail-form">
+                  <div className="mcp-detail-grid">
+                    <label>
+                      <span>名称</span>
+                      <input value={draft?.name ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="node-repl" />
+                    </label>
+                    <label>
+                      <span>传输方式</span>
+                      <select value={draft?.transport ?? "stdio"} onChange={(event) => setMcpDraft((current: any) => ({ ...current, transport: event.target.value }))}>
+                        <option value="stdio">stdio</option>
+                        <option value="sse">sse</option>
+                      </select>
+                    </label>
+                  </div>
+                  {(draft?.transport ?? "stdio") === "stdio" ? (
+                    <div className="mcp-detail-grid">
+                      <label><span>启动命令</span><input value={draft?.command ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, command: event.target.value }))} placeholder="node" /></label>
+                      <label><span>参数</span><input value={draft?.args ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, args: event.target.value }))} placeholder="server.mjs" /></label>
+                    </div>
+                  ) : (
+                    <label><span>服务地址</span><input value={draft?.url ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, url: event.target.value }))} placeholder="http://127.0.0.1:9000" /></label>
+                  )}
+                  <label><span>环境变量</span><textarea value={draft?.env ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, env: event.target.value }))} rows={4} placeholder="KEY=value" /></label>
+                  <div className="mcp-state-strip">
+                    <span className={`mcp-status ${selectedHealth?.ok ? "ok" : "pending"}`}>{selectedHealth?.ok ? "Connected" : "未检测"}</span>
+                    <strong>{selectedHealth?.detail || "测试连接后显示服务器状态"}</strong>
+                  </div>
+                  <div className="mcp-capabilities">
+                    <span>能力与工具</span>
+                    <div>
+                      {(selectedTools.length > 0 ? selectedTools : selectedInspection?.tools ?? []).map((tool: any) => (
+                        <button key={tool.id ?? tool.name} type="button" onClick={() => tool.id && handleInsertMcpTool(tool)}>{tool.name}</button>
+                      ))}
+                      {selectedTools.length === 0 && !(selectedInspection?.tools?.length) ? <em>读取能力后显示工具列表</em> : null}
+                    </div>
+                  </div>
+                  <div className="mcp-detail-actions">
+                    <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleInspectMcpServer(selectedServer)}>读取能力</button>
+                    <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleToggleMcpServer(selectedServer.id)}>{selectedServer?.enabled ? "停用" : "启用"}</button>
+                    <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleDeleteMcpServer(selectedServer.id)}>移除</button>
+                    <button className="primary" type="button" onClick={() => void handleSaveMcpServer()}>{editingMcpId ? "保存服务器" : "添加服务器"}</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </details>
         </div>
       </section>
     );
@@ -9089,29 +9175,54 @@ function renderAutomationPrototypeModule() {
     const visibleAutomationItems = automationItems.filter((item: any) => {
       const query = automationSearchQuery.trim().toLowerCase();
       if (!query) return true;
-      return [item.title, item.trigger, item.action, item.schedule, item.status, item.targetType].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+      return [item.title, item.trigger, item.prompt, item.action, item.schedule, item.status, item.targetType].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
     });
     const runtimeLabels: Record<string, string> = { worktree: "工作树", local: "本地", dialog: "对话" };
     const scheduleLabels: Record<string, string> = { hourly: "每小时", daily: "每天", weekly: "每周", custom: "自定义" };
     const statusLabels: Record<string, string> = { scheduled: "运行中", running: "执行中", idle: "待命", paused: "已暂停" };
     const selectedTargetName = automationDraft.targetType === "dialog" ? selectedThread?.title ?? "当前对话" : selectedWorkspace?.name ?? "当前项目";
     const dialogRuntime = automationDraft.runtime === "dialog";
+    const showForm = automationView === "detail" || editingFeatureId || automationCreateMode === "form";
 
     function startNewAutomation() {
       resetFeatureDraft("automations");
+      setAutomationIntent("");
+      setAutomationCreateMode("intent");
       setAutomationView("new");
     }
 
     function loadAutomation(item: any) {
       loadFeatureDraft("automations", item);
+      setAutomationCreateMode("form");
       setAutomationView("detail");
+    }
+
+    function applyIntentDraft() {
+      const parsed = parseAutomationIntent(automationIntent);
+      setAutomationDraft((current: any) => ({
+        ...current,
+        title: parsed.title || current.title,
+        prompt: parsed.prompt,
+        trigger: parsed.trigger,
+        schedule: parsed.schedule,
+        intervalMinutes: parsed.intervalMinutes,
+        dailyTime: parsed.dailyTime || "",
+        action: parsed.action === "thread_follow_up" ? "workspace_scan" : parsed.action,
+        template: parsed.template,
+        status: "scheduled",
+        workspaceId: selectedWorkspace?.id || current.workspaceId,
+        threadId: selectedThread?.id || current.threadId,
+        model: current.model || modelConfig.model,
+        reasoning: current.reasoning || modelConfig.reasoningEffort
+      }));
+      setAutomationCreateMode("form");
     }
 
     return (
       <section className="automation-page prototype">
         <main className="automation-workspace prototype">
           <header className="automation-head prototype">
-            <div><h1>自动化</h1><p>基于项目、对话或本地环境定时运行 Codex 任务。</p></div>
+            <div><h1>自动化</h1><p>用自然语言描述何时跑、做什么；对齐 Codex 自动任务创建方式。</p></div>
             <label className="automation-search"><span aria-hidden="true">⌕</span><input value={automationSearchQuery} onChange={(event) => setAutomationSearchQuery(event.target.value)} placeholder="搜索自动化功能" /></label>
           </header>
 
@@ -9133,36 +9244,77 @@ function renderAutomationPrototypeModule() {
             </aside>
 
             <section className="automation-create-card prototype">
-              <div className="automation-create-title">
-                <div><h2>{automationView === "detail" || editingFeatureId ? "编辑自动化功能" : "新建自动化功能"}</h2><p>选择运行环境、目标、计划、模型和提示词，创建后按计划执行。</p></div>
-                <select value={automationDraft.template} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, template: event.target.value }))}>
-                  <option value="">选择模板</option>
-                  <option value="每日进度汇总">每日进度汇总</option>
-                  <option value="Sentry 崩溃巡检">Sentry 崩溃巡检</option>
-                  <option value="发布前检查">发布前检查</option>
-                </select>
-              </div>
+              {automationView === "new" && automationCreateMode === "intent" ? (
+                <>
+                  <div className="automation-create-title">
+                    <div><h2>新建自动化功能</h2><p>一两句话说明触发时机和要做的事，然后生成可编辑草稿。</p></div>
+                  </div>
+                  <label className="automation-field">
+                    <span>用自然语言描述</span>
+                    <textarea
+                      value={automationIntent}
+                      onChange={(event) => setAutomationIntent(event.target.value)}
+                      placeholder="例如：每天 18:00 检查当前项目最近变更，整理完成事项和下一步计划"
+                      rows={5}
+                    />
+                  </label>
+                  <div className="automation-intent-examples">
+                    {automationIntentExamples().map((example) => (
+                      <button key={example} type="button" onClick={() => setAutomationIntent(example)}>{example}</button>
+                    ))}
+                  </div>
+                  <div className="automation-create-actions">
+                    <button type="button" onClick={() => setAutomationCreateMode("form")}>手动配置</button>
+                    <button className="primary" type="button" disabled={!automationIntent.trim()} onClick={applyIntentDraft}>生成草稿</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="automation-create-title">
+                    <div>
+                      <h2>{automationView === "detail" || editingFeatureId ? "编辑自动化功能" : "确认草稿"}</h2>
+                      <p>确认名称、计划、提示词后创建；也可继续调整高级字段。</p>
+                    </div>
+                    <select value={automationDraft.template} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, template: event.target.value }))}>
+                      <option value="">选择模板</option>
+                      <option value="每日进度汇总">每日进度汇总</option>
+                      <option value="Sentry 崩溃巡检">Sentry 崩溃巡检</option>
+                      <option value="发布前检查">发布前检查</option>
+                    </select>
+                  </div>
 
-              <div className="automation-select-row">
-                <label><span>运行环境</span><select value={automationDraft.runtime} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, runtime: event.target.value }))}><option value="worktree">工作树</option><option value="local">本地</option><option value="dialog">对话</option></select></label>
-                {!dialogRuntime ? <label><span>对话类型</span><select value={automationDraft.targetType} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, targetType: event.target.value }))}><option value="project">项目</option><option value="dialog">对话</option></select></label> : null}
-                <label><span>计划</span><select value={automationDraft.schedule} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, schedule: event.target.value }))}><option value="hourly">每小时</option><option value="daily">每天</option><option value="weekly">每周</option><option value="custom">...</option></select></label>
-                {!dialogRuntime ? (<>
-                  <label><span>模型</span><select value={automationDraft.model} disabled={composerModelOptions.length === 0} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, model: event.target.value }))}>{composerModelOptions.length === 0 ? <option value="">当前套餐无可用模型</option> : composerModelOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
-                  <label><span>推理</span><select value={automationDraft.reasoning} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, reasoning: event.target.value }))}><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
-                </>) : null}
-              </div>
+                  <div className="automation-draft-summary">
+                    <div><span>名称</span><strong>{automationDraft.title || "未命名"}</strong></div>
+                    <div><span>计划</span><strong>{automationDraft.dailyTime ? `每天 ${automationDraft.dailyTime}` : (scheduleLabels[automationDraft.schedule] ?? automationDraft.schedule)}</strong></div>
+                    <div><span>目标</span><strong>{selectedTargetName}</strong></div>
+                  </div>
 
-              <div className="automation-target-strip"><span>{runtimeLabels[automationDraft.runtime] ?? "工作树"}</span><strong>{selectedTargetName}</strong><em>{scheduleLabels[automationDraft.schedule] ?? "每天"}</em></div>
+                  {showForm ? (
+                    <>
+                      <div className="automation-select-row">
+                        <label><span>运行环境</span><select value={automationDraft.runtime} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, runtime: event.target.value }))}><option value="worktree">工作树</option><option value="local">本地</option><option value="dialog">对话</option></select></label>
+                        {!dialogRuntime ? <label><span>对话类型</span><select value={automationDraft.targetType} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, targetType: event.target.value }))}><option value="project">项目</option><option value="dialog">对话</option></select></label> : null}
+                        <label><span>计划</span><select value={automationDraft.schedule} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, schedule: event.target.value }))}><option value="hourly">每小时</option><option value="daily">每天</option><option value="weekly">每周</option><option value="custom">...</option></select></label>
+                        {!dialogRuntime ? (<>
+                          <label><span>模型</span><select value={automationDraft.model} disabled={composerModelOptions.length === 0} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, model: event.target.value }))}>{composerModelOptions.length === 0 ? <option value="">当前套餐无可用模型</option> : composerModelOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+                          <label><span>推理</span><select value={automationDraft.reasoning} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, reasoning: event.target.value }))}><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
+                        </>) : null}
+                      </div>
+                      <div className="automation-target-strip"><span>{runtimeLabels[automationDraft.runtime] ?? "工作树"}</span><strong>{selectedTargetName}</strong><em>{automationDraft.dailyTime || scheduleLabels[automationDraft.schedule] || "每天"}</em></div>
+                      <label className="automation-field"><span>自动化功能标题</span><input value={automationDraft.title} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, title: event.target.value }))} placeholder="自动化功能标题" /></label>
+                      <label className="automation-field"><span>每日时刻（可选）</span><input value={automationDraft.dailyTime || ""} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, dailyTime: event.target.value }))} placeholder="18:00" /></label>
+                      <div className="automation-sandbox-note">注：自动化任务以默认沙盒设置运行。若需操作电脑窗口，可在提示词中说明「使用本机窗口操控」。</div>
+                      <label className="automation-field"><span>提示词</span><textarea value={automationDraft.prompt || automationDraft.trigger} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, prompt: event.target.value, trigger: event.target.value }))} placeholder="添加提示词" rows={7} /></label>
+                    </>
+                  ) : null}
 
-              <label className="automation-field"><span>自动化功能标题</span><input value={automationDraft.title} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, title: event.target.value }))} placeholder="自动化功能标题" /></label>
-              <div className="automation-sandbox-note">注：自动化任务以默认沙盒设置运行。若工具调用需修改工作空间外文件、访问网络或操作电脑应用，该操作将执行失败。可通过规则选择性允许特定命令在沙盒外运行。</div>
-              <label className="automation-field"><span>提示词</span><textarea value={automationDraft.prompt || automationDraft.trigger} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, prompt: event.target.value, trigger: event.target.value }))} placeholder="添加提示词，例如：在 sentry 中查找崩溃" rows={7} /></label>
-              <div className="automation-context-note">注：当运行环境选择“对话”后，后面只有“选择计划”；选择模板只展示模板名称。</div>
-              <div className="automation-create-actions">
-                <button type="button" onClick={startNewAutomation}>取消</button>
-                <button className="primary" type="button" onClick={() => void saveFeature("automations")}>{automationView === "detail" || editingFeatureId ? "保存" : "创建"}</button>
-              </div>
+                  <div className="automation-create-actions">
+                    <button type="button" onClick={startNewAutomation}>取消</button>
+                    {!showForm ? <button type="button" onClick={() => setAutomationCreateMode("form")}>手动调整</button> : null}
+                    <button className="primary" type="button" onClick={() => void saveFeature("automations")}>{automationView === "detail" || editingFeatureId ? "保存" : "创建"}</button>
+                  </div>
+                </>
+              )}
             </section>
           </section>
         </main>

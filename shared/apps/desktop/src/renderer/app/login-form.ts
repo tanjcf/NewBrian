@@ -34,6 +34,15 @@ export type LoginAuthStatusView = {
   } | null;
   email_code_login_enabled?: boolean;
   password_login_enabled?: boolean;
+  /** ISO server clock from spring-app `/api/desktop/auth/config`. */
+  server_time?: string | null;
+  /** Optional `yyyy-MM-dd` (Asia/Shanghai) from spring-app. */
+  server_date?: string | null;
+  /**
+   * When false, hide the National Day login ceremony.
+   * Production packaged builds set this from spring-app Oct 1; local unpackaged stays true.
+   */
+  login_ceremony_enabled?: boolean;
 };
 
 export function isCnMobile(value: string): boolean {

@@ -25,44 +25,74 @@ export function computeNextDailyRunAt(dailyTime?: string, nowMs = Date.now()) {
 const nextRunAt = (item: Pick<AutomationSpec, "intervalMinutes" | "dailyTime">, nowMs: number) =>
   item.dailyTime ? computeNextDailyRunAt(item.dailyTime, nowMs) : computeNextAutomationRunAt(item.intervalMinutes, nowMs);
 
+function optionalTrimmed(value?: string) {
+  const text = value?.trim();
+  return text ? text : undefined;
+}
+
+function resolveAction(value?: string): AutomationSpec["action"] {
+  if (value === "git_status" || value === "error_remediation") return value;
+  return "workspace_scan";
+}
+
 export function createAutomationSpec(
   input: FeatureItemInput,
   context: { makeId: () => string; activeWorkspaceId?: string; activeThreadId?: string; nowMs?: number }
 ): AutomationSpec {
   const intervalMinutes = parsePositiveInterval(input.intervalMinutes);
-  const status: AutomationSpec["status"] = ["scheduled", "running", "paused"].includes(input.status ?? "")
+  const dailyTime = /^\d{2}:\d{2}$/.test(input.dailyTime ?? "") ? input.dailyTime : undefined;
+  const hasTiming = Boolean(dailyTime) || typeof intervalMinutes === "number";
+  const status: AutomationSpec["status"] = ["scheduled", "running", "paused", "idle"].includes(input.status ?? "")
     ? input.status as AutomationSpec["status"]
-    : "idle";
+    : hasTiming
+      ? "scheduled"
+      : "idle";
+  const prompt = optionalTrimmed(input.prompt);
+  const trigger = optionalTrimmed(input.trigger) || prompt || "待配置触发说明";
   return {
     id: input.id?.trim() || context.makeId(),
     title: input.title?.trim() || "未命名自动化",
     status,
-    trigger: input.trigger?.trim() || "待配置触发说明",
+    trigger,
+    prompt,
+    schedule: optionalTrimmed(input.schedule),
+    runtime: optionalTrimmed(input.runtime),
+    model: optionalTrimmed(input.model),
+    reasoning: optionalTrimmed(input.reasoning),
+    rrule: optionalTrimmed(input.rrule),
     workspaceId: input.workspaceId?.trim() || context.activeWorkspaceId || undefined,
     threadId: input.threadId?.trim() || context.activeThreadId || undefined,
-    action: input.action === "git_status" || input.action === "error_remediation" ? input.action : "workspace_scan",
+    action: resolveAction(input.action),
     intervalMinutes,
-    dailyTime: /^\d{2}:\d{2}$/.test(input.dailyTime ?? "") ? input.dailyTime : undefined,
-    nextRunAt: isActiveStatus(status) ? nextRunAt({ intervalMinutes, dailyTime: input.dailyTime }, context.nowMs ?? Date.now()) : undefined
+    dailyTime,
+    nextRunAt: isActiveStatus(status) ? nextRunAt({ intervalMinutes, dailyTime }, context.nowMs ?? Date.now()) : undefined
   };
 }
 
 export function updateAutomationSpec(item: AutomationSpec, input: FeatureItemInput, nowMs = Date.now()) {
   const intervalMinutes = parsePositiveInterval(input.intervalMinutes) ?? item.intervalMinutes;
+  const dailyTime = /^\d{2}:\d{2}$/.test(input.dailyTime ?? "") ? input.dailyTime : item.dailyTime;
   const status: AutomationSpec["status"] = ["scheduled", "running", "paused", "idle"].includes(input.status ?? "")
     ? input.status as AutomationSpec["status"]
     : item.status;
+  const prompt = input.prompt !== undefined ? optionalTrimmed(input.prompt) : item.prompt;
   return {
     ...item,
     title: input.title?.trim() || item.title,
     trigger: input.trigger?.trim() || item.trigger,
+    prompt,
+    schedule: input.schedule !== undefined ? optionalTrimmed(input.schedule) : item.schedule,
+    runtime: input.runtime !== undefined ? optionalTrimmed(input.runtime) : item.runtime,
+    model: input.model !== undefined ? optionalTrimmed(input.model) : item.model,
+    reasoning: input.reasoning !== undefined ? optionalTrimmed(input.reasoning) : item.reasoning,
+    rrule: input.rrule !== undefined ? optionalTrimmed(input.rrule) : item.rrule,
     status,
     workspaceId: input.workspaceId?.trim() || item.workspaceId,
     threadId: input.threadId?.trim() || item.threadId,
-    action: input.action === "git_status" || input.action === "workspace_scan" || input.action === "error_remediation" ? input.action : item.action,
+    action: input.action ? resolveAction(input.action) : item.action,
     intervalMinutes,
-    dailyTime: /^\d{2}:\d{2}$/.test(input.dailyTime ?? "") ? input.dailyTime : item.dailyTime,
-    nextRunAt: isActiveStatus(status) ? nextRunAt({ intervalMinutes, dailyTime: input.dailyTime ?? item.dailyTime }, nowMs) : undefined
+    dailyTime,
+    nextRunAt: isActiveStatus(status) ? nextRunAt({ intervalMinutes, dailyTime }, nowMs) : undefined
   };
 }
 

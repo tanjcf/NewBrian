@@ -3,6 +3,7 @@ import brandIcon from "../assets/newbrain-icon-256.png";
 import ceremonyPhoto from "../assets/founding-ceremony-ref.png";
 
 type LoginCeremonyOverlayProps = {
+  enabled?: boolean;
   onContinue: () => void;
 };
 
@@ -10,7 +11,7 @@ function ceremonyMaxRadius() {
   return Math.hypot(window.innerWidth, window.innerHeight) * 1.25;
 }
 
-export function LoginCeremonyOverlay({ onContinue }: LoginCeremonyOverlayProps) {
+export function LoginCeremonyOverlay({ enabled = true, onContinue }: LoginCeremonyOverlayProps) {
   const [visible, setVisible] = useState(false);
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const [reveal, setReveal] = useState(0);
@@ -77,13 +78,17 @@ export function LoginCeremonyOverlay({ onContinue }: LoginCeremonyOverlayProps) 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
   useEffect(() => {
+    if (!enabled) {
+      if (openRef.current) close();
+      return;
+    }
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ x: number; y: number }>).detail;
       if (detail) openAt(detail.x, detail.y);
     };
     window.addEventListener("newbrain-open-login-ceremony", handler as EventListener);
     return () => window.removeEventListener("newbrain-open-login-ceremony", handler as EventListener);
-  }, [openAt]);
+  }, [close, enabled, openAt]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -93,7 +98,7 @@ export function LoginCeremonyOverlay({ onContinue }: LoginCeremonyOverlayProps) 
     return () => document.removeEventListener("keydown", onKey);
   }, [close]);
 
-  if (!visible) {
+  if (!enabled || !visible) {
     return null;
   }
 
@@ -142,8 +147,9 @@ export function LoginCeremonyOverlay({ onContinue }: LoginCeremonyOverlayProps) 
           </button>
         </section>
         <p className="login-ceremony-tribute">
-          <strong>为国献礼</strong>
-          <span>以智启程 · 不负山河</span>
+          <strong>献礼盛世中华</strong>
+          <span>拓科技之界，澎湃新质生产力；</span>
+          <span>望美好未来，成就自由全面发展。</span>
         </p>
       </div>
     </div>

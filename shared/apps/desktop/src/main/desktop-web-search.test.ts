@@ -82,9 +82,13 @@ test("registers web.search_paid tool and returns unavailable payload on empty re
       paidAttempted: false,
       paidSucceeded: false,
       sourceTypesUsed: [],
-      items: []
-    })
+      items: [],
+      fetches: [],
+      fetchAttempted: false
+    }),
+    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
+  assert.ok(tools.has("web.fetch_page"));
   const result = await tools.get("web.search_paid")!({ query: "q" }) as { details: { status: string; code: string }; isError?: boolean };
   assert.equal(result.details.status, "unavailable");
   assert.equal(result.details.code, "WEB_SEARCH_EMPTY");
@@ -122,7 +126,15 @@ test("market news client maps orchestrator evidence pack and never logs tokens",
             publishedAt: "2026-08-19",
             snippet: "公司宣布扩产",
             sourceType: "akshare"
-          }]
+          }],
+          fetches: [{
+            url: "https://example.com/news/1",
+            title: "扩产公告",
+            text: "公司宣布扩产全文",
+            status: "ok",
+            statusCode: 200
+          }],
+          fetchAttempted: true
         }
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }) as typeof fetch
@@ -135,6 +147,8 @@ test("market news client maps orchestrator evidence pack and never logs tokens",
   assert.equal(result.items[0]?.url, "https://example.com/news/1");
   assert.equal(result.items[0]?.siteName, "财联社");
   assert.equal(result.sourceTypesUsed[0], "akshare");
+  assert.equal(result.fetchAttempted, true);
+  assert.equal(result.fetches[0]?.text, "公司宣布扩产全文");
 });
 
 test("news_search_free prefers free-first pack and surfaces unavailable guidance", async () => {
@@ -156,10 +170,14 @@ test("news_search_free prefers free-first pack and surfaces unavailable guidance
       paidAttempted: false,
       paidSucceeded: false,
       sourceTypesUsed: [],
-      items: []
-    })
+      items: [],
+      fetches: [],
+      fetchAttempted: false
+    }),
+    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
   assert.ok(tools.has("news_search_free"));
+  assert.ok(tools.has("web.fetch_page"));
   const result = await tools.get("news_search_free")!({ query: "最新利率" }) as {
     details: { status: string; code: string; message: string; searchedAt: string };
     isError?: boolean;
