@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BRAIN · 长期关注</title>
+<style>
+:root{font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif;color:#263d35;background:#f5f8f6}*{box-sizing:border-box}body{margin:0;padding:22px}header{display:flex;justify-content:space-between;align-items:center;gap:14px}h1{font-size:23px;margin:0}h2{font-size:17px;margin:0 0 12px}p{margin:7px 0;color:#63776d}button,input,select,textarea{font:inherit}button{border:1px solid #ceddd4;border-radius:7px;padding:7px 12px;background:white;color:#255441;cursor:pointer}button.primary{background:#26755b;color:white;border-color:#26755b}button:disabled{opacity:.55;cursor:wait}button.danger{color:#a23c38}input,select,textarea{border:1px solid #cad8d0;border-radius:6px;padding:8px;width:100%;background:white;color:#263d35}textarea{resize:vertical}label{display:block;color:#42594e}label span{display:block;margin-bottom:4px}input[type=checkbox]{width:auto;margin-right:7px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.wide{grid-column:1/-1}.card{padding:18px;border:1px solid #dce7df;border-radius:12px;background:white;margin-top:16px}.status{padding:12px 14px;background:#edf4ef;border-radius:8px;margin-top:15px}.notice{color:#84651c;background:#fcf6df}.error{color:#a8342f;background:#fff0ee}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}.item{border-top:1px solid #e5ebe7;padding:15px 0}.item:first-child{border-top:0}.title{display:flex;justify-content:space-between;gap:10px}.badge{font-size:12px;background:#eaf3ed;color:#287351;padding:2px 8px;border-radius:12px}.muted{font-size:12px;color:#708479;overflow-wrap:anywhere}.rules{padding:12px;background:#f5f8f6;border-radius:8px;margin-top:10px}.rule{border-bottom:1px solid #e3eae5;padding:8px 0}.rule:last-child{border:0}details summary{cursor:pointer;font-weight:600}.empty{padding:16px;text-align:center;color:#7b8c83}#feedback{position:sticky;top:0;z-index:2;white-space:pre-wrap}a{color:#277759}@media(max-width:620px){body{padding:12px}.grid{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.card{padding:14px}}
+</style></head><body>
+<header><div><h1>长期关注</h1><p>A 股 · ETF　/　记住关注，按规则提醒</p></div><button id="poll">检查到期订阅</button></header>
+<div id="feedback" role="status" aria-live="polite"></div>
+<div id="health" class="status">正在连接本地监控服务…</div>
+<p class="muted">仅供参考，不执行任何买卖。日线监控；首次行情建立基线，后续条件变化才提醒。原型其他页的演示数据不会进入此监控。</p>
+<section class="card"><h2>我的关注 <span id="count" class="badge">0</span></h2><div id="subscriptions"></div></section>
+<section class="card"><h2 id="formTitle">添加关注</h2>
+<form id="subscriptionForm"><input id="ident" type="hidden"><div class="grid">
+<label><span>证券代码</span><input id="symbol" required pattern="[0-9]{6}(\.(SH|SZ|BJ))?" placeholder="6 位代码，如 600519"></label>
+<label><span>标的类型</span><select id="asset"><option value="stock">A 股股票</option><option value="etf">ETF</option></select></label>
+<label><span>名称（可选）</span><input id="label" maxlength="160" placeholder="你确认的公司或基金名称"></label>
+<label><span>检查间隔（分钟）</span><input id="interval" type="number" min="1" max="1440" value="15" required></label>
+<label><span>提醒冷却时间（分钟）</span><input id="cooldown" type="number" min="1" max="10080" value="60" required></label>
+<label><span>允许行情年龄（小时）</span><input id="maxage" type="number" min="1" max="168" value="96" required></label>
+<label class="wide"><span>长期关注原因</span><textarea id="notes" rows="2" maxlength="4000" placeholder="关注什么变化，为什么长期跟踪"></textarea></label>
+</div><div id="rules" class="rules"></div><div class="row"><button id="addRule" type="button">＋ 添加规则</button></div>
+<div class="row"><label><input id="subEmail" type="checkbox" checked>邮件提醒</label><label><input id="subSms" type="checkbox" checked>短信提醒</label></div>
+<div class="row"><label><input id="enabled" type="checkbox">保存后启动监控（需真实行情服务）</label></div>
+<p class="muted">你选择的规则是参考条件，并不代表确定的买卖时机。保存修改会重新建立基线，并取消旧的待发提醒。</p>
+<div class="row"><button class="primary" type="submit">保存关注</button><button id="resetForm" type="button">取消编辑 / 清空</button></div>
+</form></section>
+<section class="card"><details><summary>邮件与短信接收设置</summary><p>只保存你确认的接收地址。服务商密钥由后台配置，不在网页输入。开启渠道后，仍需要服务进程允许外发。</p>
+<form id="profileForm"><div class="grid"><label><span>接收邮箱</span><input id="email" type="email" autocomplete="email"></label><label><span>接收手机</span><input id="sms" type="tel" placeholder="+8613800000000" pattern="\+[1-9][0-9]{7,14}" autocomplete="tel"></label></div>
+<div class="row"><label><input id="emailEnabled" type="checkbox">同意向该邮箱发送参考提醒</label><label><input id="smsEnabled" type="checkbox">同意向该手机发送参考提醒</label></div>
+<div class="row"><button type="submit">保存接收设置</button></div></form></details></section>
+<section class="card"><h2>提醒与投递记录</h2><p class="muted">“服务已受理”不等于收件人已收到。退订后保留历史记录供核对。</p><div id="alerts"></div></section>
+<script src="/watch.js"></script></body></html>
