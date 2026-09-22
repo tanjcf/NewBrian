@@ -6,6 +6,10 @@ const parsePositiveInterval = (value?: string) => {
   return parsed > 0 ? parsed : undefined;
 };
 
+const WEEKDAY_BY_RRULE: Record<string, number> = {
+  SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6
+};
+
 export function computeNextAutomationRunAt(intervalMinutes?: number, nowMs = Date.now()) {
   return typeof intervalMinutes === "number" && intervalMinutes > 0
     ? new Date(nowMs + intervalMinutes * 60_000).toISOString()
@@ -22,8 +26,39 @@ export function computeNextDailyRunAt(dailyTime?: string, nowMs = Date.now()) {
   return next.toISOString();
 }
 
-const nextRunAt = (item: Pick<AutomationSpec, "intervalMinutes" | "dailyTime">, nowMs: number) =>
-  item.dailyTime ? computeNextDailyRunAt(item.dailyTime, nowMs) : computeNextAutomationRunAt(item.intervalMinutes, nowMs);
+/** Next weekly occurrence for a given weekday (0=Sun..6=Sat) and optional HH:mm. */
+export function computeNextWeeklyRunAt(input: { weekday: number; dailyTime?: string }, nowMs = Date.now()) {
+  const weekday = ((input.weekday % 7) + 7) % 7;
+  const timeMatch = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(input.dailyTime ?? "");
+  const hour = timeMatch ? Number(timeMatch[0].slice(0, 2)) : 9;
+  const minute = timeMatch ? Number(timeMatch[0].slice(3, 5)) : 0;
+  const next = new Date(nowMs);
+  next.setSeconds(0, 0);
+  next.setHours(hour, minute, 0, 0);
+  const delta = (weekday - next.getDay() + 7) % 7;
+  if (delta === 0 && next.getTime() <= nowMs) next.setDate(next.getDate() + 7);
+  else next.setDate(next.getDate() + delta);
+  return next.toISOString();
+}
+
+export function parseWeeklyWeekdayFromRrule(rrule?: string): number | undefined {
+  const match = /BYDAY=([A-Z]{2})/i.exec(rrule ?? "");
+  if (!match) return undefined;
+  const key = match[1].toUpperCase();
+  return Object.prototype.hasOwnProperty.call(WEEKDAY_BY_RRULE, key) ? WEEKDAY_BY_RRULE[key] : undefined;
+}
+
+const nextRunAt = (
+  item: Pick<AutomationSpec, "intervalMinutes" | "dailyTime" | "schedule" | "rrule">,
+  nowMs: number
+) => {
+  const weekday = parseWeeklyWeekdayFromRrule(item.rrule);
+  if (item.schedule === "weekly" || weekday != null || /FREQ=WEEKLY/i.test(item.rrule ?? "")) {
+    return computeNextWeeklyRunAt({ weekday: weekday ?? 1, dailyTime: item.dailyTime }, nowMs);
+  }
+  if (item.dailyTime) return computeNextDailyRunAt(item.dailyTime, nowMs);
+  return computeNextAutomationRunAt(item.intervalMinutes, nowMs);
+};
 
 function optionalTrimmed(value?: string) {
   const text = value?.trim();
@@ -41,7 +76,9 @@ export function createAutomationSpec(
 ): AutomationSpec {
   const intervalMinutes = parsePositiveInterval(input.intervalMinutes);
   const dailyTime = /^\d{2}:\d{2}$/.test(input.dailyTime ?? "") ? input.dailyTime : undefined;
-  const hasTiming = Boolean(dailyTime) || typeof intervalMinutes === "number";
+  const schedule = optionalTrimmed(input.schedule);
+  const rrule = optionalTrimmed(input.rrule);
+  const hasTiming = Boolean(dailyTime) || typeof intervalMinutes === "number" || schedule === "weekly" || Boolean(rrule);
   const status: AutomationSpec["status"] = ["scheduled", "running", "paused", "idle"].includes(input.status ?? "")
     ? input.status as AutomationSpec["status"]
     : hasTiming
@@ -49,24 +86,28 @@ export function createAutomationSpec(
       : "idle";
   const prompt = optionalTrimmed(input.prompt);
   const trigger = optionalTrimmed(input.trigger) || prompt || "待配置触发说明";
-  return {
+  const spec: AutomationSpec = {
     id: input.id?.trim() || context.makeId(),
     title: input.title?.trim() || "未命名自动化",
     status,
     trigger,
     prompt,
-    schedule: optionalTrimmed(input.schedule),
+    schedule,
     runtime: optionalTrimmed(input.runtime),
     model: optionalTrimmed(input.model),
     reasoning: optionalTrimmed(input.reasoning),
-    rrule: optionalTrimmed(input.rrule),
+    rrule,
     workspaceId: input.workspaceId?.trim() || context.activeWorkspaceId || undefined,
     threadId: input.threadId?.trim() || context.activeThreadId || undefined,
     action: resolveAction(input.action),
     intervalMinutes,
     dailyTime,
-    nextRunAt: isActiveStatus(status) ? nextRunAt({ intervalMinutes, dailyTime }, context.nowMs ?? Date.now()) : undefined
+    nextRunAt: undefined
   };
+  if (isActiveStatus(status)) {
+    spec.nextRunAt = nextRunAt(spec, context.nowMs ?? Date.now());
+  }
+  return spec;
 }
 
 export function updateAutomationSpec(item: AutomationSpec, input: FeatureItemInput, nowMs = Date.now()) {
@@ -76,7 +117,7 @@ export function updateAutomationSpec(item: AutomationSpec, input: FeatureItemInp
     ? input.status as AutomationSpec["status"]
     : item.status;
   const prompt = input.prompt !== undefined ? optionalTrimmed(input.prompt) : item.prompt;
-  return {
+  const next: AutomationSpec = {
     ...item,
     title: input.title?.trim() || item.title,
     trigger: input.trigger?.trim() || item.trigger,
@@ -92,14 +133,19 @@ export function updateAutomationSpec(item: AutomationSpec, input: FeatureItemInp
     action: input.action ? resolveAction(input.action) : item.action,
     intervalMinutes,
     dailyTime,
-    nextRunAt: isActiveStatus(status) ? nextRunAt({ intervalMinutes, dailyTime }, nowMs) : undefined
+    nextRunAt: undefined
   };
+  if (isActiveStatus(status)) {
+    next.nextRunAt = nextRunAt(next, nowMs);
+  }
+  return next;
 }
 
 export function selectDueAutomations(automations: AutomationSpec[], nowMs = Date.now()) {
   return automations.filter((item) => {
     if (item.status !== "scheduled" && item.status !== "running") return false;
-    if (!item.nextRunAt || (!item.dailyTime && (!item.intervalMinutes || item.intervalMinutes <= 0))) return false;
+    const hasWeekly = item.schedule === "weekly" || Boolean(parseWeeklyWeekdayFromRrule(item.rrule)) || /FREQ=WEEKLY/i.test(item.rrule ?? "");
+    if (!item.nextRunAt || (!item.dailyTime && !hasWeekly && (!item.intervalMinutes || item.intervalMinutes <= 0))) return false;
     return new Date(item.nextRunAt).getTime() <= nowMs;
   });
 }

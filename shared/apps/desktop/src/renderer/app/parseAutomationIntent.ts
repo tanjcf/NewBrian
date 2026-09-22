@@ -12,6 +12,7 @@ export type ParsedAutomationIntent = {
   dailyTime?: string;
   action: "workspace_scan" | "git_status" | "thread_follow_up";
   template: string;
+  rrule?: string;
 };
 
 const EXAMPLE_INTENTS = [
@@ -19,6 +20,16 @@ const EXAMPLE_INTENTS = [
   "每小时检查一次 Git 状态，有未提交改动时提醒",
   "每周一汇总本周对话进度并给出跟进建议"
 ] as const;
+
+const WEEKDAY_TO_RRULE: Array<{ pattern: RegExp; byday: string }> = [
+  { pattern: /每周日|星期天|星期日|周日|Sunday/i, byday: "SU" },
+  { pattern: /每周一|星期一|周一|Monday/i, byday: "MO" },
+  { pattern: /每周二|星期二|周二|Tuesday/i, byday: "TU" },
+  { pattern: /每周三|星期三|周三|Wednesday/i, byday: "WE" },
+  { pattern: /每周四|星期四|周四|Thursday/i, byday: "TH" },
+  { pattern: /每周五|星期五|周五|Friday/i, byday: "FR" },
+  { pattern: /每周六|星期六|周六|Saturday/i, byday: "SA" }
+];
 
 /**
  * Example prompts shown in the automation create surface.
@@ -47,6 +58,7 @@ export function parseAutomationIntent(raw: string): ParsedAutomationIntent {
   const lower = text.toLowerCase();
   let schedule: ParsedAutomationIntent["schedule"] = "daily";
   let intervalMinutes = "1440";
+  let rrule: string | undefined;
 
   const everyMinutes = text.match(/每(?:隔)?\s*(\d+)\s*分钟/) || lower.match(/every\s+(\d+)\s*(?:minutes?|mins?)/);
   const everyHours = text.match(/每(?:隔)?\s*(\d+)\s*(?:小时|钟头)/) || lower.match(/every\s+(\d+)\s*(?:hours?|hrs?)/);
@@ -63,12 +75,20 @@ export function parseAutomationIntent(raw: string): ParsedAutomationIntent {
   } else if (/每周|weekly|每星期/.test(text) || /every\s+(?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/.test(lower)) {
     schedule = "weekly";
     intervalMinutes = String(7 * 1440);
+    const weekday = WEEKDAY_TO_RRULE.find((item) => item.pattern.test(text));
+    const byday = weekday?.byday || "MO";
+    rrule = `FREQ=WEEKLY;BYDAY=${byday}`;
   } else if (/每天|每日|daily|每天\s*\d{1,2}/.test(text) || /every\s+day/.test(lower)) {
     schedule = "daily";
     intervalMinutes = "1440";
   }
 
   const dailyTime = parseDailyTime(text);
+  if (rrule && dailyTime) {
+    const [hour, minute] = dailyTime.split(":");
+    rrule = `${rrule};BYHOUR=${Number(hour)};BYMINUTE=${Number(minute)}`;
+  }
+
   let action: ParsedAutomationIntent["action"] = "workspace_scan";
   let template = "每日进度汇总";
   if (/git|提交|分支|工作区变更|未提交/.test(lower) || /git/.test(lower)) {
@@ -90,6 +110,7 @@ export function parseAutomationIntent(raw: string): ParsedAutomationIntent {
     schedule,
     intervalMinutes,
     ...(dailyTime ? { dailyTime } : {}),
+    ...(rrule ? { rrule } : {}),
     action,
     template
   };

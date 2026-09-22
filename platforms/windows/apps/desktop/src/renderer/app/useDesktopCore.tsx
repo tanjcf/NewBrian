@@ -320,6 +320,27 @@ async function handleThreadMenuAction(action: string, workspace: WorkspaceCatalo
     case "new-window":
       window.open(window.location.href, "_blank", "noopener,noreferrer");
       return;
+    case "schedule-task": {
+      setSelectedWorkspaceId(workspace.id);
+      setSelectedThreadId(thread.id);
+      setIsComposingNewThread(false);
+      setActiveFeature("new-chat");
+      setQuestion(`请帮我为对话「${thread.title || "当前对话"}」创建一个自动化计划任务：说明触发时间和要执行的内容。`);
+      if (typeof ctx.setComposerSkillContext === "function") {
+        ctx.setComposerSkillContext("Automation Creator");
+      }
+      if (typeof ctx.setNewThreadScope === "function") {
+        ctx.setNewThreadScope("project");
+      }
+      if (typeof ctx.setChatUsesProject === "function") {
+        ctx.setChatUsesProject(true);
+      }
+      if (typeof ctx.setSelectedSidebarRow === "function") {
+        ctx.setSelectedSidebarRow(`chat:${workspace.id}:${thread.id}`);
+      }
+      setChatStatus("已进入 Automation Creator：发送后将创建计划任务，并继续在对话中确认细节。");
+      return;
+    }
     case "export-html": {
       if (!api?.exportWorkspaceThreadHtml) {
         setErrorMessage("当前版本不支持导出对话 HTML。");
@@ -1175,7 +1196,8 @@ async function saveFeature(kind: ManagedFeatureKind) {
     reasoning: draft.reasoning,
     template: draft.template,
     prompt: draft.prompt || draft.trigger,
-    sandboxRule: draft.sandboxRule
+    sandboxRule: draft.sandboxRule,
+    rrule: draft.rrule ?? ""
   };
 
   try {

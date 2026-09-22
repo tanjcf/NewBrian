@@ -2262,23 +2262,90 @@ async function fetchDesktopBillingSubscription() {
   const gatewayOrigin = await readGatewayOrigin();
   return { ...(normalized as Record<string, unknown>), gateway_origin: gatewayOrigin };
 }
+function extractGatewayErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const record = payload as Record<string, unknown>;
+  const nested =
+    record.result && typeof record.result === "object"
+      ? (record.result as Record<string, unknown>)
+      : null;
+  const candidates = [
+    record.message,
+    record.detail,
+    record.error,
+    record.reason,
+    nested?.message,
+    nested?.detail
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate ?? "").trim();
+    if (text && text !== "true" && text !== "false") return text;
+  }
+  return fallback;
+}
+
+function mapRedeemGatewayError(message: string, status: number): string {
+  const text = String(message || "").trim();
+  if (/login required|AUTH_UNAUTHORIZED|unauthorized|请先登录/i.test(text) || status === 401) {
+    return "请先登录后再兑换。";
+  }
+  if (/redeem code is invalid|code is required|invalid redeem/i.test(text)) {
+    return "兑换码无效，请检查后重试。";
+  }
+  if (/redeem code is not active/i.test(text)) {
+    return "兑换码未启用或已停用。";
+  }
+  if (/redeem code expired/i.test(text)) {
+    return "兑换码已过期。";
+  }
+  if (/usage limit reached|already used|update failed/i.test(text)) {
+    return "兑换码已使用或次数已用尽。";
+  }
+  if (/missing subscription plan/i.test(text)) {
+    return "兑换码缺少套餐配置，请联系发放方。";
+  }
+  if (status === 404 || status === 501) {
+    return "该接口处于开发中，暂时无法使用。";
+  }
+  return text || `兑换失败：HTTP ${status || "unknown"}`;
+}
+
 async function redeemDesktopCode(input: { code: string }) {
   const code = String(input?.code || "").trim();
   if (!code) throw new Error("请输入兑换码。");
   const authState = await readDesktopAuthState();
-  if (!authState) throw new Error("请先登录再兑换。");
+  if (!authState) throw new Error("请先登录后再兑换。");
+  if (!authState.access_token?.trim() && !authState.session_cookie?.trim()) {
+    throw new Error("请先登录后再兑换。");
+  }
   const gatewayOrigin = await readGatewayOrigin();
   const device = collectDesktopDeviceFingerprint();
-  const headers = { "Content-Type": "application/json", ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device }) };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
+  };
   if (authState.session_cookie?.trim()) headers.Cookie = authState.session_cookie.trim();
-  const response = await fetch(`${gatewayOrigin}/api/redeem`, { method: "POST", headers, body: JSON.stringify({ code }) });
-  const payload = await readJsonResponse(response);
-  if (!response.ok) {
-    if (response.status === 404 || response.status === 501) {
-      throw new Error("该接口处于开发中，暂时无法使用。");
+  let response: Response;
+  try {
+    response = await fetch(`${gatewayOrigin}/api/redeem`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ code })
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error || "");
+    if (/ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed/i.test(detail)) {
+      throw new Error("无法连接 spring-app，请确认网关可用后重试。");
     }
-    const message = payload && typeof payload === "object" ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "") : "";
-    throw new Error(message || `兑换失败：HTTP ${response.status}`);
+    throw new Error(detail || "兑换请求失败，请稍后重试。");
+  }
+  const payload = await readJsonResponse(response);
+  const payloadRecord = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const businessFailed = Boolean(payloadRecord && payloadRecord.ok === false);
+  if (!response.ok || businessFailed) {
+    const rawMessage = extractGatewayErrorMessage(payload, "");
+    throw new Error(mapRedeemGatewayError(rawMessage, response.status));
   }
   return payload;
 }
@@ -4841,15 +4908,27 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
       plugins: config.plugins.map((item) => item.id === id ? nextPlugin : item)
     });
   }
-  return writeFeatureConfig({
+  const runNow = input.status === "run_now";
+  const nextConfig = await writeFeatureConfig({
     ...config,
     automations: config.automations.map((item) => {
       if (item.id !== id) {
         return item;
       }
+      if (runNow) {
+        return {
+          ...item,
+          status: "scheduled" as const,
+          nextRunAt: new Date(Date.now() - 1_000).toISOString()
+        };
+      }
       return updateAutomationSpec(item, input);
     })
   });
+  if (runNow) {
+    void tickAutomations();
+  }
+  return nextConfig;
 }
 async function deleteFeatureItem(kind: ManagedFeatureKind, id: string) {
   const config = await readFeatureConfig();

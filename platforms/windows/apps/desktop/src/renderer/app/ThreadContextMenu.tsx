@@ -43,7 +43,7 @@ export function ThreadContextMenu({ menu, pinnedThreadIds, unreadThreadIds, onAc
       <button type="button" onClick={trigger("fork-local")}>
         <SidebarIcon name="branch" /><span>分支</span><strong>›</strong>
       </button>
-      <button type="button" disabled>
+      <button type="button" onClick={trigger("schedule-task")}>
         <SidebarIcon name="automation" /><span>添加计划任务...</span>
       </button>
       <button type="button" onClick={trigger("export-html")}>

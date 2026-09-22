@@ -1,0 +1,784 @@
+/* Capability catalog — skills / plugins / automation (prototype layout) */
+.capability-catalog {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
+}
+.capability-catalog .catalog-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+.capability-catalog .catalog-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: #667085;
+  font: 700 10px/1.2 Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+.capability-catalog .catalog-heading h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 720;
+}
+.capability-catalog .catalog-heading p {
+  margin: 0;
+  color: #6f7680;
+  font-size: 13px;
+}
+.capability-catalog .catalog-create {
+  min-height: 40px;
+  border: 1px solid #171b24;
+  border-radius: 7px;
+  background: #171b24;
+  color: #fff;
+  padding: 0 16px;
+  cursor: pointer;
+  font-weight: 650;
+}
+.capability-catalog .catalog-create:hover {
+  background: #2a303b;
+}
+.capability-catalog .catalog-surface {
+  border: 1px solid #dfe4ea;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 14px 34px rgba(31, 42, 55, 0.055);
+}
+.capability-catalog .catalog-toolbar {
+  background: #fafbfc;
+}
+.capability-catalog .catalog-viewbar {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #e2e6ea;
+  padding: 8px 12px;
+}
+.capability-catalog .catalog-filterbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 132px 140px 38px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #e2e6ea;
+  padding: 12px;
+}
+.capability-catalog .catalog-filterbar.is-recommended {
+  grid-template-columns: minmax(220px, 1fr) 140px 38px;
+}
+.capability-catalog .catalog-filterbar.automation-filterbar {
+  grid-template-columns: minmax(280px, 1fr) 150px;
+}
+.capability-catalog .catalog-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid #e2e6ea;
+  border-radius: 7px;
+  background: #fff;
+  padding: 3px;
+}
+.capability-catalog .catalog-tabs button {
+  height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #6f7680;
+  padding: 0 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.capability-catalog .catalog-tabs button.active {
+  background: #edf3ff;
+  color: #245fd2;
+  font-weight: 700;
+}
+.capability-catalog .catalog-search {
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e2e6ea;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 11px;
+  color: #89909b;
+}
+.capability-catalog .catalog-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #20242b;
+}
+.capability-catalog .catalog-select {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid #e2e6ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #4f5661;
+  padding: 0 9px;
+  outline: 0;
+}
+.capability-catalog .catalog-icon-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #e2e6ea;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 17px;
+}
+.capability-catalog .catalog-icon-button:hover {
+  border-color: #b8c6d8;
+  background: #f5f8fc;
+}
+.capability-catalog .catalog-result-bar {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e2e6ea;
+  padding: 0 16px;
+  color: #8a919b;
+  font-size: 11px;
+}
+.capability-catalog .skill-row {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 92px;
+  gap: 13px;
+  align-items: center;
+  border-bottom: 1px solid #edf0f3;
+  padding: 12px 16px;
+}
+.capability-catalog .skill-row:last-child {
+  border-bottom: 0;
+}
+.capability-catalog .skill-row:hover {
+  background: #fafcff;
+}
+.capability-catalog .skill-mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d6e2f8;
+  border-radius: 8px;
+  color: #245fd2;
+  background: #edf3ff;
+  font: 750 14px/1 inherit;
+}
+.capability-catalog .skill-copy {
+  min-width: 0;
+}
+.capability-catalog .skill-copy strong {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.capability-catalog .skill-copy p {
+  margin: 0 0 5px;
+  color: #656d78;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.capability-catalog .skill-copy small {
+  color: #9aa1aa;
+  font-size: 10px;
+}
+.capability-catalog .skill-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.capability-catalog .catalog-more,
+.capability-catalog .catalog-row-action {
+  height: 32px;
+  border: 1px solid #e2e6ea;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.capability-catalog .catalog-row-action {
+  color: #245fd2;
+  font-weight: 650;
+}
+.capability-catalog .catalog-row-action.danger-text {
+  color: #ef4050;
+}
+.capability-catalog .discovery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+.capability-catalog .discovery-card {
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+  display: grid;
+  gap: 10px;
+}
+.capability-catalog .discovery-card header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.capability-catalog .discovery-card h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.capability-catalog .discovery-card small {
+  color: #9aa1aa;
+}
+.capability-catalog .discovery-card p {
+  margin: 0;
+  color: #656d78;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 36px;
+}
+.capability-catalog .discovery-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.capability-catalog .discovery-tags span {
+  border-radius: 999px;
+  background: #eef0f6;
+  color: #59606b;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+.capability-catalog .discovery-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.capability-catalog .category-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  border-bottom: 1px solid #e2e6ea;
+  padding: 10px 12px;
+}
+.capability-catalog .market-filter {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #67707c;
+  padding: 0 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  font-size: 11px;
+}
+.capability-catalog .market-filter:hover,
+.capability-catalog .market-filter.active {
+  border-color: #cddaf0;
+  background: #edf3ff;
+  color: #245fd2;
+  font-weight: 650;
+}
+.capability-catalog .plugin-card {
+  border-bottom: 1px solid #edf0f3;
+}
+.capability-catalog .plugin-summary {
+  min-height: 96px;
+  display: grid;
+  grid-template-columns: 42px minmax(200px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+.capability-catalog .plugin-summary.installed-layout {
+  grid-template-columns: 42px minmax(200px, 1fr) 210px 126px;
+}
+.capability-catalog .plugin-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.capability-catalog .plugin-title-row h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.capability-catalog .plugin-copy p {
+  margin: 5px 0 7px;
+  color: #656d78;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.capability-catalog .plugin-meta {
+  display: flex;
+  gap: 8px;
+  color: #9299a3;
+  font-size: 10px;
+}
+.capability-catalog .plugin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.capability-catalog .plugin-stats span {
+  display: grid;
+  gap: 3px;
+}
+.capability-catalog .plugin-stats small {
+  color: #9aa1aa;
+  font-size: 9px;
+}
+.capability-catalog .plugin-stats b {
+  color: #3c434d;
+  font-size: 11px;
+}
+.capability-catalog .plugin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.capability-catalog .plugin-detail {
+  margin: 0 16px 14px 72px;
+  border: 1px solid #dde5ef;
+  border-radius: 7px;
+  background: #fff;
+  padding: 15px;
+  color: #656d78;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.capability-catalog .catalog-status.installed {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 650;
+  color: #18794e;
+  background: #eaf7f0;
+}
+.capability-catalog .automation-filters {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid #e2e6ea;
+  border-radius: 7px;
+  background: #fff;
+  padding: 3px;
+}
+.capability-catalog .automation-filters button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #6f7680;
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.capability-catalog .automation-filters button.active {
+  background: #edf3ff;
+  color: #245fd2;
+  font-weight: 700;
+}
+.capability-catalog .automation-table-head {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.4fr) 155px 155px 78px 34px;
+  gap: 14px;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid #e8ebef;
+  background: #fcfdfe;
+  padding: 0 14px;
+  color: #9299a3;
+  font-size: 10px;
+}
+.capability-catalog .scheduled-task {
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: minmax(230px, 1.4fr) 155px 155px 78px 34px;
+  gap: 14px;
+  align-items: center;
+  border-bottom: 1px solid #edf0f3;
+  padding: 13px 14px;
+  cursor: pointer;
+}
+.capability-catalog .scheduled-task:hover {
+  background: #fafcff;
+}
+.capability-catalog .scheduled-copy h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 5px;
+  font-size: 13px;
+}
+.capability-catalog .scheduled-copy h3 span {
+  border-radius: 999px;
+  background: #edf3ff;
+  color: #245fd2;
+  padding: 3px 6px;
+  font-size: 9px;
+  font-weight: 650;
+}
+.capability-catalog .scheduled-copy p,
+.capability-catalog .scheduled-timing p,
+.capability-catalog .scheduled-result p {
+  margin: 0;
+  color: #969da7;
+  font-size: 10px;
+}
+.capability-catalog .scheduled-timing,
+.capability-catalog .scheduled-result {
+  display: grid;
+  gap: 4px;
+}
+.capability-catalog .scheduled-timing small,
+.capability-catalog .scheduled-result small {
+  color: #9aa1aa;
+  font-size: 9px;
+}
+.capability-catalog .scheduled-timing strong,
+.capability-catalog .scheduled-result strong {
+  font-size: 12px;
+}
+.capability-catalog .scheduled-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6f7680;
+  font-size: 11px;
+}
+.capability-catalog .scheduled-state i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #12b76a;
+}
+.capability-catalog .scheduled-state.paused i {
+  background: #a9adb5;
+}
+.capability-catalog .scheduled-state.completed i {
+  background: #0788ef;
+}
+.capability-catalog .task-menu-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #6f7680;
+}
+.capability-catalog .automation-suggestions {
+  padding-top: 22px;
+}
+.capability-catalog .automation-template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.capability-catalog .automation-template-card {
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+  background: #fff;
+}
+.capability-catalog .automation-template-card > span {
+  color: #9aa1aa;
+  font-size: 10px;
+}
+.capability-catalog .automation-template-card h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.capability-catalog .automation-template-card p {
+  margin: 0;
+  color: #656d78;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 40px;
+}
+.capability-catalog .automation-template-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.capability-catalog .automation-empty,
+.capability-catalog .empty-state {
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  color: #6f7680;
+  text-align: center;
+  padding: 24px;
+}
+.mcp-proto-list {
+  display: grid;
+  gap: 14px;
+}
+.mcp-proto-card {
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: #fff;
+}
+.mcp-proto-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+.mcp-proto-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.mcp-proto-card p {
+  margin: 0 0 12px;
+  color: #6f7680;
+  line-height: 1.55;
+  font-size: 13px;
+}
+.mcp-proto-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.mcp-proto-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mcp-proto-chips span {
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #eef0f6;
+  color: #59606b;
+  font-size: 12px;
+}
+.mcp-proto-dialog {
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  max-width: 720px;
+  width: calc(100% - 32px);
+  box-shadow: 0 28px 70px rgba(23, 34, 56, 0.2);
+}
+.mcp-proto-dialog::backdrop {
+  background: rgba(20, 24, 32, 0.45);
+}
+.mcp-proto-dialog-body {
+  padding: 22px 24px 18px;
+}
+.mcp-proto-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 24px 20px;
+}
+
+.capability-catalog .catalog-pagination {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #e2e6ea;
+  padding: 8px 16px;
+  color: #8a919b;
+  font-size: 11px;
+}
+.capability-catalog .catalog-pagination div {
+  display: flex;
+  gap: 6px;
+}
+.capability-catalog .catalog-pagination button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e6ea;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.capability-catalog .catalog-pagination button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.capability-catalog .skill-actions,
+.capability-catalog .scheduled-task {
+  position: relative;
+}
+.capability-catalog .catalog-menu-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 160px;
+  border: 1px solid #dfe4ea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(23, 34, 56, 0.14);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+.capability-catalog .catalog-menu-popover button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.capability-catalog .catalog-menu-popover button:hover {
+  background: #f3f6fa;
+}
+.capability-catalog .catalog-menu-popover button.danger {
+  color: #ef4050;
+}
+.catalog-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 24, 32, 0.45);
+  padding: 16px;
+}
+.catalog-modal {
+  width: min(560px, 100%);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(23, 34, 56, 0.2);
+  overflow: hidden;
+}
+.catalog-modal.wide {
+  width: min(720px, 100%);
+}
+.catalog-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 0;
+}
+.catalog-modal-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.catalog-modal-body {
+  padding: 16px 20px;
+}
+.catalog-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 20px 18px;
+}
+.catalog-modal .skill-detail-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.catalog-modal .skill-detail-head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.catalog-modal .skill-detail-head h2 span {
+  color: #89909b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.catalog-modal .skill-instructions h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.catalog-modal .skill-instructions p,
+.catalog-modal .skill-instructions ol {
+  color: #656d78;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.capability-catalog .plugin-market-info {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.capability-catalog .plugin-market-info span {
+  display: grid;
+  gap: 2px;
+}
+.capability-catalog .plugin-market-info small {
+  color: #9aa1aa;
+  font-size: 9px;
+}
+.capability-catalog .plugin-market-info b {
+  font-size: 11px;
+  color: #3c434d;
+}
+.mcp-proto-page .catalog-create {
+  border: 1px solid #171b24;
+  border-radius: 7px;
+  background: #171b24;
+  color: #fff;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.capability-catalog .skill-visual,
+.catalog-modal .skill-visual {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #cbdcff;
+  border-radius: 13px;
+  background: #eaf2ff;
+  color: #3474dc;
+  font: 750 14px/1 inherit;
+  box-shadow: inset -5px -5px 0 rgba(62,112,218,.08), 0 3px 8px rgba(50,72,110,.08);
+}
+.capability-catalog .skill-visual.large,
+.catalog-modal .skill-visual.large {
+  width: 70px;
+  height: 70px;
+  border-radius: 20px;
+  font-size: 22px;
+}
+.capability-catalog .skill-visual.tone-blue,
+.catalog-modal .skill-visual.tone-blue { border-color: #cbdcff; background: #eaf2ff; color: #3474dc; }
+.capability-catalog .skill-visual.tone-green,
+.catalog-modal .skill-visual.tone-green { border-color: #bfe5db; background: #e6f7f2; color: #16836f; }
+.capability-catalog .skill-visual.tone-rose,
+.catalog-modal .skill-visual.tone-rose { border-color: #f0ced9; background: #fff0f4; color: #bd5278; }
+.capability-catalog .skill-visual.tone-amber,
+.catalog-modal .skill-visual.tone-amber { border-color: #eddcaf; background: #fff7df; color: #a96f0d; }
+.capability-catalog .skill-visual.tone-violet,
+.catalog-modal .skill-visual.tone-violet { border-color: #d8cff4; background: #f3efff; color: #7257c8; }

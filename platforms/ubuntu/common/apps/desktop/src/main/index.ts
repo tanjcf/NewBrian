@@ -4974,11 +4974,20 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
     });
   }
 
-  return writeFeatureConfig({
+  const runNow = input.status === "run_now";
+  const nextConfig = await writeFeatureConfig({
     ...config,
     automations: config.automations.map((item) => {
       if (item.id !== id) {
         return item;
+      }
+
+      if (runNow) {
+        return {
+          ...item,
+          status: "scheduled" as const,
+          nextRunAt: new Date(Date.now() - 1_000).toISOString()
+        };
       }
 
       const parsedInterval = Number.parseInt(input.intervalMinutes ?? "", 10);
@@ -5010,6 +5019,10 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
       };
     })
   });
+  if (runNow) {
+    void tickAutomations();
+  }
+  return nextConfig;
 }
 
 async function deleteFeatureItem(kind: ManagedFeatureKind, id: string) {

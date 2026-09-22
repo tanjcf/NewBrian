@@ -33,5 +33,6 @@ test("parses weekly follow-up requests and exposes examples", () => {
   assert.equal(result.intervalMinutes, "10080");
   assert.equal(result.dailyTime, "09:00");
   assert.equal(result.action, "thread_follow_up");
+  assert.equal(result.rrule, "FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0");
   assert.ok(automationIntentExamples().length >= 3);
 });

@@ -1469,8 +1469,24 @@ export function WorkspaceModules(ctx: any) {
   const reasoningPickerWrapRef = useRef<HTMLDivElement | null>(null);
   const [composerSpeed, setComposerSpeed] = useState<"standard" | "fast">("standard");
   const [skillsView, setSkillsView] = useState<"list" | "detail" | "new">("list");
-  const [skillsTab, setSkillsTab] = useState<"installed" | "recommended">("recommended");
+  const [skillsTab, setSkillsTab] = useState<"installed" | "recommended">("installed");
   const [skillSearchText, setSkillSearchText] = useState("");
+  const [skillStatusFilter, setSkillStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const [skillSortMode, setSkillSortMode] = useState<"name" | "status">("name");
+  const [pluginCategoryFilter, setPluginCategoryFilter] = useState("全部");
+  const [expandedPluginId, setExpandedPluginId] = useState("");
+  const [automationStatusFilter, setAutomationStatusFilter] = useState<"all" | "enabled" | "paused" | "completed">("all");
+  const [automationSortMode, setAutomationSortMode] = useState<"next" | "name" | "result">("next");
+  const [skillCatalogPage, setSkillCatalogPage] = useState(1);
+  const [pluginCatalogPage, setPluginCatalogPage] = useState(1);
+  const [automationCatalogPage, setAutomationCatalogPage] = useState(1);
+  const [pluginSortMode, setPluginSortMode] = useState<"popular" | "name" | "installed">("popular");
+  const [pluginVendorFilter, setPluginVendorFilter] = useState("全部来源");
+  const [skillMenuId, setSkillMenuId] = useState("");
+  const [automationMenuId, setAutomationMenuId] = useState("");
+  const [skillDetailModalId, setSkillDetailModalId] = useState("");
+  const [automationDetailModalId, setAutomationDetailModalId] = useState("");
+  const [pluginDetailModalId, setPluginDetailModalId] = useState("");
   const [summonedExpert, setSummonedExpert] = useState<null | {
     expertId: string;
     profession: string;
@@ -1490,11 +1506,6 @@ export function WorkspaceModules(ctx: any) {
   const [mcpAdvancedOpen, setMcpAdvancedOpen] = useState(false);
   const windowControlSupported = Boolean(api?.windowControl?.list);
   useEffect(() => {
-    if (activeFeature === "skills") {
-      setSkillsTab("recommended");
-    }
-  }, [activeFeature]);
-  useEffect(() => {
     if (activeFeature !== "skills" || skillsTab !== "recommended") return;
     if (desktopPreferences?.market?.directClawhubAllowed !== true) return;
     if (!api?.searchOpenClawSkills) {
@@ -1502,29 +1513,35 @@ export function WorkspaceModules(ctx: any) {
       return;
     }
     let cancelled = false;
-    setClawhubBusy(true);
-    void api
-      .searchOpenClawSkills({ query: "*", limit: 20 })
-      .then((results: unknown) => {
-        if (cancelled) return;
-        const list = Array.isArray(results) ? [...results] : [];
-        list.sort((a: any, b: any) => Number(b?.score ?? 0) - Number(a?.score ?? 0));
-        setClawhubResults(list);
-        if (typeof setChatStatus === "function") {
-          setChatStatus(`已加载 ${list.length} 个 OpenClaw 高排行技能`);
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setErrorMessage(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (!cancelled) setClawhubBusy(false);
-      });
+    const query = skillSearchText.trim() || "*";
+    const timer = window.setTimeout(() => {
+      setClawhubBusy(true);
+      void api
+        .searchOpenClawSkills({ query, limit: 20 })
+        .then((results: unknown) => {
+          if (cancelled) return;
+          const list = Array.isArray(results) ? [...results] : [];
+          list.sort((a: any, b: any) => Number(b?.score ?? 0) - Number(a?.score ?? 0));
+          setClawhubResults(list);
+          if (typeof setChatStatus === "function") {
+            setChatStatus(query === "*"
+              ? `已加载 ${list.length} 个 OpenClaw 高排行技能`
+              : `已搜索到 ${list.length} 个匹配技能`);
+          }
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          setErrorMessage(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          if (!cancelled) setClawhubBusy(false);
+        });
+    }, 280);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [activeFeature, skillsTab, api, desktopPreferences?.market?.directClawhubAllowed]);
+  }, [activeFeature, skillsTab, api, desktopPreferences?.market?.directClawhubAllowed, skillSearchText]);
   useEffect(() => {
     let cancelled = false;
     const threadId = String(selectedThread?.id || "").trim();
@@ -1598,6 +1615,7 @@ export function WorkspaceModules(ctx: any) {
       const snapshot = await api.listRepositoryPlugins({
         scope: pluginScopeTab,
         keyword: pluginSearchQuery.trim(),
+        category: pluginCategoryFilter !== "全部" && pluginCategoryFilter !== "自动推荐" ? pluginCategoryFilter : undefined,
         page: 1,
         pageSize: 100
       });
@@ -1622,8 +1640,23 @@ export function WorkspaceModules(ctx: any) {
     } finally {
       setRepositoryPluginsLoading(false);
     }
-  }, [api, pluginScopeTab, pluginSearchQuery]);
+  }, [api, pluginScopeTab, pluginSearchQuery, pluginCategoryFilter]);
 
+  useEffect(() => {
+    if (activeFeature !== "automation" || !api?.getFeatureConfig) return;
+    let cancelled = false;
+    const refresh = () => {
+      void api.getFeatureConfig().then((next: any) => {
+        if (!cancelled && next) setFeatureConfig(next);
+      }).catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 12_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeFeature, api, setFeatureConfig]);
   useEffect(() => {
     if (activeFeature !== "plugins") return;
     const timeout = window.setTimeout(() => { void loadRepositoryPlugins(); }, 180);
@@ -1658,6 +1691,7 @@ export function WorkspaceModules(ctx: any) {
   const researchIntakeGenerationRef = useRef(0);
   const researchIntakeDraftRef = useRef<any>(null);
   const skipResearchPersistRef = useRef(false);
+  const lastCreatorMaterializeRef = useRef("");
   const NEAR_BOTTOM_PX = 140;
   const scrollTaskToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = taskScrollRef.current;
@@ -5490,8 +5524,77 @@ function renderSidebarModule() {
     setComposerMentionQuery(null);
   }
 
+  async function materializeCreatorFromChat(rawText: string, creatorLabel: string) {
+    const text = String(rawText || "").trim();
+    if (!text || !api?.addFeatureItem) return null;
+    const dedupeKey = `${creatorLabel}::${text}`;
+    if (lastCreatorMaterializeRef.current === dedupeKey) return null;
+    lastCreatorMaterializeRef.current = dedupeKey;
+    try {
+      if (creatorLabel === "Automation Creator") {
+        if (/请帮我修改自动化任务/.test(text)) {
+          if (typeof setChatStatus === "function") setChatStatus("已进入自动化修改对话，发送后请确认计划细节");
+          return null;
+        }
+        const parsed = parseAutomationIntent(text);
+        const nextConfig = await api.addFeatureItem({
+          kind: "automations",
+          item: {
+            title: parsed.title || "新自动化任务",
+            trigger: parsed.trigger || text,
+            prompt: parsed.prompt || text,
+            schedule: parsed.schedule,
+            intervalMinutes: parsed.intervalMinutes,
+            dailyTime: parsed.dailyTime || "",
+            rrule: parsed.rrule || "",
+            action: parsed.action === "thread_follow_up" ? "workspace_scan" : parsed.action,
+            status: "scheduled",
+            workspaceId: selectedWorkspace?.id || "",
+            threadId: selectedThread?.id || "",
+            model: modelConfig?.model || "",
+            reasoning: modelConfig?.reasoningEffort || "low",
+            runtime: "worktree"
+          }
+        });
+        setFeatureConfig(nextConfig);
+        if (typeof setChatStatus === "function") setChatStatus(`已创建自动化「${parsed.title || "新自动化任务"}」，并继续在对话中确认细节`);
+        return parsed;
+      }
+      if (creatorLabel === "Skill Creator") {
+        const name = text.replace(/^帮我创建[^：:]*[：:]\s*/, "").slice(0, 40) || "新技能";
+        const nextConfig = await api.addFeatureItem({
+          kind: "skills",
+          item: {
+            name,
+            summary: text,
+            status: "enabled",
+            source: "conversation",
+            scope: "global",
+            path: ""
+          }
+        });
+        setFeatureConfig(nextConfig);
+        if (typeof setChatStatus === "function") setChatStatus(`已登记技能「${name}」，可在技能页继续完善`);
+        return { name };
+      }
+      if (creatorLabel === "Plugin Creator") {
+        if (typeof setChatStatus === "function") {
+          setChatStatus("Plugin Creator：请在对话中说明插件能力；完成后可到插件页安装仓库插件或登记本地 manifest。");
+        }
+        return { ok: true };
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+    return null;
+  }
+
   function submitComposerRequest(draft?: Parameters<typeof askModel>[0]) {
     const outbound = buildComposerSendDraft(draft);
+    const creatorLabel = String(outbound.skillContext || composerSkillContext || "").trim();
+    if (creatorLabel === "Automation Creator" || creatorLabel === "Skill Creator" || creatorLabel === "Plugin Creator") {
+      void materializeCreatorFromChat(String(outbound.question || ""), creatorLabel);
+    }
     const sidebarRow = String(selectedSidebarRow || "");
     const inProjectConversationContext = isBrainConversationSelection
       || sidebarRow.startsWith("project-thread:");
@@ -8319,19 +8422,99 @@ function renderExtensionsModule() {
     );
   }
 function renderSkillsModule() {
+    const resolveSkillVisualKey = (name: string) => {
+      const key = String(name || "").toLowerCase();
+      if (/browser|web|chrome/.test(key)) return "browser";
+      if (/excel|sheet|table|sql|db|数据/.test(key)) return "excel";
+      if (/image|vision|图/.test(key)) return "image";
+      if (/ppt|演示/.test(key)) return "ppt";
+      if (/pdf/.test(key)) return "pdf";
+      if (/docs|doc|文档|写作|write/.test(key)) return "docs";
+      if (/auto|定时|巡检|扫描|schedule/.test(key)) return "automation";
+      if (/install|zip|claw|安装/.test(key)) return "installer";
+      if (/review|审核|检查/.test(key)) return "review";
+      if (/plugin|插件/.test(key)) return "plugin";
+      return "skill";
+    };
+    const skillVisualTone = (name: string) => {
+      const map: Record<string, string> = {
+        browser: "tone-blue",
+        excel: "tone-green",
+        image: "tone-rose",
+        ppt: "tone-rose",
+        pdf: "tone-rose",
+        docs: "tone-amber",
+        automation: "tone-amber",
+        installer: "tone-green",
+        review: "tone-green",
+        plugin: "tone-violet",
+        skill: "tone-violet",
+        db: "tone-blue"
+      };
+      return map[resolveSkillVisualKey(name)] || "tone-blue";
+    };
+    const renderCapabilityVisual = (name: string, large = false) => {
+      const key = resolveSkillVisualKey(name);
+      const paths: Record<string, any> = {
+        browser: (<><path d="M21.54 15H17a2 2 0 0 0-2 2v4.54" /><path d="M7 3.34V5a3 3 0 0 0 3 3 2 2 0 0 1 2 2c0 1.1.9 2 2 2s2-.9 2-2 .9-2 2-2h3.17" /><path d="M11 21.95V18a2 2 0 0 0-2-2 2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05" /><circle cx="12" cy="12" r="10" /></>),
+        excel: (<><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18M3 15h18M9 9v12M15 9v12" /></>),
+        image: (<><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" /></>),
+        docs: (<><path d="M12 7v14M16 12h2M16 8h2M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3zM6 12h2M6 8h2" /></>),
+        plugin: (<><path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2" /><rect x="14" y="2" width="8" height="8" rx="1" /></>),
+        automation: (<><path d="M4 14a1 1 0 0 1-.8-1.6l9.9-10.2a.5.5 0 0 1 .9.4l-1.9 6A1 1 0 0 0 13 10h7a1 1 0 0 1 .8 1.6l-9.9 10.2a.5.5 0 0 1-.9-.4l1.9-6A1 1 0 0 0 11 14z" /></>),
+        ppt: (<><path d="M2 3h20M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3m4 18 5-5 5 5" /></>),
+        skill: (<><path d="m21.6 3.6-1.2-1.2a1.2 1.2 0 0 0-1.8 0L2.4 18.6a1.2 1.2 0 0 0 0 1.8l1.2 1.2a1.2 1.2 0 0 0 1.8 0L21.6 5.4a1.2 1.2 0 0 0 0-1.8M14 7l3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9" /></>),
+        installer: (<><path d="M12 22v-9M15.2 2.2a1.7 1.7 0 0 1 1.6 0L21 4.6a1.9 1.9 0 0 1 0 3.3L8.8 14.8a1.7 1.7 0 0 1-1.6 0L3 12.4a1.9 1.9 0 0 1 0-3.3zM20 13v3.9a2.1 2.1 0 0 1-1.1 1.8l-6 3.1a1.9 1.9 0 0 1-1.8 0l-6-3.1A2.1 2.1 0 0 1 4 16.9V13" /></>),
+        pdf: (<><path d="M10.5 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.7.7l3.6 3.6A2.4 2.4 0 0 1 20 8v6M14 2v5a1 1 0 0 0 1 1h5m-6 12 2 2 4-4" /></>),
+        review: (<><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /><path d="m16 16-1.9-1.9" /></>)
+      };
+      return (
+        <span className={`skill-visual ${skillVisualTone(name)}${large ? " large" : ""}`}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">{paths[key] || paths.skill}</svg>
+        </span>
+      );
+    };
     const skills = featureConfig.skills;
     const query = skillSearchText.trim().toLowerCase();
-    const visibleSkills = skills
+    const installedSkills = skills
       .filter((skill: any) => RESEARCH_WRITING_PRODUCT_ENABLED || skill.name !== RESEARCH_WRITING_SKILL)
-      .filter((skill: any) => skillsTab === "installed" ? (skill.status ?? "enabled") !== "recommended" : true)
+      .filter((skill: any) => (skill.status ?? "enabled") !== "recommended");
+    const visibleInstalled = installedSkills
+      .filter((skill: any) => {
+        if (skillStatusFilter === "enabled") return (skill.status ?? "enabled") === "enabled";
+        if (skillStatusFilter === "disabled") return (skill.status ?? "enabled") === "disabled";
+        return true;
+      })
       .filter((skill: any) => {
         if (!query) return true;
         return [skill.name, skill.summary, skill.source, skill.scope, skill.path].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+      })
+      .slice()
+      .sort((a: any, b: any) => {
+        if (skillSortMode === "status") {
+          const ae = (a.status ?? "enabled") === "enabled" ? 1 : 0;
+          const be = (b.status ?? "enabled") === "enabled" ? 1 : 0;
+          return be - ae || String(a.name || "").localeCompare(String(b.name || ""));
+        }
+        return String(a.name || "").localeCompare(String(b.name || ""));
       });
-    const filteredSkills = skills.filter((skill: any) =>
-      RESEARCH_WRITING_PRODUCT_ENABLED || skill.name !== RESEARCH_WRITING_SKILL
-    );
-    const selectedSkill = filteredSkills.find((skill: any) => skill.id === editingFeatureId) ?? visibleSkills[0] ?? filteredSkills[0];
+
+    const clawhubVisible = clawhubResults
+      .filter((item: any) => {
+        if (!query) return true;
+        const hay = [item.displayName, item.slug, item.summary, item.ownerHandle].filter(Boolean).join(" ").toLowerCase();
+        return hay.includes(query);
+      })
+      .slice()
+      .sort((a: any, b: any) => String(a.displayName || a.slug || "").localeCompare(String(b.displayName || b.slug || "")));
+
+    const list = skillsTab === "installed" ? visibleInstalled : clawhubVisible;
+    const pageSize = 6;
+    const pages = Math.max(1, Math.ceil(list.length / pageSize));
+    const page = Math.min(skillCatalogPage, pages);
+    const paged = list.slice((page - 1) * pageSize, page * pageSize);
+    const selectedSkill = installedSkills.find((skill: any) => skill.id === skillDetailModalId) ?? null;
+    const directClawhubAllowed = desktopPreferences?.market?.directClawhubAllowed === true;
 
     async function persistSkillUpdate(skill: any, nextStatus: string) {
       if (!api?.updateFeatureItem) return;
@@ -8348,7 +8531,7 @@ function renderSkillsModule() {
         }
       });
       setFeatureConfig(nextConfig);
-      if (typeof setChatStatus === "function") setChatStatus(`${skill.name} 已${nextStatus === "enabled" ? "启用" : "禁用"}`);
+      if (typeof setChatStatus === "function") setChatStatus(`${skill.name} 已${nextStatus === "enabled" ? "启用" : "停用"}`);
     }
 
     async function toggleSkill(skill: any) {
@@ -8362,11 +8545,14 @@ function renderSkillsModule() {
 
     async function uninstallSkill(skill: any) {
       if (!api?.deleteFeatureItem) return;
+      const confirmed = window.confirm(`卸载后，“${skill.name}”将不能在对话中使用。`);
+      if (!confirmed) return;
       try {
         const nextConfig = await api.deleteFeatureItem({ kind: "skills", id: skill.id });
         setFeatureConfig(nextConfig);
         if (typeof setChatStatus === "function") setChatStatus(`${skill.name} 已卸载`);
-        if (editingFeatureId === skill.id) { resetFeatureDraft("skills"); setSkillsView("list"); }
+        if (skillDetailModalId === skill.id) setSkillDetailModalId("");
+        setSkillMenuId("");
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error));
       }
@@ -8378,10 +8564,7 @@ function renderSkillsModule() {
         return;
       }
       try {
-        const result = await api.exportOpenClawSkillZip({
-          skillId: skill.id,
-          skillName: skill.name
-        });
+        const result = await api.exportOpenClawSkillZip({ skillId: skill.id, skillName: skill.name });
         if (!result?.ok) {
           if (typeof setChatStatus === "function") setChatStatus("已取消技能 zip 备份");
           return;
@@ -8394,29 +8577,32 @@ function renderSkillsModule() {
       }
     }
 
-    async function uninstallWritingSkillsAction() {
-      if (!api?.uninstallWritingSkills) {
-        setErrorMessage("当前桌面版本尚未启用写作技能批量卸载。");
-        return;
-      }
-      try {
-        const result = await api.uninstallWritingSkills({});
-        const nextConfig = await api.getFeatureConfig();
-        setFeatureConfig(nextConfig);
-        if (typeof setChatStatus === "function") setChatStatus(result.detail || "写作技能卸载完成");
-        setSkillsView("list");
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : String(error));
-      }
+    function openCreatorChat(invocation: string, draft = "") {
+      setSelectedSidebarRow("feature:new-chat");
+      setErrorMessage?.("");
+      setSearchFilePreview(null);
+      setActiveFeature("new-chat");
+      setNewThreadScope("chat");
+      setChatUsesProject?.(false);
+      setIsComposingNewThread(true);
+      setSelectedThreadId("");
+      setQuestion(draft);
+      setSelectedComposerSkill(null);
+      setComposerSkillContext(invocation);
+      setSelectedComposerTools([]);
+      setComposerModes([]);
+      setPreviewMode("empty");
+      setPreviewPlacement("hidden");
+      if (typeof setChatStatus === "function") setChatStatus(`已进入 ${invocation}`);
     }
 
-    function showSkillDetail(skill: any) { loadFeatureDraft("skills", skill); setSkillsView("detail"); }
-    function startNewSkill() { resetFeatureDraft("skills"); setSkillsView("new"); }
+    function startNewSkill() {
+      openCreatorChat("Skill Creator", "帮我创建一个可复用技能：");
+    }
+
     function trySkillInChat(skill: any) {
-      setQuestion(`在当前对话中试用技能：${skill.name}`);
-      setActiveFeature("new-chat");
-      setIsComposingNewThread(false);
-      if (typeof setChatStatus === "function") setChatStatus(`已填入技能试用提示：${skill.name}`);
+      openCreatorChat(skill.name, `在当前对话中试用技能：${skill.name}`);
+      selectComposerSkill(skill);
     }
 
     async function installClawHubRef(ref: string) {
@@ -8430,24 +8616,17 @@ function renderSkillsModule() {
         setErrorMessage("当前桌面版本尚未启用 ClawHub 安装。");
         return;
       }
-      const confirmed = window.confirm(
-        `即将安装社区技能 ${skillRef}。\n\n脚本不会自动执行；请确认已了解风险后再继续。`
-      );
+      const confirmed = window.confirm(`即将安装社区技能 ${skillRef}。\n\n脚本不会自动执行；请确认已了解风险后再继续。`);
       if (!confirmed) return;
       setClawhubBusy(true);
       setClawhubInstallingRef(skillRef);
       try {
-        const result = await api.installOpenClawSkillFromClawHub({
-          ref: skillRef,
-          acknowledgeRisk: true,
-          force: true
-        });
+        const result = await api.installOpenClawSkillFromClawHub({ ref: skillRef, acknowledgeRisk: true, force: true });
         const nextConfig = await api.getFeatureConfig();
         setFeatureConfig(nextConfig);
-        if (typeof setChatStatus === "function") {
-          setChatStatus(`已安装 OpenClaw 技能：${result?.skill?.name || skillRef}`);
-        }
+        if (typeof setChatStatus === "function") setChatStatus(`已安装 OpenClaw 技能：${result?.skill?.name || skillRef}`);
         setSkillsTab("installed");
+        setSkillCatalogPage(1);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -8461,16 +8640,11 @@ function renderSkillsModule() {
         setErrorMessage("当前桌面版本尚未启用 OpenClaw zip 安装。");
         return;
       }
-      const confirmed = window.confirm(
-        "即将从本地 zip 安装 OpenClaw 技能。\n\n脚本不会自动执行；请确认已了解风险后再继续。"
-      );
+      const confirmed = window.confirm("即将从本地 zip 安装 OpenClaw 技能。\n\n脚本不会自动执行；请确认已了解风险后再继续。");
       if (!confirmed) return;
       setClawhubBusy(true);
       try {
-        const result = await api.selectAndInstallOpenClawSkill({
-          acknowledgeRisk: true,
-          force: true
-        });
+        const result = await api.selectAndInstallOpenClawSkill({ acknowledgeRisk: true, force: true });
         if (!result) {
           if (typeof setChatStatus === "function") setChatStatus("已取消 zip 安装");
           return;
@@ -8479,6 +8653,7 @@ function renderSkillsModule() {
         setFeatureConfig(nextConfig);
         if (typeof setChatStatus === "function") setChatStatus(`已从 zip 安装技能：${result.skill?.name}`);
         setSkillsTab("installed");
+        setSkillCatalogPage(1);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -8486,178 +8661,229 @@ function renderSkillsModule() {
       }
     }
 
-    const detailPanel = (() => {
-      if (skillsView === "new") {
-        return (
-          <section className="skills-create-panel">
-            <div className="skills-detail-head">
-              <button type="button" onClick={() => setSkillsView("list")}>返回</button>
-              <div><h2>新建技能</h2><p>填写基础信息后保存，NewBrain 会把它加入技能列表。</p></div>
-            </div>
-            <div className="skills-detail-form">
-              <label><span>名称</span><input value={skillDraft.name} onChange={(event) => setSkillDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="技能名称" /></label>
-              <label><span>说明</span><textarea value={skillDraft.summary} onChange={(event) => setSkillDraft((current: any) => ({ ...current, summary: event.target.value }))} placeholder="描述这个技能的触发场景、能力和约束" rows={4} /></label>
-              <div className="skills-detail-grid">
-                <label><span>来源</span><input value={skillDraft.source} onChange={(event) => setSkillDraft((current: any) => ({ ...current, source: event.target.value }))} placeholder="local / system / plugin" /></label>
-                <label><span>作用域</span><select value={skillDraft.scope} onChange={(event) => setSkillDraft((current: any) => ({ ...current, scope: event.target.value }))}><option value="global">全局</option><option value="workspace">工作区</option></select></label>
-              </div>
-              <label><span>路径</span><input value={skillDraft.path} onChange={(event) => setSkillDraft((current: any) => ({ ...current, path: event.target.value }))} placeholder="skills/name/SKILL.md" /></label>
-              <div className="skills-detail-actions"><button type="button" onClick={() => setSkillsView("list")}>取消</button><button type="button" onClick={() => void saveFeature("skills")}>保存技能</button></div>
-            </div>
-          </section>
-        );
-      }
-      if (skillsView !== "detail" || !selectedSkill) return null;
-      const enabled = (selectedSkill.status ?? "enabled") === "enabled";
-      return (
-        <section className="skills-detail-page">
-          <div className="skills-detail-head">
-            <button type="button" onClick={() => setSkillsView("list")}>返回</button>
-            <div><h2>{selectedSkill.name} <span>Skill</span></h2><p>{selectedSkill.summary || "暂无描述"}</p></div>
-          </div>
-          <div className="skills-detail-meta">
-            <span>来源：{selectedSkill.source || "local"}</span>
-            <span>作用域：{selectedSkill.scope || "global"}</span>
-            <span>状态：{enabled ? "启用" : "禁用"}</span>
-            <span>路径：{selectedSkill.path || "未配置"}</span>
-          </div>
-          <div className="skills-detail-command-row">
-            <button type="button" onClick={() => void toggleSkill(selectedSkill)}>{enabled ? "禁用" : "启用"}</button>
-            <button type="button" onClick={() => trySkillInChat(selectedSkill)}>在对话中试用</button>
-            <button type="button" onClick={() => void exportSkillZip(selectedSkill)}>备份为 zip</button>
-            <button type="button" onClick={() => void uninstallSkill(selectedSkill)}>卸载</button>
-          </div>
-        </section>
-      );
-    })();
-
-    const directClawhubAllowed = desktopPreferences?.market?.directClawhubAllowed === true;
-    const clawhubPanel = skillsTab === "recommended" ? (
-      <section className="skills-clawhub-panel" style={{ marginBottom: 16 }}>
-        <div className="skills-detail-actions" style={{ marginBottom: 12 }}>
-          <button type="button" disabled={clawhubBusy} onClick={() => void installOpenClawZip()}>
-            {clawhubBusy && !clawhubInstallingRef ? "处理中…" : "从 zip 安装"}
-          </button>
-        </div>
-        {!directClawhubAllowed ? (
-          <div className="skills-empty-state" role="status">ClawHub 直连已关闭，仅支持本地 zip 导入。可在设置 → 配置中开启。</div>
-        ) : (
-          <div className="skills-market-list">
-            {clawhubResults.length ? clawhubResults.map((item: any, index: number) => {
-              const ref = item.ownerHandle ? `@${item.ownerHandle}/${item.slug}` : item.slug;
-              const installing = clawhubInstallingRef === ref;
-              return (
-                <article className="skills-market-card" key={`${ref}-${index}`}>
-                  <div className="skills-market-icon" aria-hidden="true">{String(item.displayName || item.slug || "S").slice(0, 1).toUpperCase()}</div>
-                  <div className="skills-market-main">
-                    <strong>{item.displayName || item.slug} <span>ClawHub</span></strong>
-                    <p>{item.summary || ref}</p>
-                  </div>
-                  <div className="skills-market-actions">
-                    <button type="button" disabled={clawhubBusy} onClick={() => void installClawHubRef(ref)}>
-                      {installing ? "安装中…" : "安装"}
-                    </button>
-                  </div>
-                </article>
-              );
-            }) : (
-              <div className="skills-empty-state" role="status">
-                {clawhubBusy ? "正在加载 OpenClaw 高排行技能…" : "暂无可用技能，可从 zip 安装"}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-    ) : null;
+    const resultMeta = list.length
+      ? `显示 ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, list.length)}，共 ${list.length} 项`
+      : "0 个结果";
 
     return (
-      <section className="skills-page skills-market-page">
-        <header className="skills-page-toolbar">
-          <div className="skills-page-title"><h1>技能</h1><p>赋予 NewBrain 更强大的能力。</p></div>
-          <div className="skills-toolbar-actions">
-            <button
-              type="button"
-              data-testid="open-experts-marketplace"
-              title="浏览并安装专家包（召唤仅由 Skill 自行 expert.summon）"
-              onClick={() => {
-                setSelectedSidebarRow("feature:experts");
-                setActiveFeature("experts");
-              }}
-            >
-              安装专家包
-            </button>
-            <button type="button" onClick={() => void runAction(() => api!.queueWorkspaceScan())} disabled={!api}><span>↻</span>刷新</button>
-            <button type="button" onClick={() => void uninstallWritingSkillsAction()} disabled={!api} title="先卸载本地写作技能，再用 zip 备份其余技能">卸载写作技能</button>
-            <label className="skills-search"><span aria-hidden="true">⌕</span><input value={skillSearchText} onChange={(event) => setSkillSearchText(event.target.value)} placeholder="搜索技能" /></label>
-            <button className="skills-new-button" type="button" onClick={startNewSkill}>+ 新技能</button>
+      <section className="capability-catalog skills-page">
+        <header className="catalog-heading">
+          <div>
+            <span className="catalog-kicker">CAPABILITY LIBRARY</span>
+            <h1>技能</h1>
+            <p>管理可复用的专业工作流，并控制它们在对话中的可用状态。</p>
           </div>
+          <button className="catalog-create" type="button" onClick={startNewSkill}>＋ 新建技能</button>
         </header>
-        <div className="ui-logo-tabs skills-tabs"><button className={skillsTab === "installed" ? "active" : ""} type="button" onClick={() => setSkillsTab("installed")}>已安装</button><button className={skillsTab === "recommended" ? "active" : ""} type="button" onClick={() => setSkillsTab("recommended")}>OpenClaw</button></div>
-        {skillsTab === "recommended" ? clawhubPanel : (detailPanel ?? (
-          <div className="skills-market-list">
-            {visibleSkills.length ? visibleSkills.map((skill: any, index: number) => {
-              const enabled = (skill.status ?? "enabled") === "enabled";
-              return (
-                <article className="skills-market-card" key={skill.id ?? `${skill.name}-${index}`} onClick={() => showSkillDetail(skill)}>
-                  <div className="skills-market-icon" aria-hidden="true">{String(skill.name || "S").slice(0, 1).toUpperCase()}</div>
-                  <div className="skills-market-main"><strong>{skill.name} <span>Skill</span></strong><p>{skill.summary || "暂无描述"}</p></div>
-                  <div className="skills-market-actions" onClick={(event) => event.stopPropagation()}>
-                    <button type="button" onClick={() => showSkillDetail(skill)}>详情</button>
-                    <button className={`settings-toggle ${enabled ? "on" : ""}`} type="button" aria-label={enabled ? "禁用技能" : "启用技能"} onClick={() => void toggleSkill(skill)}><span /></button>
-                    <button type="button" onClick={() => void exportSkillZip(skill)}>备份 zip</button>
-                    <button type="button" onClick={() => void uninstallSkill(skill)}>卸载</button>
-                    <button type="button" onClick={() => trySkillInChat(skill)}>在对话中试用</button>
-                  </div>
-                </article>
-              );
-            }) : <div className="skills-empty-state">暂无匹配的技能</div>}
+        <section className="catalog-surface">
+          <div className="catalog-toolbar">
+            <div className="catalog-viewbar">
+              <div className="catalog-tabs">
+                <button className={skillsTab === "installed" ? "active" : ""} type="button" onClick={() => { setSkillsTab("installed"); setSkillCatalogPage(1); }}>已安装</button>
+                <button className={skillsTab === "recommended" ? "active" : ""} type="button" onClick={() => { setSkillsTab("recommended"); setSkillCatalogPage(1); }}>可安装</button>
+              </div>
+              <div className="inline-actions" style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <button type="button" data-testid="open-experts-marketplace" onClick={() => { setSelectedSidebarRow("feature:experts"); setActiveFeature("experts"); }}>安装专家包</button>
+                {skillsTab === "recommended" ? (
+                  <button type="button" disabled={clawhubBusy} onClick={() => void installOpenClawZip()}>{clawhubBusy && !clawhubInstallingRef ? "处理中…" : "从 zip 安装"}</button>
+                ) : null}
+              </div>
+            </div>
+            <div className={`catalog-filterbar${skillsTab === "recommended" ? " is-recommended" : ""}`}>
+              <label className="catalog-search"><span>⌕</span><input value={skillSearchText} onChange={(event) => { setSkillSearchText(event.target.value); setSkillCatalogPage(1); }} placeholder="搜索名称或能力说明" /></label>
+              {skillsTab === "installed" ? (
+                <select className="catalog-select" value={skillStatusFilter} onChange={(event) => { setSkillStatusFilter(event.target.value as any); setSkillCatalogPage(1); }} aria-label="技能状态">
+                  <option value="all">全部状态</option>
+                  <option value="enabled">已启用</option>
+                  <option value="disabled">已停用</option>
+                </select>
+              ) : null}
+              <select className="catalog-select" value={skillSortMode} onChange={(event) => setSkillSortMode(event.target.value as any)} aria-label="技能排序">
+                <option value="name">按名称排序</option>
+                <option value="status">按状态排序</option>
+              </select>
+              <button className="catalog-icon-button" type="button" title="刷新" onClick={() => void runAction(() => api!.queueWorkspaceScan())} disabled={!api}>↻</button>
+            </div>
           </div>
-        ))}
+          <div className="catalog-result-bar"><span>{resultMeta}</span><span>每页 {pageSize} 项</span></div>
+          {skillsTab === "recommended" ? (
+            !directClawhubAllowed ? (
+              <div className="empty-state"><div><strong>ClawHub 直连已关闭</strong>仅支持本地 zip 导入。可在设置 → 配置中开启。</div></div>
+            ) : (
+              <div className="discovery-grid skill-discovery-grid">
+                {paged.length ? paged.map((item: any, index: number) => {
+                  const ref = item.ownerHandle ? `@${item.ownerHandle}/${item.slug}` : item.slug;
+                  const installing = clawhubInstallingRef === ref;
+                  return (
+                    <article className="discovery-card skill-discovery-card" key={`${ref}-${index}`}>
+                      <header>
+                        {renderCapabilityVisual(item.displayName || item.slug)}
+                        <div><h3>{item.displayName || item.slug}</h3><small>专业工作流</small></div>
+                      </header>
+                      <p>{item.summary || ref}</p>
+                      <div className="discovery-tags"><span>官方推荐</span><span>对话可用</span></div>
+                      <footer>
+                        <span>OpenClaw</span>
+                        <button className="catalog-row-action" type="button" disabled={clawhubBusy} onClick={() => void installClawHubRef(ref)}>{installing ? "安装中…" : "安装"}</button>
+                      </footer>
+                    </article>
+                  );
+                }) : <div className="empty-state"><div><strong>{clawhubBusy ? "正在加载…" : "暂无推荐技能"}</strong>{clawhubBusy ? "" : "可从 zip 安装"}</div></div>}
+              </div>
+            )
+          ) : (
+            <div className="skill-grid">
+              {paged.length ? paged.map((skill: any, index: number) => {
+                const enabled = (skill.status ?? "enabled") === "enabled";
+                const open = skillMenuId === skill.id;
+                return (
+                  <article className="skill-row" key={skill.id ?? `${skill.name}-${index}`}>
+                    {renderCapabilityVisual(skill.name)}
+                    <span className="skill-copy">
+                      <strong>{skill.name}</strong>
+                      <p>{skill.summary || "暂无描述"}</p>
+                      <small>工作区技能 · 可在对话中调用</small>
+                    </span>
+                    <span className="skill-actions">
+                      <button className={`switch ${enabled ? "on" : ""}`} type="button" aria-label={enabled ? "停用技能" : "启用技能"} onClick={() => void toggleSkill(skill)} />
+                      <button className="catalog-more" type="button" aria-label={`管理${skill.name}`} onClick={() => setSkillMenuId(open ? "" : skill.id)}>•••</button>
+                      {open ? (
+                        <div className="catalog-menu-popover" role="menu">
+                          <button type="button" onClick={() => { setSkillDetailModalId(skill.id); setSkillMenuId(""); }}>详情</button>
+                          <button type="button" onClick={() => { setSkillMenuId(""); void exportSkillZip(skill); }}>备份 zip</button>
+                          <button type="button" onClick={() => { setSkillMenuId(""); trySkillInChat(skill); }}>在对话中试用</button>
+                          <button type="button" className="danger" onClick={() => { setSkillMenuId(""); void uninstallSkill(skill); }}>卸载</button>
+                        </div>
+                      ) : null}
+                    </span>
+                  </article>
+                );
+              }) : <div className="empty-state"><div><strong>未找到技能</strong>调整关键词或状态筛选</div></div>}
+            </div>
+          )}
+          <footer className="catalog-pagination">
+            <span>第 {page} / {pages} 页</span>
+            <div>
+              <button type="button" disabled={page <= 1} onClick={() => setSkillCatalogPage((current) => Math.max(1, current - 1))} aria-label="上一页">←</button>
+              <button type="button" disabled={page >= pages} onClick={() => setSkillCatalogPage((current) => Math.min(pages, current + 1))} aria-label="下一页">→</button>
+            </div>
+          </footer>
+        </section>
+
+        {selectedSkill ? (
+          <div className="catalog-modal-backdrop" role="presentation" onClick={() => setSkillDetailModalId("")}>
+            <section className="catalog-modal wide" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+              <header className="catalog-modal-head">
+                <h2>详情</h2>
+                <button type="button" className="icon-btn" aria-label="关闭" onClick={() => setSkillDetailModalId("")}>×</button>
+              </header>
+              <div className="catalog-modal-body">
+                <div className="skill-detail-head">
+                  {renderCapabilityVisual(selectedSkill.name, true)}
+                  <div>
+                    <h2>{selectedSkill.name} <span>Skill</span></h2>
+                    <p>{selectedSkill.summary || "暂无描述"}</p>
+                  </div>
+                  <div className="skill-actions">
+                    <button className={`switch ${(selectedSkill.status ?? "enabled") === "enabled" ? "on" : ""}`} type="button" onClick={() => void toggleSkill(selectedSkill)} />
+                    <button className="catalog-row-action danger-text" type="button" onClick={() => void uninstallSkill(selectedSkill)}>卸载</button>
+                  </div>
+                </div>
+                <div className="skill-instructions">
+                  <h3>{selectedSkill.name} 使用说明</h3>
+                  <p>来源：{selectedSkill.source || "local"} · 作用域：{selectedSkill.scope || "global"} · 路径：{selectedSkill.path || "未配置"}</p>
+                  <ol>
+                    <li>读取当前对话及用户明确提供的文件。</li>
+                    <li>按照技能定义执行稳定、可复用的工作流。</li>
+                    <li>遇到缺失信息时先说明具体缺口。</li>
+                    <li>输出结果后给出验证状态和可继续操作的文件。</li>
+                  </ol>
+                </div>
+              </div>
+              <footer className="catalog-modal-foot">
+                <button type="button" onClick={() => setSkillDetailModalId("")}>关闭</button>
+                <button className="catalog-create" type="button" onClick={() => { setSkillDetailModalId(""); trySkillInChat(selectedSkill); }}>在对话中试用</button>
+              </footer>
+            </section>
+          </div>
+        ) : null}
       </section>
     );
   }
 function renderPluginsModule() {
     const pluginCatalog = [
-      { id: "plugin-git-console", name: "Git Console", summary: "内置 Git 工作区助手，用于查看状态、分支和仓库操作。", version: "内置", source: "NewBrain", capabilities: ["git", "workspace"], category: "精选", color: "emerald", bundled: true },
-      { id: "plugin-shell-runner", name: "Shell Runner", summary: "内置命令执行器，支持审批模式下运行 shell 命令。", version: "内置", source: "NewBrain", capabilities: ["shell", "approval"], category: "精选", color: "orange", bundled: true },
-      ...builtinPluginCatalog.map((plugin) => ({ ...plugin, version: "1.0.0", source: "NewBrain", bundled: true })),
-      ...repositoryPlugins
+      { id: "plugin-git-console", name: "Git Console", summary: "内置 Git 工作区助手，用于查看状态、分支和仓库操作。", version: "内置", source: "NewBrain", capabilities: ["git", "workspace"], category: "精选", color: "emerald", bundled: true, tags: ["内置", "精选"], published: "", calls: "", success: "", latency: "" },
+      { id: "plugin-shell-runner", name: "Shell Runner", summary: "内置命令执行器，支持审批模式下运行 shell 命令。", version: "内置", source: "NewBrain", capabilities: ["shell", "approval"], category: "精选", color: "orange", bundled: true, tags: ["内置", "精选"], published: "", calls: "", success: "", latency: "" },
+      ...builtinPluginCatalog.map((plugin) => ({ ...plugin, version: "1.0.0", source: "NewBrain", bundled: true, tags: ["内置", plugin.category].filter(Boolean), published: "", calls: "", success: "", latency: "" })),
+      ...repositoryPlugins.map((plugin) => ({
+        ...plugin,
+        tags: [plugin.source, plugin.category, plugin.executionKind].filter(Boolean),
+        published: plugin.published || plugin.updatedAt || "",
+        calls: plugin.calls || plugin.installCount || "",
+        success: plugin.success || "",
+        latency: plugin.latency || "",
+        workspaceCalls: plugin.workspaceCalls || "",
+        workspaceSuccess: plugin.workspaceSuccess || "",
+        workspaceLatency: plugin.workspaceLatency || "",
+        detail: plugin.detail || plugin.summary
+      }))
     ];
     const installedIds = new Set((featureConfig.plugins ?? []).map((plugin: any) => plugin.id));
-    const visiblePlugins = pluginCatalog
+    const categories = ["全部", "自动推荐", ...[...new Set(pluginCatalog.map((plugin) => plugin.category || "其他"))].filter((item) => item && item !== "全部")];
+    let visiblePlugins = pluginCatalog
       .map((plugin) => ({ ...plugin, installed: Boolean(plugin.installed || plugin.bundled || installedIds.has(plugin.id)) }))
       .filter((plugin) => pluginMarketTab === "all" || plugin.installed)
+      .filter((plugin) => pluginCategoryFilter === "全部" || pluginCategoryFilter === "自动推荐" || (plugin.category || "其他") === pluginCategoryFilter)
+      .filter((plugin) => {
+        if (pluginVendorFilter === "全部来源") return true;
+        if (pluginVendorFilter === "由 NewBrain 构建" || pluginVendorFilter === "由 OpenAI 构建") return plugin.bundled || plugin.source === "NewBrain" || String(plugin.tags || []).includes("官方");
+        return String(plugin.source || "").includes(pluginVendorFilter.split(" ")[0]);
+      })
       .filter((plugin) => {
         const query = pluginSearchQuery.trim().toLowerCase();
         if (!query) return true;
-        return [plugin.name, plugin.summary, plugin.category, ...plugin.capabilities].some((value) => String(value).toLowerCase().includes(query));
+        return [plugin.name, plugin.summary, plugin.category, plugin.source, ...(plugin.capabilities || []), ...(plugin.tags || [])].some((value) => String(value).toLowerCase().includes(query));
       });
-    const pluginGroups = [
-      { id: "featured", label: "精选", plugins: visiblePlugins.filter((plugin) => plugin.category === "精选") },
-      { id: "productivity", label: "生产力", plugins: visiblePlugins.filter((plugin) => plugin.category === "生产力") }
-    ].filter((group) => group.plugins.length > 0);
-    const dynamicPluginGroups = [...new Set(visiblePlugins.map((plugin) => plugin.category || "其他"))]
-      .map((category) => ({
-        id: String(category).toLowerCase().replace(/[^a-z0-9]+/g, "-") || String(category),
-        label: String(category),
-        plugins: visiblePlugins.filter((plugin) => (plugin.category || "其他") === category)
-      }));
+    visiblePlugins = visiblePlugins.slice().sort((a: any, b: any) => {
+      if (pluginSortMode === "name") return String(a.name).localeCompare(String(b.name));
+      if (pluginSortMode === "installed") return Number(b.installed) - Number(a.installed) || String(a.name).localeCompare(String(b.name));
+      return String(b.calls || b.version || "").localeCompare(String(a.calls || a.version || "")) || String(a.name).localeCompare(String(b.name));
+    });
+    const discovery = pluginMarketTab === "all";
+    const pageSize = discovery ? 6 : 4;
+    const pages = Math.max(1, Math.ceil(visiblePlugins.length / pageSize));
+    const page = Math.min(pluginCatalogPage, pages);
+    const paged = visiblePlugins.slice((page - 1) * pageSize, page * pageSize);
+    const selectedPluginRaw = pluginCatalog.find((plugin) => plugin.id === pluginDetailModalId) ?? null;
+    const selectedPlugin = selectedPluginRaw
+      ? { ...selectedPluginRaw, installed: Boolean(selectedPluginRaw.installed || selectedPluginRaw.bundled || installedIds.has(selectedPluginRaw.id)) }
+      : null;
+    const emptyCopy = pluginMarketTab === "installed" ? "暂无已安装的插件，请您先在全部中进行插件的安装" : "没有匹配的插件，请更换分类或搜索词";
+    const resultMeta = visiblePlugins.length
+      ? `显示 ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, visiblePlugins.length)}，共 ${visiblePlugins.length} 项`
+      : "0 个结果";
+
+    function openCreatorChat(invocation: string, draft = "") {
+      setSelectedSidebarRow("feature:new-chat");
+      setErrorMessage?.("");
+      setSearchFilePreview(null);
+      setActiveFeature("new-chat");
+      setNewThreadScope("chat");
+      setChatUsesProject?.(false);
+      setIsComposingNewThread(true);
+      setSelectedThreadId("");
+      setQuestion(draft);
+      setSelectedComposerSkill(null);
+      setComposerSkillContext(invocation);
+      setSelectedComposerTools([]);
+      setComposerModes([]);
+      setPreviewMode("empty");
+      setPreviewPlacement("hidden");
+      if (typeof setChatStatus === "function") setChatStatus(`已进入 ${invocation}`);
+    }
 
     function startNewPlugin() {
-      resetFeatureDraft("plugins");
-      setPluginDraft((current: any) => ({
-        ...current,
-        name: "",
-        summary: "",
-        status: "enabled",
-        version: "0.1.0",
-        source: "",
-        manifestPath: "",
-        capabilities: [],
-        action: "create_plugin"
-      }));
-      setPluginMarketTab("installed");
-      if (typeof setChatStatus === "function") setChatStatus("请填写插件 manifest 路径后保存。");
+      openCreatorChat("Plugin Creator", "help me create a plugin");
     }
 
     async function installCatalogPlugin(plugin: any) {
@@ -8666,22 +8892,18 @@ function renderPluginsModule() {
       if (!isUpgrade && installedIds.has(plugin.id)) return;
       if (plugin.repository && api?.installRepositoryPlugin) {
         try {
-          if (typeof setChatStatus === "function") {
-            setChatStatus(isUpgrade ? `正在升级 ${plugin.name}…` : `正在安装 ${plugin.name}…`);
-          }
+          if (typeof setChatStatus === "function") setChatStatus(isUpgrade ? `正在升级 ${plugin.name}…` : `正在安装 ${plugin.name}…`);
           await api.installRepositoryPlugin({ pluginKey: plugin.pluginKey, version: plugin.version });
           await loadRepositoryPlugins();
           if (api.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
-          if (typeof setChatStatus === "function") {
-            setChatStatus(isUpgrade ? `${plugin.name} 已升级，历史数据已保留。` : `${plugin.name} 已安装，技能已同步到 Composer。`);
-          }
+          if (typeof setChatStatus === "function") setChatStatus(isUpgrade ? `${plugin.name} 已升级，历史数据已保留。` : `${plugin.name} 已安装，技能已同步到 Composer。`);
         } catch (error) {
           if (typeof setChatStatus === "function") setChatStatus(error instanceof Error ? error.message : String(error));
         }
         return;
       }
       if (typeof setChatStatus === "function") {
-        setChatStatus(`${plugin.name} 暂无可激活的插件 manifest，未执行安装。请使用“新插件”添加真实目录。`);
+        setChatStatus(`${plugin.name} 暂无可激活的插件 manifest，未执行安装。请使用“新建插件”在对话中创建。`);
       }
     }
 
@@ -8698,102 +8920,191 @@ function renderPluginsModule() {
 
     async function removeCatalogPlugin(plugin: any) {
       if (!plugin.repository || !api?.removeRepositoryPlugin) return;
+      const confirmed = window.confirm(`卸载后，对话将不能再调用“${plugin.name}”。`);
+      if (!confirmed) return;
       try {
         await api.removeRepositoryPlugin({ pluginKey: plugin.pluginKey });
         await loadRepositoryPlugins();
         if (api.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
+        if (typeof setChatStatus === "function") setChatStatus(`${plugin.name} 已卸载`);
+        setExpandedPluginId("");
+        setPluginDetailModalId("");
       } catch (error) {
         if (typeof setChatStatus === "function") setChatStatus(error instanceof Error ? error.message : String(error));
       }
     }
 
-    function openPluginDetail(plugin: any) {
-      setQuestion(`在当前对话中使用插件：${plugin.name}`);
-      setActiveFeature("new-chat");
-      setIsComposingNewThread(false);
-    }
-
-    const isCreatingPlugin = pluginMarketTab === "installed" && !pluginSearchQuery.trim() && (pluginDraft.action === "create_plugin" || pluginDraft.manifestPath || pluginDraft.source) && !pluginDraft.name;
-    if (isCreatingPlugin) {
-      const pluginInstallPath = (pluginDraft.manifestPath || pluginDraft.source || "").trim();
-      return (
-        <section className="plugins-page prototype">
-          <header className="plugins-page-toolbar">
-            <div className="plugins-page-title"><h1>新插件</h1><p>登记一个本地 NewBrain 插件 manifest。</p></div>
-            <div className="plugins-toolbar-actions"><button type="button" onClick={() => setPluginMarketTab("all")}>返回</button></div>
-          </header>
-          <div className="plugins-detail-pane single-pane">
-            <div className="plugins-detail-form">
-              <label><span>名称</span><input value={pluginDraft.name} onChange={(event) => setPluginDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="插件名称" /></label>
-              <label><span>说明</span><textarea value={pluginDraft.summary} onChange={(event) => setPluginDraft((current: any) => ({ ...current, summary: event.target.value }))} rows={4} placeholder="插件能力说明" /></label>
-              <div className="plugins-detail-grid">
-                <label className="plugin-path-field"><span>插件目录 / manifest</span><input value={pluginInstallPath} onChange={(event) => setPluginDraft((current: any) => ({ ...current, source: event.target.value, manifestPath: event.target.value }))} placeholder="G:\\path\\plugin 或 .codex-plugin\\plugin.json" /></label>
-                <label><span>版本</span><input value={pluginDraft.version ?? "0.1.0"} onChange={(event) => setPluginDraft((current: any) => ({ ...current, version: event.target.value }))} placeholder="0.1.0" /></label>
-              </div>
-              <div className="plugins-detail-actions"><button type="button" onClick={() => setPluginMarketTab("all")}>取消</button><button className="primary" type="button" onClick={() => void saveFeature("plugins")}>保存插件</button></div>
-            </div>
-          </div>
-        </section>
-      );
+    async function togglePluginAction(plugin: any) {
+      if (plugin.bundled) return;
+      if (plugin.installed) {
+        if (plugin.repository) await removeCatalogPlugin(plugin);
+        return;
+      }
+      await installCatalogPlugin(plugin);
     }
 
     return (
-      <section className="ui-logo-feature-page plugins-ui-logo-page">
-        <header className="ui-logo-page-head">
-          <div><h1>插件</h1><p>NewBrain 已内置能力，以及可与 Codex 工作流对应的工具模块。</p></div>
-          <button className="ui-logo-primary-action" type="button" onClick={startNewPlugin}>+ 新插件</button>
-        </header>
-        <div className="ui-logo-tabs">
-          <button className={pluginMarketTab === "all" ? "active" : ""} type="button" onClick={() => setPluginMarketTab("all")}>全部</button>
-          <button className={pluginMarketTab === "installed" ? "active" : ""} type="button" onClick={() => setPluginMarketTab("installed")}>已安装</button>
-        </div>
-        <div className="plugin-market-controls">
-          <div className="ui-logo-tabs plugin-scope-tabs">
-            <button className={pluginScopeTab === "public" ? "active" : ""} type="button" onClick={() => setPluginScopeTab("public")}>公开</button>
-            <button className={pluginScopeTab === "private" ? "active" : ""} type="button" onClick={() => setPluginScopeTab("private")}>个人</button>
+      <section className="capability-catalog plugins-page">
+        <header className="catalog-heading">
+          <div>
+            <span className="catalog-kicker">INTEGRATION DIRECTORY</span>
+            <h1>插件</h1>
+            <p>连接外部服务和实时数据源，让对话能够读取、查询和执行操作。</p>
           </div>
-          <label className="ui-logo-search"><span aria-hidden="true">⌕</span><input value={pluginSearchQuery} onChange={(event) => setPluginSearchQuery(event.target.value)} placeholder="搜索插件" /></label>
-          <button type="button" onClick={() => setFeatureConfig({ ...featureConfig })}>刷新</button>
-        </div>
-        <div className="plugin-market-groups">
-          {repositoryPluginsLoading ? <div className="skills-empty-state">正在加载插件仓库…</div> : null}
-          {repositoryPluginError ? <div className="skills-empty-state error">{repositoryPluginError}</div> : null}
-          {dynamicPluginGroups.map((group) => (
-            <section className="plugin-market-group" key={group.id}>
-              <h2>{group.label}</h2>
-              <div className="plugin-market-grid">
-                {group.plugins.map((plugin) => (
-                  <article className="plugin-market-row" key={plugin.id} onClick={() => openPluginDetail(plugin)}>
-                    <div className={`ui-logo-card-icon ${plugin.color}`}>{plugin.name.slice(0, 1)}</div>
-                    <div className="plugin-market-copy">
-                      <h3>{plugin.name}</h3>
-                      <p>{plugin.summary}</p>
-                      <span className={`plugin-execution-badge kind-${plugin.executionKind || "instructions"}`} title={executionKindDescription(plugin.executionKind)}>
-                        {executionKindLabel(plugin.executionKind)}
-                      </span>
-                    </div>
-                    {plugin.repository && plugin.installed ? (
-                      <div className="plugin-market-actions" onClick={(event) => event.stopPropagation()}>
-                        {plugin.installState === "update_available" ? (
-                          <button type="button" onClick={() => void installCatalogPlugin(plugin)}>升级</button>
-                        ) : null}
-                        <button type="button" onClick={() => void setCatalogPluginEnabled(plugin, plugin.installState === "disabled")}>
-                          {plugin.installState === "disabled" ? "启用" : "停用"}
-                        </button>
-                        <button type="button" onClick={() => void removeCatalogPlugin(plugin)}>卸载</button>
-                      </div>
-                    ) : plugin.bundled ? (
-                      <button type="button" disabled onClick={(event) => event.stopPropagation()}>内置</button>
-                    ) : (
-                      <button type="button" disabled={plugin.installed} onClick={(event) => { event.stopPropagation(); void installCatalogPlugin(plugin); }}>{plugin.installed ? "已安装" : "了解详情"}</button>
-                    )}
-                  </article>
-                ))}
+          <button className="catalog-create" type="button" onClick={startNewPlugin}>＋ 新建插件</button>
+        </header>
+        <section className="catalog-surface">
+          <div className="catalog-toolbar plugin-catalog-toolbar">
+            <div className="catalog-viewbar">
+              <div className="catalog-tabs">
+                <button className={pluginMarketTab === "all" ? "active" : ""} type="button" onClick={() => { setPluginMarketTab("all"); setPluginCatalogPage(1); setExpandedPluginId(""); }}>插件市场</button>
+                <button className={pluginMarketTab === "installed" ? "active" : ""} type="button" onClick={() => { setPluginMarketTab("installed"); setPluginCatalogPage(1); setExpandedPluginId(""); }}>已安装</button>
               </div>
+            </div>
+            <div className="catalog-filterbar plugin-filterbar">
+              <label className="catalog-search"><span>⌕</span><input value={pluginSearchQuery} onChange={(event) => { setPluginSearchQuery(event.target.value); setPluginCatalogPage(1); }} placeholder="搜索插件、分类或提供方" /></label>
+              <select className="catalog-select" value={pluginVendorFilter} onChange={(event) => { setPluginVendorFilter(event.target.value); setPluginCatalogPage(1); }} aria-label="插件来源">
+                <option>全部来源</option>
+                <option>由 NewBrain 构建</option>
+                <option>扣子官方</option>
+              </select>
+              <select className="catalog-select" value={pluginSortMode} onChange={(event) => { setPluginSortMode(event.target.value as any); setPluginCatalogPage(1); }} aria-label="插件排序">
+                <option value="popular">按热度排序</option>
+                <option value="name">按名称排序</option>
+                <option value="installed">已安装优先</option>
+              </select>
+              <button className="catalog-icon-button" type="button" title="刷新" onClick={() => void loadRepositoryPlugins()}>↻</button>
+            </div>
+          </div>
+          <div className="category-strip" aria-label="插件分类">
+            {categories.map((category) => (
+              <button key={category} type="button" className={`market-filter${pluginCategoryFilter === category ? " active" : ""}`} onClick={() => { setPluginCategoryFilter(category); setPluginCatalogPage(1); }}>{category}</button>
+            ))}
+          </div>
+          <div className="catalog-result-bar"><span>{resultMeta}</span><span>每页 {pageSize} 项</span></div>
+          {repositoryPluginsLoading && !paged.length ? <div className="empty-state">正在加载插件仓库…</div> : null}
+          {repositoryPluginError ? <div className="empty-state error">{repositoryPluginError}</div> : null}
+          {discovery ? (
+            <div className="discovery-grid plugin-discovery-grid">
+              {paged.length ? paged.map((plugin: any) => (
+                <article className="discovery-card plugin-discovery-card" key={plugin.id}>
+                  <header>
+                    <span className={`skill-visual tone-${({ emerald: "green", orange: "amber", blue: "blue", violet: "violet", rose: "rose" } as any)[plugin.color] || "blue"}`}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+                    </span>
+                    <div><h3>{plugin.name}</h3><small>{plugin.category || "其他"}</small></div>
+                    {plugin.installed ? <span className="catalog-status installed">已安装</span> : null}
+                  </header>
+                  <p>{plugin.summary}</p>
+                  <div className="discovery-tags">{(plugin.tags || []).slice(0, 3).map((tag: string) => <span key={tag}>{tag}</span>)}</div>
+                  <div className="plugin-market-info">
+                    <span><small>适用于</small><b>{plugin.category || "其他"}</b></span>
+                    <span><small>所需权限</small><b>网络访问</b></span>
+                    <span><small>更新时间</small><b>{String(plugin.published || plugin.version || "—").slice(0, 10)}</b></span>
+                  </div>
+                  <footer>
+                    <span>{plugin.source || "NewBrain"}</span>
+                    <div>
+                      <button className="catalog-more" type="button" onClick={() => setPluginDetailModalId(plugin.id)}>详情</button>
+                      {plugin.bundled ? (
+                        <button className="catalog-row-action" type="button" disabled>内置</button>
+                      ) : (
+                        <button className={`catalog-row-action${plugin.installed ? " danger-text" : ""}`} type="button" onClick={() => void togglePluginAction(plugin)}>
+                          {plugin.installState === "update_available" ? "升级" : plugin.installed ? "卸载" : "添加"}
+                        </button>
+                      )}
+                    </div>
+                  </footer>
+                </article>
+              )) : (!repositoryPluginsLoading ? <div className="empty-state"><div><strong>{emptyCopy}</strong></div></div> : null)}
+            </div>
+          ) : (
+            <div className="plugin-list">
+              {paged.length ? paged.map((plugin: any) => {
+                const expanded = expandedPluginId === plugin.id;
+                return (
+                  <article className={`plugin-card${expanded ? " expanded" : ""}`} key={plugin.id}>
+                    <div className="plugin-summary installed-layout" onClick={() => setExpandedPluginId(expanded ? "" : plugin.id)}>
+                      <span className="skill-visual tone-blue">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+                      </span>
+                      <div className="plugin-copy">
+                        <div className="plugin-title-row"><h3>{plugin.name}</h3><span className="catalog-status installed">已安装</span></div>
+                        <p>{plugin.summary}</p>
+                        <div className="plugin-meta"><span>{plugin.category || "其他"}</span><span>{plugin.source || "NewBrain"}</span><span>{plugin.version || "—"}</span></div>
+                      </div>
+                      <div className="plugin-stats">
+                        <span><small>本工作区调用</small><b>{plugin.workspaceCalls || plugin.calls || "暂无"}</b></span>
+                        <span><small>成功率</small><b>{plugin.workspaceSuccess || plugin.success || "暂无"}</b></span>
+                        <span><small>平均延迟</small><b>{plugin.workspaceLatency || plugin.latency || "暂无"}</b></span>
+                      </div>
+                      <div className="plugin-actions" onClick={(event) => event.stopPropagation()}>
+                        {plugin.repository && plugin.installState === "update_available" ? (
+                          <button className="catalog-row-action" type="button" onClick={() => void installCatalogPlugin(plugin)}>升级</button>
+                        ) : null}
+                        {plugin.repository ? (
+                          <button className="catalog-row-action" type="button" onClick={() => void setCatalogPluginEnabled(plugin, plugin.installState === "disabled")}>
+                            {plugin.installState === "disabled" ? "启用" : "停用"}
+                          </button>
+                        ) : null}
+                        {!plugin.bundled ? (
+                          <button className="catalog-row-action danger-text" type="button" onClick={() => void togglePluginAction(plugin)}>卸载</button>
+                        ) : null}
+                        <button className="catalog-more" type="button" onClick={() => setExpandedPluginId(expanded ? "" : plugin.id)}>{expanded ? "收起" : "详情"}</button>
+                      </div>
+                    </div>
+                    {expanded ? (
+                      <div className="plugin-detail">
+                        <h4>{plugin.name} 的能力与权限</h4>
+                        <p>{plugin.detail || plugin.summary}</p>
+                        <div className="discovery-tags">
+                          <span>网络访问</span>
+                          <span>对话调用</span>
+                          <span>{executionKindLabel(plugin.executionKind)}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              }) : <div className="empty-state"><div><strong>{emptyCopy}</strong></div></div>}
+            </div>
+          )}
+          <footer className="catalog-pagination">
+            <span>第 {page} / {pages} 页</span>
+            <div>
+              <button type="button" disabled={page <= 1} onClick={() => { setPluginCatalogPage((current) => Math.max(1, current - 1)); setExpandedPluginId(""); }} aria-label="上一页">←</button>
+              <button type="button" disabled={page >= pages} onClick={() => { setPluginCatalogPage((current) => Math.min(pages, current + 1)); setExpandedPluginId(""); }} aria-label="下一页">→</button>
+            </div>
+          </footer>
+        </section>
+
+        {selectedPlugin ? (
+          <div className="catalog-modal-backdrop" role="presentation" onClick={() => setPluginDetailModalId("")}>
+            <section className="catalog-modal wide" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+              <header className="catalog-modal-head">
+                <h2>{selectedPlugin.name}</h2>
+                <button type="button" className="icon-btn" aria-label="关闭" onClick={() => setPluginDetailModalId("")}>×</button>
+              </header>
+              <div className="catalog-modal-body">
+                <p>{selectedPlugin.summary}</p>
+                <div className="discovery-tags">{(selectedPlugin.tags || []).map((tag: string) => <span key={tag}>{tag}</span>)}</div>
+                <div className="skill-instructions">
+                  <h3>能力与权限</h3>
+                  <p>{selectedPlugin.detail || selectedPlugin.summary}</p>
+                  <p>提供方：{selectedPlugin.source || "NewBrain"} · 版本 {selectedPlugin.version || "—"}</p>
+                </div>
+              </div>
+              <footer className="catalog-modal-foot">
+                <button type="button" onClick={() => setPluginDetailModalId("")}>关闭</button>
+                {!selectedPlugin.bundled ? (
+                  <button className={`catalog-create${selectedPlugin.installed ? " danger" : ""}`} type="button" onClick={() => { setPluginDetailModalId(""); void togglePluginAction(selectedPlugin); }}>
+                    {selectedPlugin.installed ? "卸载插件" : "添加插件"}
+                  </button>
+                ) : null}
+              </footer>
             </section>
-          ))}
-          {!visiblePlugins.length ? <div className="skills-empty-state">没有符合条件的插件</div> : null}
-        </div>
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -9162,162 +9473,278 @@ function renderAutomationModule() {
   }
 
 function renderAutomationPrototypeModule() {
-    const automationItems = featureConfig.automations.length > 0 ? featureConfig.automations : [
-      {
-        id: "daily-project-brief",
-        title: "每日项目进度整理",
-        trigger: "每天 09:00 汇总项目变更、风险和下一步建议",
-        prompt: "检查当前项目最近变更，整理完成事项、风险和下一步建议。",
-        runtime: "worktree", targetType: "project", schedule: "daily", model: modelConfig.model, reasoning: "low",
-        template: "每日进度汇总", action: "workspace_scan", intervalMinutes: "1440", status: "scheduled"
-      }
+    const automationItems = featureConfig.automations ?? [];
+    const scheduleLabel = (item: any) => {
+      if (item.dailyTime) return `每天 ${item.dailyTime}`;
+      if (item.schedule === "hourly") return "每小时";
+      if (item.schedule === "daily") return "每天";
+      if (item.schedule === "weekly") return "每周";
+      if (item.intervalMinutes) return `每 ${item.intervalMinutes} 分钟`;
+      return item.schedule || item.trigger || "未配置计划";
+    };
+    const statusKey = (item: any) => {
+      if (item.status === "paused" || item.status === "idle") return "paused";
+      if (item.status === "running" || item.status === "scheduled") return "enabled";
+      return "completed";
+    };
+    const statusText = (item: any) => {
+      const key = statusKey(item);
+      return key === "enabled" ? "运行中" : key === "paused" ? "已暂停" : "已完成";
+    };
+    const visibleItems = automationItems
+      .filter((item: any) => {
+        const query = automationSearchQuery.trim().toLowerCase();
+        if (!query) return true;
+        return [item.title, item.trigger, item.prompt, item.action, item.schedule, item.status].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+      })
+      .filter((item: any) => {
+        if (automationStatusFilter === "all") return true;
+        if (automationStatusFilter === "enabled") return statusKey(item) === "enabled";
+        if (automationStatusFilter === "paused") return statusKey(item) === "paused";
+        return statusKey(item) === "completed";
+      })
+      .slice()
+      .sort((a: any, b: any) => {
+        if (automationSortMode === "name") return String(a.title || "").localeCompare(String(b.title || ""));
+        if (automationSortMode === "result") {
+          const ar = Number(Boolean(a.unread || a.hasNewResult || a.lastError));
+          const br = Number(Boolean(b.unread || b.hasNewResult || b.lastError));
+          return br - ar || String(a.title || "").localeCompare(String(b.title || ""));
+        }
+        return Number(statusKey(b) === "enabled") - Number(statusKey(a) === "enabled") || String(a.title || "").localeCompare(String(b.title || ""));
+      });
+    const pageSize = 5;
+    const pages = Math.max(1, Math.ceil(visibleItems.length / pageSize));
+    const page = Math.min(automationCatalogPage, pages);
+    const paged = visibleItems.slice((page - 1) * pageSize, page * pageSize);
+    const selected = automationItems.find((item: any) => item.id === automationDetailModalId) ?? null;
+    const resultMeta = visibleItems.length
+      ? `显示 ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, visibleItems.length)}，共 ${visibleItems.length} 项`
+      : "0 个结果";
+
+    const suggestions = [
+      { group: "信息汇总", name: "每日简报", time: "工作日 8:00", desc: "汇总日历、重要未读消息和当天优先事项", prompt: "请创建一个工作日早上 8 点运行的每日简报，汇总日历、重要未读消息和当天优先事项。" },
+      { group: "项目管理", name: "每周回顾", time: "每周五 16:00", desc: "整理本周项目进展、风险和下周计划", prompt: "请创建一个每周五下午 4 点运行的周报，汇总本周项目进展、风险和下周计划。" },
+      { group: "持续监测", name: "跟进监控", time: "工作日 9:00", desc: "检查指定信息源并标记需要关注的更新", prompt: "请创建一个工作日上午 9 点运行的跟进监控，检查指定信息源并标记需要关注的更新。" }
     ];
-    const visibleAutomationItems = automationItems.filter((item: any) => {
-      const query = automationSearchQuery.trim().toLowerCase();
-      if (!query) return true;
-      return [item.title, item.trigger, item.prompt, item.action, item.schedule, item.status, item.targetType].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
-    });
-    const runtimeLabels: Record<string, string> = { worktree: "工作树", local: "本地", dialog: "对话" };
-    const scheduleLabels: Record<string, string> = { hourly: "每小时", daily: "每天", weekly: "每周", custom: "自定义" };
-    const statusLabels: Record<string, string> = { scheduled: "运行中", running: "执行中", idle: "待命", paused: "已暂停" };
-    const selectedTargetName = automationDraft.targetType === "dialog" ? selectedThread?.title ?? "当前对话" : selectedWorkspace?.name ?? "当前项目";
-    const dialogRuntime = automationDraft.runtime === "dialog";
-    const showForm = automationView === "detail" || editingFeatureId || automationCreateMode === "form";
 
-    function startNewAutomation() {
-      resetFeatureDraft("automations");
-      setAutomationIntent("");
-      setAutomationCreateMode("intent");
-      setAutomationView("new");
+    function openCreatorChat(invocation: string, draft = "") {
+      setSelectedSidebarRow("feature:new-chat");
+      setErrorMessage?.("");
+      setSearchFilePreview(null);
+      setActiveFeature("new-chat");
+      setNewThreadScope("chat");
+      setChatUsesProject?.(false);
+      setIsComposingNewThread(true);
+      setSelectedThreadId("");
+      setQuestion(draft);
+      setSelectedComposerSkill(null);
+      setComposerSkillContext(invocation);
+      setSelectedComposerTools([]);
+      setComposerModes([]);
+      setPreviewMode("empty");
+      setPreviewPlacement("hidden");
+      if (typeof setChatStatus === "function") setChatStatus(`已进入 ${invocation}`);
     }
 
-    function loadAutomation(item: any) {
-      loadFeatureDraft("automations", item);
-      setAutomationCreateMode("form");
-      setAutomationView("detail");
+    function startNewAutomation(draft = "请帮我创建一个自动化任务：", options?: { materialize?: boolean }) {
+      openCreatorChat("Automation Creator", draft);
+      if (options?.materialize && draft && draft !== "请帮我创建一个自动化任务：") {
+        void materializeCreatorFromChat(draft, "Automation Creator");
+      }
     }
 
-    function applyIntentDraft() {
-      const parsed = parseAutomationIntent(automationIntent);
-      setAutomationDraft((current: any) => ({
-        ...current,
-        title: parsed.title || current.title,
-        prompt: parsed.prompt,
-        trigger: parsed.trigger,
-        schedule: parsed.schedule,
-        intervalMinutes: parsed.intervalMinutes,
-        dailyTime: parsed.dailyTime || "",
-        action: parsed.action === "thread_follow_up" ? "workspace_scan" : parsed.action,
-        template: parsed.template,
-        status: "scheduled",
-        workspaceId: selectedWorkspace?.id || current.workspaceId,
-        threadId: selectedThread?.id || current.threadId,
-        model: current.model || modelConfig.model,
-        reasoning: current.reasoning || modelConfig.reasoningEffort
-      }));
-      setAutomationCreateMode("form");
+    async function persistAutomation(item: any, patch: Record<string, string>) {
+      if (!api?.updateFeatureItem) return;
+      const nextConfig = await api.updateFeatureItem({
+        kind: "automations",
+        id: item.id,
+        item: {
+          title: item.title ?? "",
+          trigger: item.trigger ?? "",
+          prompt: item.prompt ?? item.trigger ?? "",
+          status: item.status ?? "scheduled",
+          action: item.action ?? "workspace_scan",
+          intervalMinutes: item.intervalMinutes != null ? String(item.intervalMinutes) : "",
+          dailyTime: item.dailyTime ?? "",
+          schedule: item.schedule ?? "",
+          runtime: item.runtime ?? "",
+          model: item.model ?? "",
+          reasoning: item.reasoning ?? "",
+          workspaceId: item.workspaceId ?? "",
+          threadId: item.threadId ?? "",
+          ...patch
+        }
+      });
+      setFeatureConfig(nextConfig);
+    }
+
+    async function toggleAutomation(item: any) {
+      const nextStatus = statusKey(item) === "enabled" ? "paused" : "scheduled";
+      try {
+        await persistAutomation(item, { status: nextStatus });
+        if (typeof setChatStatus === "function") setChatStatus(nextStatus === "paused" ? "任务已暂停" : "任务已开启");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    async function runAutomationNow(item: any) {
+      try {
+        await persistAutomation(item, { status: "run_now" });
+        if (api?.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
+        window.setTimeout(() => {
+          if (api?.getFeatureConfig) void api.getFeatureConfig().then((next: any) => next && setFeatureConfig(next));
+        }, 1500);
+        if (typeof setChatStatus === "function") setChatStatus(`“${item.title}”已触发立即运行`);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    async function deleteAutomation(item: any) {
+      if (!api?.deleteFeatureItem) return;
+      const confirmed = window.confirm(`确定删除“${item.title}”吗？此操作无法撤销。`);
+      if (!confirmed) return;
+      try {
+        const nextConfig = await api.deleteFeatureItem({ kind: "automations", id: item.id });
+        setFeatureConfig(nextConfig);
+        if (typeof setChatStatus === "function") setChatStatus("自动化任务已删除");
+        setAutomationDetailModalId("");
+        setAutomationMenuId("");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      }
     }
 
     return (
-      <section className="automation-page prototype">
-        <main className="automation-workspace prototype">
-          <header className="automation-head prototype">
-            <div><h1>自动化</h1><p>用自然语言描述何时跑、做什么；对齐 Codex 自动任务创建方式。</p></div>
-            <label className="automation-search"><span aria-hidden="true">⌕</span><input value={automationSearchQuery} onChange={(event) => setAutomationSearchQuery(event.target.value)} placeholder="搜索自动化功能" /></label>
-          </header>
-
-          <section className="automation-board single-pane">
-            <aside className="automation-list-panel">
-              <div className="automation-list-head">
-                <div><strong>自动化任务</strong><span>{visibleAutomationItems.length} / {automationItems.length} 个任务</span></div>
-                <button type="button" onClick={startNewAutomation}>新建</button>
-              </div>
-              <div className="automation-list">
-                {visibleAutomationItems.map((item: any, index: number) => (
-                  <button key={item.id ?? `${item.title}-${index}`} className={`automation-item${editingFeatureId === item.id ? " active" : ""}`} type="button" onClick={() => loadAutomation(item)}>
-                    <span className={`automation-status-dot ${item.status ?? "idle"}`} aria-hidden="true" />
-                    <span className="automation-item-main"><strong>{item.title || "未命名自动化"}</strong><em>{item.prompt || item.trigger || "暂无提示词"}</em></span>
-                    <span className={`automation-status-chip ${item.status ?? "idle"}`}>{statusLabels[item.status] ?? "待命"}</span>
-                  </button>
+      <section className="capability-catalog automation-page scheduled-page">
+        <header className="catalog-heading">
+          <div>
+            <span className="catalog-kicker">AUTOMATION CONTROL</span>
+            <h1>自动化</h1>
+            <p>集中管理定时任务、持续监测和自动执行结果。</p>
+          </div>
+          <button className="catalog-create create-automation" type="button" onClick={() => startNewAutomation()}>＋ 新建自动化</button>
+        </header>
+        <section className="catalog-surface automation-surface">
+          <div className="automation-catalog-toolbar">
+            <div className="catalog-viewbar automation-viewbar">
+              <div className="automation-filters">
+                {([["all", "全部"], ["enabled", "运行中"], ["paused", "已暂停"], ["completed", "已完成"]] as const).map(([key, label]) => (
+                  <button key={key} type="button" className={automationStatusFilter === key ? "active" : ""} onClick={() => { setAutomationStatusFilter(key); setAutomationCatalogPage(1); }}>{label}</button>
                 ))}
               </div>
-            </aside>
-
-            <section className="automation-create-card prototype">
-              {automationView === "new" && automationCreateMode === "intent" ? (
-                <>
-                  <div className="automation-create-title">
-                    <div><h2>新建自动化功能</h2><p>一两句话说明触发时机和要做的事，然后生成可编辑草稿。</p></div>
+            </div>
+            <div className="catalog-filterbar automation-filterbar">
+              <label className="catalog-search"><span>⌕</span><input value={automationSearchQuery} onChange={(event) => { setAutomationSearchQuery(event.target.value); setAutomationCatalogPage(1); }} placeholder="搜索任务名称、计划或指令" /></label>
+              <select className="catalog-select" value={automationSortMode} onChange={(event) => { setAutomationSortMode(event.target.value as any); setAutomationCatalogPage(1); }} aria-label="自动化排序">
+                <option value="next">运行中优先</option>
+                <option value="name">按名称排序</option>
+                <option value="result">有新结果优先</option>
+              </select>
+            </div>
+          </div>
+          <div className="catalog-result-bar"><span>{resultMeta}</span><span>每页 {pageSize} 项</span></div>
+          <div className="automation-table-head"><span>任务</span><span>运行计划</span><span>最近运行</span><span>状态</span><span></span></div>
+          <div className="scheduled-list">
+            {paged.length ? paged.map((item: any) => {
+              const key = statusKey(item);
+              const open = automationMenuId === item.id;
+              const unread = Boolean(item.unread || item.hasNewResult);
+              return (
+                <article className={`scheduled-task${unread ? " unread" : ""}`} key={item.id} onClick={() => setAutomationDetailModalId(item.id)}>
+                  <div className="scheduled-copy">
+                    <h3>{item.title || "未命名自动化"}{unread ? <span>新结果</span> : null}</h3>
+                    <p>{item.prompt || item.trigger || "对话创建"}</p>
                   </div>
-                  <label className="automation-field">
-                    <span>用自然语言描述</span>
-                    <textarea
-                      value={automationIntent}
-                      onChange={(event) => setAutomationIntent(event.target.value)}
-                      placeholder="例如：每天 18:00 检查当前项目最近变更，整理完成事项和下一步计划"
-                      rows={5}
-                    />
-                  </label>
-                  <div className="automation-intent-examples">
-                    {automationIntentExamples().map((example) => (
-                      <button key={example} type="button" onClick={() => setAutomationIntent(example)}>{example}</button>
-                    ))}
+                  <div className="scheduled-timing">
+                    <small>运行计划</small>
+                    <strong>{scheduleLabel(item)}</strong>
+                    <p>{item.nextRunAt ? `下次 ${new Date(item.nextRunAt).toLocaleString()}` : "待调度"}</p>
                   </div>
-                  <div className="automation-create-actions">
-                    <button type="button" onClick={() => setAutomationCreateMode("form")}>手动配置</button>
-                    <button className="primary" type="button" disabled={!automationIntent.trim()} onClick={applyIntentDraft}>生成草稿</button>
+                  <div className="scheduled-result">
+                    <small>最近运行</small>
+                    <strong>{item.lastError ? "失败" : item.lastRunAt ? "成功" : "尚未运行"}</strong>
+                    <p>{item.lastRunAt ? new Date(item.lastRunAt).toLocaleString() : "—"}</p>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="automation-create-title">
-                    <div>
-                      <h2>{automationView === "detail" || editingFeatureId ? "编辑自动化功能" : "确认草稿"}</h2>
-                      <p>确认名称、计划、提示词后创建；也可继续调整高级字段。</p>
+                  <span className={`scheduled-state ${key}`}><i></i>{statusText(item)}</span>
+                  <button className="task-menu-btn" type="button" aria-label="更多操作" onClick={(event) => { event.stopPropagation(); setAutomationMenuId(open ? "" : item.id); }}>•••</button>
+                  {open ? (
+                    <div className="catalog-menu-popover" role="menu" onClick={(event) => event.stopPropagation()}>
+                      <button type="button" onClick={() => { setAutomationMenuId(""); void runAutomationNow(item); }}>立即运行</button>
+                      <button type="button" onClick={() => { setAutomationMenuId(""); void toggleAutomation(item); }}>{key === "enabled" ? "暂停任务" : "开启任务"}</button>
+                      <button type="button" onClick={() => { setAutomationMenuId(""); startNewAutomation(`请帮我修改自动化任务“${item.title}”。当前计划：${scheduleLabel(item)}。当前指令：${item.prompt || item.trigger || ""}`); }}>在对话中编辑</button>
+                      <button type="button" onClick={() => { setAutomationMenuId(""); setAutomationDetailModalId(item.id); }}>查看详情</button>
+                      <button type="button" className="danger" onClick={() => { setAutomationMenuId(""); void deleteAutomation(item); }}>删除</button>
                     </div>
-                    <select value={automationDraft.template} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, template: event.target.value }))}>
-                      <option value="">选择模板</option>
-                      <option value="每日进度汇总">每日进度汇总</option>
-                      <option value="Sentry 崩溃巡检">Sentry 崩溃巡检</option>
-                      <option value="发布前检查">发布前检查</option>
-                    </select>
-                  </div>
-
-                  <div className="automation-draft-summary">
-                    <div><span>名称</span><strong>{automationDraft.title || "未命名"}</strong></div>
-                    <div><span>计划</span><strong>{automationDraft.dailyTime ? `每天 ${automationDraft.dailyTime}` : (scheduleLabels[automationDraft.schedule] ?? automationDraft.schedule)}</strong></div>
-                    <div><span>目标</span><strong>{selectedTargetName}</strong></div>
-                  </div>
-
-                  {showForm ? (
-                    <>
-                      <div className="automation-select-row">
-                        <label><span>运行环境</span><select value={automationDraft.runtime} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, runtime: event.target.value }))}><option value="worktree">工作树</option><option value="local">本地</option><option value="dialog">对话</option></select></label>
-                        {!dialogRuntime ? <label><span>对话类型</span><select value={automationDraft.targetType} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, targetType: event.target.value }))}><option value="project">项目</option><option value="dialog">对话</option></select></label> : null}
-                        <label><span>计划</span><select value={automationDraft.schedule} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, schedule: event.target.value }))}><option value="hourly">每小时</option><option value="daily">每天</option><option value="weekly">每周</option><option value="custom">...</option></select></label>
-                        {!dialogRuntime ? (<>
-                          <label><span>模型</span><select value={automationDraft.model} disabled={composerModelOptions.length === 0} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, model: event.target.value }))}>{composerModelOptions.length === 0 ? <option value="">当前套餐无可用模型</option> : composerModelOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
-                          <label><span>推理</span><select value={automationDraft.reasoning} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, reasoning: event.target.value }))}><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
-                        </>) : null}
-                      </div>
-                      <div className="automation-target-strip"><span>{runtimeLabels[automationDraft.runtime] ?? "工作树"}</span><strong>{selectedTargetName}</strong><em>{automationDraft.dailyTime || scheduleLabels[automationDraft.schedule] || "每天"}</em></div>
-                      <label className="automation-field"><span>自动化功能标题</span><input value={automationDraft.title} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, title: event.target.value }))} placeholder="自动化功能标题" /></label>
-                      <label className="automation-field"><span>每日时刻（可选）</span><input value={automationDraft.dailyTime || ""} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, dailyTime: event.target.value }))} placeholder="18:00" /></label>
-                      <div className="automation-sandbox-note">注：自动化任务以默认沙盒设置运行。若需操作电脑窗口，可在提示词中说明「使用本机窗口操控」。</div>
-                      <label className="automation-field"><span>提示词</span><textarea value={automationDraft.prompt || automationDraft.trigger} onChange={(event) => setAutomationDraft((current: any) => ({ ...current, prompt: event.target.value, trigger: event.target.value }))} placeholder="添加提示词" rows={7} /></label>
-                    </>
                   ) : null}
+                </article>
+              );
+            }) : <div className="automation-empty"><div><strong>没有匹配的任务</strong>调整筛选条件或在对话中创建新任务。</div></div>}
+          </div>
+          <footer className="catalog-pagination">
+            <span>第 {page} / {pages} 页</span>
+            <div>
+              <button type="button" disabled={page <= 1} onClick={() => setAutomationCatalogPage((current) => Math.max(1, current - 1))} aria-label="上一页">←</button>
+              <button type="button" disabled={page >= pages} onClick={() => setAutomationCatalogPage((current) => Math.min(pages, current + 1))} aria-label="下一页">→</button>
+            </div>
+          </footer>
+        </section>
 
-                  <div className="automation-create-actions">
-                    <button type="button" onClick={startNewAutomation}>取消</button>
-                    {!showForm ? <button type="button" onClick={() => setAutomationCreateMode("form")}>手动调整</button> : null}
-                    <button className="primary" type="button" onClick={() => void saveFeature("automations")}>{automationView === "detail" || editingFeatureId ? "保存" : "创建"}</button>
+        <section className="automation-suggestions">
+          <header>
+            <div><span className="catalog-kicker">STARTER TEMPLATES</span><h2>从模板开始</h2></div>
+            <p>选择模板后，将进入对话继续确认时间与数据源。</p>
+          </header>
+          <div className="automation-template-grid">
+            {suggestions.map((item) => (
+              <article className="automation-template-card" key={item.name}>
+                <span>{item.group}</span>
+                <h3>{item.name}</h3>
+                <p>{item.desc}</p>
+                <footer>
+                  <small>{item.time}</small>
+                  <button type="button" onClick={() => startNewAutomation(item.prompt, { materialize: true })}>使用模板</button>
+                </footer>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {selected ? (
+          <div className="catalog-modal-backdrop" role="presentation" onClick={() => setAutomationDetailModalId("")}>
+            <section className="catalog-modal wide" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+              <header className="catalog-modal-head">
+                <h2>{selected.title || "未命名自动化"}</h2>
+                <button type="button" className="icon-btn" aria-label="关闭" onClick={() => setAutomationDetailModalId("")}>×</button>
+              </header>
+              <div className="catalog-modal-body">
+                <div className="automation-detail-summary" style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12, marginBottom: 16 }}>
+                  <div><small>运行计划</small><strong style={{ display: "block" }}>{scheduleLabel(selected)}</strong></div>
+                  <div><small>下次运行</small><strong style={{ display: "block" }}>{selected.nextRunAt ? new Date(selected.nextRunAt).toLocaleString() : "待调度"}</strong></div>
+                  <div><small>最近运行</small><strong style={{ display: "block" }}>{selected.lastRunAt ? new Date(selected.lastRunAt).toLocaleString() : "尚未运行"}</strong></div>
+                  <div><small>运行结果</small><strong style={{ display: "block" }}>{selected.lastError || (selected.lastRunAt ? "成功" : "—")}</strong></div>
+                </div>
+                <div>
+                  <strong style={{ fontSize: 13 }}>任务指令</strong>
+                  <p style={{ color: "#656d78", lineHeight: 1.6 }}>{selected.prompt || selected.trigger || "暂无指令"}</p>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
+                  <div>
+                    <strong>任务状态</strong>
+                    <div style={{ color: "#656d78", fontSize: 12 }}>{statusKey(selected) === "enabled" ? "已开启，将按计划继续运行" : "已暂停，不会自动运行"}</div>
                   </div>
-                </>
-              )}
+                  <button className={`switch ${statusKey(selected) === "enabled" ? "on" : ""}`} type="button" onClick={() => void toggleAutomation(selected)} />
+                </div>
+              </div>
+              <footer className="catalog-modal-foot">
+                <button type="button" onClick={() => setAutomationDetailModalId("")}>关闭</button>
+                <button className="catalog-create" type="button" onClick={() => { setAutomationDetailModalId(""); startNewAutomation(`请帮我修改自动化任务“${selected.title}”。当前计划：${scheduleLabel(selected)}。当前指令：${selected.prompt || selected.trigger || ""}`); }}>在对话中编辑</button>
+              </footer>
             </section>
-          </section>
-        </main>
+          </div>
+        ) : null}
       </section>
     );
   }
