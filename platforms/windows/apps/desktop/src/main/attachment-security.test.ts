@@ -13,7 +13,8 @@ const {
   getAttachmentByteLimit,
   isAttachmentSizeLimitError,
   MAX_ATTACHMENT_BYTES,
-  MAX_IMAGE_BYTES
+  MAX_IMAGE_BYTES,
+  MAX_LOCAL_LINK_BYTES
 } = attachmentPolicy;
 
 test("enforces smaller image and bounded document attachment limits", () => {
@@ -58,8 +59,18 @@ test("maps size-limit errors into Chinese composer notices", () => {
     formatAttachmentSelectionNotice([{ name: "photo.png", extension: ".png" }], 2),
     /已添加 2 个附件/
   );
-  assert.equal(
+  assert.match(
     formatAttachmentSizeLimitError(oversize),
-    "附件不能超过 20 MB，请压缩或更换较小的文件后再试。"
+    /整文件复制不能超过 20 MB/
+  );
+});
+
+test("routes oversized documents to local-link instead of hard reject", () => {
+  assert.equal(attachmentPolicy.shouldLocalLinkAttachment(".pdf", MAX_ATTACHMENT_BYTES + 1), true);
+  assert.equal(attachmentPolicy.shouldLocalLinkAttachment(".png", MAX_IMAGE_BYTES + 1), false);
+  assert.equal(attachmentPolicy.isAttachmentTooLargeForLocalLink(".pdf", MAX_LOCAL_LINK_BYTES + 1), true);
+  assert.match(
+    attachmentPolicy.formatAttachmentLocalLinkMessage("huge.pdf", 30 * 1024 * 1024),
+    /本地路径引用/
   );
 });

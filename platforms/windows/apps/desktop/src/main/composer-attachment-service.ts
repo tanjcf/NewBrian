@@ -1,7 +1,19 @@
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ComposerAttachment, SaveComposerClipboardFileInput } from "@codex-forge/protocol";
+import {
+  formatAttachmentLocalLinkMessage,
+  formatAttachmentOversizeMessage,
+  formatAttachmentTooLargeForLocalLinkMessage,
+  isAttachmentSizeLimitError,
+  isAttachmentTooLargeForLocalLink,
+  isImageAttachmentExtension,
+  MAX_ATTACHMENT_BYTES,
+  MAX_IMAGE_BYTES,
+  shouldLocalLinkAttachment
+} from "./attachment-security.ts";
 
 export const ATTACHMENT_PROTOCOL_HOST = "media";
+export const LOCAL_FILE_PROTOCOL_HOST = "local-file";
 
 export interface ComposerAttachmentSkip {
   name: string;
@@ -12,41 +24,35 @@ export interface ComposerAttachmentSelectionResult {
   attachments: ComposerAttachment[];
   skipped: ComposerAttachmentSkip[];
   detail: string;
-}
-
-const ATTACHMENT_SIZE_LIMIT_RE = /exceeds the (\d+) byte limit/i;
-const IMAGE_EXTENSION_RE = /^\.(png|jpe?g|webp|gif|bmp|svg)$/i;
-
-function isAttachmentSizeLimitError(error: unknown): error is Error {
-  return error instanceof Error && ATTACHMENT_SIZE_LIMIT_RE.test(error.message);
-}
-
-function formatSkippedAttachmentReason(fileName: string, extension: string, error: Error) {
-  const matchedLimit = Number(error.message.match(ATTACHMENT_SIZE_LIMIT_RE)?.[1] || 0);
-  const fallbackMb = IMAGE_EXTENSION_RE.test(extension) ? 10 : 20;
-  const limitMb = Number.isFinite(matchedLimit) && matchedLimit > 0
-    ? Math.round(matchedLimit / (1024 * 1024))
-    : fallbackMb;
-  const kind = IMAGE_EXTENSION_RE.test(extension) ? "图片" : "文件";
-  const safeName = String(fileName || "未命名").trim() || "未命名";
-  return `${kind}「${safeName}」超过 ${limitMb} MB 限制`;
+  linked?: Array<{ name: string; reason: string }>;
 }
 
 function formatSelectionDetail(
-  skipped: Array<{ name: string; reason: string }>,
-  acceptedCount: number
+  skipped: ComposerAttachmentSkip[],
+  linked: Array<{ name: string; reason: string }>,
+  acceptedCopiedCount: number
 ) {
-  if (skipped.length === 0) return "";
-  const details = skipped.map((item) => item.reason).join("；");
-  if (acceptedCount > 0) {
-    return `已添加 ${acceptedCount} 个附件；${details}，已跳过。`;
+  if (skipped.length === 0 && linked.length === 0) return "";
+  const parts: string[] = [];
+  if (acceptedCopiedCount > 0) parts.push(`已添加 ${acceptedCopiedCount} 个附件`);
+  if (linked.length > 0) parts.push(linked.map((item) => item.reason).join("；"));
+  if (skipped.length > 0) {
+    const details = skipped.map((item) => item.reason).join("；");
+    parts.push(`${details}，已跳过`);
   }
-  return `${details}，已跳过。图片不超过 10 MB，其他文件不超过 20 MB。`;
+  if (skipped.length > 0 && acceptedCopiedCount + linked.length === 0) {
+    return `${parts.join("；")}。图片不超过 ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))} MB，其他文件复制不超过 ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB（更大文档可本地路径引用）。`;
+  }
+  return `${parts.join("；")}。`;
 }
 
 /** Builds a stable custom-protocol URL that Chromium will not rewrite as a hostname-only URL. */
 export function buildManagedAttachmentUrl(filePath: string) {
   return `newbrain-attachment://${ATTACHMENT_PROTOCOL_HOST}/${encodeURIComponent(basename(filePath))}`;
+}
+
+export function buildLocalFileAttachmentUrl(filePath: string) {
+  return `newbrain-local-file://${LOCAL_FILE_PROTOCOL_HOST}/${encodeURIComponent(resolve(filePath))}`;
 }
 
 /**
@@ -95,6 +101,7 @@ export interface ComposerAttachmentServiceDependencies {
 /** Owns managed attachment ingestion, opening, clipboard persistence, and preview URLs. */
 export class ComposerAttachmentService {
   private readonly dependencies: ComposerAttachmentServiceDependencies;
+  private readonly allowedLocalPaths = new Set<string>();
 
   constructor(dependencies: ComposerAttachmentServiceDependencies) {
     this.dependencies = dependencies;
@@ -104,41 +111,83 @@ export class ComposerAttachmentService {
     const paths = (await this.dependencies.selectFiles()).slice(0, 5);
     const attachments: ComposerAttachment[] = [];
     const skipped: ComposerAttachmentSkip[] = [];
+    const linked: Array<{ name: string; reason: string }> = [];
+    let copiedCount = 0;
     for (const sourcePath of paths) {
       const originalName = basename(sourcePath);
       try {
-        attachments.push(await this.store(sourcePath, originalName));
+        const attachment = await this.store(sourcePath, originalName);
+        attachments.push(attachment);
+        if (attachment.linkMode === "local") {
+          linked.push({
+            name: originalName,
+            reason: formatAttachmentLocalLinkMessage(originalName, attachment.sizeBytes || 0)
+          });
+        } else {
+          copiedCount += 1;
+        }
       } catch (error) {
-        if (!isAttachmentSizeLimitError(error)) throw error;
+        if (!isAttachmentSizeLimitError(error) && !(error instanceof Error && /本地引用上限|超过 .* MB/.test(error.message))) {
+          throw error;
+        }
         const extension = extname(originalName || sourcePath);
         skipped.push({
           name: originalName,
-          reason: formatSkippedAttachmentReason(originalName, extension, error)
+          reason: error instanceof Error && /本地引用上限/.test(error.message)
+            ? error.message
+            : formatAttachmentOversizeMessage(originalName, extension)
         });
       }
     }
     return {
       attachments,
       skipped,
-      detail: formatSelectionDetail(skipped, attachments.length)
+      linked,
+      detail: formatSelectionDetail(skipped, linked, copiedCount)
     };
   }
 
   async store(sourcePath: string, originalName: string): Promise<ComposerAttachment> {
-    const sourceStat = await this.dependencies.statFile(sourcePath);
+    const resolvedSource = resolve(sourcePath);
+    const sourceStat = await this.dependencies.statFile(resolvedSource);
     if (!sourceStat.isFile()) throw new Error("Attachment source is not a file.");
-    this.dependencies.assertSize(extname(originalName || sourcePath), sourceStat.size);
+    const extension = extname(originalName || resolvedSource);
+    const displayName = originalName || basename(resolvedSource);
+
+    if (shouldLocalLinkAttachment(extension, sourceStat.size)) {
+      this.allowedLocalPaths.add(resolvedSource);
+      return {
+        name: displayName,
+        path: resolvedSource,
+        url: buildLocalFileAttachmentUrl(resolvedSource),
+        sourcePath: resolvedSource,
+        linkMode: "local",
+        sizeBytes: sourceStat.size
+      };
+    }
+
+    if (isAttachmentTooLargeForLocalLink(extension, sourceStat.size)) {
+      if (isImageAttachmentExtension(extension)) {
+        this.dependencies.assertSize(extension, sourceStat.size);
+      }
+      throw new Error(formatAttachmentTooLargeForLocalLinkMessage(displayName));
+    }
+
+    this.dependencies.assertSize(extension, sourceStat.size);
     await this.dependencies.ensureDirectory(this.dependencies.attachmentRoot);
-    const safeExtension = extname(originalName).replace(/[^a-z0-9.]/gi, "");
+    const safeExtension = extension.replace(/[^a-z0-9.]/gi, "");
     const filePath = join(
       this.dependencies.attachmentRoot,
       `${this.dependencies.nowMs()}-${this.dependencies.makeId()}${safeExtension}`
     );
-    await this.dependencies.copyFile(sourcePath, filePath);
+    await this.dependencies.copyFile(resolvedSource, filePath);
     return {
-      name: originalName || basename(sourcePath),
+      name: displayName,
       path: filePath,
-      url: await this.previewUrl(filePath)
+      url: await this.previewUrl(filePath),
+      sourcePath: resolvedSource,
+      linkMode: "copied",
+      sizeBytes: sourceStat.size
     };
   }
 
@@ -152,7 +201,9 @@ export class ComposerAttachmentService {
     return {
       name: input.name || fileName,
       path: filePath,
-      url: await this.previewUrl(filePath, input.mimeType)
+      url: await this.previewUrl(filePath, input.mimeType),
+      linkMode: "copied",
+      sizeBytes: input.data.byteLength
     };
   }
 
@@ -160,7 +211,9 @@ export class ComposerAttachmentService {
     const attachmentRoot = resolve(this.dependencies.attachmentRoot);
     const targetPath = resolve(input.path);
     const relativePath = relative(attachmentRoot, targetPath);
-    if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    const inManagedRoot = Boolean(relativePath) && !relativePath.startsWith("..") && !isAbsolute(relativePath);
+    const allowedLocal = this.allowedLocalPaths.has(targetPath);
+    if (!inManagedRoot && !allowedLocal) {
       return { ok: false, detail: "Attachment is outside the managed attachment directory." };
     }
     const stat = await this.dependencies.statFile(targetPath).catch(() => null);

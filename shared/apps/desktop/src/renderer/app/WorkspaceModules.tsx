@@ -196,6 +196,16 @@ import { mergeRefreshedModelConfig } from "./model-config-refresh";
 import { combineComposerQuote } from "./composer-quote";
 import { normalizeComposerAttachmentError } from "./composer-attachment-errors";
 import {
+  insertComposerAttachmentTokens,
+  removeComposerAttachmentToken
+} from "./composer-attachment-insert";
+import {
+  COMPOSER_FOCUS_ATTACHMENT_LIMIT,
+  COMPOSER_MATERIALS_MENU_ITEMS,
+  composerAttachmentAccessLabel,
+  composerFocusCapacityHint
+} from "./composer-materials-policy";
+import {
   shouldShowAppUpdateAutoPrompt
 } from "./app-update-progress-copy";
 import { AppUpdateDialog } from "./AppUpdateDialog";
@@ -3463,18 +3473,12 @@ export function WorkspaceModules(ctx: any) {
     try {
       const result = await api.selectComposerImages();
       const files = result?.attachments ?? [];
-      setComposerImages((current: any[]) => {
-        const next = [...current];
-        for (const file of files) {
-          if (!next.some((item) => item.path === file.path)) next.push(file);
-        }
-        return next.slice(0, 8);
-      });
+      const added = attachComposerAttachmentsAtCursor(files, COMPOSER_FOCUS_ATTACHMENT_LIMIT);
       if (result?.detail) {
-        if (files.length > 0) setChatStatus(result.detail);
+        if (added > 0) setChatStatus(result.detail);
         else setErrorMessage(result.detail);
-      } else if (files.length > 0) {
-        setChatStatus(`已添加 ${files.length} 个资料`);
+      } else if (added > 0) {
+        setChatStatus(`已在光标处添加 ${added} 个资料`);
       }
     } catch (error) {
       setErrorMessage(normalizeComposerAttachmentError(error));
@@ -3491,16 +3495,50 @@ export function WorkspaceModules(ctx: any) {
           data: await file.arrayBuffer()
         }))
       );
-      setComposerImages((current: any[]) => {
-        const next = [...current];
-        for (const attachment of attachments) {
-          if (!next.some((item) => item.path === attachment.path)) next.push(attachment);
-        }
-        return next.slice(0, 8);
-      });
-      setChatStatus(`已添加 ${attachments.length} 个资料`);
+      const added = attachComposerAttachmentsAtCursor(attachments, COMPOSER_FOCUS_ATTACHMENT_LIMIT);
+      if (added > 0) setChatStatus(`已在光标处添加 ${added} 个资料`);
     } catch (error) {
       setErrorMessage(normalizeComposerAttachmentError(error));
+    }
+  };
+  const attachComposerAttachmentsAtCursor = (files: any[], limit = COMPOSER_FOCUS_ATTACHMENT_LIMIT) => {
+    const incoming = Array.isArray(files) ? files.filter((file) => file && typeof file.path === "string" && file.path.trim()) : [];
+    if (!incoming.length) return 0;
+    const current = Array.isArray(composerImages) ? composerImages : [];
+    const next = [...current];
+    const added: any[] = [];
+    for (const file of incoming) {
+      if (next.length >= limit) break;
+      if (next.some((item) => item.path === file.path)) continue;
+      next.push(file);
+      added.push(file);
+    }
+    if (!added.length) return 0;
+    setComposerImages(next);
+    const draftText = composerTextareaRef.current?.getValue() ?? question;
+    const caret = composerTextareaRef.current?.getSelectionStart() ?? draftText.length;
+    const inserted = insertComposerAttachmentTokens(
+      draftText,
+      caret,
+      added.map((file) => String(file.name || file.path.split(/[\\/]/).pop() || "附件"))
+    );
+    composerTextareaRef.current?.setValue(inserted.next, inserted.cursor);
+    setQuestion(inserted.next);
+    setComposerLayoutDraft(inserted.next);
+    window.requestAnimationFrame(() => composerTextareaRef.current?.focus());
+    return added.length;
+  };
+  const removeComposerAttachment = (image: any) => {
+    const path = String(image?.path || "");
+    const name = String(image?.name || path.split(/[\\/]/).pop() || "附件");
+    setComposerImages((current: any[]) => current.filter((item) => item.path !== path));
+    const draftText = composerTextareaRef.current?.getValue() ?? question;
+    const next = removeComposerAttachmentToken(draftText, name);
+    if (next !== draftText) {
+      const caret = Math.min(composerTextareaRef.current?.getSelectionStart() ?? next.length, next.length);
+      composerTextareaRef.current?.setValue(next, caret);
+      setQuestion(next);
+      setComposerLayoutDraft(next);
     }
   };
   const getAttachmentKind = (file: any) => {
@@ -7144,11 +7182,15 @@ function renderChatModule() {
               </div>
             ) : null}
             {composerImages.length > 0 ? (
-              <div className="composer-image-strip">
+              <div className="composer-image-strip" data-testid="composer-materials-strip">
+                <div className="composer-materials-hint" data-testid="composer-materials-hint" title="焦点材料是对话里的少量关键文件；目录请挂载工作区；万级表格请用数据场景。">
+                  {composerFocusCapacityHint(composerImages.length, COMPOSER_FOCUS_ATTACHMENT_LIMIT)}
+                </div>
                 {composerImages.map((image) => {
                   const kind = getAttachmentKind(image);
+                  const accessLabel = composerAttachmentAccessLabel(image.linkMode);
                   return (
-                    <div className="composer-image-preview" key={image.path}>
+                    <div className="composer-image-preview" key={image.path} data-link-mode={image.linkMode || "copied"}>
                       {kind.tone === "image" ? (
                         <button
                           type="button"
@@ -7159,17 +7201,18 @@ function renderChatModule() {
                           <img src={image.url} alt={image.name} />
                         </button>
                       ) : (
-                        <div className={`composer-file-preview type-${kind.tone}`} title={image.name}>
+                        <div className={`composer-file-preview type-${kind.tone}`} title={`${image.name} · ${accessLabel}${image.sourcePath ? `\n${image.sourcePath}` : ""}`}>
                           <strong>{kind.icon}</strong>
                           <span>{image.name}</span>
                           <em>{kind.label}</em>
+                          <i className="composer-file-access">{accessLabel}</i>
                         </div>
                       )}
                       <button
                         type="button"
                         title={`移除 ${image.name}`}
                         aria-label={`移除 ${image.name}`}
-                        onClick={() => setComposerImages((current: any[]) => current.filter((item) => item.path !== image.path))}
+                        onClick={() => removeComposerAttachment(image)}
                       >
                         ×
                       </button>
@@ -7187,10 +7230,10 @@ function renderChatModule() {
                 selectedComposerSkill?.name === RESEARCH_WRITING_SKILL
                   ? "描述您撰写或修改的文档，也可以上传材料..."
                   : isBrainConversationSelection
-                    ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息。输入 @ 引用其它对话`
+                    ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息。输入 @ 引用其它对话；添加附件会插入到光标处`
                   : isNewChatMode
-                    ? "可向 NewBrain 询问任何事。输入 @ 引用其它对话"
-                    : "要求后续变更。输入 @ 引用其它对话"
+                    ? "可向 NewBrain 询问任何事。输入 @ 引用其它对话；添加附件会插入到光标处"
+                    : "要求后续变更。输入 @ 引用其它对话；添加附件会插入到光标处"
               }
               onDraftChange={handleComposerDraftChange}
               onHistoryChange={setComposerDraftHistoryCaps}
@@ -7222,9 +7265,64 @@ function renderChatModule() {
                 <div className="composer-picker-wrap">
                   <button type="button" data-testid="composer-add-button" className="composer-icon-button" title="添加文件等内容" onClick={() => setComposerMenu((current) => current === "add" ? null : "add")}>＋</button>
                   {composerMenu === "add" ? (
-                    <div className="composer-picker-menu composer-add-menu">
+                    <div className="composer-picker-menu composer-add-menu" data-testid="composer-materials-menu">
+                      <span className="composer-menu-label">材料分层</span>
+                      <button
+                        type="button"
+                        data-testid={COMPOSER_MATERIALS_MENU_ITEMS[0].testId}
+                        onClick={() => void selectComposerFiles()}
+                      >
+                        <SidebarIcon name="paperclip" />
+                        <span>
+                          <strong>{COMPOSER_MATERIALS_MENU_ITEMS[0].title}</strong>
+                          <small>{COMPOSER_MATERIALS_MENU_ITEMS[0].detail}</small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={COMPOSER_MATERIALS_MENU_ITEMS[1].testId}
+                        onClick={() => {
+                          setComposerMenu(null);
+                          void (async () => {
+                            const workspaceId = await addExistingProject({ brainWorkspaceKey: selectedBrainWorkspaceKey });
+                            if (!workspaceId) return;
+                            const projects = await refreshBrainProjects(selectedBrainWorkspaceKey);
+                            setSelectedSidebarRow(`project:${workspaceId}`);
+                            bindBrainProjectToWorkspace(workspaceId, {
+                              composingNewThread: true,
+                              projects
+                            });
+                            setActiveFeature("new-chat");
+                            setNewThreadScope("project");
+                            setChatUsesProject?.(true);
+                            setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+                            setChatStatus("已挂载工作区文件夹。大目录请在此按需读取，不要塞进聊天焦点附件。");
+                          })();
+                        }}
+                      >
+                        <SidebarIcon name="folder-open" />
+                        <span>
+                          <strong>{COMPOSER_MATERIALS_MENU_ITEMS[1].title}</strong>
+                          <small>{COMPOSER_MATERIALS_MENU_ITEMS[1].detail}</small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={COMPOSER_MATERIALS_MENU_ITEMS[2].testId}
+                        onClick={() => {
+                          setComposerMenu(null);
+                          switchBrainWorkspace("data");
+                          setActiveFeature("new-chat");
+                          setChatStatus("已打开数据场景。万级表格请走数据导入/查询，不要用聊天附件硬塞。");
+                        }}
+                      >
+                        <SidebarIcon name="file-text" />
+                        <span>
+                          <strong>{COMPOSER_MATERIALS_MENU_ITEMS[2].title}</strong>
+                          <small>{COMPOSER_MATERIALS_MENU_ITEMS[2].detail}</small>
+                        </span>
+                      </button>
                       <span className="composer-menu-label">添加</span>
-                      <button type="button" onClick={() => void selectComposerFiles()}><SidebarIcon name="paperclip" /><span><strong>文件和图片</strong><small>添加到当前对话</small></span></button>
                       <button type="button" data-composer-mode="goal" className={composerModes.includes("goal") ? "active" : ""} aria-pressed={composerModes.includes("goal")} onClick={() => void enableGoalMode()}><SidebarIcon name="target" /><span><strong>{goalExecution?.goal?.status === "paused" ? "继续目标" : "目标"}</strong><small>{goalExecution?.goal?.status === "paused" ? goalExecution.goal.objective : "设置要持续追求的目标"}</small></span><span className="composer-add-option-check" aria-hidden="true">{composerModes.includes("goal") ? "✓" : ""}</span></button>
                       <button type="button" data-composer-mode="plan" className={composerModes.includes("plan") ? "active" : ""} aria-pressed={composerModes.includes("plan")} onClick={() => void enablePlanMode()}><SidebarIcon name="plan" /><span><strong>计划模式</strong><small>开启计划模式</small></span><span className="composer-add-option-check" aria-hidden="true">{composerModes.includes("plan") ? "✓" : ""}</span></button>
                       {researchWritingSession.enabled ? <>
@@ -7374,7 +7472,7 @@ function renderChatModule() {
                       </button>
                       <button type="button" onClick={() => { void selectComposerFiles(); setComposerMenu(null); }}>
                         <SidebarIcon name="paperclip" />
-                        <span><strong>文件和图片</strong><small>选择文件加入当前请求</small></span>
+                        <span><strong>文件和图片</strong><small>插入到光标处（焦点材料）</small></span>
                       </button>
                       {mcpDiscoveredTools.slice(0, 6).map((tool: any) => (
                         <button key={`composer-context-${tool.id}`} type="button" onClick={() => { handleInsertMcpTool(tool); setComposerMenu(null); }}>
@@ -7480,18 +7578,12 @@ function renderChatModule() {
                   try {
                     const result = await api.selectComposerImages();
                     const images = result?.attachments ?? [];
-                    setComposerImages((current: any[]) => {
-                      const next = [...current];
-                      for (const image of images) {
-                        if (!next.some((item) => item.path === image.path)) next.push(image);
-                      }
-                      return next.slice(0, 5);
-                    });
+                    const added = attachComposerAttachmentsAtCursor(images, 5);
                     if (result?.detail) {
-                      if (images.length > 0) setChatStatus(result.detail);
+                      if (added > 0) setChatStatus(result.detail);
                       else setErrorMessage(result.detail);
-                    } else if (images.length > 0) {
-                      setChatStatus(`已添加 ${images.length} 个资料`);
+                    } else if (added > 0) {
+                      setChatStatus(`已在光标处添加 ${added} 个资料`);
                     }
                   } catch (error) {
                     setErrorMessage(normalizeComposerAttachmentError(error));
@@ -7840,15 +7932,11 @@ function renderChatModule() {
     setBrainDraft((current) => [current.trim(), reference].filter(Boolean).join("\n\n"));
     if (snapshotPath) {
       const markLabel = annotation.geometry?.displayIndex || annotation.id;
-      setComposerImages((current: any[]) => {
-        const attachment = {
-          name: `标记-${markLabel}.png`,
-          path: snapshotPath,
-          url: snapshotUrl || undefined
-        };
-        if (current.some((item) => item.path === attachment.path)) return current;
-        return [...current, attachment].slice(0, 8);
-      });
+      attachComposerAttachmentsAtCursor([{
+        name: `标记-${markLabel}.png`,
+        path: snapshotPath,
+        url: snapshotUrl || undefined
+      }], COMPOSER_FOCUS_ATTACHMENT_LIMIT);
     }
     setChatStatus(snapshotPath
       ? `标注 ${annotation.geometry?.displayIndex || annotation.id} 已加入对话（含区域截图），发送后 Agent 将按附图处理。`

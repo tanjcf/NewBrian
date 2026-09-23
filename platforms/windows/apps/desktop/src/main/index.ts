@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, globalShortcut, ipcMain, net, protocol, screen } from "electron";
+import { app, BrowserWindow, crashReporter, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from "electron";
 import { nativeTheme } from "electron";
 import { safeStorage } from "electron";
 import { dialog } from "electron";
@@ -239,7 +239,9 @@ import {
   getImageMimeType,
   getModelEmbeddableImageMimeType,
   truncateAttachmentText,
-  MAX_EXTRACTOR_OUTPUT_BYTES
+  MAX_ATTACHMENT_BYTES,
+  MAX_EXTRACTOR_OUTPUT_BYTES,
+  MAX_IMAGE_BYTES
 } from "./attachment-security.js";
 import {
   describeImageForBridge
@@ -1129,11 +1131,41 @@ let mainWindowRef: BrowserWindow | null = null;
 let trayService: DesktopTrayService | null = null;
 let explicitQuitRequested = false;
 function resolveDesktopIconPath() {
-  const packagedIconPath = join(process.resourcesPath, "newbrain.ico");
-  const devIconPath = join(appDirectory, "..", "..", "build", "icon.ico");
-  const legacyDevIconPath = join(workspacePath, "apps/desktop/build/icon.ico");
-  const preferredPath = app.isPackaged ? packagedIconPath : devIconPath;
-  return existsSync(preferredPath) ? preferredPath : legacyDevIconPath;
+  const candidates = app.isPackaged
+    ? [
+        join(process.resourcesPath, "newbrain.png"),
+        join(process.resourcesPath, "newbrain.ico"),
+        join(process.resourcesPath, "icon.png"),
+        join(process.resourcesPath, "icon.ico")
+      ]
+    : [
+        join(appDirectory, "..", "..", "build", "icon.png"),
+        join(appDirectory, "..", "..", "build", "icon.ico"),
+        join(appDirectory, "..", "..", "public", "icon.png"),
+        join(appDirectory, "..", "..", "public", "icon.ico"),
+        join(workspacePath, "apps/desktop/build/icon.png"),
+        join(workspacePath, "apps/desktop/build/icon.ico")
+      ];
+  for (const candidate of candidates) {
+    if (!candidate || !existsSync(candidate)) continue;
+    try {
+      const image = nativeImage.createFromPath(candidate);
+      if (!image.isEmpty()) return candidate;
+    } catch {
+      // Try the next candidate when Electron cannot decode this asset.
+    }
+  }
+  return candidates.find((candidate) => candidate && existsSync(candidate)) || "";
+}
+function resolveDesktopNativeImage() {
+  const iconPath = resolveDesktopIconPath();
+  if (!iconPath) return nativeImage.createEmpty();
+  try {
+    const image = nativeImage.createFromPath(iconPath);
+    return image.isEmpty() ? nativeImage.createEmpty() : image;
+  } catch {
+    return nativeImage.createEmpty();
+  }
 }
 function showMainWindow() {
   const window = mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : createMainWindow();
@@ -7781,11 +7813,16 @@ async function extractSpreadsheetAttachmentText(filePath: string) {
 async function extractTextAttachment(filePath: string, extension: string) {
   if ([".pdf", ".docx", ".pptx", ".xlsx"].includes(extension)) {
     try {
+      const fileStat = await fs.stat(filePath).catch(() => null);
+      const maxBytes = Math.min(
+        Math.max(20 * 1024 * 1024, Number(fileStat?.size) || 0),
+        512 * 1024 * 1024
+      );
       const result = await documentWorkerProcess.ingest({
         requestId: `attachment-${randomUUID()}`,
         projectRoot: dirname(filePath),
         relativePath: basename(filePath),
-        maxBytes: 20 * 1024 * 1024
+        maxBytes
       });
       if (result.status === "completed") return result.text;
     } catch (error) {
@@ -8455,10 +8492,22 @@ async function callModelApi(input: {
       const mimeType = getModelEmbeddableImageMimeType(extension);
       const stat = await fs.stat(attachment.path);
       if (!stat.isFile()) throw new Error(`Attachment is not a file: ${attachment.name}`);
-      assertAttachmentSize(extension, stat.size);
-      const attachmentHeader = `Attachment ${index + 1}: ${attachment.name}\nType: ${extension || "unknown"}\nSize: ${formatAttachmentSize(stat.size)}\nLocal path: ${attachment.path}`;
+      const linkMode = attachment.linkMode === "local" ? "local" : "copied";
+      const localLinked = linkMode === "local" || stat.size > MAX_ATTACHMENT_BYTES;
+      if (!localLinked) {
+        assertAttachmentSize(extension, stat.size);
+      }
+      const sourcePath = String(attachment.sourcePath || "").trim() || attachment.path;
+      const attachmentHeader = [
+        `Attachment ${index + 1}: ${attachment.name}`,
+        `Type: ${extension || "unknown"}`,
+        `Size: ${formatAttachmentSize(stat.size)}`,
+        `Local path: ${attachment.path}`,
+        sourcePath !== attachment.path ? `Source path: ${sourcePath}` : "",
+        localLinked ? "Access: local-path reference (not whole-file copied into app storage)" : ""
+      ].filter(Boolean).join("\n");
       if (mimeType) {
-        if (stat.size > 10 * 1024 * 1024) throw new Error(`Image attachment exceeds 10 MB: ${attachment.name}`);
+        if (stat.size > MAX_IMAGE_BYTES) throw new Error(`Image attachment exceeds 10 MB: ${attachment.name}`);
         imageAttachments.push({
           name: attachment.name,
           path: attachment.path,
@@ -8474,7 +8523,9 @@ async function callModelApi(input: {
           await appendDesktopDebugLog(
             `attachment extraction failed path=${attachment.path} error=${error instanceof Error ? error.stack || error.message : String(error)}`
           );
-          content = `[Unable to extract attachment text: ${error instanceof Error ? error.message : String(error)}]`;
+          content = localLinked
+            ? `[Large local file could not be fully extracted in-process. Keep using Local path above; prefer workspace tools / targeted reads. Detail: ${error instanceof Error ? error.message : String(error)}]`
+            : `[Unable to extract attachment text: ${error instanceof Error ? error.message : String(error)}]`;
         }
         files.push(`${attachmentHeader}\nExtracted content:\n${truncateAttachmentText(content, 120_000)}`);
       }
@@ -8690,6 +8741,7 @@ function createMainWindow() {
   const { workAreaSize } = screen.getPrimaryDisplay();
   const windowBounds = computeDesktopWindowBounds(workAreaSize);
   const resolvedIconPath = resolveDesktopIconPath();
+  const resolvedIconImage = resolveDesktopNativeImage();
   const window = new BrowserWindow({
     width: windowBounds.width,
     height: windowBounds.height,
@@ -8703,7 +8755,9 @@ function createMainWindow() {
       : {}),
     title: "NewBrain",
     backgroundColor: "#efe7d8",
-    icon: resolvedIconPath,
+    ...(resolvedIconImage.isEmpty()
+      ? (resolvedIconPath ? { icon: resolvedIconPath } : {})
+      : { icon: resolvedIconImage }),
     frame: false,
     titleBarOverlay: {
       color: "#ffffff",
@@ -8717,6 +8771,13 @@ function createMainWindow() {
       nodeIntegration: false
     }
   });
+  if (!resolvedIconImage.isEmpty()) {
+    try {
+      window.setIcon(resolvedIconImage);
+    } catch {
+      // Windows may reject empty or unsupported icon payloads; keep BrowserWindow options as fallback.
+    }
+  }
   // Prefer Ctrl+wheel font-size scaling in the renderer; block Chromium page zoom.
   try {
     window.webContents.setVisualZoomLevelLimits(1, 1);

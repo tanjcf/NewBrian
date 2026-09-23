@@ -12,6 +12,7 @@ function stripIpcInvokePrefix(message: string) {
 /** Maps composer attachment IPC failures into a stable Chinese user-facing message. */
 export function normalizeComposerAttachmentError(error: unknown) {
   const message = stripIpcInvokePrefix(error instanceof Error ? error.message : String(error));
+  if (/本地引用上限|本地路径引用/u.test(message)) return message;
   const match = message.match(ATTACHMENT_SIZE_LIMIT_RE);
   if (!match) return message;
   const limit = Number(match[1]);
@@ -20,9 +21,9 @@ export function normalizeComposerAttachmentError(error: unknown) {
     return `图片或剪贴板附件不能超过 ${limitMb || 10} MB，请压缩或更换较小的文件后再试。`;
   }
   if (limit === MAX_ATTACHMENT_BYTES) {
-    return `附件不能超过 ${limitMb || 20} MB，请压缩或更换较小的文件后再试。`;
+    return `整文件复制不能超过 ${limitMb || 20} MB。更大的文档请用「选择文件」添加，将自动改为本地路径引用。`;
   }
   return limitMb > 0
-    ? `附件超过 ${limitMb} MB 限制，请压缩或更换较小的文件后再试。`
-    : "附件超过大小限制，请压缩或更换较小的文件后再试。";
+    ? `附件超过 ${limitMb} MB 限制，请压缩、拆分或挂载工作区后再试。`
+    : "附件超过大小限制，请压缩、拆分或挂载工作区后再试。";
 }

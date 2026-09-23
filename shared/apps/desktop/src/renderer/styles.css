@@ -13453,9 +13453,39 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 
 .composer-image-strip {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   overflow-x: auto;
   padding: 10px 12px 2px;
+}
+
+.composer-materials-hint {
+  flex: 1 0 100%;
+  margin: 0;
+  padding: 0 2px 2px;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.composer-file-preview .composer-file-access,
+.composer-file-preview i.composer-file-access {
+  display: block;
+  margin: 0;
+  padding: 0;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1.2;
+  color: #8b93a3;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-image-preview[data-link-mode="local"] {
+  border-color: #c7d7f0;
+  background: #f3f7fd;
 }
 
 .composer-image-preview {

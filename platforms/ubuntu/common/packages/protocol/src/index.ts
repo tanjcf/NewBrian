@@ -313,6 +313,11 @@ export interface ComposerAttachment {
   name: string;
   path: string;
   url: string;
+  /** Original user-selected path when known (copied or local-linked). */
+  sourcePath?: string;
+  /** copied = managed app storage; local = referenced in place without whole-file copy. */
+  linkMode?: "copied" | "local";
+  sizeBytes?: number;
 }
 
 export interface OpenComposerAttachmentInput {
