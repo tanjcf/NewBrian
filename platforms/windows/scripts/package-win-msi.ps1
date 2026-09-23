@@ -12,6 +12,38 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Resolve-RceditPath {
+  $cacheRoot = Join-Path $env:LOCALAPPDATA "electron-builder\Cache\winCodeSign"
+  if (-not (Test-Path -LiteralPath $cacheRoot)) {
+    throw "electron-builder winCodeSign cache is missing: $cacheRoot"
+  }
+  $hit = Get-ChildItem -LiteralPath $cacheRoot -Recurse -Filter "rcedit-x64.exe" -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending |
+    Select-Object -First 1
+  if ($null -eq $hit) {
+    throw "rcedit-x64.exe was not found under $cacheRoot"
+  }
+  return $hit.FullName
+}
+
+function Set-NewBrainExecutableIcon {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExecutablePath,
+    [Parameter(Mandatory = $true)][string]$IconPath
+  )
+  if (-not (Test-Path -LiteralPath $ExecutablePath)) {
+    throw "Executable missing for icon edit: $ExecutablePath"
+  }
+  if (-not (Test-Path -LiteralPath $IconPath)) {
+    throw "Icon missing for executable edit: $IconPath"
+  }
+  $rcedit = Resolve-RceditPath
+  & $rcedit $ExecutablePath --set-icon $IconPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "rcedit failed while setting icon on $ExecutablePath (exit $LASTEXITCODE)"
+  }
+}
+
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $desktopRoot = Join-Path $repoRoot "apps\desktop"
 $electronVite = Join-Path $desktopRoot "node_modules\electron-vite\bin\electron-vite.js"
@@ -437,6 +469,14 @@ process.stdout.write(asar.extractFile(archive, file));
           throw "Packaged renderer still contains obsolete selectWorkspace reference: $rendererAsset"
         }
         Write-Host "Verified renderer asset: $rendererAsset" -ForegroundColor DarkGray
+
+        # Unsigned builds disable electron-builder's signAndEditExecutable to avoid Authenticode
+        # failures, which also skips embedding the app icon into the .exe (taskbar falls back to
+        # the Electron atom). Always re-apply the NewBrain icon with rcedit for unsigned packages.
+        if (-not $requireSignature) {
+          Set-NewBrainExecutableIcon -ExecutablePath $unpackedExe -IconPath $iconPath
+          Write-Host "Applied NewBrain icon to unsigned executable via rcedit." -ForegroundColor DarkGray
+        }
 
         Write-Host "Verified packaged NewBrain executable and icon resource." -ForegroundColor DarkGray
 
