@@ -53,6 +53,33 @@ interface DesktopIntegrationIpcCompositionDeps {
   ensurePreviewWindow: (url: string) => any;
   closePreviewWindow: () => void;
   capturePreviewWindow: () => Promise<any>;
+  clearBrowserBrowsingData: () => Promise<{ ok: boolean; detail: string }>;
+  listBrowserHistory: () => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+  removeBrowserHistoryEntry: (id: string) => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+  clearBrowserHistory: () => Promise<{ ok: boolean }>;
+  selectBrowserDownloadDir: () => Promise<{ path: string } | null>;
+  listBrowserCredentials: () => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+  upsertBrowserCredential: (input: {
+    origin: string;
+    username: string;
+    password: string;
+    id?: string;
+  }) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+  removeBrowserCredential: (
+    id: string
+  ) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+  listBrowserContacts: () => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+  upsertBrowserContact: (input: {
+    name: string;
+    email?: string;
+    phone?: string;
+    id?: string;
+  }) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+  removeBrowserContact: (
+    id: string
+  ) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+  getBrowserCdpAccess: () => Promise<{ enabled: boolean; partition: string; detail: string }>;
+  probeBrowserSiteTools: () => Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }>;
   saveActiveThreadState: (summary?: string) => Promise<any>;
   appendDiagnosticsLog: (line: string) => Promise<any>;
   readPolicyRules: () => Promise<any>;
@@ -151,12 +178,29 @@ export function registerDesktopIntegrationIpcComposition(deps: DesktopIntegratio
     closeWindow: deps.closePreviewWindow,
     captureWindow: deps.capturePreviewWindow,
     saveThreadState: deps.saveActiveThreadState,
-    appendDiagnostics: deps.appendDiagnosticsLog
+    appendDiagnostics: deps.appendDiagnosticsLog,
+    openExternal: async (url) => {
+      const { shell } = await import("electron");
+      await shell.openExternal(url);
+    }
   });
   registerBrowserIpcHandlers({
     openPreview: (url) => browserPreviewService.open(url),
     closePreview: () => browserPreviewService.close(),
-    capturePreview: () => browserPreviewService.capture()
+    capturePreview: () => browserPreviewService.capture(),
+    clearBrowsingData: () => deps.clearBrowserBrowsingData(),
+    listHistory: () => deps.listBrowserHistory(),
+    removeHistoryEntry: (id) => deps.removeBrowserHistoryEntry(id),
+    clearHistory: () => deps.clearBrowserHistory(),
+    selectDownloadDir: () => deps.selectBrowserDownloadDir(),
+    listCredentials: () => deps.listBrowserCredentials(),
+    upsertCredential: (input) => deps.upsertBrowserCredential(input),
+    removeCredential: (id) => deps.removeBrowserCredential(id),
+    listContacts: () => deps.listBrowserContacts(),
+    upsertContact: (input) => deps.upsertBrowserContact(input),
+    removeContact: (id) => deps.removeBrowserContact(id),
+    getCdpAccess: () => deps.getBrowserCdpAccess(),
+    probeSiteTools: () => deps.probeBrowserSiteTools()
   });
   registerPolicyIpcHandlers({
     getRules: deps.readPolicyRules,

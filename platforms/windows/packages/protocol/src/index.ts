@@ -670,10 +670,33 @@ export interface DesktopPreferences {
   shortcuts: Record<string, string>;
   worktree: { defaultIsolated: boolean; keepArchived: boolean; rootDir: string };
   browser: {
+    enabled: boolean;
     autoOpenPreview: boolean;
     preserveTabs: boolean;
     highResScreenshots: boolean;
     previewUrl: string;
+    openWebLinksIn: "in-app-browser" | "system";
+    openLocalLinksIn: "in-app-browser" | "system";
+    showFullUrl: boolean;
+    annotatedScreenshots: "always" | "ask" | "never";
+    downloadDir: string;
+    askDownloadPath: boolean;
+    historyAccess: "always_ask" | "allow" | "deny";
+    siteToolsEnabled: boolean;
+    agentPermissions: {
+      defaults: {
+        browse: "require_approval" | "always_allow" | "deny";
+        download: "require_approval" | "always_allow" | "deny";
+        upload: "require_approval" | "always_allow" | "deny";
+      };
+      exceptions: Array<{
+        origin: string;
+        browse: "require_approval" | "always_allow" | "deny";
+        download: "require_approval" | "always_allow" | "deny";
+        upload: "require_approval" | "always_allow" | "deny";
+      }>;
+    };
+    fullCdpAccess: boolean;
   };
   /**
    * Skill market install policy.
@@ -857,6 +880,7 @@ export const desktopIpcChannels = {
     openWalletPayment: "phase1:open-wallet-payment",
     setWalletOverageEnabled: "phase1:set-wallet-overage-enabled",
     redeemCode: "phase1:redeem-code",
+    claimNationalDayGift: "phase1:claim-national-day-gift",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
     loginWithAlipayQr: "phase1:login-with-alipay-qr",
@@ -987,7 +1011,20 @@ export const desktopIpcChannels = {
   browser: {
     openPreview: "phase1:open-browser-preview",
     closePreview: "phase1:close-browser-preview",
-    capturePreview: "phase1:capture-browser-preview"
+    capturePreview: "phase1:capture-browser-preview",
+    clearBrowsingData: "phase1:clear-browser-browsing-data",
+    listHistory: "phase1:list-browser-history",
+    removeHistoryEntry: "phase1:remove-browser-history-entry",
+    clearHistory: "phase1:clear-browser-history",
+    selectDownloadDir: "phase1:select-browser-download-dir",
+    listCredentials: "phase1:list-browser-credentials",
+    upsertCredential: "phase1:upsert-browser-credential",
+    removeCredential: "phase1:remove-browser-credential",
+    listContacts: "phase1:list-browser-contacts",
+    upsertContact: "phase1:upsert-browser-contact",
+    removeContact: "phase1:remove-browser-contact",
+    getCdpAccess: "phase1:get-browser-cdp-access",
+    probeSiteTools: "phase1:probe-browser-site-tools"
   },
   mobile: {
     startPairing: "phase1:start-mobile-pairing",
@@ -1159,8 +1196,8 @@ export interface DesktopAuthStatus {
   /** Asia/Shanghai `yyyy-MM-dd` from spring-app. */
   server_date?: string | null;
   /**
-   * National Day login ceremony. Packaged builds require spring-app Oct 1;
-   * local unpackaged builds stay enabled for preview.
+   * National Day login ceremony. Packaged builds require spring-app clock in
+   * Asia/Shanghai Sep 29–Oct 15 (inclusive); local unpackaged builds stay enabled for preview.
    */
   login_ceremony_enabled?: boolean;
 }

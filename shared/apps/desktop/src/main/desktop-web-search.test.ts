@@ -63,6 +63,54 @@ test("paid search client never accepts empty auth and maps HTTP failures", async
   );
 });
 
+test("paid search client maps Spring edition/cacheHit and payment error bodies", async () => {
+  const okClient = new DesktopWebSearchClient({
+    readGatewayOrigin: async () => "https://gateway.example",
+    readAccessToken: async () => "token",
+    createHeaders: ({ accessToken }) => ({ Authorization: `Bearer ${accessToken}` }),
+    fetchImpl: (async () => new Response(JSON.stringify({
+      ok: true,
+      data: {
+        query: "贵州茅台",
+        provider: "baidu_qianfan",
+        searchedAt: "2026-09-25T00:00:00.000Z",
+        edition: "standard",
+        cacheHit: true,
+        items: [{
+          title: "公告",
+          url: "https://example.com/a",
+          siteName: "上交所",
+          snippet: "扩产",
+          summary: "扩产",
+          publishedAt: "2026-09-24"
+        }]
+      }
+    }), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch
+  });
+  const ok = await okClient.search({ query: "贵州茅台" });
+  assert.equal(ok.provider, "baidu_qianfan");
+  assert.equal(ok.edition, "standard");
+  assert.equal(ok.cacheHit, true);
+  assert.equal(ok.items[0]?.url, "https://example.com/a");
+
+  const payClient = new DesktopWebSearchClient({
+    readGatewayOrigin: async () => "https://gateway.example",
+    readAccessToken: async () => "token",
+    createHeaders: ({ accessToken }) => ({ Authorization: `Bearer ${accessToken}` }),
+    fetchImpl: (async () => new Response(JSON.stringify({
+      ok: false,
+      code: "WEB_SEARCH_PAYMENT_REQUIRED",
+      message: "WEB_SEARCH_PAYMENT_REQUIRED: daily cost quota exceeded"
+    }), { status: 402, headers: { "Content-Type": "application/json" } })) as typeof fetch
+  });
+  await assert.rejects(
+    () => payClient.search({ query: "贵州茅台" }),
+    (error: unknown) => error instanceof DesktopWebSearchError
+      && error.code === "WEB_SEARCH_PAYMENT_REQUIRED"
+      && /daily cost quota exceeded/.test(error.message)
+  );
+});
+
 test("registers web.search_paid tool and returns unavailable payload on empty results", async () => {
   const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
   registerDesktopWebSearchTools({
@@ -71,7 +119,14 @@ test("registers web.search_paid tool and returns unavailable payload on empty re
       tools.set(String(definition.name), execute);
     }
   }, {
-    search: async () => ({ query: "q", provider: "bocha", searchedAt: "2026-08-20T00:00:00.000Z", items: [] }),
+    search: async () => ({
+      query: "q",
+      provider: "bocha",
+      searchedAt: "2026-08-20T00:00:00.000Z",
+      edition: "",
+      cacheHit: false,
+      items: []
+    }),
     searchMarketNews: async () => ({
       query: "q",
       searchedAt: "2026-08-20T00:00:00.000Z",
@@ -93,6 +148,92 @@ test("registers web.search_paid tool and returns unavailable payload on empty re
   assert.equal(result.details.status, "unavailable");
   assert.equal(result.details.code, "WEB_SEARCH_EMPTY");
   assert.equal(result.isError, true);
+});
+
+test("web.search_paid surfaces baidu edition and treats provider none as unavailable", async () => {
+  const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
+  registerDesktopWebSearchTools({
+    unregisterExternalTools: () => undefined,
+    registerExternalTool: (definition, execute) => {
+      tools.set(String(definition.name), execute);
+    }
+  }, {
+    search: async () => ({
+      query: "q",
+      provider: "baidu_qianfan",
+      searchedAt: "2026-09-25T00:00:00.000Z",
+      edition: "enhanced",
+      cacheHit: false,
+      items: [{
+        title: "新闻",
+        url: "https://example.com/n",
+        siteName: "财联社",
+        snippet: "摘要",
+        summary: "摘要",
+        publishedAt: "2026-09-24"
+      }]
+    }),
+    searchMarketNews: async () => ({
+      query: "q",
+      searchedAt: "2026-09-25T00:00:00.000Z",
+      decision: "NONE",
+      status: "unavailable",
+      message: "",
+      complete: false,
+      paidAttempted: false,
+      paidSucceeded: false,
+      sourceTypesUsed: [],
+      items: [],
+      fetches: [],
+      fetchAttempted: false
+    }),
+    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
+  });
+  const ok = await tools.get("web.search_paid")!({ query: "q" }) as {
+    details: { status: string; provider: string; edition: string; cacheHit: boolean };
+  };
+  assert.equal(ok.details.status, "ok");
+  assert.equal(ok.details.provider, "baidu_qianfan");
+  assert.equal(ok.details.edition, "enhanced");
+  assert.equal(ok.details.cacheHit, false);
+
+  registerDesktopWebSearchTools({
+    unregisterExternalTools: () => undefined,
+    registerExternalTool: (definition, execute) => {
+      tools.set(String(definition.name), execute);
+    }
+  }, {
+    search: async () => ({
+      query: "q",
+      provider: "none",
+      searchedAt: "2026-09-25T00:00:00.000Z",
+      edition: "",
+      cacheHit: false,
+      items: []
+    }),
+    searchMarketNews: async () => ({
+      query: "q",
+      searchedAt: "2026-09-25T00:00:00.000Z",
+      decision: "NONE",
+      status: "unavailable",
+      message: "",
+      complete: false,
+      paidAttempted: false,
+      paidSucceeded: false,
+      sourceTypesUsed: [],
+      items: [],
+      fetches: [],
+      fetchAttempted: false
+    }),
+    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
+  });
+  const empty = await tools.get("web.search_paid")!({ query: "q" }) as {
+    details: { status: string; code: string };
+    isError?: boolean;
+  };
+  assert.equal(empty.details.status, "unavailable");
+  assert.equal(empty.details.code, "WEB_SEARCH_UNAVAILABLE");
+  assert.equal(empty.isError, true);
 });
 
 test("market news client maps orchestrator evidence pack and never logs tokens", async () => {
@@ -159,7 +300,14 @@ test("news_search_free prefers free-first pack and surfaces unavailable guidance
       tools.set(String(definition.name), execute);
     }
   }, {
-    search: async () => ({ query: "q", provider: "bocha", searchedAt: "2026-08-20T00:00:00.000Z", items: [] }),
+    search: async () => ({
+      query: "q",
+      provider: "bocha",
+      searchedAt: "2026-08-20T00:00:00.000Z",
+      edition: "",
+      cacheHit: false,
+      items: []
+    }),
     searchMarketNews: async () => ({
       query: "最新利率",
       searchedAt: "2026-08-20T12:00:00.000Z",

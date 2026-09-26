@@ -1,5 +1,10 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { isBrainWorkspaceKey, type DesktopPreferences } from "@codex-forge/protocol";
+import {
+  DEFAULT_BROWSER_USE_PREFERENCES,
+  normalizeBrowserUsePreferencesPartial,
+  type BrowserUsePreferences
+} from "./browser-agent-policy.ts";
 
 export interface DesktopPreferencesNormalizationContext {
   defaults: DesktopPreferences;
@@ -97,6 +102,7 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
     rootDir: join(workspaceStateRoot, "worktrees")
   },
   browser: {
+    ...DEFAULT_BROWSER_USE_PREFERENCES,
     autoOpenPreview: false,
     preserveTabs: true,
     highResScreenshots: false,
@@ -326,21 +332,10 @@ export function normalizeDesktopPreferencesValue(
           : context.defaults.worktree.keepArchived,
       rootDir: normalizeWorktreeRootDir(input?.worktree?.rootDir)
     },
-    browser: {
-      autoOpenPreview:
-        typeof input?.browser?.autoOpenPreview === "boolean"
-          ? input.browser.autoOpenPreview
-          : context.defaults.browser.autoOpenPreview,
-      preserveTabs:
-        typeof input?.browser?.preserveTabs === "boolean"
-          ? input.browser.preserveTabs
-          : context.defaults.browser.preserveTabs,
-      highResScreenshots:
-        typeof input?.browser?.highResScreenshots === "boolean"
-          ? input.browser.highResScreenshots
-          : context.defaults.browser.highResScreenshots,
-      previewUrl: input?.browser?.previewUrl?.trim() || context.defaults.browser.previewUrl
-    },
+    browser: normalizeBrowserUsePreferencesPartial(input?.browser as Partial<BrowserUsePreferences> | undefined, {
+      ...DEFAULT_BROWSER_USE_PREFERENCES,
+      ...context.defaults.browser
+    } as BrowserUsePreferences),
     market: {
       // Default closed. Only an explicit true in saved prefs (or env override in service) reopens.
       directClawhubAllowed:

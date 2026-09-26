@@ -137,6 +137,7 @@ test("synchronizes the authenticated v1 control plane without persisting credent
     accessToken: "secret-token",
     clientVersion: "0.1.0",
     platform: "win32",
+    packagePreference: "nsis",
     fetchImpl,
     now: () => "2026-06-30T00:00:00.000Z"
   });
@@ -184,4 +185,79 @@ test("rejects an incompatible minimum client version", async () => {
     }),
     /低于服务端最低版本/
   );
+});
+
+test("caches stable app-update offers and clears them when unavailable", async () => {
+  const { syncDesktopControlPlane } = await controlPlane;
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/bootstrap")) {
+      return new Response(JSON.stringify({
+        protocol_version: "1.0",
+        minimum_client_version: "0.1.0",
+        app_release: {
+          latest_version: "1.4.10",
+          download_url: "http://example.test/old.msi",
+          sha256: "abc"
+        }
+      }), { status: 200 });
+    }
+    if (url.endsWith("/app-update")) {
+      return new Response(JSON.stringify({
+        available: true,
+        latest_version: "1.4.12",
+        download_url: "http://example.test/NewBrain-1.4.12-setup.exe",
+        sha256: "def",
+        channel: "stable",
+        release_id: "rel_test",
+        package_kind: "nsis"
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      protocol_version: "1.0",
+      minimum_client_version: "0.1.0"
+    }), { status: 200 });
+  };
+
+  const withOffer = await syncDesktopControlPlane({
+    gatewayOrigin: "http://120.48.151.202:8790",
+    accessToken: "token",
+    clientVersion: "1.4.11",
+    fetchImpl
+  });
+  assert.equal(withOffer.bootstrap.app_release?.latest_version, "1.4.12");
+  assert.equal(withOffer.bootstrap.app_release?.channel, "stable");
+
+  const clearFetch: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/bootstrap")) {
+      return new Response(JSON.stringify({
+        protocol_version: "1.0",
+        minimum_client_version: "0.1.0",
+        app_release: {
+          latest_version: "1.4.12",
+          download_url: "http://example.test/NewBrain-1.4.12-setup.exe",
+          sha256: "def"
+        }
+      }), { status: 200 });
+    }
+    if (url.endsWith("/app-update")) {
+      return new Response(JSON.stringify({
+        available: false,
+        detail: "当前已是可用版本，或服务端尚未发布更新包。"
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      protocol_version: "1.0",
+      minimum_client_version: "0.1.0"
+    }), { status: 200 });
+  };
+
+  const cleared = await syncDesktopControlPlane({
+    gatewayOrigin: "http://120.48.151.202:8790",
+    accessToken: "token",
+    clientVersion: "1.4.12",
+    fetchImpl: clearFetch
+  });
+  assert.equal(cleared.bootstrap.app_release, undefined);
 });

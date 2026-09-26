@@ -643,10 +643,33 @@ export interface DesktopPreferences {
   shortcuts: Record<string, string>;
   worktree: { defaultIsolated: boolean; keepArchived: boolean; rootDir: string };
   browser: {
+    enabled: boolean;
     autoOpenPreview: boolean;
     preserveTabs: boolean;
     highResScreenshots: boolean;
     previewUrl: string;
+    openWebLinksIn: "in-app-browser" | "system";
+    openLocalLinksIn: "in-app-browser" | "system";
+    showFullUrl: boolean;
+    annotatedScreenshots: "always" | "ask" | "never";
+    downloadDir: string;
+    askDownloadPath: boolean;
+    historyAccess: "always_ask" | "allow" | "deny";
+    siteToolsEnabled: boolean;
+    agentPermissions: {
+      defaults: {
+        browse: "require_approval" | "always_allow" | "deny";
+        download: "require_approval" | "always_allow" | "deny";
+        upload: "require_approval" | "always_allow" | "deny";
+      };
+      exceptions: Array<{
+        origin: string;
+        browse: "require_approval" | "always_allow" | "deny";
+        download: "require_approval" | "always_allow" | "deny";
+        upload: "require_approval" | "always_allow" | "deny";
+      }>;
+    };
+    fullCdpAccess: boolean;
   };
   /**
    * Skill market install policy.
@@ -825,6 +848,7 @@ export const desktopIpcChannels = {
     getStatus: "phase1:get-auth-status",
     getBillingSubscription: "phase1:get-billing-subscription",
     openWalletPayment: "phase1:open-wallet-payment",
+    claimNationalDayGift: "phase1:claim-national-day-gift",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
     changePassword: "phase1:change-auth-password",
@@ -946,7 +970,20 @@ export const desktopIpcChannels = {
   browser: {
     openPreview: "phase1:open-browser-preview",
     closePreview: "phase1:close-browser-preview",
-    capturePreview: "phase1:capture-browser-preview"
+    capturePreview: "phase1:capture-browser-preview",
+    clearBrowsingData: "phase1:clear-browser-browsing-data",
+    listHistory: "phase1:list-browser-history",
+    removeHistoryEntry: "phase1:remove-browser-history-entry",
+    clearHistory: "phase1:clear-browser-history",
+    selectDownloadDir: "phase1:select-browser-download-dir",
+    listCredentials: "phase1:list-browser-credentials",
+    upsertCredential: "phase1:upsert-browser-credential",
+    removeCredential: "phase1:remove-browser-credential",
+    listContacts: "phase1:list-browser-contacts",
+    upsertContact: "phase1:upsert-browser-contact",
+    removeContact: "phase1:remove-browser-contact",
+    getCdpAccess: "phase1:get-browser-cdp-access",
+    probeSiteTools: "phase1:probe-browser-site-tools"
   },
   mobile: {
     startPairing: "phase1:start-mobile-pairing",
@@ -978,6 +1015,10 @@ export const desktopIpcChannels = {
   appUpdate: {
     getStatus: "phase1:get-app-update-status",
     start: "phase1:start-app-update",
+    apply: "phase1:apply-app-update",
+    getApplied: "phase1:get-applied-app-update",
+    dismissApplied: "phase1:dismiss-applied-app-update",
+    skipVersion: "phase1:skip-app-update-version",
     verify: "phase1:verify-app-update",
     progress: "phase1:app-update-progress"
   },
@@ -1458,6 +1499,10 @@ export interface DesktopAppUpdateStatus {
   notes?: string;
   mandatory?: boolean;
   downloadUrl?: string;
+  /** True when the package is downloaded and waiting for restart apply. */
+  staged?: boolean;
+  stagedPath?: string;
+  skippedVersion?: string;
   detail: string;
 }
 
@@ -1465,15 +1510,35 @@ export interface DesktopAppUpdateStartResult {
   ok: boolean;
   path?: string;
   detail: string;
+  /** Download finished and staged; user should restart to apply. */
+  staged?: boolean;
+}
+
+export interface DesktopAppUpdateAppliedInfo {
+  fromVersion: string;
+  toVersion: string;
+  notes: string;
+  appliedAt: string;
 }
 
 export interface DesktopAppUpdateProgress {
-  phase: "preparing" | "downloading" | "verifying" | "installing" | "opening" | "done" | "error";
+  phase:
+    | "preparing"
+    | "downloading"
+    | "verifying"
+    | "ready"
+    | "installing"
+    | "opening"
+    | "done"
+    | "success"
+    | "error";
   percent: number;
   detail: string;
   latestVersion?: string;
-  /** Silent in-app path, MSI wizard fallback, or ulit.zip patch apply. */
-  installMode?: "silent" | "wizard" | "patch";
+  currentVersion?: string;
+  notes?: string;
+  /** Silent in-app zip replace (Mac) or Windows installer modes. */
+  installMode?: "silent" | "wizard" | "patch" | "nsis";
   preservesUserData: true;
 }
 

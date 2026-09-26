@@ -28,7 +28,8 @@ test("starts one non-overlapping control-plane heartbeat and stops its timer", a
   heartbeat.start();
   assert.equal(timer.unrefCalled, true);
   assert.ok(scheduled);
-  scheduled();
+  // start() kicks an immediate sync, then interval callbacks continue.
+  assert.equal(syncCalls, 1);
   scheduled();
   assert.equal(syncCalls, 1);
 
@@ -39,4 +40,18 @@ test("starts one non-overlapping control-plane heartbeat and stops its timer", a
 
   heartbeat.stop();
   assert.equal(cleared, timer);
+});
+
+test("start warms the control-plane cache immediately after login", async () => {
+  let syncCalls = 0;
+  const heartbeat = new DesktopControlPlaneHeartbeat({
+    intervalMs: 30_000,
+    sync: async () => { syncCalls += 1; },
+    setInterval: () => ({ unref() {} }),
+    clearInterval: () => undefined
+  });
+  heartbeat.start();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(syncCalls, 1);
+  heartbeat.stop();
 });

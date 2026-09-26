@@ -56,7 +56,7 @@ export function registerDesktopWebSearchTools(
     {
       name: "news_search_free",
       title: "市场新闻搜索",
-      description: "Search market/finance news with free sources first through the company Spring orchestrator. Automatically upgrades to one paid web search only when free news is insufficient. May include TopK page fetches. Prefer this for latest stock news, announcements, and prices. Never call for greetings or casual chat.",
+      description: "Search market/finance news with free sources first through the company Spring orchestrator (AKShare → Baidu standard/enhanced → Bocha). Automatically upgrades to paid search only when free news is insufficient. May include TopK page fetches. Prefer this for latest stock news, announcements, and prices. Never call for greetings or casual chat.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -139,7 +139,7 @@ export function registerDesktopWebSearchTools(
     {
       name: "web.search_paid",
       title: "全网付费搜索",
-      description: "Paid company web search via Spring. Use only when the user explicitly asks for full-web search or news_search_free is insufficient. Company API keys stay server-side. Never call for greetings or casual chat.",
+      description: "Company web search via Spring orchestrator (Baidu standard/enhanced then Bocha). Use only when the user explicitly asks for full-web search or news_search_free is insufficient. Company API keys stay server-side. Never call for greetings or casual chat.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -163,12 +163,19 @@ export function registerDesktopWebSearchTools(
           count: typeof input.count === "number" ? input.count : undefined
         });
         if (!result.items.length) {
+          const emptyCode = result.provider === "none" ? "WEB_SEARCH_UNAVAILABLE" : "WEB_SEARCH_EMPTY";
           return toolResult({
             status: "unavailable",
-            code: "WEB_SEARCH_EMPTY",
-            message: formatDesktopWebSearchUnavailable("Paid web search returned no source URLs."),
+            code: emptyCode,
+            message: formatDesktopWebSearchUnavailable(
+              result.provider === "none"
+                ? "Web search returned no usable sources."
+                : "Paid web search returned no source URLs."
+            ),
             searchedAt: result.searchedAt,
             provider: result.provider,
+            edition: result.edition,
+            cacheHit: result.cacheHit,
             query: result.query,
             items: []
           }, true);
@@ -183,6 +190,8 @@ export function registerDesktopWebSearchTools(
           status: "ok",
           query: result.query,
           provider: result.provider,
+          edition: result.edition,
+          cacheHit: result.cacheHit,
           searchedAt: result.searchedAt,
           items: result.items,
           citationBlock: citationPreview,

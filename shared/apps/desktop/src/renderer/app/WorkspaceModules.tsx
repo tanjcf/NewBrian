@@ -194,7 +194,7 @@ import { recoverActiveThreadRetry } from "./generation-failure-recovery";
 import { GovernmentWritingSpecification } from "./GovernmentWritingSpecification";
 import { mergeRefreshedModelConfig } from "./model-config-refresh";
 import { combineComposerQuote } from "./composer-quote";
-import { normalizeComposerAttachmentError } from "./composer-attachment-errors";
+import { isComposerAttachmentErrorMessage, normalizeComposerAttachmentError } from "./composer-attachment-errors";
 import {
   insertComposerAttachmentTokens,
   removeComposerAttachmentToken
@@ -3830,6 +3830,13 @@ export function WorkspaceModules(ctx: any) {
   }, [setSearchQuery, setShowSearchDialog]);
 
   useEffect(() => {
+    if (activeFeature !== "mobile") return;
+    // NewBrain 移动版入口已隐藏：旧状态或深链落到 mobile 时回到新对话。
+    setActiveFeature("new-chat");
+    setSelectedSidebarRow("feature:new-chat");
+  }, [activeFeature, setActiveFeature, setSelectedSidebarRow]);
+
+  useEffect(() => {
     if (activeFeature !== "mobile" || !api) return;
     void api.closeBrowserPreview();
     let canceled = false;
@@ -4418,7 +4425,7 @@ function renderSidebarModule() {
                 <strong>搜索</strong>
               </button>
               <div className="feature-nav-secondary">
-                {featureItems.filter((item: any) => item.id !== "new-chat" && item.id !== "extensions").map((item: any) => (
+                {featureItems.filter((item: any) => item.id !== "new-chat" && item.id !== "extensions" && item.id !== "mobile").map((item: any) => (
                   <button
                     key={item.id}
                     className={`feature-nav-item secondary${selectedSidebarRow === `feature:${item.id}` ? " active" : ""}`}
@@ -6087,7 +6094,11 @@ function renderChatModule() {
         </header>
 
         <div className="task-scroll" ref={taskScrollRef} data-testid="task-scroll">
-          {errorMessage && !(ctx.generationFailure && ctx.generationFailure.threadId === selectedThread?.id) ? <div className="error-banner">{errorMessage}</div> : null}
+          {errorMessage
+            && !(ctx.generationFailure && ctx.generationFailure.threadId === selectedThread?.id)
+            && !isComposerAttachmentErrorMessage(errorMessage)
+            ? <div className="error-banner" data-testid="task-error-banner">{errorMessage}</div>
+            : null}
           {isNewChatMode ? (
             <div className="new-chat-canvas">
               <h1>{newChatTitle}</h1>
@@ -6963,6 +6974,15 @@ function renderChatModule() {
               {ttsFollow.snippet ? <em>{ttsFollow.snippet}</em> : null}
             </div>
           ) : null}
+          {errorMessage
+            && !(ctx.generationFailure && ctx.generationFailure.threadId === selectedThread?.id)
+            && isComposerAttachmentErrorMessage(errorMessage)
+            ? (
+              <div className="error-banner composer-error-banner" data-testid="composer-error-banner" role="alert">
+                {errorMessage}
+              </div>
+            )
+            : null}
           {showJumpToLatest ? (
             <button
               type="button"
@@ -10210,7 +10230,7 @@ function renderWorkspaceModules() {
     const showCenterPreview = previewPlacement === "center" && previewMode !== "empty" && activeFeature === "new-chat";
     // Full-page features must win over an active thread selection; otherwise Holon/专家/技能
     // opened while a chat row is selected would silently keep showing chat.
-    const fullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp", "holon"].includes(activeFeature);
+    const fullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mcp", "holon"].includes(activeFeature);
     const mainModule = fullPageFeature
       ? (
         activeFeature === "extensions"
@@ -10221,9 +10241,7 @@ function renderWorkspaceModules() {
               ? renderPluginsModule()
               : activeFeature === "automation"
                 ? renderAutomationPrototypeModule()
-                : activeFeature === "mobile"
-                  ? renderMobileModule()
-                  : activeFeature === "mcp"
+                : activeFeature === "mcp"
                     ? renderMcpModule()
                     : activeFeature === "holon"
                       ? <HolonWorkspace threadId={selectedThread?.id} />

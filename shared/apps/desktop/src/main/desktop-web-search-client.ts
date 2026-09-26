@@ -13,6 +13,10 @@ export interface DesktopWebSearchResult {
   query: string;
   provider: string;
   searchedAt: string;
+  /** Baidu standard/enhanced edition when provider is baidu_qianfan; otherwise empty. */
+  edition: string;
+  /** True when Spring/search-gateway served a cache hit (no paid charge). */
+  cacheHit: boolean;
   items: DesktopWebSearchItem[];
 }
 
@@ -63,7 +67,25 @@ export class DesktopWebSearchError extends Error {
   }
 }
 
-/** Calls company Spring paid web-search; company keys stay server-side. */
+/** Reads Spring desktop error JSON when HTTP status is non-2xx. */
+async function throwDesktopWebSearchHttpError(
+  response: Response,
+  fallbackMessage: string,
+  fallbackCodePrefix = "WEB_SEARCH_HTTP_"
+): Promise<never> {
+  let code = `${fallbackCodePrefix}${response.status}`;
+  let message = fallbackMessage;
+  try {
+    const payload = await response.json() as { code?: string; message?: string };
+    if (payload?.code) code = String(payload.code);
+    if (payload?.message) message = String(payload.message);
+  } catch {
+    // Keep HTTP status fallback when the body is not JSON.
+  }
+  throw new DesktopWebSearchError(code, message);
+}
+
+/** Calls company Spring web-search (orchestrated); company keys stay server-side. */
 export class DesktopWebSearchClient {
   private readonly dependencies: DesktopWebSearchClientDependencies;
   private readonly fetchImpl: typeof fetch;
@@ -114,8 +136,8 @@ export class DesktopWebSearchClient {
     });
 
     if (!response.ok) {
-      throw new DesktopWebSearchError(
-        `WEB_SEARCH_HTTP_${response.status}`,
+      await throwDesktopWebSearchHttpError(
+        response,
         `Paid web search failed with HTTP ${response.status}.`
       );
     }
@@ -126,6 +148,8 @@ export class DesktopWebSearchClient {
         query?: string;
         provider?: string;
         searchedAt?: string;
+        edition?: string;
+        cacheHit?: boolean;
         items?: Array<Record<string, unknown>>;
       };
       message?: string;
@@ -154,11 +178,13 @@ export class DesktopWebSearchClient {
       query: String(payload.data.query || query),
       provider: String(payload.data.provider || "unknown"),
       searchedAt: String(payload.data.searchedAt || new Date().toISOString()),
+      edition: String(payload.data.edition || ""),
+      cacheHit: Boolean(payload.data.cacheHit),
       items
     };
   }
 
-  /** Free-news-first market search via Spring orchestrator; paid Bocha stays server-side. */
+  /** Free-news-first market search via Spring orchestrator; Baidu then Bocha stay server-side. */
   async searchMarketNews(input: {
     query: string;
     freshness?: DesktopWebSearchFreshness;
@@ -198,8 +224,8 @@ export class DesktopWebSearchClient {
     });
 
     if (!response.ok) {
-      throw new DesktopWebSearchError(
-        `WEB_SEARCH_HTTP_${response.status}`,
+      await throwDesktopWebSearchHttpError(
+        response,
         `Market news search failed with HTTP ${response.status}.`
       );
     }
@@ -313,9 +339,10 @@ export class DesktopWebSearchClient {
     });
 
     if (!response.ok) {
-      throw new DesktopWebSearchError(
-        `WEB_FETCH_HTTP_${response.status}`,
-        `Web fetch failed with HTTP ${response.status}.`
+      await throwDesktopWebSearchHttpError(
+        response,
+        `Web fetch failed with HTTP ${response.status}.`,
+        "WEB_FETCH_HTTP_"
       );
     }
 

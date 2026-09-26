@@ -1,6 +1,6 @@
 {
   "name": "@codex-forge/desktop",
-  "version": "1.4.11",
+  "version": "1.4.23",
   "private": true,
   "description": "Desktop shell for the NewBrain local-first coding agent workbench.",
   "author": "NewBrain",
@@ -123,7 +123,10 @@
       "node_modules/pinyin-pro/**"
     ],
     "extraResources": [
-      { "from": "resources/garden", "to": "garden" },
+      {
+        "from": "resources/garden",
+        "to": "garden"
+      },
       {
         "from": "build/package-resources/newbrain.config.json",
         "to": "newbrain.config.json"
@@ -139,6 +142,10 @@
       {
         "from": "build/icon.ico",
         "to": "newbrain.ico"
+      },
+      {
+        "from": "build/tray.ico",
+        "to": "newbrain-tray.ico"
       },
       {
         "from": "build/icon.png",
@@ -190,12 +197,19 @@
       "oneClick": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
+      "include": "installer.nsh",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "NewBrain",
+      "menuCategory": false,
       "artifactName": "${productName} ${version}-setup.${ext}",
       "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "displayLanguageSelector": false
     },
     "msi": {
       "upgradeCode": "2D97097C-03A2-54F7-B1D4-7E34233F7A65",

@@ -52,6 +52,10 @@ import {
   shouldUseLoginCode,
   withTimeout
 } from "./app/desktop-model";
+import {
+  APP_UPDATE_STATUS_POLL_MS,
+  shouldRefreshAppUpdateOnWindowSignal
+} from "./app/app-update-status-poll";
 import type {
   BootstrapPayload,
   ComposerToolFieldValueMap,
@@ -367,6 +371,37 @@ export function App() {
   const [showMcpToolPicker, setShowMcpToolPicker] = useState(false);
   const [selectedComposerTools, setSelectedComposerTools] = useState<ComposerToolChip[]>([]);
   const [authStatus, setAuthStatus] = useState<DesktopAuthStatusState>(initialDesktopAuthStatus);
+  const [appUpdateStatus, setAppUpdateStatus] = useState<null | {
+    currentVersion: string;
+    available: boolean;
+    latestVersion?: string;
+    releaseId?: string;
+    channel?: string;
+    notes?: string;
+    mandatory?: boolean;
+    downloadUrl?: string;
+    staged?: boolean;
+    stagedPath?: string;
+    skippedVersion?: string;
+    detail: string;
+  }>(null);
+  const [appUpdateBusy, setAppUpdateBusy] = useState(false);
+  const [appUpdateDiscoverOpen, setAppUpdateDiscoverOpen] = useState(false);
+  const [appUpdateApplied, setAppUpdateApplied] = useState<null | {
+    fromVersion: string;
+    toVersion: string;
+    notes: string;
+  }>(null);
+  const [appUpdateProgress, setAppUpdateProgress] = useState<null | {
+    phase: string;
+    percent: number;
+    detail: string;
+    latestVersion?: string;
+    currentVersion?: string;
+    notes?: string;
+    installMode?: "silent" | "wizard" | "patch" | "nsis";
+    preservesUserData: true;
+  }>(null);
   const [accountProfile, setAccountProfile] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("newbrain.accountProfile.v1") || "{}");
@@ -681,6 +716,196 @@ export function App() {
         ? "需要手动安装 conda"
         : "等待初始化";
   const isAuthenticated = authStatus.authenticated;
+  useEffect(() => {
+    if (!api?.onAppUpdateProgress) return;
+    return api.onAppUpdateProgress((progress) => {
+      setAppUpdateProgress(progress);
+      setAppUpdateDiscoverOpen(false);
+      if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
+        setAppUpdateBusy(false);
+      }
+      if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
+        void api.getAppUpdateStatus?.().then((status) => setAppUpdateStatus(status)).catch(() => undefined);
+      }
+    });
+  }, [api]);
+  useEffect(() => {
+    if (!api?.getAppliedAppUpdate) return;
+    void api.getAppliedAppUpdate().then((applied) => {
+      if (applied) setAppUpdateApplied(applied);
+    }).catch(() => undefined);
+  }, [api]);
+  useEffect(() => {
+    if (!appUpdateStatus?.available) return;
+    if (appUpdateStatus.skippedVersion && appUpdateStatus.skippedVersion === appUpdateStatus.latestVersion) return;
+    if (appUpdateApplied) return;
+    if (
+      appUpdateProgress?.phase === "ready"
+      && !appUpdateStatus.staged
+      && appUpdateProgress.latestVersion
+      && appUpdateProgress.latestVersion === appUpdateStatus.latestVersion
+    ) {
+      setAppUpdateProgress(null);
+      setAppUpdateDiscoverOpen(true);
+      return;
+    }
+    if (appUpdateProgress || appUpdateDiscoverOpen) return;
+    if (appUpdateStatus.staged) {
+      setAppUpdateProgress({
+        phase: "ready",
+        percent: 100,
+        detail: appUpdateStatus.detail,
+        latestVersion: appUpdateStatus.latestVersion,
+        currentVersion: appUpdateStatus.currentVersion,
+        notes: appUpdateStatus.notes,
+        preservesUserData: true
+      });
+      return;
+    }
+    setAppUpdateDiscoverOpen(true);
+  }, [
+    appUpdateStatus?.available,
+    appUpdateStatus?.latestVersion,
+    appUpdateStatus?.staged,
+    appUpdateStatus?.skippedVersion,
+    appUpdateStatus?.detail,
+    appUpdateProgress?.phase,
+    appUpdateProgress?.latestVersion,
+    appUpdateDiscoverOpen,
+    appUpdateApplied
+  ]);
+  useEffect(() => {
+    if (!api?.getAppUpdateStatus) return;
+    let cancelled = false;
+    const refresh = () => {
+      if (!shouldRefreshAppUpdateOnWindowSignal({
+        isAuthenticated,
+        documentHidden: typeof document !== "undefined" && document.hidden
+      })) {
+        return;
+      }
+      void api.getAppUpdateStatus().then((status) => {
+        if (!cancelled && status) setAppUpdateStatus(status);
+      }).catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, APP_UPDATE_STATUS_POLL_MS);
+    const onFocus = () => refresh();
+    const onVisibility = () => refresh();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [api, isAuthenticated]);
+  async function startDesktopAppUpdate() {
+    if (!api?.startAppUpdate || appUpdateBusy) return;
+    setAppUpdateBusy(true);
+    setAppUpdateDiscoverOpen(false);
+    setAppUpdateProgress({
+      phase: "preparing",
+      percent: 1,
+      detail: "正在准备更新。聊天记录、项目与本地历史会保留。",
+      latestVersion: appUpdateStatus?.latestVersion,
+      currentVersion: appUpdateStatus?.currentVersion,
+      notes: appUpdateStatus?.notes,
+      preservesUserData: true
+    });
+    try {
+      const result = await api.startAppUpdate();
+      setChatStatus(result.detail || "");
+      if (!result.ok) {
+        setAppUpdateProgress((current) => current ? {
+          ...current,
+          phase: "error",
+          percent: 0,
+          detail: result.detail || "更新失败"
+        } : {
+          phase: "error",
+          percent: 0,
+          detail: result.detail || "更新失败",
+          preservesUserData: true
+        });
+        setErrorMessage(result.detail || "更新失败");
+      } else if (result.staged) {
+        setAppUpdateProgress((current) => ({
+          phase: "ready",
+          percent: 100,
+          detail: result.detail || `v${appUpdateStatus?.latestVersion || ""} 已就绪，重启后生效。`,
+          latestVersion: current?.latestVersion || appUpdateStatus?.latestVersion,
+          currentVersion: current?.currentVersion || appUpdateStatus?.currentVersion,
+          notes: current?.notes || appUpdateStatus?.notes,
+          preservesUserData: true
+        }));
+      }
+      const status = await api.getAppUpdateStatus().catch(() => null);
+      if (status) setAppUpdateStatus(status);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setAppUpdateProgress({
+        phase: "error",
+        percent: 0,
+        detail,
+        preservesUserData: true
+      });
+      setErrorMessage(detail);
+    } finally {
+      setAppUpdateBusy(false);
+    }
+  }
+  async function applyDesktopAppUpdate() {
+    if (!api?.applyAppUpdate || appUpdateBusy) return;
+    setAppUpdateBusy(true);
+    try {
+      const result = await api.applyAppUpdate();
+      setChatStatus(result.detail || "");
+      if (!result.ok) {
+        setAppUpdateProgress({
+          phase: "error",
+          percent: 0,
+          detail: result.detail || "安装失败",
+          latestVersion: appUpdateStatus?.latestVersion,
+          currentVersion: appUpdateStatus?.currentVersion,
+          notes: appUpdateStatus?.notes,
+          preservesUserData: true
+        });
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setAppUpdateProgress({
+        phase: "error",
+        percent: 0,
+        detail,
+        latestVersion: appUpdateStatus?.latestVersion,
+        currentVersion: appUpdateStatus?.currentVersion,
+        notes: appUpdateStatus?.notes,
+        preservesUserData: true
+      });
+    } finally {
+      setAppUpdateBusy(false);
+    }
+  }
+  async function skipDesktopAppUpdate() {
+    const version = appUpdateStatus?.latestVersion;
+    if (api?.skipAppUpdateVersion) {
+      await api.skipAppUpdateVersion(version).catch(() => undefined);
+    }
+    const status = await api?.getAppUpdateStatus?.().catch(() => null);
+    if (status) setAppUpdateStatus(status);
+  }
+  function dismissAppUpdateProgress() {
+    setAppUpdateProgress(null);
+  }
+  function dismissAppUpdateDiscover() {
+    setAppUpdateDiscoverOpen(false);
+  }
+  async function dismissAppliedAppUpdate() {
+    setAppUpdateApplied(null);
+    await api?.dismissAppliedAppUpdate?.().catch(() => undefined);
+  }
   const isBootstrapBlocking =
     isAuthenticated &&
     desktopBootstrapStatus.overall.status === "pending";
@@ -749,7 +974,7 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mcp"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
@@ -1020,7 +1245,10 @@ export function App() {
     }
   }
 
-  async function handleLoginSubmit(agreementChecked = loginForm.agreementAccepted) {
+  async function handleLoginSubmit(
+    agreementChecked = loginForm.agreementAccepted,
+    emailAuthMode: "password" | "code" = "password"
+  ) {
     if (!api || isSubmittingLogin) {
       return;
     }
@@ -1029,10 +1257,8 @@ export function App() {
     const identifier = resolveLoginIdentifier(loginForm);
     const password = loginForm.password.trim();
     const captcha = loginForm.captcha.trim();
-    const emailCodeRequired = Boolean(
-      (authStatus as DesktopAuthStatusState & { email_code_login_enabled?: boolean }).email_code_login_enabled
-    );
-    const useCode = shouldUseLoginCode(loginForm, "password", emailCodeRequired);
+    const passwordLoginEnabled = authStatus.password_login_enabled !== false;
+    const useCode = shouldUseLoginCode(loginForm, emailAuthMode, { passwordLoginEnabled });
 
     if (channel === "phone") {
       if (!isCnMobile(identifier)) {
@@ -2300,6 +2526,11 @@ export function App() {
         desktopBootstrapStatus={desktopBootstrapStatus}
         setChatStatus={setChatStatus}
         setErrorMessage={setErrorMessage}
+        appUpdateStatus={appUpdateStatus}
+        appUpdateBusy={appUpdateBusy}
+        startDesktopAppUpdate={startDesktopAppUpdate}
+        applyDesktopAppUpdate={applyDesktopAppUpdate}
+        skipDesktopAppUpdate={skipDesktopAppUpdate}
       />
     );
   }
@@ -2390,6 +2621,17 @@ export function App() {
         setShowAccountMenu={setShowAccountMenu}
         setActiveSettingsSection={setActiveSettingsSection}
         handleLogout={handleLogout}
+        appUpdateStatus={appUpdateStatus}
+        appUpdateBusy={appUpdateBusy}
+        appUpdateProgress={appUpdateProgress}
+        appUpdateDiscoverOpen={appUpdateDiscoverOpen}
+        appUpdateApplied={appUpdateApplied}
+        startDesktopAppUpdate={startDesktopAppUpdate}
+        applyDesktopAppUpdate={applyDesktopAppUpdate}
+        skipDesktopAppUpdate={skipDesktopAppUpdate}
+        dismissAppUpdateProgress={dismissAppUpdateProgress}
+        dismissAppUpdateDiscover={dismissAppUpdateDiscover}
+        dismissAppliedAppUpdate={dismissAppliedAppUpdate}
         title={title}
         previewPlacement={previewPlacement}
         setPreviewPlacement={setPreviewPlacement}
@@ -2490,7 +2732,9 @@ export function App() {
         isSubmittingLogin={isSubmittingLogin}
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
-        onLoginSubmit={(agreementChecked) => void handleLoginSubmit(agreementChecked)}
+        onLoginSubmit={(agreementChecked, emailAuthMode) =>
+          void handleLoginSubmit(agreementChecked, emailAuthMode)
+        }
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}
         setLoginForm={handleLoginFormChange}

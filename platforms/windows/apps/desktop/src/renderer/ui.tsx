@@ -891,7 +891,20 @@ export function App() {
   useEffect(() => {
     if (!appUpdateStatus?.available) return;
     if (appUpdateStatus.skippedVersion && appUpdateStatus.skippedVersion === appUpdateStatus.latestVersion) return;
-    if (appUpdateProgress || appUpdateApplied) return;
+    if (appUpdateApplied) return;
+    // Staged package was cleared (mismatch / failed apply) while the UI still
+    // showed "ready" — drop the stale ready card so the user can download again.
+    if (
+      appUpdateProgress?.phase === "ready"
+      && !appUpdateStatus.staged
+      && appUpdateProgress.latestVersion
+      && appUpdateProgress.latestVersion === appUpdateStatus.latestVersion
+    ) {
+      setAppUpdateProgress(null);
+      setAppUpdateDiscoverOpen(true);
+      return;
+    }
+    if (appUpdateProgress || appUpdateDiscoverOpen) return;
     if (appUpdateStatus.staged) {
       setAppUpdateProgress({
         phase: "ready",
@@ -905,12 +918,43 @@ export function App() {
       return;
     }
     setAppUpdateDiscoverOpen(true);
-  }, [appUpdateStatus?.available, appUpdateStatus?.latestVersion, appUpdateStatus?.staged, appUpdateStatus?.skippedVersion]);
+  }, [
+    appUpdateStatus?.available,
+    appUpdateStatus?.latestVersion,
+    appUpdateStatus?.staged,
+    appUpdateStatus?.skippedVersion,
+    appUpdateStatus?.detail,
+    appUpdateProgress?.phase,
+    appUpdateProgress?.latestVersion,
+    appUpdateDiscoverOpen,
+    appUpdateApplied
+  ]);
   useEffect(() => {
-    // App/control-plane status is refreshed only by an explicit update action.
-    // Automatic polling is disabled while the remote control plane is not a
-    // production-ready user-facing feature.
-    return;
+    if (!api?.getAppUpdateStatus) return;
+    let cancelled = false;
+    const refresh = () => {
+      if (!shouldRefreshAppUpdateOnWindowSignal({
+        isAuthenticated,
+        documentHidden: typeof document !== "undefined" && document.hidden
+      })) {
+        return;
+      }
+      void api.getAppUpdateStatus().then((status) => {
+        if (!cancelled && status) setAppUpdateStatus(status);
+      }).catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, APP_UPDATE_STATUS_POLL_MS);
+    const onFocus = () => refresh();
+    const onVisibility = () => refresh();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [api, isAuthenticated]);
   async function startDesktopAppUpdate() {
     if (!api?.startAppUpdate || appUpdateBusy) return;
@@ -978,6 +1022,9 @@ export function App() {
           phase: "error",
           percent: 0,
           detail: result.detail || "安装失败",
+          latestVersion: appUpdateStatus?.latestVersion,
+          currentVersion: appUpdateStatus?.currentVersion,
+          notes: appUpdateStatus?.notes,
           preservesUserData: true
         });
       }
@@ -987,6 +1034,9 @@ export function App() {
         phase: "error",
         percent: 0,
         detail,
+        latestVersion: appUpdateStatus?.latestVersion,
+        currentVersion: appUpdateStatus?.currentVersion,
+        notes: appUpdateStatus?.notes,
         preservesUserData: true
       });
     } finally {
@@ -1083,7 +1133,7 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp", "holon"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mcp", "holon"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
@@ -1391,7 +1441,10 @@ export function App() {
     }
   }
 
-  async function handleLoginSubmit(agreementChecked = loginForm.agreementAccepted) {
+  async function handleLoginSubmit(
+    agreementChecked = loginForm.agreementAccepted,
+    emailAuthMode: "password" | "code" = "password"
+  ) {
     if (!api || isSubmittingLogin) {
       return;
     }
@@ -1400,10 +1453,8 @@ export function App() {
     const identifier = resolveLoginIdentifier(loginForm);
     const password = loginForm.password.trim();
     const captcha = loginForm.captcha.trim();
-    const emailCodeRequired = Boolean(
-      (authStatus as DesktopAuthStatusState & { email_code_login_enabled?: boolean }).email_code_login_enabled
-    );
-    const useCode = shouldUseLoginCode(loginForm, "password", emailCodeRequired);
+    const passwordLoginEnabled = authStatus.password_login_enabled !== false;
+    const useCode = shouldUseLoginCode(loginForm, emailAuthMode, { passwordLoginEnabled });
 
     if (channel === "phone") {
       if (!isCnMobile(identifier)) {
@@ -1448,6 +1499,22 @@ export function App() {
       if (nextAuthStatus.authenticated) {
         const nextBootstrapStatus = await api.startDesktopBootstrap();
         setDesktopBootstrapStatus(nextBootstrapStatus);
+        try {
+          if (window.sessionStorage.getItem("nd_easter_found") === "1" && api.claimNationalDayGift) {
+            const gift = await api.claimNationalDayGift();
+            window.sessionStorage.removeItem("nd_easter_found");
+            const giftMessage =
+              gift && typeof gift === "object" && typeof (gift as { gift_message?: unknown }).gift_message === "string"
+                ? String((gift as { gift_message: string }).gift_message)
+                : "";
+            if (giftMessage) {
+              setChatStatus(giftMessage);
+            }
+          }
+        } catch (giftError) {
+          const giftFail = giftError instanceof Error ? giftError.message : String(giftError ?? "");
+          if (giftFail) setChatStatus(giftFail);
+        }
       }
       setLoginForm((current) => ({
         ...current,
@@ -3123,7 +3190,9 @@ export function App() {
         isSubmittingLogin={isSubmittingLogin}
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
-        onLoginSubmit={(agreementChecked) => void handleLoginSubmit(agreementChecked)}
+        onLoginSubmit={(agreementChecked, emailAuthMode) =>
+          void handleLoginSubmit(agreementChecked, emailAuthMode)
+        }
         onAlipayQrLogin={() => void handleAlipayQrLogin()}
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}

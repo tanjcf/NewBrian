@@ -365,6 +365,7 @@ contextBridge.exposeInMainWorld("newbrain", {
   setWalletOverageEnabled: (input: { enabled: boolean }): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke(desktopIpcChannels.auth.setWalletOverageEnabled, input),
   redeemCode: (input: { code: string }): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.redeemCode, input),
+  claimNationalDayGift: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.claimNationalDayGift),
   sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
   loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
   loginWithAlipayQr: (input: DesktopAuthAlipayQrLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.loginWithAlipayQr, input),
@@ -589,6 +590,45 @@ contextBridge.exposeInMainWorld("newbrain", {
   openBrowserPreview: (url?: string): Promise<{ ok: boolean; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.openPreview, url),
   closeBrowserPreview: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.closePreview),
   captureBrowserPreview: (): Promise<{ ok: boolean; path: string; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.capturePreview),
+  clearBrowserBrowsingData: (): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.clearBrowsingData),
+  listBrowserHistory: (): Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listHistory),
+  removeBrowserHistoryEntry: (id: string): Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeHistoryEntry, id),
+  clearBrowserHistory: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.clearHistory),
+  selectBrowserDownloadDir: (): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.selectDownloadDir),
+  listBrowserCredentials: (): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listCredentials),
+  upsertBrowserCredential: (input: {
+    origin: string;
+    username: string;
+    password: string;
+    id?: string;
+  }): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.upsertCredential, input),
+  removeBrowserCredential: (
+    id: string
+  ): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeCredential, id),
+  listBrowserContacts: (): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listContacts),
+  upsertBrowserContact: (input: {
+    name: string;
+    email?: string;
+    phone?: string;
+    id?: string;
+  }): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.upsertContact, input),
+  removeBrowserContact: (
+    id: string
+  ): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeContact, id),
+  getBrowserCdpAccess: (): Promise<{ enabled: boolean; partition: string; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.getCdpAccess),
+  probeBrowserSiteTools: (): Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.probeSiteTools),
   controlWindow: (action: WindowControlAction): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(desktopIpcChannels.window.control, action),
   showAppMenu: (input: ShowAppMenuInput): Promise<{ ok: boolean }> =>

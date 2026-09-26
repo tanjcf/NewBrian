@@ -40,7 +40,8 @@ export type LoginAuthStatusView = {
   server_date?: string | null;
   /**
    * When false, hide the National Day login ceremony.
-   * Production packaged builds set this from spring-app Oct 1; local unpackaged stays true.
+   * Production packaged builds set this from spring-app Sep 29–Oct 15 (Asia/Shanghai);
+   * local unpackaged stays true.
    */
   login_ceremony_enabled?: boolean;
 };
@@ -57,14 +58,20 @@ export function resolveLoginIdentifier(form: LoginFormState): string {
   return form.channel === "phone" ? form.phone.trim() : form.email.trim();
 }
 
+/**
+ * Decide whether email login submits captcha instead of password.
+ * `email_code_login_enabled` only means code login is available — never pass it as a force flag.
+ * Force code only when the server disables password login.
+ */
 export function shouldUseLoginCode(
   form: LoginFormState,
   emailAuthMode: LoginEmailAuthMode,
-  emailCodeRequired = false
+  options?: { passwordLoginEnabled?: boolean }
 ): boolean {
   if (form.channel === "phone") return true;
-  if (emailCodeRequired) return true;
+  if (options?.passwordLoginEnabled === false) return true;
   if (emailAuthMode === "code") return true;
+  if (emailAuthMode === "password") return false;
   const password = form.password.trim();
   const captcha = form.captcha.trim();
   return Boolean(captcha) && !password;

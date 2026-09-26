@@ -524,9 +524,48 @@ contextBridge.exposeInMainWorld("newbrain", {
   }>) => ipcRenderer.invoke("phase1:save-policy-rules", rules),
   openSystemTool: (input: string | { toolId: string; workspaceId?: string }): Promise<{ ok: boolean; detail: string }> =>
     ipcRenderer.invoke("phase1:open-system-tool", input),
-  openBrowserPreview: (url?: string): Promise<{ ok: boolean; url: string }> => ipcRenderer.invoke("phase1:open-browser-preview", url),
-  closeBrowserPreview: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("phase1:close-browser-preview"),
-  captureBrowserPreview: (): Promise<{ ok: boolean; path: string; url: string }> => ipcRenderer.invoke("phase1:capture-browser-preview"),
+  openBrowserPreview: (url?: string): Promise<{ ok: boolean; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.openPreview, url),
+  closeBrowserPreview: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.closePreview),
+  captureBrowserPreview: (): Promise<{ ok: boolean; path: string; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.capturePreview),
+  clearBrowserBrowsingData: (): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.clearBrowsingData),
+  listBrowserHistory: (): Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listHistory),
+  removeBrowserHistoryEntry: (id: string): Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeHistoryEntry, id),
+  clearBrowserHistory: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.clearHistory),
+  selectBrowserDownloadDir: (): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.selectDownloadDir),
+  listBrowserCredentials: (): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listCredentials),
+  upsertBrowserCredential: (input: {
+    origin: string;
+    username: string;
+    password: string;
+    id?: string;
+  }): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.upsertCredential, input),
+  removeBrowserCredential: (
+    id: string
+  ): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeCredential, id),
+  listBrowserContacts: (): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listContacts),
+  upsertBrowserContact: (input: {
+    name: string;
+    email?: string;
+    phone?: string;
+    id?: string;
+  }): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.upsertContact, input),
+  removeBrowserContact: (
+    id: string
+  ): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeContact, id),
+  getBrowserCdpAccess: (): Promise<{ enabled: boolean; partition: string; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.getCdpAccess),
+  probeBrowserSiteTools: (): Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.probeSiteTools),
   controlWindow: (action: "minimize" | "maximize" | "close"): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke("phase1:window-control", action),
   showAppMenu: (input: { menu: "file" | "edit" | "view" | "window" | "help"; x: number; y: number }): Promise<{ ok: boolean }> =>

@@ -63,6 +63,10 @@ test("maps size-limit errors into Chinese composer notices", () => {
     formatAttachmentSizeLimitError(oversize),
     /整文件复制不能超过 20 MB/
   );
+  assert.match(
+    formatAttachmentSizeLimitError(new Error(`Clipboard attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit.`)),
+    /整文件复制不能超过 20 MB/
+  );
 });
 
 test("routes oversized documents to local-link instead of hard reject", () => {

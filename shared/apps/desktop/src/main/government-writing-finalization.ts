@@ -88,6 +88,37 @@ export function selectGovernmentDraftCandidate(current: string, priorAssistantMe
   return substantive[0] ?? "";
 }
 
+/**
+ * Pick government article body for native PDF/DOCX delivery.
+ * Prefer the same substantive candidate as finalization; fall back to a short
+ * complete speech (salutation) so brief closing remarks still export.
+ */
+export function prepareGovernmentPdfContent(content: string, priorAssistantMessages: string[], _sourceText = "") {
+  void _sourceText;
+  const preferred = selectGovernmentDraftCandidate(content, priorAssistantMessages);
+  const candidates = [content, ...priorAssistantMessages]
+    .map((candidate) => String(candidate ?? "").trim())
+    .filter(Boolean);
+  const salutations = ["同志们"];
+  const selected = preferred
+    || candidates.find((candidate) =>
+      salutations.some((salutation) => candidate.includes(salutation))
+      && candidate.replace(/\s+/g, "").length >= 80
+    )
+    || "";
+  if (!selected) return "";
+  const salutationOffsets = salutations
+    .map((salutation) => selected.indexOf(salutation))
+    .filter((offset) => offset >= 0);
+  const salutationOffset = salutationOffsets.length ? Math.min(...salutationOffsets) : -1;
+  return (salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
+    .split(/\n#{1,6}\s*终审结果/u)[0]
+    .replace(/\n*PDF (?:文件)?尚未生成并验证[\s\S]*$/u, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/<\/?[^>]+>/g, "")
+    .trim();
+}
+
 export function buildGovernmentWritingFinalizationRequest(userRequest: string, draft: string) {
   return [
     "Finalize a government-writing draft after the user confirmed its outline.",

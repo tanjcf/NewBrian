@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { BrowserWindow, app, shell } from "electron";
 import { desktopIpcChannels, type DesktopAppUpdateProgress } from "@codex-forge/protocol";
 import {
@@ -85,11 +85,14 @@ async function scheduleDeferredSilentNsis(input: {
   downloadDir: string;
 }): Promise<{ exitCode: number | null; error?: string }> {
   const scriptPath = join(input.downloadDir, `nsis-upgrade-${Date.now()}.cmd`);
+  const imageName = basename(input.executablePath) || "NewBrain.exe";
   const script = buildDeferredSilentNsisScript({
     setupPath: input.setupPath,
     executablePath: input.executablePath,
-    processImageName: "NewBrain.exe",
-    maxWaitSeconds: 90
+    processImageName: imageName,
+    processId: process.pid,
+    maxWaitSeconds: 90,
+    resultPath: join(input.downloadDir, "last-nsis-update.json")
   });
   try {
     await writeFile(scriptPath, script, "utf8");
@@ -167,6 +170,13 @@ function skippedVersionPath() {
   return join(app.getPath("userData"), "updates", "skipped-version.txt");
 }
 
+let desktopUpdateExitPending = false;
+
+/** True while a deferred MSI/NSIS apply is about to force-quit the process. */
+export function isDesktopUpdateExitPending(): boolean {
+  return desktopUpdateExitPending;
+}
+
 /** Wire cached/refreshed control-plane release offers into click-to-upgrade IPC. */
 export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompositionDeps) {
   const downloadDir = () => join(app.getPath("userData"), "updates");
@@ -174,13 +184,9 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
     getCurrentVersion: () => app.getVersion(),
     getExecutablePath: () => app.getPath("exe"),
     readCachedRelease: async () => {
-      const cached = controlPlaneCacheRelease(await deps.readControlPlaneState());
-      if (!deps.fetchAppUpdate) return cached;
-      try {
-        return preferAppUpdatePayload(await deps.fetchAppUpdate(), cached);
-      } catch {
-        return cached;
-      }
+      // Disk-only: never await the network here. Settings "软件版本" must render
+      // currentVersion even when /api/desktop/v1/app-update hangs (e.g. Spring OOM).
+      return controlPlaneCacheRelease(await deps.readControlPlaneState());
     },
     refreshRelease: async () => {
       const synced = controlPlaneCacheRelease(await deps.syncControlPlane());
@@ -214,13 +220,24 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
       return error || "";
     },
     afterSilentSuccess: () => {
+      // Deferred MSI/NSIS scripts wait for this process to exit before installing.
+      // Prefer a short graceful quit so will-quit can close SQLite; fall back to
+      // app.exit because agent-host before-quit may preventDefault indefinitely.
+      desktopUpdateExitPending = true;
       setTimeout(() => {
         try {
           app.quit();
         } catch {
           // ignore
         }
-      }, 600);
+      }, 200);
+      setTimeout(() => {
+        try {
+          app.exit(0);
+        } catch {
+          // ignore
+        }
+      }, 3500);
     },
     onProgress: broadcastAppUpdateProgress,
     verifyUpdate: deps.verifyAppUpdate,
@@ -242,6 +259,9 @@ export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompos
     }
   });
   registerDesktopAppUpdateIpc({
+    // Refresh from gateway with an 8s timeout inside getStatus. Settings / sidebar
+    // polls must see newly promoted stable releases without requiring quit+reopen.
+    // Disk cache remains the fallback when the network refresh times out.
     getStatus: () => service.getStatus({ refresh: true }),
     start: () => service.startUpdate(),
     apply: () => service.applyStagedUpdate(),

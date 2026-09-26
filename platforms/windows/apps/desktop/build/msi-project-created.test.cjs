@@ -23,7 +23,20 @@ test('upgrades retain the product family, use rollback, and skip user-data clean
     assert.match(xml, /<MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize"/);
     assert.match(xml, /DowngradeErrorMessage=/);
     assert.doesNotMatch(xml, /DISABLEROLLBACK|CleanNewbrainInstallDir/);
-    assert.match(xml, /Action="StopRunningNewbrain" Before="InstallInitialize"/);
+    assert.match(xml, /Action="StopRunningNewbrain" Before="InstallInitialize">NOT REMOVE</);
+    assert.match(xml, /taskkill \/F \/IM NewBrain\.exe \/T/);
+    assert.match(xml, /taskkill \/F \/IM newbrain\.exe \/T/);
+    assert.match(xml, /taskkill \/F \/IM brain-core\.exe \/T/);
+    assert.match(xml, /Directory="TARGETDIR"/);
+    assert.match(xml, /Action="CreateNewbrainDesktopShortcut" After="InstallFinalize"/);
+    assert.match(xml, /Id="CreateNewbrainDesktopShortcut"/);
+    assert.match(xml, /Directory="APPLICATIONFOLDER"/);
+    assert.match(xml, /Impersonate="yes"/);
+    assert.match(xml, /BaseName -ieq 'newbrain'/);
+    assert.match(xml, /GetFolderPath\('Desktop'\)/);
+    assert.match(xml, /NOT Installed OR REINSTALL OR UPGRADINGPRODUCTCODE/);
+    assert.ok(xml.indexOf("CreateNewbrainDesktopShortcut") < xml.lastIndexOf("</Product>"));
+    assert.ok(xml.includes("</Product>\n</Wix>") || /<\/Product>\s*<\/Wix>/.test(xml));
     assert.match(xml, /<Property Id="APPLICATIONFOLDER" Secure="yes">/);
     assert.match(xml, /RegistrySearch Id="PreviousNewbrainInstallDirectory" Root="HKCU" Key="Environment" Name="NEWBRAIN_HOME" Type="raw"/);
     for (const action of ['RemoveNewbrainUserDataOnUninstall', 'ClearNewbrainHomeEnv']) {

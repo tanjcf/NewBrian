@@ -42,7 +42,15 @@ try {
     [Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer) | Out-Null
   }
   $running = Get-Process -Id $config.processId -ErrorAction SilentlyContinue
-  if ($running -and -not $running.WaitForExit(120000)) { throw 'Application did not exit; update cancelled without changing files.' }
+  if ($running) {
+    if (-not $running.WaitForExit(90000)) {
+      # Soft quit can leave a headless Electron process alive; force-release locks.
+      Stop-Process -Id $config.processId -Force -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 2
+      $still = Get-Process -Id $config.processId -ErrorAction SilentlyContinue
+      if ($still) { throw 'Application did not exit; update cancelled without changing files.' }
+    }
+  }
   $result.status = 'backing-up'
   Save-Result
   New-Item -ItemType Directory -Force -Path $config.backupRoot | Out-Null

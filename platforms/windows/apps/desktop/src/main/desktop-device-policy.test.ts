@@ -92,7 +92,29 @@ test("sanitizes non-ASCII device names so Electron fetch headers stay ByteString
   });
   assert.equal(headers["X-Desktop-Device-Name"], "desktop");
   assert.match(headers["X-Desktop-Device-Name"], /^[\x20-\x7E]+$/);
-  assert.equal(headers["X-Desktop-Package-Preference"], "nsis");
+  assert.equal(
+    headers["X-Desktop-Package-Preference"],
+    policy.resolveDesktopPackagePreference(process.execPath)
+  );
+});
+
+test("package preference follows MSI vs NSIS install layout", () => {
+  assert.equal(
+    policy.resolveDesktopPackagePreference(
+      "C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe"
+    ),
+    "msi"
+  );
+  assert.equal(
+    policy.resolveDesktopPackagePreference(
+      "C:\\Users\\Ada\\AppData\\Local\\Programs\\@codex-forgedesktop\\newbrain.exe"
+    ),
+    "nsis"
+  );
+  assert.equal(
+    policy.resolveDesktopPackagePreference("C:\\Program Files\\NewBrain\\NewBrain.exe"),
+    "msi"
+  );
 });
 
 test("builds a fingerprint while exposing only hashed hardware identifiers", () => {

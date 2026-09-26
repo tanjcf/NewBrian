@@ -63,16 +63,20 @@ export async function sha256FileStreaming(path: string): Promise<string> {
   return digest.digest("hex");
 }
 
-function buildDownloadHeaders(existingBytes: number, url = ""): Record<string, string> {
+function buildDownloadHeaders(
+  existingBytes: number,
+  url = "",
+  packagePreference?: "msi" | "nsis"
+): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: "application/octet-stream,*/*"
   };
   if (existingBytes > 0) {
     headers.Range = `bytes=${existingBytes}-`;
   }
-  // Prefer NSIS when hitting Spring dual-pack download without an explicit package query.
+  // Match Spring dual-pack download to the running install layout.
   if (/\/api\/desktop\/v1\/app-releases\/[^/]+\/download/i.test(url) && !/[?&]package=/i.test(url)) {
-    headers["X-Desktop-Package-Preference"] = "nsis";
+    headers["X-Desktop-Package-Preference"] = packagePreference || "msi";
   }
   return headers;
 }
@@ -88,11 +92,12 @@ async function cancelBody(response: Response) {
 async function fetchInstallerResponse(
   fetchImpl: typeof fetch,
   url: string,
-  existingBytes: number
+  existingBytes: number,
+  packagePreference?: "msi" | "nsis"
 ): Promise<Response> {
   return fetchImpl(url, {
     method: "GET",
-    headers: buildDownloadHeaders(existingBytes, url)
+    headers: buildDownloadHeaders(existingBytes, url, packagePreference)
   });
 }
 
@@ -105,18 +110,24 @@ export async function downloadResumableToFile(input: {
   partialPath: string;
   fetchImpl?: typeof fetch;
   onProgress?: (progress: ResumableDownloadProgress) => void;
+  packagePreference?: "msi" | "nsis";
 }): Promise<ResumableDownloadResult> {
   const fetchImpl = input.fetchImpl ?? fetch;
   let existingBytes = await readPartialByteLength(input.partialPath);
 
-  let response = await fetchInstallerResponse(fetchImpl, input.url, existingBytes);
+  let response = await fetchInstallerResponse(
+    fetchImpl,
+    input.url,
+    existingBytes,
+    input.packagePreference
+  );
 
   // Range not satisfiable (stale/oversized partial) → discard and restart.
   if (response.status === 416 && existingBytes > 0) {
     await cancelBody(response);
     await rm(input.partialPath, { force: true }).catch(() => undefined);
     existingBytes = 0;
-    response = await fetchInstallerResponse(fetchImpl, input.url, 0);
+    response = await fetchInstallerResponse(fetchImpl, input.url, 0, input.packagePreference);
   }
 
   if (!(response.status === 200 || response.status === 206) || !response.body) {
@@ -133,7 +144,7 @@ export async function downloadResumableToFile(input: {
       await cancelBody(response);
       await rm(input.partialPath, { force: true }).catch(() => undefined);
       existingBytes = 0;
-      response = await fetchInstallerResponse(fetchImpl, input.url, 0);
+      response = await fetchInstallerResponse(fetchImpl, input.url, 0, input.packagePreference);
       if (!(response.status === 200 || response.status === 206) || !response.body) {
         await cancelBody(response);
         throw new Error(`下载更新失败：HTTP ${response.status}`);

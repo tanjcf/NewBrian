@@ -43,7 +43,7 @@ const windowsWorkflow = await readFile(
 test("keeps Chromium sandbox enabled and external navigation approved", () => {
   assert.doesNotMatch(source, /appendSwitch\(["']no-sandbox["']\)/);
   assert.doesNotMatch(source, /sandbox:\s*false/);
-  assert.match(source, /partition:\s*["']newbrain-browser-preview["']/);
+  assert.match(source, /["']persist:newbrain-browser["']/);
   assert.match(source, /name:\s*["']browser\.open["'][\s\S]{0,300}requiresApproval:\s*true/);
   assert.match(source, /!app\.isPackaged && e2eRemoteDebugPort && process\.env\.NEWBRAIN_E2E_AUTH_BYPASS === "1"/);
   assert.doesNotMatch(source, /if \(process\.env\.NEWBRAIN_E2E_AUTH_BYPASS === "1"\) \{/);

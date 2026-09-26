@@ -384,6 +384,7 @@ declare global {
   }) => Promise<Record<string, unknown>>;
   setWalletOverageEnabled: (input: { enabled: boolean }) => Promise<Record<string, unknown>>;
   redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
+  claimNationalDayGift: () => Promise<Record<string, unknown>>;
       listRepositoryPlugins: (input?: PluginCatalogQuery) => Promise<PluginCatalogSnapshot>;
       getRepositoryPlugin: (input: PluginKeyInput) => Promise<Record<string, unknown>>;
       installRepositoryPlugin: (input: PluginInstallInput) => Promise<PluginOperationResult>;
@@ -810,6 +811,29 @@ declare global {
       openBrowserPreview: (url?: string) => Promise<{ ok: boolean; url: string }>;
       closeBrowserPreview: () => Promise<{ ok: boolean }>;
       captureBrowserPreview: () => Promise<{ ok: boolean; path: string; url: string }>;
+      clearBrowserBrowsingData?: () => Promise<{ ok: boolean; detail: string }>;
+      listBrowserHistory?: () => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+      removeBrowserHistoryEntry?: (id: string) => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+      clearBrowserHistory?: () => Promise<{ ok: boolean }>;
+      selectBrowserDownloadDir?: () => Promise<{ path: string } | null>;
+      listBrowserCredentials?: () => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      upsertBrowserCredential?: (input: {
+        origin: string;
+        username: string;
+        password: string;
+        id?: string;
+      }) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      removeBrowserCredential?: (id: string) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      listBrowserContacts?: () => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      upsertBrowserContact?: (input: {
+        name: string;
+        email?: string;
+        phone?: string;
+        id?: string;
+      }) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      removeBrowserContact?: (id: string) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      getBrowserCdpAccess?: () => Promise<{ enabled: boolean; partition: string; detail: string }>;
+      probeBrowserSiteTools?: () => Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }>;
       getSystemTools: () => Promise<SystemToolState[]>;
       generateResearchWritingIntake: (input: {
         userRequest?: string;
@@ -874,7 +898,6 @@ export const featureItems: FeatureItem[] = [
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
   { id: "automation", label: "自动化", icon: "◔", description: "用自然语言创建定时任务，对齐 Codex 自动任务。" },
-  { id: "mobile", label: "NewBrain 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
   { id: "mcp", label: "软件联动", icon: "↔", description: "开箱控制任意 Windows 窗口；MCP 仅作高级扩展。" }
 ];
 
@@ -1008,10 +1031,41 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
     rootDir: ".newbrain/worktrees"
   },
   browser: {
+    enabled: true,
     autoOpenPreview: false,
     preserveTabs: true,
     highResScreenshots: false,
-    previewUrl: "http://127.0.0.1:3000"
+    previewUrl: "http://127.0.0.1:3000",
+    openWebLinksIn: "in-app-browser",
+    openLocalLinksIn: "in-app-browser",
+    showFullUrl: false,
+    annotatedScreenshots: "always",
+    downloadDir: "",
+    askDownloadPath: false,
+    historyAccess: "always_ask",
+    siteToolsEnabled: true,
+    agentPermissions: {
+      defaults: {
+        browse: "require_approval",
+        download: "require_approval",
+        upload: "require_approval"
+      },
+      exceptions: [
+        {
+          origin: "http://127.0.0.1:8765",
+          browse: "always_allow",
+          download: "require_approval",
+          upload: "require_approval"
+        },
+        {
+          origin: "http://localhost:8765",
+          browse: "always_allow",
+          download: "require_approval",
+          upload: "require_approval"
+        }
+      ]
+    },
+    fullCdpAccess: false
   },
   market: {
     directClawhubAllowed: true

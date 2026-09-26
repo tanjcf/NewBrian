@@ -222,7 +222,25 @@ export function AppUpdateDialog(props: AppUpdateDialogProps): ReactNode {
             </>
           ) : null}
 
-          {(isError || phase === "done") && !isReady ? (
+          {isError && !isReady ? (
+            <>
+              <button type="button" onClick={() => onClose?.()}>
+                知道了
+              </button>
+              {typeof onUpdateNow === "function" ? (
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={Boolean(busy)}
+                  onClick={() => onUpdateNow()}
+                >
+                  立即更新
+                </button>
+              ) : null}
+            </>
+          ) : null}
+
+          {phase === "done" && !isReady && !isError ? (
             <button type="button" className="primary" onClick={() => onClose?.()}>
               知道了
             </button>

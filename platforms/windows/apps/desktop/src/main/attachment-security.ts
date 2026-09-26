@@ -92,11 +92,12 @@ export function formatAttachmentSizeLimitError(error: unknown) {
   if (!match) return "";
   const limit = Number(match[1]);
   const limitMb = Number.isFinite(limit) ? Math.round(limit / (1024 * 1024)) : 0;
-  if (limit === MAX_IMAGE_BYTES || /clipboard/i.test(message)) {
-    return `图片或剪贴板附件不能超过 ${limitMb || 10} MB，请压缩或更换较小的文件后再试。`;
-  }
+  // Prefer the document-copy limit: clipboard/drag-drop of non-images can hit 20 MB.
   if (limit === MAX_ATTACHMENT_BYTES) {
     return `整文件复制不能超过 ${limitMb || 20} MB。更大的文档请用「选择文件」添加，将自动改为本地路径引用。`;
+  }
+  if (limit === MAX_IMAGE_BYTES || /clipboard/i.test(message)) {
+    return `图片或剪贴板附件不能超过 ${limitMb || 10} MB，请压缩或更换较小的文件后再试。`;
   }
   return limitMb > 0
     ? `附件超过 ${limitMb} MB 限制，请压缩、拆分或挂载工作区后再试。`

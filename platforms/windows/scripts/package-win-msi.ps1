@@ -63,6 +63,24 @@ $desktopPackage = Get-Content (Join-Path $desktopRoot "package.json") -Raw | Con
 if (-not [string]::IsNullOrWhiteSpace($Version)) {
   Assert-MsiVersion $Version
   $desktopPackage.version = $Version
+  # Persist version with Node JSON round-trip (PowerShell ConvertTo-Json corrupts nested package.json).
+  $desktopPackageJsonPath = Join-Path $desktopRoot "package.json"
+  $nodeSetter = @'
+const fs = require("fs");
+const path = process.argv[2];
+const version = process.argv[3];
+const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+pkg.version = version;
+fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+'@
+  $nodeSetterPath = Join-Path $env:TEMP "newbrain-set-desktop-version.js"
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($nodeSetterPath, $nodeSetter, $utf8NoBom)
+  & node $nodeSetterPath $desktopPackageJsonPath $Version
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to persist desktop package.json version $Version"
+  }
+  Write-Host "Desktop package.json version set to $($desktopPackage.version)" -ForegroundColor Cyan
 }
 $isProduction = $Channel -eq "Production"
 $channelSlug = $Channel.ToLowerInvariant()

@@ -702,6 +702,29 @@ declare global {
       openBrowserPreview: (url?: string) => Promise<{ ok: boolean; url: string }>;
       closeBrowserPreview: () => Promise<{ ok: boolean }>;
       captureBrowserPreview: () => Promise<{ ok: boolean; path: string; url: string }>;
+      clearBrowserBrowsingData?: () => Promise<{ ok: boolean; detail: string }>;
+      listBrowserHistory?: () => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+      removeBrowserHistoryEntry?: (id: string) => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+      clearBrowserHistory?: () => Promise<{ ok: boolean }>;
+      selectBrowserDownloadDir?: () => Promise<{ path: string } | null>;
+      listBrowserCredentials?: () => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      upsertBrowserCredential?: (input: {
+        origin: string;
+        username: string;
+        password: string;
+        id?: string;
+      }) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      removeBrowserCredential?: (id: string) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      listBrowserContacts?: () => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      upsertBrowserContact?: (input: {
+        name: string;
+        email?: string;
+        phone?: string;
+        id?: string;
+      }) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      removeBrowserContact?: (id: string) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      getBrowserCdpAccess?: () => Promise<{ enabled: boolean; partition: string; detail: string }>;
+      probeBrowserSiteTools?: () => Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }>;
       getSystemTools: () => Promise<SystemToolState[]>;
       openSystemTool: (input: string | { toolId: string; workspaceId?: string }) => Promise<{ ok: boolean; detail: string }>;
       controlWindow: (action: "minimize" | "maximize" | "close") => Promise<{ ok: boolean }>;
@@ -761,7 +784,6 @@ export const featureItems: FeatureItem[] = [
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
   { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" },
-  { id: "mobile", label: "NewBrain 移动版", icon: "▯", description: "将手机安全连接到这台电脑。" },
   { id: "mcp", label: "软件联动", icon: "↔", description: "开箱控制本机窗口；MCP 仅作高级扩展。" }
 ];
 

@@ -99,13 +99,23 @@ test("names local download artifacts for ulit packages without double ulit", () 
 test("deferred wait uses hidden Get-Process and never find /I", () => {
   const wait = buildDeferredProcessExitWaitPowerShell({
     processImageName: "NewBrain.exe",
-    maxWaitSeconds: 30
+    maxWaitSeconds: 30,
+    forceKillOnTimeout: false
   });
   assert.match(wait, /Get-Process -Name \$name/);
   assert.match(wait, /WindowStyle Hidden/);
   assert.match(wait, /等待 NewBrain 退出超时/);
   assert.doesNotMatch(wait, /find \/I/i);
   assert.doesNotMatch(wait, /tasklist/i);
+
+  const forceWait = buildDeferredProcessExitWaitPowerShell({
+    processImageName: "NewBrain.exe",
+    processId: 4242,
+    maxWaitSeconds: 30
+  });
+  assert.match(forceWait, /WaitForExit\(30000\)/);
+  assert.match(forceWait, /Stop-Process -Id 4242/);
+  assert.doesNotMatch(forceWait, /find \/I/i);
 
   const script = buildDeferredUlitZipApplyScript({
     zipPath: "C:\\updates\\1.2.8ulit.zip",
@@ -114,7 +124,7 @@ test("deferred wait uses hidden Get-Process and never find /I", () => {
   });
   assert.match(script, /Expand-Archive/);
   assert.match(script, /apply\.cmd/);
-  assert.match(script, /Get-Process -Name \$name/);
+  assert.match(script, /Get-Process -Name/);
   assert.doesNotMatch(script, /find \/I/i);
   assert.match(script, /Local\\.newbrain/);
   assert.match(script, /title NewBrain update/);

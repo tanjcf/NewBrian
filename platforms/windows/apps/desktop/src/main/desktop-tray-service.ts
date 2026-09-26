@@ -15,6 +15,8 @@ export class DesktopTrayService {
 
   create() {
     if (this.tray && !this.tray.isDestroyed()) return this.tray;
+    // Prefer a path (especially multi-size .ico on Windows) so the shell can
+    // pick 16/20/24/32 bitmaps instead of downscaling a single 256 PNG.
     const tray = new Tray(this.dependencies.iconPath);
     tray.setToolTip("NewBrain — 后台运行中");
     tray.on("double-click", this.dependencies.showWindow);

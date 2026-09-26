@@ -158,6 +158,11 @@ export function LoginCeremonyOverlay({ enabled = true, onContinue }: LoginCeremo
 
 /** 悬停热点：以旗中心为原点展开 */
 export function openLoginCeremonyFromHotspot(target: HTMLElement) {
+  try {
+    window.sessionStorage.setItem("nd_easter_found", "1");
+  } catch {
+    // ignore storage failures
+  }
   const rect = target.getBoundingClientRect();
   window.dispatchEvent(
     new CustomEvent("newbrain-open-login-ceremony", {

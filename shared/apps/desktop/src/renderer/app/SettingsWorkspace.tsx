@@ -67,6 +67,12 @@ export function SettingsWorkspace(ctx: any) {
   const [knowledgeSyncBusy, setKnowledgeSyncBusy] = useState(false);
   const [knowledgeSyncNotice, setKnowledgeSyncNotice] = useState("");
   const [recordingShortcut, setRecordingShortcut] = useState("");
+  const [browserManagePanel, setBrowserManagePanel] = useState<"history" | "passwords" | "contacts" | null>(null);
+  const [browserHistoryRows, setBrowserHistoryRows] = useState<Array<{ id: string; url: string; title: string; visitedAt: string }>>([]);
+  const [browserCredentialRows, setBrowserCredentialRows] = useState<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>([]);
+  const [browserContactRows, setBrowserContactRows] = useState<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>([]);
+  const [browserCredentialDraft, setBrowserCredentialDraft] = useState({ origin: "", username: "", password: "" });
+  const [browserContactDraft, setBrowserContactDraft] = useState({ name: "", email: "", phone: "" });
   const compareSemver = (left, right) => {
     const parts = (value) => String(value || "0")
       .replace(/^v/i, "")
@@ -680,7 +686,7 @@ function renderSettingsWorkspace() {
                     <label>软件版本</label>
                     <div className="account-settings-value">
                       <span>
-                        {appUpdateStatus?.currentVersion || "读取中…"}
+                        {appUpdateStatus?.currentVersion || "—"}
                         {appUpdateStatus?.available && appUpdateStatus.latestVersion
                           ? ` → ${appUpdateStatus.latestVersion}`
                           : ""}
@@ -1712,17 +1718,587 @@ function renderSettingsWorkspace() {
               </>
             ) : activeSettingsSection === "browser" ? (
               <>
-                <div className="settings-page-head"><div><h3>浏览器</h3><p>预览 URL 会保存，打开按钮会调用系统浏览器。</p></div><button type="button" onClick={() => void runSettingsSave("浏览器", saveDesktopPreferences)}>保存浏览器</button></div>
-                <section className="settings-card">
-                  <label className="settings-field"><span>预览 URL</span><input value={desktopPreferences.browser.previewUrl} onChange={(event) => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, previewUrl: event.target.value } }))} /></label>
-                  <div className="settings-preference-list">
-                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, autoOpenPreview: !current.browser.autoOpenPreview } }))}><span>前端改动后自动打开本地预览</span><SettingsSwitch enabled={desktopPreferences.browser.autoOpenPreview} /></button>
-                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, preserveTabs: !current.browser.preserveTabs } }))}><span>保留上次浏览器标签</span><SettingsSwitch enabled={desktopPreferences.browser.preserveTabs} /></button>
-                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, highResScreenshots: !current.browser.highResScreenshots } }))}><span>截图验证使用高分辨率</span><SettingsSwitch enabled={desktopPreferences.browser.highResScreenshots} /></button>
+                <div className="settings-page-head">
+                  <div>
+                    <h3>浏览器</h3>
+                    <p>管理 Browser Use 偏好与网站访问权限（对齐 Codex 桌面浏览器设置）。</p>
                   </div>
+                  <button type="button" onClick={() => void runSettingsSave("浏览器", saveDesktopPreferences)}>保存浏览器</button>
+                </div>
+                <section className="settings-card">
+                  <div className="settings-preference-list">
+                    <button
+                      type="button"
+                      onClick={() => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: { ...current.browser, enabled: !current.browser.enabled }
+                      }))}
+                    >
+                      <span>Browser：允许智能体操控内置浏览器</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.enabled !== false} />
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>常规</h4>
+                  <label className="settings-field">
+                    <span>预览 URL</span>
+                    <input
+                      value={desktopPreferences.browser.previewUrl}
+                      onChange={(event) => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: { ...current.browser, previewUrl: event.target.value }
+                      }))}
+                    />
+                  </label>
+                  <label className="settings-field">
+                    <span>网页 URL 和链接打开位置</span>
+                    <select
+                      value={desktopPreferences.browser.openWebLinksIn || "in-app-browser"}
+                      onChange={(event) => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: {
+                          ...current.browser,
+                          openWebLinksIn: event.target.value === "system" ? "system" : "in-app-browser"
+                        }
+                      }))}
+                    >
+                      <option value="in-app-browser">NewBrain 内置浏览器</option>
+                      <option value="system">系统浏览器</option>
+                    </select>
+                  </label>
+                  <label className="settings-field">
+                    <span>本地 URL 打开位置</span>
+                    <select
+                      value={desktopPreferences.browser.openLocalLinksIn || "in-app-browser"}
+                      onChange={(event) => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: {
+                          ...current.browser,
+                          openLocalLinksIn: event.target.value === "system" ? "system" : "in-app-browser"
+                        }
+                      }))}
+                    >
+                      <option value="in-app-browser">NewBrain 内置浏览器</option>
+                      <option value="system">系统浏览器</option>
+                    </select>
+                  </label>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, showFullUrl: !current.browser.showFullUrl } }))}>
+                      <span>显示完整网址</span>
+                      <SettingsSwitch enabled={Boolean(desktopPreferences.browser.showFullUrl)} />
+                    </button>
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, autoOpenPreview: !current.browser.autoOpenPreview } }))}>
+                      <span>前端改动后自动打开本地预览</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.autoOpenPreview} />
+                    </button>
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, preserveTabs: !current.browser.preserveTabs } }))}>
+                      <span>保留上次浏览器标签</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.preserveTabs} />
+                    </button>
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, highResScreenshots: !current.browser.highResScreenshots } }))}>
+                      <span>截图验证使用高分辨率</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.highResScreenshots} />
+                    </button>
+                  </div>
+                  <label className="settings-field">
+                    <span>批注截图</span>
+                    <select
+                      value={desktopPreferences.browser.annotatedScreenshots || "always"}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setDesktopPreferences((current) => ({
+                          ...current,
+                          browser: {
+                            ...current.browser,
+                            annotatedScreenshots: value === "ask" || value === "never" ? value : "always"
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="always">始终包含</option>
+                      <option value="ask">询问</option>
+                      <option value="never">从不</option>
+                    </select>
+                  </label>
+                  <p className="subtle">截图有助于理解批注，但会增加用量。</p>
                   <div className="inline-actions">
                     <button type="button" disabled={!api} onClick={() => void api?.openBrowserPreview(desktopPreferences.browser.previewUrl)}>打开预览</button>
                     <button type="button" disabled={!api} onClick={async () => { const result = await api?.captureBrowserPreview(); if (result) setChatStatus(`截图已保存: ${result.path}`); }}>截取预览</button>
+                    <button
+                      type="button"
+                      disabled={!api?.clearBrowserBrowsingData}
+                      onClick={async () => {
+                        const result = await api?.clearBrowserBrowsingData?.();
+                        setChatStatus(result?.detail || "已清除浏览数据");
+                      }}
+                    >
+                      清除浏览数据
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!api?.listBrowserHistory}
+                      onClick={async () => {
+                        try {
+                          const rows = await api?.listBrowserHistory?.();
+                          setBrowserHistoryRows(rows || []);
+                          setBrowserManagePanel("history");
+                          setChatStatus(`浏览历史 ${rows?.length ?? 0} 条`);
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
+                        }
+                      }}
+                    >
+                      管理浏览历史
+                    </button>
+                  </div>
+                  {browserManagePanel === "history" ? (
+                    <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                      {browserHistoryRows.length === 0 ? <p className="subtle">暂无历史记录。</p> : null}
+                      {browserHistoryRows.map((row) => (
+                        <article key={row.id} className="mcp-server-item enabled">
+                          <div className="mcp-server-main">
+                            <strong>{row.title || row.url}</strong>
+                            <p className="subtle">{row.url}</p>
+                            <p className="subtle">{row.visitedAt}</p>
+                          </div>
+                          <div className="mcp-server-actions">
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={!api?.removeBrowserHistoryEntry}
+                              onClick={async () => {
+                                try {
+                                  const rows = await api?.removeBrowserHistoryEntry?.(row.id);
+                                  setBrowserHistoryRows(rows || []);
+                                } catch (error) {
+                                  setErrorMessage(error instanceof Error ? error.message : String(error));
+                                }
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          className="danger"
+                          disabled={!api?.clearBrowserHistory}
+                          onClick={async () => {
+                            try {
+                              await api?.clearBrowserHistory?.();
+                              setBrowserHistoryRows([]);
+                              setChatStatus("已清空浏览历史");
+                            } catch (error) {
+                              setErrorMessage(error instanceof Error ? error.message : String(error));
+                            }
+                          }}
+                        >
+                          清空历史
+                        </button>
+                        <button type="button" onClick={() => setBrowserManagePanel(null)}>关闭</button>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+                <section className="settings-card">
+                  <h4>自动填充和密码</h4>
+                  <p className="subtle">密码与联系人保存在本地，不会进入模型上下文。</p>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      disabled={!api?.listBrowserCredentials}
+                      onClick={async () => {
+                        try {
+                          const rows = await api?.listBrowserCredentials?.();
+                          setBrowserCredentialRows(rows || []);
+                          setBrowserManagePanel("passwords");
+                          setChatStatus(rows?.length ? `已保存 ${rows.length} 条登录凭据（仅元数据）` : "暂无保存的密码");
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
+                        }
+                      }}
+                    >
+                      管理密码
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!api?.listBrowserContacts}
+                      onClick={async () => {
+                        try {
+                          const rows = await api?.listBrowserContacts?.();
+                          setBrowserContactRows(rows || []);
+                          setBrowserManagePanel("contacts");
+                          setChatStatus(rows?.length ? `已保存 ${rows.length} 条联系人` : "暂无联系人");
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
+                        }
+                      }}
+                    >
+                      管理联系信息
+                    </button>
+                  </div>
+                  {browserManagePanel === "passwords" ? (
+                    <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                      <label className="settings-field"><span>Origin</span><input value={browserCredentialDraft.origin} onChange={(event) => setBrowserCredentialDraft((current) => ({ ...current, origin: event.target.value }))} /></label>
+                      <label className="settings-field"><span>用户名</span><input value={browserCredentialDraft.username} onChange={(event) => setBrowserCredentialDraft((current) => ({ ...current, username: event.target.value }))} /></label>
+                      <label className="settings-field"><span>密码</span><input type="password" autoComplete="new-password" value={browserCredentialDraft.password} onChange={(event) => setBrowserCredentialDraft((current) => ({ ...current, password: event.target.value }))} /></label>
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          disabled={!api?.upsertBrowserCredential}
+                          onClick={async () => {
+                            try {
+                              const rows = await api?.upsertBrowserCredential?.(browserCredentialDraft);
+                              setBrowserCredentialRows(rows || []);
+                              setBrowserCredentialDraft({ origin: "", username: "", password: "" });
+                              setChatStatus("已保存凭据（本地加密）");
+                            } catch (error) {
+                              setErrorMessage(error instanceof Error ? error.message : String(error));
+                            }
+                          }}
+                        >
+                          保存凭据
+                        </button>
+                        <button type="button" onClick={() => setBrowserManagePanel(null)}>关闭</button>
+                      </div>
+                      {browserCredentialRows.map((row) => (
+                        <article key={row.id} className="mcp-server-item enabled">
+                          <div className="mcp-server-main">
+                            <strong>{row.username}</strong>
+                            <p className="subtle">{row.origin}{row.hasPassword ? " · 已加密密码" : ""}</p>
+                          </div>
+                          <div className="mcp-server-actions">
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={!api?.removeBrowserCredential}
+                              onClick={async () => {
+                                try {
+                                  const rows = await api?.removeBrowserCredential?.(row.id);
+                                  setBrowserCredentialRows(rows || []);
+                                } catch (error) {
+                                  setErrorMessage(error instanceof Error ? error.message : String(error));
+                                }
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                  {browserManagePanel === "contacts" ? (
+                    <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                      <label className="settings-field"><span>姓名</span><input value={browserContactDraft.name} onChange={(event) => setBrowserContactDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+                      <label className="settings-field"><span>邮箱</span><input value={browserContactDraft.email} onChange={(event) => setBrowserContactDraft((current) => ({ ...current, email: event.target.value }))} /></label>
+                      <label className="settings-field"><span>电话</span><input value={browserContactDraft.phone} onChange={(event) => setBrowserContactDraft((current) => ({ ...current, phone: event.target.value }))} /></label>
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          disabled={!api?.upsertBrowserContact}
+                          onClick={async () => {
+                            try {
+                              const rows = await api?.upsertBrowserContact?.(browserContactDraft);
+                              setBrowserContactRows(rows || []);
+                              setBrowserContactDraft({ name: "", email: "", phone: "" });
+                              setChatStatus("已保存联系人");
+                            } catch (error) {
+                              setErrorMessage(error instanceof Error ? error.message : String(error));
+                            }
+                          }}
+                        >
+                          保存联系人
+                        </button>
+                        <button type="button" onClick={() => setBrowserManagePanel(null)}>关闭</button>
+                      </div>
+                      {browserContactRows.map((row) => (
+                        <article key={row.id} className="mcp-server-item enabled">
+                          <div className="mcp-server-main">
+                            <strong>{row.name}</strong>
+                            <p className="subtle">{[row.email, row.phone].filter(Boolean).join(" · ") || "无联系方式"}</p>
+                          </div>
+                          <div className="mcp-server-actions">
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={!api?.removeBrowserContact}
+                              onClick={async () => {
+                                try {
+                                  const rows = await api?.removeBrowserContact?.(row.id);
+                                  setBrowserContactRows(rows || []);
+                                } catch (error) {
+                                  setErrorMessage(error instanceof Error ? error.message : String(error));
+                                }
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+                <section className="settings-card">
+                  <h4>扩展程序</h4>
+                  <p className="subtle">内置浏览器扩展管理取决于 Electron 扩展加载能力；桌面端暂不支持。</p>
+                  <div className="inline-actions">
+                    <button type="button" disabled title="桌面端暂不支持">管理扩展</button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>下载</h4>
+                  <label className="settings-field">
+                    <span>位置</span>
+                    <div className="inline-actions" style={{ marginTop: 0 }}>
+                      <input
+                        readOnly
+                        value={desktopPreferences.browser.downloadDir || "系统下载文件夹"}
+                      />
+                      <button
+                        type="button"
+                        disabled={!api?.selectBrowserDownloadDir}
+                        onClick={async () => {
+                          const result = await api?.selectBrowserDownloadDir?.();
+                          if (result?.path) {
+                            setDesktopPreferences((current) => ({
+                              ...current,
+                              browser: { ...current.browser, downloadDir: result.path }
+                            }));
+                          }
+                        }}
+                      >
+                        更改
+                      </button>
+                    </div>
+                  </label>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, askDownloadPath: !current.browser.askDownloadPath } }))}>
+                      <span>下载前询问保存位置</span>
+                      <SettingsSwitch enabled={Boolean(desktopPreferences.browser.askDownloadPath)} />
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>浏览器权限</h4>
+                  <label className="settings-field">
+                    <span>历史记录访问</span>
+                    <select
+                      value={desktopPreferences.browser.historyAccess || "always_ask"}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setDesktopPreferences((current) => ({
+                          ...current,
+                          browser: {
+                            ...current.browser,
+                            historyAccess: value === "allow" || value === "deny" ? value : "always_ask"
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="always_ask">始终询问</option>
+                      <option value="allow">允许</option>
+                      <option value="deny">拒绝</option>
+                    </select>
+                  </label>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, siteToolsEnabled: !current.browser.siteToolsEnabled } }))}>
+                      <span>启用站点工具（含 WebMCP 探测）</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.siteToolsEnabled !== false} />
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>智能体权限</h4>
+                  <p className="subtle">设置默认策略，并为站点添加例外。</p>
+                  {(["browse", "download", "upload"] as const).map((action) => (
+                    <label key={action} className="settings-field">
+                      <span>默认 · {action === "browse" ? "浏览" : action === "download" ? "下载" : "上传"}</span>
+                      <select
+                        value={desktopPreferences.browser.agentPermissions?.defaults?.[action] || "require_approval"}
+                        onChange={(event) => {
+                          const value = event.target.value === "always_allow" || event.target.value === "deny"
+                            ? event.target.value
+                            : "require_approval";
+                          setDesktopPreferences((current) => ({
+                            ...current,
+                            browser: {
+                              ...current.browser,
+                              agentPermissions: {
+                                defaults: {
+                                  browse: current.browser.agentPermissions?.defaults?.browse || "require_approval",
+                                  download: current.browser.agentPermissions?.defaults?.download || "require_approval",
+                                  upload: current.browser.agentPermissions?.defaults?.upload || "require_approval",
+                                  [action]: value
+                                },
+                                exceptions: current.browser.agentPermissions?.exceptions || []
+                              }
+                            }
+                          }));
+                        }}
+                      >
+                        <option value="require_approval">需要批准</option>
+                        <option value="always_allow">始终允许</option>
+                        <option value="deny">拒绝</option>
+                      </select>
+                    </label>
+                  ))}
+                  <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                    {(desktopPreferences.browser.agentPermissions?.exceptions || []).map((row, index) => (
+                      <article key={`${row.origin}-${index}`} className="mcp-server-item enabled">
+                        <div className="mcp-server-main">
+                          <label className="settings-field">
+                            <span>Origin</span>
+                            <input
+                              value={row.origin}
+                              onChange={(event) => {
+                                const origin = event.target.value;
+                                setDesktopPreferences((current) => {
+                                  const exceptions = [...(current.browser.agentPermissions?.exceptions || [])];
+                                  exceptions[index] = { ...exceptions[index], origin };
+                                  return {
+                                    ...current,
+                                    browser: {
+                                      ...current.browser,
+                                      agentPermissions: {
+                                        defaults: current.browser.agentPermissions?.defaults || {
+                                          browse: "require_approval",
+                                          download: "require_approval",
+                                          upload: "require_approval"
+                                        },
+                                        exceptions
+                                      }
+                                    }
+                                  };
+                                });
+                              }}
+                            />
+                          </label>
+                          {(["browse", "download", "upload"] as const).map((action) => (
+                            <label key={action} className="settings-field">
+                              <span>{action === "browse" ? "浏览" : action === "download" ? "下载" : "上传"}</span>
+                              <select
+                                value={row[action]}
+                                onChange={(event) => {
+                                  const value = event.target.value === "always_allow" || event.target.value === "deny"
+                                    ? event.target.value
+                                    : "require_approval";
+                                  setDesktopPreferences((current) => {
+                                    const exceptions = [...(current.browser.agentPermissions?.exceptions || [])];
+                                    exceptions[index] = { ...exceptions[index], [action]: value };
+                                    return {
+                                      ...current,
+                                      browser: {
+                                        ...current.browser,
+                                        agentPermissions: {
+                                          defaults: current.browser.agentPermissions?.defaults || {
+                                            browse: "require_approval",
+                                            download: "require_approval",
+                                            upload: "require_approval"
+                                          },
+                                          exceptions
+                                        }
+                                      }
+                                    };
+                                  });
+                                }}
+                              >
+                                <option value="require_approval">需要批准</option>
+                                <option value="always_allow">始终允许</option>
+                                <option value="deny">拒绝</option>
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mcp-server-actions">
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => setDesktopPreferences((current) => ({
+                              ...current,
+                              browser: {
+                                ...current.browser,
+                                agentPermissions: {
+                                  defaults: current.browser.agentPermissions?.defaults || {
+                                    browse: "require_approval",
+                                    download: "require_approval",
+                                    upload: "require_approval"
+                                  },
+                                  exceptions: (current.browser.agentPermissions?.exceptions || []).filter((_, i) => i !== index)
+                                }
+                              }
+                            }))}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      onClick={() => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: {
+                          ...current.browser,
+                          agentPermissions: {
+                            defaults: current.browser.agentPermissions?.defaults || {
+                              browse: "require_approval",
+                              download: "require_approval",
+                              upload: "require_approval"
+                            },
+                            exceptions: [
+                              ...(current.browser.agentPermissions?.exceptions || []),
+                              {
+                                origin: "http://127.0.0.1:3000",
+                                browse: "always_allow",
+                                download: "require_approval",
+                                upload: "require_approval"
+                              }
+                            ]
+                          }
+                        }
+                      }))}
+                    >
+                      + 添加例外
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>开发者模式</h4>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, fullCdpAccess: !current.browser.fullCdpAccess } }))}>
+                      <span>启用完整 CDP 访问权限（风险升高）</span>
+                      <SettingsSwitch enabled={Boolean(desktopPreferences.browser.fullCdpAccess)} />
+                    </button>
+                  </div>
+                  <p className="subtle">完整 Chrome DevTools Protocol 可检查敏感浏览器内部状态；默认关闭。</p>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      disabled={!api?.getBrowserCdpAccess}
+                      onClick={async () => {
+                        const status = await api?.getBrowserCdpAccess?.();
+                        setChatStatus(status?.detail || "CDP 状态未知");
+                      }}
+                    >
+                      查看 CDP 状态
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!api?.probeBrowserSiteTools}
+                      onClick={async () => {
+                        const result = await api?.probeBrowserSiteTools?.();
+                        setChatStatus(result?.detail || "站点工具探测完成");
+                      }}
+                    >
+                      探测站点工具
+                    </button>
                   </div>
                 </section>
               </>

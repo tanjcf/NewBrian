@@ -1,3 +1,5 @@
+import { resolveDesktopPackagePreference } from "./desktop-app-update-patch.ts";
+
 export type DesktopControlPlaneEnvelope = {
   protocol_version?: string;
   minimum_client_version?: string;
@@ -117,7 +119,12 @@ async function fetchEnvelope(
   url: string,
   headers: Record<string, string>
 ): Promise<DesktopControlPlaneEnvelope> {
-  const response = await fetchImpl(url, { method: "GET", headers });
+  const response = await fetchImpl(url, {
+    method: "GET",
+    headers,
+    // Bound control-plane calls so a stuck Spring SHA / OOM path cannot freeze Settings.
+    signal: AbortSignal.timeout(15_000)
+  });
   const raw = await response.text();
   let payload: unknown = null;
   try {
@@ -142,6 +149,9 @@ export async function syncDesktopControlPlane(input: {
   clientVersion: string;
   deviceId?: string;
   platform?: string;
+  /** Match Spring dual-pack offers to the running installer layout. */
+  packagePreference?: "msi" | "nsis";
+  executablePath?: string;
   headers?: Record<string, string>;
   fetchImpl?: FetchLike;
   now?: () => string;
@@ -161,7 +171,9 @@ export async function syncDesktopControlPlane(input: {
     "X-Desktop-Platform": releasePlatform
   };
   if (releasePlatform === "windows") {
-    headers["X-Desktop-Package-Preference"] = "nsis";
+    headers["X-Desktop-Package-Preference"] =
+      input.packagePreference
+      || resolveDesktopPackagePreference(input.executablePath || process.execPath);
   }
   if (input.deviceId?.trim()) {
     headers["X-Device-ID"] = input.deviceId.trim();
@@ -171,7 +183,9 @@ export async function syncDesktopControlPlane(input: {
     headers["X-Desktop-Platform"] = releasePlatform;
   }
   if (headers["X-Desktop-Platform"] === "windows" && !headers["X-Desktop-Package-Preference"]?.trim()) {
-    headers["X-Desktop-Package-Preference"] = "nsis";
+    headers["X-Desktop-Package-Preference"] = resolveDesktopPackagePreference(
+      input.executablePath || process.execPath
+    );
   }
 
   const fetchImpl = input.fetchImpl ?? fetch;
@@ -195,6 +209,9 @@ export async function syncDesktopControlPlane(input: {
         // Keep package_kind so clients can distinguish ulit.msi / ulit.zip / full MSI.
         package_kind: appUpdate.package_kind ?? appUpdate.packageKind
       };
+    } else {
+      // Clear stale offers when the server reports no update (draft-only / same version).
+      delete bootstrap.app_release;
     }
   } catch {
     // Keep bootstrap.app_release fallback when the dedicated update endpoint is unavailable.

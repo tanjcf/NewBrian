@@ -749,7 +749,7 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mcp"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
@@ -1020,7 +1020,10 @@ export function App() {
     }
   }
 
-  async function handleLoginSubmit(agreementChecked = loginForm.agreementAccepted) {
+  async function handleLoginSubmit(
+    agreementChecked = loginForm.agreementAccepted,
+    emailAuthMode: "password" | "code" = "password"
+  ) {
     if (!api || isSubmittingLogin) {
       return;
     }
@@ -1029,10 +1032,8 @@ export function App() {
     const identifier = resolveLoginIdentifier(loginForm);
     const password = loginForm.password.trim();
     const captcha = loginForm.captcha.trim();
-    const emailCodeRequired = Boolean(
-      (authStatus as DesktopAuthStatusState & { email_code_login_enabled?: boolean }).email_code_login_enabled
-    );
-    const useCode = shouldUseLoginCode(loginForm, "password", emailCodeRequired);
+    const passwordLoginEnabled = authStatus.password_login_enabled !== false;
+    const useCode = shouldUseLoginCode(loginForm, emailAuthMode, { passwordLoginEnabled });
 
     if (channel === "phone") {
       if (!isCnMobile(identifier)) {
@@ -2490,7 +2491,9 @@ export function App() {
         isSubmittingLogin={isSubmittingLogin}
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
-        onLoginSubmit={(agreementChecked) => void handleLoginSubmit(agreementChecked)}
+        onLoginSubmit={(agreementChecked, emailAuthMode) =>
+          void handleLoginSubmit(agreementChecked, emailAuthMode)
+        }
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}
         setLoginForm={handleLoginFormChange}
