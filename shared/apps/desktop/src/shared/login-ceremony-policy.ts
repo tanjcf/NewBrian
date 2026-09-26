@@ -1,6 +1,11 @@
-/** Login National Day ceremony eligibility (shared, no Electron deps). */
+/** Login National Day tribute ceremony eligibility (shared, no Electron deps). */
 
 export const LOGIN_CEREMONY_TIME_ZONE = "Asia/Shanghai";
+
+/** Inclusive start of the annual tribute window (month, day) in Asia/Shanghai. */
+export const LOGIN_CEREMONY_WINDOW_START = { month: 9, day: 29 } as const;
+/** Inclusive end of the annual tribute window (month, day) in Asia/Shanghai. */
+export const LOGIN_CEREMONY_WINDOW_END = { month: 10, day: 15 } as const;
 
 export type LoginCeremonyClockInput = {
   /** Optional `yyyy-MM-dd` from spring-app (Asia/Shanghai preferred). */
@@ -11,27 +16,76 @@ export type LoginCeremonyClockInput = {
 };
 
 /**
- * Whether spring-app server clock falls on October 1 in Asia/Shanghai.
- * Prefers explicit `serverDate`; otherwise derives the calendar day from `serverTime`.
+ * Whether spring-app server clock falls in the annual National Day tribute window
+ * (Sep 29–Oct 15 inclusive, Asia/Shanghai). Prefers explicit `serverDate`;
+ * otherwise derives the calendar day from `serverTime`.
  */
 export function isNationalDayFromServerClock(input: LoginCeremonyClockInput): boolean {
-  const timeZone = input.timeZone || LOGIN_CEREMONY_TIME_ZONE;
-  const fromDate = parseYearMonthDay(input.serverDate);
-  if (fromDate) {
-    return fromDate.month === 10 && fromDate.day === 1;
+  const day = resolveLoginCeremonyCalendarDay(input);
+  if (!day) return false;
+  return isWithinNationalDayTributeWindow(day.month, day.day);
+}
+
+/** Sep 29–Oct 15 inclusive (month/day only; repeats every year). */
+export function isWithinNationalDayTributeWindow(month: number, day: number): boolean {
+  if (month === LOGIN_CEREMONY_WINDOW_START.month && day >= LOGIN_CEREMONY_WINDOW_START.day) {
+    return true;
   }
-  const fromTime = calendarDayInTimeZone(input.serverTime, timeZone);
-  if (!fromTime) return false;
-  return fromTime.month === 10 && fromTime.day === 1;
+  if (month === LOGIN_CEREMONY_WINDOW_END.month && day <= LOGIN_CEREMONY_WINDOW_END.day) {
+    return true;
+  }
+  return false;
 }
 
 /**
- * Production packaged builds require National Day on the spring-app clock.
+ * Production packaged builds require the tribute window on the spring-app clock.
  * Local/unpacked builds stay always eligible so the ceremony can be previewed.
  */
 export function shouldEnableLoginCeremony(input: LoginCeremonyClockInput & { isPackaged: boolean }): boolean {
   if (!input.isPackaged) return true;
   return isNationalDayFromServerClock(input);
+}
+
+/**
+ * Asia/Shanghai midnight on Sep 29 of the given year (fixed UTC+8, no DST).
+ * Local sessions synced before this instant are treated as pre-window logins.
+ */
+export function resolveLoginCeremonyWindowStartMs(year: number): number {
+  const start = Date.parse(
+    `${String(year).padStart(4, "0")}-${String(LOGIN_CEREMONY_WINDOW_START.month).padStart(2, "0")}-${String(LOGIN_CEREMONY_WINDOW_START.day).padStart(2, "0")}T00:00:00+08:00`
+  );
+  return Number.isFinite(start) ? start : Number.NaN;
+}
+
+/** Resolve calendar day used for tribute-window gating. */
+export function resolveLoginCeremonyCalendarDay(
+  input: LoginCeremonyClockInput
+): { year: number; month: number; day: number } | null {
+  const timeZone = input.timeZone || LOGIN_CEREMONY_TIME_ZONE;
+  const fromDate = parseYearMonthDay(input.serverDate);
+  if (fromDate) return fromDate;
+  return calendarDayInTimeZone(input.serverTime, timeZone);
+}
+
+/**
+ * Packaged builds: once the tribute window has started on the spring-app clock,
+ * clear local sessions that were last synced before that year's Sep 29 00:00 Asia/Shanghai
+ * so users re-login and see the ceremony. Unpacked / preview builds never force.
+ */
+export function shouldInvalidateLocalAuthForLoginCeremony(
+  input: LoginCeremonyClockInput & {
+    isPackaged: boolean;
+    lastSyncedAt?: string | null;
+  }
+): boolean {
+  if (!input.isPackaged) return false;
+  const day = resolveLoginCeremonyCalendarDay(input);
+  if (!day || !isWithinNationalDayTributeWindow(day.month, day.day)) return false;
+  const windowStartMs = resolveLoginCeremonyWindowStartMs(day.year);
+  if (!Number.isFinite(windowStartMs)) return false;
+  const syncedMs = Date.parse(String(input.lastSyncedAt || "").trim());
+  if (!Number.isFinite(syncedMs)) return true;
+  return syncedMs < windowStartMs;
 }
 
 /** Fields the login UI reads from desktop auth status / spring-app auth config. */

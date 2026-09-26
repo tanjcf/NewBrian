@@ -32,7 +32,7 @@ export interface LoginScreenProps {
   loginForm: LoginFormState;
   /** Windows-only Alipay OAuth; omit on platforms without Alipay. */
   onAlipayQrLogin?: () => void;
-  onLoginSubmit: (agreementChecked?: boolean) => void;
+  onLoginSubmit: (agreementChecked?: boolean, emailAuthMode?: LoginEmailAuthMode) => void;
   onSendLoginCode: () => void;
   setAgreementDialog: Dispatch<SetStateAction<null | "tos" | "policy">>;
   setLoginForm: Dispatch<SetStateAction<LoginFormState>>;
@@ -54,7 +54,11 @@ export function LoginScreen({
   setAgreementDialog,
   setLoginForm
 }: LoginScreenProps) {
-  const [emailAuthMode, setEmailAuthMode] = useState<LoginEmailAuthMode>("password");
+  const passwordLoginEnabled = authStatus.password_login_enabled !== false;
+  const emailCodeLoginEnabled = authStatus.email_code_login_enabled === true;
+  const [emailAuthMode, setEmailAuthMode] = useState<LoginEmailAuthMode>(
+    passwordLoginEnabled ? "password" : "code"
+  );
   const [panelView, setPanelView] = useState<PanelView>("form");
   const agreementEnabled = Boolean(authStatus.agreement?.enabled);
   const agreementTitle =
@@ -75,10 +79,22 @@ export function LoginScreen({
     }
   }, [isSubmittingLogin, panelView]);
 
+  useEffect(() => {
+    if (!passwordLoginEnabled) {
+      setEmailAuthMode("code");
+      return;
+    }
+    if (!emailCodeLoginEnabled) {
+      setEmailAuthMode("password");
+    }
+  }, [passwordLoginEnabled, emailCodeLoginEnabled]);
+
   const channel = loginForm.channel === "phone" ? "phone" : "email";
   const agreementChecked = agreementEnabled ? loginForm.agreementAccepted : true;
+  const effectiveEmailAuthMode: LoginEmailAuthMode =
+    !passwordLoginEnabled ? "code" : !emailCodeLoginEnabled ? "password" : emailAuthMode;
   const canSubmit = canSubmitLoginForm(loginForm, {
-    emailAuthMode,
+    emailAuthMode: effectiveEmailAuthMode,
     isSubmitting: isSubmittingLogin,
     agreementEnabled
   });
@@ -90,7 +106,7 @@ export function LoginScreen({
       password: "",
       captcha: ""
     }));
-    if (next === "email") setEmailAuthMode("password");
+    if (next === "email") setEmailAuthMode(passwordLoginEnabled ? "password" : "code");
   }
 
   function startAlipay() {
@@ -174,7 +190,7 @@ export function LoginScreen({
                     />
                   </label>
 
-                  {emailAuthMode === "password" ? (
+                  {effectiveEmailAuthMode === "password" ? (
                     <div className="login-fields-block">
                       <label className="login-field">
                         <span>密码</span>
@@ -188,16 +204,18 @@ export function LoginScreen({
                           type="password"
                         />
                       </label>
-                      <button
-                        type="button"
-                        className="login-alt-link"
-                        onClick={() => {
-                          setEmailAuthMode("code");
-                          setLoginForm((current) => ({ ...current, password: "" }));
-                        }}
-                      >
-                        改用邮箱验证码登录
-                      </button>
+                      {emailCodeLoginEnabled ? (
+                        <button
+                          type="button"
+                          className="login-alt-link"
+                          onClick={() => {
+                            setEmailAuthMode("code");
+                            setLoginForm((current) => ({ ...current, password: "" }));
+                          }}
+                        >
+                          改用邮箱验证码登录
+                        </button>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="login-fields-block">
@@ -230,16 +248,18 @@ export function LoginScreen({
                           </button>
                         </div>
                       </label>
-                      <button
-                        type="button"
-                        className="login-alt-link"
-                        onClick={() => {
-                          setEmailAuthMode("password");
-                          setLoginForm((current) => ({ ...current, captcha: "" }));
-                        }}
-                      >
-                        改用密码登录
-                      </button>
+                      {passwordLoginEnabled ? (
+                        <button
+                          type="button"
+                          className="login-alt-link"
+                          onClick={() => {
+                            setEmailAuthMode("password");
+                            setLoginForm((current) => ({ ...current, captcha: "" }));
+                          }}
+                        >
+                          改用密码登录
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </>
@@ -330,7 +350,8 @@ export function LoginScreen({
                     agreementEnabled
                       ? ((document.querySelector("[data-login-agreement]") as HTMLInputElement | null)
                           ?.checked ?? loginForm.agreementAccepted)
-                      : true
+                      : true,
+                    effectiveEmailAuthMode
                   )
                 }
               >
@@ -357,6 +378,9 @@ export function LoginScreen({
               <div className="login-hints login-service-hints">
                 <span>{authServiceStatusLabel(authStatus)}</span>
                 {authStatus.last_error ? <em>{String(authStatus.last_error)}</em> : null}
+                {loginCeremonyEnabled ? (
+                  <span className="login-ceremony-promo">欢庆国庆 · 找到彩蛋有好礼</span>
+                ) : null}
               </div>
             </div>
           )}

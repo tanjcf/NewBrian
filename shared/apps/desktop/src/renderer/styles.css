@@ -617,6 +617,12 @@ textarea {
   display: none;
 }
 
+.login-ceremony-promo {
+  color: #c4c9d2;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
 .login-panel-copy {
   display: none;
 }
@@ -6938,6 +6944,16 @@ textarea {
   color: #b42318;
   border-radius: 14px;
   padding: 12px 14px;
+}
+
+.composer-area > .composer-error-banner {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .conversation-history {

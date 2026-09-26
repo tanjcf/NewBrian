@@ -14,8 +14,16 @@ test("unpackaged builds always enable the login ceremony", () => {
   );
 });
 
-test("packaged builds require Asia/Shanghai October 1 from server_time", () => {
-  // 2026-09-30 23:30 UTC => 2026-10-01 07:30 Asia/Shanghai
+test("packaged builds enable Sep 29–Oct 15 Asia/Shanghai tribute window", () => {
+  // 2026-09-28 16:00 UTC => 2026-09-29 00:00 Asia/Shanghai (window start)
+  assert.equal(
+    policy.shouldEnableLoginCeremony({
+      isPackaged: true,
+      serverTime: "2026-09-28T16:00:00.000Z"
+    }),
+    true
+  );
+  // Mid-window Oct 1
   assert.equal(
     policy.shouldEnableLoginCeremony({
       isPackaged: true,
@@ -23,36 +31,44 @@ test("packaged builds require Asia/Shanghai October 1 from server_time", () => {
     }),
     true
   );
-  // 2026-10-01 15:30 UTC => 2026-10-01 23:30 Asia/Shanghai
+  // 2026-10-15 15:59 UTC => still Oct 15 Asia/Shanghai
   assert.equal(
     policy.shouldEnableLoginCeremony({
       isPackaged: true,
-      serverTime: "2026-10-01T15:30:00.000Z"
+      serverTime: "2026-10-15T15:59:00.000Z"
     }),
     true
   );
-  // 2026-10-01 16:30 UTC => 2026-10-02 00:30 Asia/Shanghai
+  // 2026-10-15 16:00 UTC => 2026-10-16 00:00 Asia/Shanghai (after window)
   assert.equal(
     policy.shouldEnableLoginCeremony({
       isPackaged: true,
-      serverTime: "2026-10-01T16:30:00.000Z"
+      serverTime: "2026-10-15T16:00:00.000Z"
     }),
     false
   );
+  // Day before window: Sep 28 Shanghai
   assert.equal(
     policy.shouldEnableLoginCeremony({
       isPackaged: true,
-      serverTime: "2026-09-20T07:00:00.000Z"
+      serverDate: "2026-09-28"
     }),
     false
   );
   assert.equal(policy.shouldEnableLoginCeremony({ isPackaged: true, serverTime: null }), false);
 });
 
-test("explicit server_date wins over server_time", () => {
+test("explicit server_date wins over server_time for tribute window", () => {
   assert.equal(
     policy.isNationalDayFromServerClock({
-      serverDate: "2026-10-01",
+      serverDate: "2026-09-29",
+      serverTime: "2026-09-20T00:00:00.000Z"
+    }),
+    true
+  );
+  assert.equal(
+    policy.isNationalDayFromServerClock({
+      serverDate: "2026-10-15",
       serverTime: "2026-09-20T00:00:00.000Z"
     }),
     true
@@ -66,7 +82,15 @@ test("explicit server_date wins over server_time", () => {
   );
 });
 
-test("resolveLoginCeremonyAuthFields mirrors packaged Oct 1 gate", () => {
+test("isWithinNationalDayTributeWindow covers inclusive bounds", () => {
+  assert.equal(policy.isWithinNationalDayTributeWindow(9, 28), false);
+  assert.equal(policy.isWithinNationalDayTributeWindow(9, 29), true);
+  assert.equal(policy.isWithinNationalDayTributeWindow(10, 1), true);
+  assert.equal(policy.isWithinNationalDayTributeWindow(10, 15), true);
+  assert.equal(policy.isWithinNationalDayTributeWindow(10, 16), false);
+});
+
+test("resolveLoginCeremonyAuthFields mirrors packaged tribute window gate", () => {
   const enabled = policy.resolveLoginCeremonyAuthFields({
     isPackaged: true,
     serverDate: "2026-10-01",
@@ -81,4 +105,59 @@ test("resolveLoginCeremonyAuthFields mirrors packaged Oct 1 gate", () => {
   });
   assert.equal(disabled.login_ceremony_enabled, false);
   assert.equal(disabled.server_time, "2026-09-20T07:00:00.000Z");
+});
+
+test("shouldInvalidateLocalAuthForLoginCeremony clears only pre-window packaged sessions", () => {
+  assert.equal(
+    policy.shouldInvalidateLocalAuthForLoginCeremony({
+      isPackaged: false,
+      serverDate: "2026-09-29",
+      lastSyncedAt: "2026-09-20T00:00:00.000Z"
+    }),
+    false
+  );
+  assert.equal(
+    policy.shouldInvalidateLocalAuthForLoginCeremony({
+      isPackaged: true,
+      serverDate: "2026-09-28",
+      lastSyncedAt: "2026-09-20T00:00:00.000Z"
+    }),
+    false
+  );
+  assert.equal(
+    policy.shouldInvalidateLocalAuthForLoginCeremony({
+      isPackaged: true,
+      serverDate: "2026-09-29",
+      lastSyncedAt: "2026-09-28T15:59:00.000Z"
+    }),
+    true
+  );
+  assert.equal(
+    policy.shouldInvalidateLocalAuthForLoginCeremony({
+      isPackaged: true,
+      serverDate: "2026-09-29",
+      lastSyncedAt: "2026-09-28T16:00:00.000Z"
+    }),
+    false
+  );
+  assert.equal(
+    policy.shouldInvalidateLocalAuthForLoginCeremony({
+      isPackaged: true,
+      serverDate: "2026-10-01",
+      lastSyncedAt: null
+    }),
+    true
+  );
+  assert.equal(
+    policy.shouldInvalidateLocalAuthForLoginCeremony({
+      isPackaged: true,
+      serverTime: "2026-09-28T16:00:00.000Z",
+      lastSyncedAt: "2026-09-01T00:00:00.000Z"
+    }),
+    true
+  );
+});
+
+test("resolveLoginCeremonyWindowStartMs is Shanghai midnight on Sep 29", () => {
+  assert.equal(policy.resolveLoginCeremonyWindowStartMs(2026), Date.parse("2026-09-29T00:00:00+08:00"));
 });

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from "electron";
+import { app, BrowserWindow, crashReporter, globalShortcut, ipcMain, nativeImage, net, protocol, screen, session } from "electron";
 import { nativeTheme } from "electron";
 import { safeStorage } from "electron";
 import { dialog } from "electron";
@@ -94,7 +94,7 @@ import {
   type DesktopAuthApiAccount,
   type DesktopAuthApiUser
 } from "./desktop-auth-policy.js";
-import { resolveLoginCeremonyAuthFields } from "../shared/login-ceremony-policy";
+import { resolveLoginCeremonyAuthFields, shouldInvalidateLocalAuthForLoginCeremony } from "../shared/login-ceremony-policy";
 import {
   createLocalRuntime,
   createStructuredAgentResult,
@@ -278,6 +278,45 @@ import {
 import { registerSettingsIpcHandlers } from "./settings-ipc.js";
 import { registerUserKnowledgeIpcHandlers } from "./user-knowledge-ipc.js";
 import { registerDesktopIntegrationIpcComposition } from "./desktop-integration-ipc-composition.js";
+import {
+  askBrowserAnnotationDialog,
+  askBrowserDownloadApprovalDialog,
+  askBrowserHistoryAccessDialog,
+  clearNewbrainBrowserSessionData,
+  pickBrowserDownloadDirectory,
+  pickBrowserDownloadSavePath
+} from "./browser-ipc.js";
+import {
+  assertBrowserAgentPermission,
+  browserOriginFromUrl,
+  evaluateBrowserToolPolicyDecision,
+  resolveBrowserLinkOpenTarget
+} from "./browser-agent-policy.js";
+import {
+  clearBrowserHistory,
+  listBrowserHistory,
+  recordBrowserHistoryVisit,
+  removeBrowserHistoryEntry
+} from "./browser-history-store.js";
+import {
+  listBrowserCredentials,
+  removeBrowserCredential,
+  upsertBrowserCredential
+} from "./browser-credentials-store.js";
+import {
+  listBrowserContacts,
+  removeBrowserContact,
+  upsertBrowserContact
+} from "./browser-contacts-store.js";
+import {
+  mergeBrowserPermissionsExceptions,
+  writeBrowserPermissionsFile
+} from "./browser-permissions-store.js";
+import { assertBrowserHistoryAccess } from "./browser-history-access.js";
+import { writeBrowserScreenshotAnnotation } from "./browser-screenshot-annotation.js";
+import { applyBrowserDownloadItemPolicy } from "./browser-download-session.js";
+import { attachBrowserCdpIfAllowed, resolveBrowserCdpAccess } from "./browser-cdp-access.js";
+import { probeBrowserSiteTools } from "./browser-site-tools.js";
 import { McpStdioClient } from "./mcp-stdio-client.js";
 import { McpConfigService } from "./mcp-config-service.js";
 import { McpToolRuntimeService } from "./mcp-tool-runtime-service.js";
@@ -406,7 +445,7 @@ import { normalizeBrowserPreviewUrl } from "./browser-preview-service.js";
 // BrowserPreviewService composition: desktop-integration-ipc-composition.ts
 import { registerSystemIpcHandlers } from "./system-ipc.js";
 import { registerUsageExceptionFeedbackComposition } from "./user-usage-exception-feedback-composition.js";
-import { registerDesktopAppUpdateComposition } from "./desktop-app-update-composition.js";
+import { registerDesktopAppUpdateComposition, isDesktopUpdateExitPending } from "./desktop-app-update-composition.js";
 import { registerGrowthComposition } from "./growth-composition.js";
 import { registerWorkspaceGitIpcHandlers } from "./workspace-git-ipc.js";
 import { registerWindowIpcHandlers } from "./window-ipc.js";
@@ -1130,22 +1169,41 @@ let automationTickRunning = false;
 let mainWindowRef: BrowserWindow | null = null;
 let trayService: DesktopTrayService | null = null;
 let explicitQuitRequested = false;
-function resolveDesktopIconPath() {
+function resolveDesktopIconPath(options?: { preferIco?: boolean }) {
+  // Default: PNG is fine for window chrome. Pass preferIco for tray/taskbar.
+  const preferIco = options?.preferIco === true;
+  const packaged = [
+    join(process.resourcesPath, "newbrain.ico"),
+    join(process.resourcesPath, "icon.ico"),
+    join(process.resourcesPath, "newbrain.png"),
+    join(process.resourcesPath, "icon.png")
+  ];
+  const unpackaged = [
+    join(appDirectory, "..", "..", "build", "icon.ico"),
+    join(appDirectory, "..", "..", "public", "icon.ico"),
+    join(appDirectory, "..", "..", "build", "icon.png"),
+    join(appDirectory, "..", "..", "public", "icon.png"),
+    join(workspacePath, "apps/desktop/build/icon.ico"),
+    join(workspacePath, "apps/desktop/build/icon.png")
+  ];
+  const pngFirstPackaged = [
+    join(process.resourcesPath, "newbrain.png"),
+    join(process.resourcesPath, "newbrain.ico"),
+    join(process.resourcesPath, "icon.png"),
+    join(process.resourcesPath, "icon.ico")
+  ];
+  const pngFirstUnpackaged = [
+    join(appDirectory, "..", "..", "build", "icon.png"),
+    join(appDirectory, "..", "..", "build", "icon.ico"),
+    join(appDirectory, "..", "..", "public", "icon.png"),
+    join(appDirectory, "..", "..", "public", "icon.ico"),
+    join(workspacePath, "apps/desktop/build/icon.png"),
+    join(workspacePath, "apps/desktop/build/icon.ico")
+  ];
+  // Windows tray/taskbar need multi-size .ico; a lone 256 PNG scales into a blurry glyph.
   const candidates = app.isPackaged
-    ? [
-        join(process.resourcesPath, "newbrain.png"),
-        join(process.resourcesPath, "newbrain.ico"),
-        join(process.resourcesPath, "icon.png"),
-        join(process.resourcesPath, "icon.ico")
-      ]
-    : [
-        join(appDirectory, "..", "..", "build", "icon.png"),
-        join(appDirectory, "..", "..", "build", "icon.ico"),
-        join(appDirectory, "..", "..", "public", "icon.png"),
-        join(appDirectory, "..", "..", "public", "icon.ico"),
-        join(workspacePath, "apps/desktop/build/icon.png"),
-        join(workspacePath, "apps/desktop/build/icon.ico")
-      ];
+    ? (preferIco ? packaged : pngFirstPackaged)
+    : (preferIco ? unpackaged : pngFirstUnpackaged);
   for (const candidate of candidates) {
     if (!candidate || !existsSync(candidate)) continue;
     try {
@@ -1157,8 +1215,32 @@ function resolveDesktopIconPath() {
   }
   return candidates.find((candidate) => candidate && existsSync(candidate)) || "";
 }
+function resolveDesktopTrayIconPath() {
+  // Tray-only asset: keep taskbar/exe on marketing icon.ico / icon.png.
+  const trayCandidates = app.isPackaged
+    ? [
+        join(process.resourcesPath, "newbrain-tray.ico"),
+        join(process.resourcesPath, "tray.ico")
+      ]
+    : [
+        join(appDirectory, "..", "..", "build", "tray.ico"),
+        join(appDirectory, "..", "..", "public", "tray.ico"),
+        join(workspacePath, "apps/desktop/build/tray.ico")
+      ];
+  for (const candidate of trayCandidates) {
+    if (!candidate || !existsSync(candidate)) continue;
+    try {
+      const image = nativeImage.createFromPath(candidate);
+      if (!image.isEmpty()) return candidate;
+    } catch {
+      // Try the next tray candidate.
+    }
+  }
+  // Legacy fallback: multi-size marketing ICO (never the lone 256 PNG).
+  return resolveDesktopIconPath({ preferIco: true });
+}
 function resolveDesktopNativeImage() {
-  const iconPath = resolveDesktopIconPath();
+  const iconPath = resolveDesktopIconPath({ preferIco: false });
   if (!iconPath) return nativeImage.createEmpty();
   try {
     const image = nativeImage.createFromPath(iconPath);
@@ -1175,7 +1257,7 @@ function showMainWindow() {
   return window;
 }
 function createDesktopTray() {
-  trayService ??= new DesktopTrayService({ iconPath: resolveDesktopIconPath(),
+  trayService ??= new DesktopTrayService({ iconPath: resolveDesktopTrayIconPath(),
     readWorkspaces: async () => (await readWorkspaceCatalog()).workspaces, showWindow: () => { showMainWindow(); },
     openThread: async (workspaceId, threadId) => { const snapshot = await activateWorkspaceThread({ workspaceId, threadId }); showMainWindow().webContents.send(desktopIpcChannels.events.snapshotUpdate, snapshot); },
     createTask: () => { void showMainWindow().webContents.executeJavaScript(`document.querySelector('[data-testid="new-chat-button"]')?.click()`, true); },
@@ -1413,7 +1495,11 @@ async function reportRendererFailure(input: RendererFailureInput) {
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
-  if (!rendererFailureRestartScheduled && process.env.NEWBRAIN_DISABLE_CRASH_RESTART !== "1") {
+  if (
+    !rendererFailureRestartScheduled
+    && process.env.NEWBRAIN_DISABLE_CRASH_RESTART !== "1"
+    && !isDesktopUpdateExitPending()
+  ) {
     rendererFailureRestartScheduled = true;
     setTimeout(() => {
       explicitQuitRequested = true;
@@ -2087,7 +2173,11 @@ async function fetchJsonWithDesktopAuth(path: string, authState: PersistedDeskto
   for (const token of tokenCandidates.length ? tokenCandidates : [""]) {
     const headers = createDesktopAuthHeaders({ accessToken: token, device });
     if (sessionCookie) headers.Cookie = sessionCookie;
-    const response = await fetch(`${gatewayOrigin}${path}`, { method: "GET", headers });
+    const response = await fetch(`${gatewayOrigin}${path}`, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(15_000)
+    });
     const payload = await readJsonResponse(response);
     if (response.ok) return payload;
     lastPayload = payload;
@@ -2097,7 +2187,8 @@ async function fetchJsonWithDesktopAuth(path: string, authState: PersistedDeskto
   if (sessionCookie && tokenCandidates.length > 0) {
     const response = await fetch(`${gatewayOrigin}${path}`, {
       method: "GET",
-      headers: { Accept: "application/json", Cookie: sessionCookie }
+      headers: { Accept: "application/json", Cookie: sessionCookie },
+      signal: AbortSignal.timeout(15_000)
     });
     const payload = await readJsonResponse(response);
     if (response.ok) return payload;
@@ -2381,6 +2472,45 @@ async function redeemDesktopCode(input: { code: string }) {
   }
   return payload;
 }
+
+/** Claim National Day easter-egg gift from spring-app (once per user). */
+async function claimNationalDayGift() {
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再领取国庆赠礼。");
+  if (!authState.access_token?.trim() && !authState.session_cookie?.trim()) {
+    throw new Error("请先登录后再领取国庆赠礼。");
+  }
+  const gatewayOrigin = await readGatewayOrigin();
+  const device = collectDesktopDeviceFingerprint();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
+  };
+  if (authState.session_cookie?.trim()) headers.Cookie = authState.session_cookie.trim();
+  let response: Response;
+  try {
+    response = await fetch(`${gatewayOrigin}/api/desktop/v1/activities/national-day/claim`, {
+      method: "POST",
+      headers,
+      body: "{}"
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error || "");
+    if (/ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed/i.test(detail)) {
+      throw new Error("无法连接 spring-app，请确认网关可用后重试。");
+    }
+    throw new Error(detail || "国庆赠礼领取失败，请稍后重试。");
+  }
+  const payload = await readJsonResponse(response);
+  const payloadRecord = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  if (!response.ok) {
+    const rawMessage = extractGatewayErrorMessage(payload, "");
+    throw new Error(rawMessage || `国庆赠礼领取失败：HTTP ${response.status}`);
+  }
+  return payloadRecord || payload;
+}
+
 async function fetchDashboardWithSessionCookie(sessionCookie: string) {
   const gatewayOrigin = await readGatewayOrigin();
   const response = await fetch(`${gatewayOrigin}${dashboardPath}`, {
@@ -2496,6 +2626,33 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       last_checked_at: checkedAt,
       ...desktopLoginCeremonyStatusFields(loginFlags)
     } as DesktopAuthStatus;
+  }
+  {
+    const loginFlags = await fetchDesktopAuthLoginFlags();
+    if (
+      shouldInvalidateLocalAuthForLoginCeremony({
+        isPackaged: app.isPackaged,
+        serverDate: loginFlags.serverDate,
+        serverTime: loginFlags.serverTime,
+        lastSyncedAt: persisted.last_synced_at
+      })
+    ) {
+      await appendAuthAuditLog(
+        "session_expired",
+        persisted.user?.email ? `${maskEmail(persisted.user.email)} login_ceremony_window` : "login_ceremony_window"
+      );
+      desktopControlPlaneHeartbeat.stop();
+      await writeDesktopAuthState(null);
+      return {
+        authenticated: false,
+        loading: false,
+        mode: "none",
+        base_url: gatewayOrigin,
+        agreement,
+        last_checked_at: checkedAt,
+        ...desktopLoginCeremonyStatusFields(loginFlags)
+      } as DesktopAuthStatus;
+    }
   }
   try {
     let { response, payload } = await fetchDesktopAuthMe(persisted.access_token, device);
@@ -4641,6 +4798,10 @@ async function writeDesktopPreferences(nextPreferences: DesktopPreferences) {
     preferences
   };
   await fs.writeFile(modelConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeBrowserPermissionsFile(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
   await applyDesktopPreferences(preferences);
   return preferences;
 }
@@ -5840,10 +6001,9 @@ function startDesktopBootstrapInitialization() {
   return desktopBootstrapPromise;
 }
 async function startDesktopBootstrapAfterAuth() {
-  // Control-plane synchronization is intentionally manual until the remote
-  // service is production-ready. Use the explicit refresh/update action to
-  // call syncAuthenticatedDesktopControlPlane instead of touching the network
-  // during login or on a background timer.
+  // Keep control-plane + /app-update warm after login so Settings / sidebar can
+  // discover newly promoted stable releases without a manual restart.
+  desktopControlPlaneHeartbeat.start();
   try {
     await startDesktopBootstrapInitialization();
   } catch (error) {
@@ -6050,7 +6210,54 @@ function getWorkspaceShellEnv(workspace?: WorkspaceCatalogItem) {
 }
 async function getActiveDesktopPreferences() {
   const config = await readRootConfig();
-  return normalizeDesktopPreferences(config.preferences);
+  const preferences = normalizeDesktopPreferences(config.preferences);
+  preferences.browser.agentPermissions.exceptions = await mergeBrowserPermissionsExceptions(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
+  cachedBrowserUsePreferences = preferences.browser;
+  return preferences;
+}
+
+/** Sync Browser Use prefs for policy-engine hooks (updated on read/save). */
+let cachedBrowserUsePreferences: DesktopPreferences["browser"] = defaultDesktopPreferences.browser;
+
+function installBrowserAgentPolicyGate(
+  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>
+) {
+  const original = targetRuntime.evaluateToolPolicy.bind(targetRuntime);
+  targetRuntime.evaluateToolPolicy = (
+    descriptor: { name?: string; kind?: string; risk?: string; requiresApproval?: boolean },
+    argumentsValue: Record<string, unknown>,
+    permissionMode?: "full" | "approval" | "agent"
+  ) => {
+    const currentUrl =
+      previewWindowRef && !previewWindowRef.isDestroyed()
+        ? previewWindowRef.webContents.getURL()
+        : cachedBrowserUsePreferences.previewUrl;
+    const browserDecision = evaluateBrowserToolPolicyDecision(
+      cachedBrowserUsePreferences,
+      String(descriptor?.name || ""),
+      argumentsValue || {},
+      currentUrl
+    );
+    if (browserDecision) {
+      targetRuntime.sessionMachine.events.push({
+        id: `policy_${Date.now().toString(36)}`,
+        type: "policy_decision",
+        timestamp: new Date().toISOString(),
+        payload: {
+          toolName: descriptor?.name,
+          decision: browserDecision.decision,
+          source: browserDecision.source,
+          ruleId: browserDecision.ruleId,
+          reason: browserDecision.reason
+        }
+      });
+      return browserDecision;
+    }
+    return original(descriptor, argumentsValue, permissionMode);
+  };
 }
 async function buildWorkspaceShellEnvWithPreferences(workspace?: WorkspaceCatalogItem) {
   const preferences = await getActiveDesktopPreferences();
@@ -6171,6 +6378,7 @@ function registerCommandShortcuts(shortcuts: DesktopPreferences["shortcuts"]) {
   }
 }
 async function applyDesktopPreferences(preferences: DesktopPreferences) {
+  cachedBrowserUsePreferences = preferences.browser;
   activeTerminalShell = preferences.environment.terminalShell;
   registerPopupShortcut(preferences.popup.shortcut);
   registerDictationShortcuts(preferences.dictation);
@@ -6190,8 +6398,11 @@ function resolveThemePreference(preferences: DesktopPreferences) {
 }
 async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?: boolean }) {
   const preferences = await getActiveDesktopPreferences();
+  if (!options?.paymentPortal && preferences.browser.enabled === false) {
+    throw new Error("Browser Use 已关闭。请在设置 → 浏览器中开启。");
+  }
   const paymentPortal = options?.paymentPortal === true;
-  const partition = paymentPortal ? "newbrain-payment-preview" : "newbrain-browser-preview";
+  const partition = paymentPortal ? "persist:newbrain-payment-preview" : "persist:newbrain-browser";
   if (previewWindowRef && !previewWindowRef.isDestroyed()) {
     const currentPartition = String(previewWindowRef.webContents.session.partition || "");
     const isPaymentWindow = currentPartition.includes("payment");
@@ -6200,6 +6411,10 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
         await previewWindowRef.loadURL(targetUrl);
       }
       previewWindowRef.show();
+      void recordBrowserHistoryVisit(
+        { rootDir: workspaceStateRoot },
+        { url: previewWindowRef.webContents.getURL(), title: previewWindowRef.webContents.getTitle() }
+      ).catch(() => undefined);
       return previewWindowRef;
     }
     previewWindowRef.close();
@@ -6208,7 +6423,7 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: paymentPortal ? "NewBrain 支付" : "NewBrain 浏览器预览",
+    title: paymentPortal ? "NewBrain 支付" : "NewBrain 浏览器",
     show: false,
     webPreferences: {
       sandbox: true,
@@ -6217,11 +6432,46 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
       partition
     }
   });
+  const downloadDir = String(preferences.browser.downloadDir || "").trim();
+  void downloadDir;
+  previewWindow.webContents.session.removeAllListeners("will-download");
+  previewWindow.webContents.session.on("will-download", (_event, item) => {
+    void applyBrowserDownloadItemPolicy({
+      item,
+      browser: preferences.browser,
+      askApproval: askBrowserDownloadApprovalDialog,
+      askSavePath: pickBrowserDownloadSavePath
+    });
+  });
+  const syncPreviewTitle = () => {
+    if (paymentPortal) {
+      previewWindow.setTitle("NewBrain 支付");
+      return;
+    }
+    const pageUrl = previewWindow.webContents.getURL();
+    const pageTitle = previewWindow.webContents.getTitle();
+    if (preferences.browser.showFullUrl) {
+      previewWindow.setTitle(pageUrl || "NewBrain 浏览器");
+    } else {
+      previewWindow.setTitle(pageTitle ? `${pageTitle} — NewBrain` : "NewBrain 浏览器");
+    }
+  };
+  previewWindow.webContents.on("page-title-updated", syncPreviewTitle);
+  previewWindow.webContents.on("did-navigate", () => {
+    syncPreviewTitle();
+  });
   previewWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const normalized = requireWebUrl(url);
       if (paymentPortal || isAllowedPaymentHost(normalized)) {
         void previewWindow.loadURL(normalized);
+      } else {
+        const target = resolveBrowserLinkOpenTarget(preferences.browser, normalized);
+        if (target === "system") {
+          void electronShell.openExternal(normalized);
+        } else {
+          void previewWindow.loadURL(normalized);
+        }
       }
     } catch {
       // deny non-http(s)
@@ -6234,6 +6484,12 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
     } catch {
       event.preventDefault();
     }
+  });
+  previewWindow.webContents.on("did-navigate", (_event, url) => {
+    void recordBrowserHistoryVisit(
+      { rootDir: workspaceStateRoot },
+      { url, title: previewWindow.webContents.getTitle() }
+    ).catch(() => undefined);
   });
   previewWindowRef = previewWindow;
   previewWindow.on("closed", () => {
@@ -6327,8 +6583,20 @@ function registerBrowserAgentTools() {
       additionalProperties: false
     }
   }, async (input: { url?: string }) => {
+    const preferences = await getActiveDesktopPreferences();
     const url = requireWebUrl(input.url);
+    const origin = browserOriginFromUrl(url);
+    assertBrowserAgentPermission(preferences.browser, origin, "browse");
     const window = await ensurePreviewWindow(url);
+    if (preferences.browser.fullCdpAccess) {
+      await attachBrowserCdpIfAllowed({
+        fullCdpAccess: true,
+        webContents: window.webContents
+      });
+    }
+    if (preferences.browser.siteToolsEnabled) {
+      void probeBrowserSiteTools({ siteToolsEnabled: true, pageUrl: url }).catch(() => undefined);
+    }
     return {
       ok: true,
       exitCode: 0,
@@ -6346,7 +6614,9 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     const preferences = await getActiveDesktopPreferences();
-    const window = await ensurePreviewWindow(previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl);
+    const currentUrl = previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl;
+    assertBrowserAgentPermission(preferences.browser, browserOriginFromUrl(currentUrl), "browse");
+    const window = await ensurePreviewWindow(currentUrl);
     const page = await window.webContents.executeJavaScript(`(() => {
       const visible = (element) => {
         const style = window.getComputedStyle(element);
@@ -6382,6 +6652,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6411,6 +6687,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string; text?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6437,13 +6719,27 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const image = await previewWindowRef.webContents.capturePage();
     await ensureDirectory(workspaceStateRoot);
     await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+    const pageUrl = previewWindowRef.webContents.getURL();
+    const annotationPath = await writeBrowserScreenshotAnnotation({
+      mode: preferences.browser.annotatedScreenshots || "always",
+      path: desktopPreviewScreenshotPath,
+      url: pageUrl,
+      title: previewWindowRef.webContents.getTitle(),
+      ask: askBrowserAnnotationDialog
+    });
     return {
       ok: true,
       exitCode: 0,
-      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: previewWindowRef.webContents.getURL() })
+      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: pageUrl, annotationPath })
     };
   });
 }
@@ -6578,11 +6874,18 @@ async function capturePreviewWindow() {
   const image = await previewWindow.webContents.capturePage();
   await ensureDirectory(workspaceStateRoot);
   await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+  const annotationPath = await writeBrowserScreenshotAnnotation({
+    mode: preferences.browser.annotatedScreenshots || "always",
+    path: desktopPreviewScreenshotPath,
+    url: targetUrl,
+    title: previewWindow.webContents.getTitle(),
+    ask: askBrowserAnnotationDialog
+  });
   if (preferences.browser.highResScreenshots) {
     previewWindow.webContents.setZoomFactor(1);
   }
   await appendDiagnosticsLog(`captured preview screenshot ${desktopPreviewScreenshotPath}`);
-  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl };
+  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl, annotationPath };
 }
 function setupWorkspaceWatcher(preferences: DesktopPreferences) {
   workspaceWatcher?.close();
@@ -9396,6 +9699,7 @@ function registerIpc() {
     openWalletPayment: openDesktopWalletPayment,
     setWalletOverageEnabled: setDesktopWalletOverageEnabled,
     redeemCode: redeemDesktopCode,
+    claimNationalDayGift,
     sendLoginCode: sendDesktopLoginCode,
     login: loginDesktopAuth,
     loginWithAlipayQr: loginDesktopWithAlipayQr,
@@ -9482,6 +9786,55 @@ function registerIpc() {
       previewWindowRef = null;
     },
     capturePreviewWindow,
+    clearBrowserBrowsingData: async () => {
+      await clearNewbrainBrowserSessionData("persist:newbrain-browser");
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true, detail: "已清除内置浏览器数据与历史。" };
+    },
+    listBrowserHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("访问浏览历史")
+      );
+      return listBrowserHistory({ rootDir: workspaceStateRoot });
+    },
+    removeBrowserHistoryEntry: async (id) => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("删除浏览历史")
+      );
+      return removeBrowserHistoryEntry({ rootDir: workspaceStateRoot }, id);
+    },
+    clearBrowserHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("清空浏览历史")
+      );
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true };
+    },
+    selectBrowserDownloadDir: () => pickBrowserDownloadDirectory(),
+    listBrowserCredentials: () => listBrowserCredentials({ rootDir: workspaceStateRoot }),
+    upsertBrowserCredential: (input) => upsertBrowserCredential({ rootDir: workspaceStateRoot }, input),
+    removeBrowserCredential: (id) => removeBrowserCredential({ rootDir: workspaceStateRoot }, id),
+    listBrowserContacts: () => listBrowserContacts({ rootDir: workspaceStateRoot }),
+    upsertBrowserContact: (input) => upsertBrowserContact({ rootDir: workspaceStateRoot }, input),
+    removeBrowserContact: (id) => removeBrowserContact({ rootDir: workspaceStateRoot }, id),
+    getBrowserCdpAccess: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      return resolveBrowserCdpAccess({ fullCdpAccess: Boolean(preferences.browser.fullCdpAccess) });
+    },
+    probeBrowserSiteTools: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      const pageUrl =
+        previewWindowRef && !previewWindowRef.isDestroyed()
+          ? previewWindowRef.webContents.getURL()
+          : preferences.browser.previewUrl;
+      return probeBrowserSiteTools({
+        siteToolsEnabled: preferences.browser.siteToolsEnabled !== false,
+        pageUrl
+      });
+    },
     saveActiveThreadState,
     appendDiagnosticsLog,
     readPolicyRules,
@@ -9802,10 +10155,33 @@ function registerIpc() {
     },
     syncControlPlane: () => syncAuthenticatedDesktopControlPlane(),
     fetchAppUpdate: async () => {
-      const authState = await readDesktopAuthState();
-      if (!authState) throw new Error("desktop session required");
+      // Public endpoint: works without login. Attach bearer when present so fingerprint
+      // canary targeting still works for signed-in users.
+      const gatewayOrigin = await readGatewayOrigin();
       const device = collectDesktopDeviceFingerprint();
-      return fetchJsonWithDesktopAuth("/api/desktop/v1/app-update", authState, device);
+      const authState = await readDesktopAuthState();
+      const token = authState?.access_token?.trim() || "";
+      const headers = createDesktopAuthHeaders({
+        accessToken: token || undefined,
+        device
+      });
+      if (authState?.session_cookie?.trim()) {
+        headers.Cookie = authState.session_cookie.trim();
+      }
+      const response = await fetch(`${gatewayOrigin}/api/desktop/v1/app-update`, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(15_000)
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object"
+            ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "")
+            : "";
+        throw new Error(message || `app-update failed: HTTP ${response.status}`);
+      }
+      return payload;
     },
     verifyAppUpdate: async ({ releaseId, ok, appVersion }) => {
       const authState = await readDesktopAuthState();
@@ -10834,6 +11210,7 @@ app.whenReady().then(async () => {
     runtime.setPolicyRules(await readPolicyRules());
     registerDesktopWindowControlAgentTools();
     registerBrowserAgentTools();
+    installBrowserAgentPolicyGate(runtime);
     registerWorkspaceMediaAgentTools();
     registerOfficialGovernmentWebTools(runtime, officialGovernmentWebService);
     registerDesktopWebSearchTools(runtime, desktopWebSearchClient);

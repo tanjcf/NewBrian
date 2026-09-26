@@ -56,6 +56,10 @@ import {
 import { reconcileThreadMessages } from "./thread-message-reconciliation.js";
 import { builtinPluginCatalog, builtinPluginUri } from "../shared/builtin-plugins.js";
 import {
+  resolveLoginCeremonyAuthFields,
+  shouldInvalidateLocalAuthForLoginCeremony
+} from "../shared/login-ceremony-policy";
+import {
   appendRolloutRecords,
   appendStateSnapshotCompacting,
   createRolloutEvent,
@@ -68,6 +72,7 @@ import { AgentHostLoopBridge } from "./agent-host-loop-bridge.js";
 import { createAgentHostQuitCoordinator } from "./agent-host-quit-coordinator.js";
 import { AgentTurnControlPlaneService } from "./agent-turn-control-plane.js";
 import { composeAndRegisterModelChat } from "./compose-model-chat.js";
+import { registerDesktopAppUpdateComposition, isDesktopUpdateExitPending } from "./desktop-app-update-composition.js";
 import { DesktopErrorCollector } from "./desktop-error-collector.js";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
@@ -100,6 +105,50 @@ import {
   selectDueAutomations,
   updateAutomationSpec
 } from "./automation-schedule-policy.js";
+import {
+  askBrowserAnnotationDialog,
+  askBrowserDownloadApprovalDialog,
+  askBrowserHistoryAccessDialog,
+  clearNewbrainBrowserSessionData,
+  pickBrowserDownloadDirectory,
+  pickBrowserDownloadSavePath,
+  registerBrowserIpcHandlers
+} from "./browser-ipc.js";
+import {
+  assertBrowserAgentPermission,
+  browserOriginFromUrl,
+  DEFAULT_BROWSER_USE_PREFERENCES,
+  evaluateBrowserToolPolicyDecision,
+  normalizeBrowserUsePreferencesPartial,
+  resolveBrowserLinkOpenTarget,
+  type BrowserUsePreferences
+} from "./browser-agent-policy.js";
+import {
+  clearBrowserHistory,
+  listBrowserHistory,
+  recordBrowserHistoryVisit,
+  removeBrowserHistoryEntry
+} from "./browser-history-store.js";
+import {
+  listBrowserCredentials,
+  removeBrowserCredential,
+  upsertBrowserCredential
+} from "./browser-credentials-store.js";
+import {
+  listBrowserContacts,
+  removeBrowserContact,
+  upsertBrowserContact
+} from "./browser-contacts-store.js";
+import {
+  mergeBrowserPermissionsExceptions,
+  writeBrowserPermissionsFile
+} from "./browser-permissions-store.js";
+import { assertBrowserHistoryAccess } from "./browser-history-access.js";
+import { writeBrowserScreenshotAnnotation } from "./browser-screenshot-annotation.js";
+import { applyBrowserDownloadItemPolicy } from "./browser-download-session.js";
+import { attachBrowserCdpIfAllowed, resolveBrowserCdpAccess } from "./browser-cdp-access.js";
+import { probeBrowserSiteTools } from "./browser-site-tools.js";
+import { BrowserPreviewService, normalizeBrowserPreviewUrl } from "./browser-preview-service.js";
 
 const appDirectory = dirname(fileURLToPath(import.meta.url));
 const documentWorkerProcess = new DocumentWorkerProcess({
@@ -1144,6 +1193,72 @@ async function syncAuthenticatedDesktopControlPlane() {
   return state;
 }
 
+async function fetchDesktopAuthLoginFlags(): Promise<{
+  emailCodeLoginEnabled: boolean;
+  passwordLoginEnabled: boolean;
+  serverTime: string | null;
+  serverDate: string | null;
+  loginCeremonyEnabled: boolean;
+}> {
+  const ceremonyFallback = resolveLoginCeremonyAuthFields({
+    isPackaged: app.isPackaged,
+    serverTime: null,
+    serverDate: null
+  });
+  try {
+    const gatewayOrigin = await readGatewayOrigin();
+    const response = await fetch(`${gatewayOrigin}/api/desktop/auth/config`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+    const payload = (await readJsonResponse(response)) as Record<string, unknown> | null;
+    const data =
+      payload && typeof payload.data === "object" && payload.data
+        ? (payload.data as Record<string, unknown>)
+        : payload || {};
+    const emailCodeLoginEnabled = Boolean(data.email_code_login_enabled);
+    const passwordLoginEnabled =
+      data.password_login_enabled === undefined ? !emailCodeLoginEnabled : Boolean(data.password_login_enabled);
+    const serverTime = typeof data.server_time === "string" ? data.server_time : null;
+    const serverDate = typeof data.server_date === "string" ? data.server_date : null;
+    const ceremony = resolveLoginCeremonyAuthFields({
+      isPackaged: app.isPackaged,
+      serverTime,
+      serverDate
+    });
+    return {
+      emailCodeLoginEnabled,
+      passwordLoginEnabled,
+      serverTime: ceremony.server_time,
+      serverDate: ceremony.server_date,
+      loginCeremonyEnabled: ceremony.login_ceremony_enabled
+    };
+  } catch (error) {
+    await appendDesktopDebugLog(
+      `desktop auth config fetch failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return {
+      emailCodeLoginEnabled: false,
+      passwordLoginEnabled: true,
+      serverTime: null,
+      serverDate: null,
+      loginCeremonyEnabled: ceremonyFallback.login_ceremony_enabled
+    };
+  }
+}
+
+function desktopLoginCeremonyStatusFields(loginFlags: Awaited<ReturnType<typeof fetchDesktopAuthLoginFlags>>) {
+  return {
+    email_code_login_enabled: loginFlags.emailCodeLoginEnabled,
+    password_login_enabled: loginFlags.passwordLoginEnabled,
+    server_time: loginFlags.serverTime,
+    server_date: loginFlags.serverDate,
+    login_ceremony_enabled: loginFlags.loginCeremonyEnabled
+  };
+}
+
 async function fetchAgreementConfig(): Promise<DesktopAgreementConfig> {
   try {
     const gatewayOrigin = await readGatewayOrigin();
@@ -1494,14 +1609,43 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
   const gatewayOrigin = await readGatewayOrigin();
 
   if (!persisted || !persisted.access_token) {
+    const loginFlags = await fetchDesktopAuthLoginFlags();
     return {
       authenticated: false,
       loading: false,
       mode: "none",
       base_url: gatewayOrigin,
       agreement,
-      last_checked_at: checkedAt
+      last_checked_at: checkedAt,
+      ...desktopLoginCeremonyStatusFields(loginFlags)
     };
+  }
+
+  {
+    const loginFlags = await fetchDesktopAuthLoginFlags();
+    if (
+      shouldInvalidateLocalAuthForLoginCeremony({
+        isPackaged: app.isPackaged,
+        serverDate: loginFlags.serverDate,
+        serverTime: loginFlags.serverTime,
+        lastSyncedAt: persisted.last_synced_at
+      })
+    ) {
+      await appendAuthAuditLog(
+        "session_expired",
+        persisted.user?.email ? `${maskEmail(persisted.user.email)} login_ceremony_window` : "login_ceremony_window"
+      );
+      await writeDesktopAuthState(null);
+      return {
+        authenticated: false,
+        loading: false,
+        mode: "none",
+        base_url: gatewayOrigin,
+        agreement,
+        last_checked_at: checkedAt,
+        ...desktopLoginCeremonyStatusFields(loginFlags)
+      };
+    }
   }
 
   try {
@@ -1537,6 +1681,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       if (response.status === 401 || response.status === 403) {
         await appendAuthAuditLog("session_expired", persisted.user?.email ? maskEmail(persisted.user.email) : "unknown");
         await writeDesktopAuthState(null);
+        const loginFlags = await fetchDesktopAuthLoginFlags();
         return {
           authenticated: false,
           loading: false,
@@ -1544,7 +1689,8 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
           base_url: gatewayOrigin,
           agreement,
           last_checked_at: checkedAt,
-          last_error: extractDesktopAuthErrorMessage(payload, response.status)
+          last_error: extractDesktopAuthErrorMessage(payload, response.status),
+          ...desktopLoginCeremonyStatusFields(loginFlags)
         };
       }
 
@@ -1927,12 +2073,7 @@ interface DesktopPreferences {
     keepArchived: boolean;
     rootDir: string;
   };
-  browser: {
-    autoOpenPreview: boolean;
-    preserveTabs: boolean;
-    highResScreenshots: boolean;
-    previewUrl: string;
-  };
+  browser: BrowserUsePreferences;
   shortcuts: Record<string, string>;
 }
 
@@ -2533,6 +2674,7 @@ const defaultDesktopPreferences: DesktopPreferences = {
     rootDir: join(workspaceStateRoot, "worktrees")
   },
   browser: {
+    ...DEFAULT_BROWSER_USE_PREFERENCES,
     autoOpenPreview: false,
     preserveTabs: true,
     highResScreenshots: false,
@@ -2540,6 +2682,9 @@ const defaultDesktopPreferences: DesktopPreferences = {
   },
   shortcuts: {}
 };
+
+/** Sync Browser Use prefs for policy-engine hooks (updated on read/save). */
+let cachedBrowserUsePreferences: DesktopPreferences["browser"] = defaultDesktopPreferences.browser;
 
 const defaultMcpServers: McpServerConfig[] = [];
 const shownCondaPromptKeys = new Set<string>();
@@ -3242,21 +3387,7 @@ function normalizeDesktopPreferences(input?: Partial<DesktopPreferences>): Deskt
           : defaultDesktopPreferences.worktree.keepArchived,
       rootDir: normalizeWorktreeRootDir(input?.worktree?.rootDir)
     },
-    browser: {
-      autoOpenPreview:
-        typeof input?.browser?.autoOpenPreview === "boolean"
-          ? input.browser.autoOpenPreview
-          : defaultDesktopPreferences.browser.autoOpenPreview,
-      preserveTabs:
-        typeof input?.browser?.preserveTabs === "boolean"
-          ? input.browser.preserveTabs
-          : defaultDesktopPreferences.browser.preserveTabs,
-      highResScreenshots:
-        typeof input?.browser?.highResScreenshots === "boolean"
-          ? input.browser.highResScreenshots
-          : defaultDesktopPreferences.browser.highResScreenshots,
-      previewUrl: input?.browser?.previewUrl?.trim() || defaultDesktopPreferences.browser.previewUrl
-    },
+    browser: normalizeBrowserUsePreferencesPartial(input?.browser, defaultDesktopPreferences.browser),
     shortcuts:
       input?.shortcuts && typeof input.shortcuts === "object"
         ? Object.fromEntries(
@@ -3636,6 +3767,10 @@ async function writeDesktopPreferences(nextPreferences: DesktopPreferences) {
     preferences
   };
   await fs.writeFile(modelConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeBrowserPermissionsFile(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
   await applyDesktopPreferences(preferences);
   return preferences;
 }
@@ -6273,7 +6408,51 @@ function getWorkspaceShellEnv(workspace?: WorkspaceCatalogItem) {
 
 async function getActiveDesktopPreferences() {
   const config = await readRootConfig();
-  return normalizeDesktopPreferences(config.preferences);
+  const preferences = normalizeDesktopPreferences(config.preferences);
+  preferences.browser.agentPermissions.exceptions = await mergeBrowserPermissionsExceptions(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
+  cachedBrowserUsePreferences = preferences.browser;
+  return preferences;
+}
+
+function installBrowserAgentPolicyGate(
+  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>
+) {
+  const original = targetRuntime.evaluateToolPolicy.bind(targetRuntime);
+  targetRuntime.evaluateToolPolicy = (
+    descriptor: { name?: string; kind?: string; risk?: string; requiresApproval?: boolean },
+    argumentsValue: Record<string, unknown>,
+    permissionMode?: "full" | "approval" | "agent"
+  ) => {
+    const currentUrl =
+      previewWindowRef && !previewWindowRef.isDestroyed()
+        ? previewWindowRef.webContents.getURL()
+        : cachedBrowserUsePreferences.previewUrl;
+    const browserDecision = evaluateBrowserToolPolicyDecision(
+      cachedBrowserUsePreferences,
+      String(descriptor?.name || ""),
+      argumentsValue || {},
+      currentUrl
+    );
+    if (browserDecision) {
+      targetRuntime.sessionMachine.events.push({
+        id: `policy_${Date.now().toString(36)}`,
+        type: "policy_decision",
+        timestamp: new Date().toISOString(),
+        payload: {
+          toolName: descriptor?.name,
+          decision: browserDecision.decision,
+          source: browserDecision.source,
+          ruleId: browserDecision.ruleId,
+          reason: browserDecision.reason
+        }
+      });
+      return browserDecision;
+    }
+    return original(descriptor, argumentsValue, permissionMode);
+  };
 }
 
 async function buildWorkspaceShellEnvWithPreferences(workspace?: WorkspaceCatalogItem) {
@@ -6363,6 +6542,7 @@ function registerDictationShortcuts(dictation: DesktopPreferences["dictation"]) 
 }
 
 async function applyDesktopPreferences(preferences: DesktopPreferences) {
+  cachedBrowserUsePreferences = preferences.browser;
   terminalSession.shell = preferences.environment.terminalShell;
   registerPopupShortcut(preferences.popup.shortcut);
   registerDictationShortcuts(preferences.dictation);
@@ -6388,24 +6568,84 @@ function resolveThemePreference(preferences: DesktopPreferences) {
 
 async function ensurePreviewWindow(targetUrl: string) {
   const preferences = await getActiveDesktopPreferences();
+  if (preferences.browser.enabled === false) {
+    throw new Error("Browser Use 已关闭。请在设置 → 浏览器中开启。");
+  }
+  const partition = "persist:newbrain-browser";
   if (previewWindowRef && !previewWindowRef.isDestroyed()) {
     if (!preferences.browser.preserveTabs || previewWindowRef.webContents.getURL() !== targetUrl) {
       await previewWindowRef.loadURL(targetUrl);
     }
     previewWindowRef.show();
+    void recordBrowserHistoryVisit(
+      { rootDir: workspaceStateRoot },
+      { url: previewWindowRef.webContents.getURL(), title: previewWindowRef.webContents.getTitle() }
+    ).catch(() => undefined);
     return previewWindowRef;
   }
 
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: "NewBrain 浏览器预览",
+    title: "NewBrain 浏览器",
     show: false,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      partition
     }
+  });
+  const downloadDir = String(preferences.browser.downloadDir || "").trim();
+  void downloadDir;
+  previewWindow.webContents.session.removeAllListeners("will-download");
+  previewWindow.webContents.session.on("will-download", (_event, item) => {
+    void applyBrowserDownloadItemPolicy({
+      item,
+      browser: preferences.browser,
+      askApproval: askBrowserDownloadApprovalDialog,
+      askSavePath: pickBrowserDownloadSavePath
+    });
+  });
+  const syncPreviewTitle = () => {
+    const pageUrl = previewWindow.webContents.getURL();
+    const pageTitle = previewWindow.webContents.getTitle();
+    if (preferences.browser.showFullUrl) {
+      previewWindow.setTitle(pageUrl || "NewBrain 浏览器");
+    } else {
+      previewWindow.setTitle(pageTitle ? `${pageTitle} — NewBrain` : "NewBrain 浏览器");
+    }
+  };
+  previewWindow.webContents.on("page-title-updated", syncPreviewTitle);
+  previewWindow.webContents.on("did-navigate", () => {
+    syncPreviewTitle();
+  });
+  previewWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const normalized = requireWebUrl(url);
+      const target = resolveBrowserLinkOpenTarget(preferences.browser, normalized);
+      if (target === "system") {
+        void electronShell.openExternal(normalized);
+      } else {
+        void previewWindow.loadURL(normalized);
+      }
+    } catch {
+      // deny non-http(s)
+    }
+    return { action: "deny" };
+  });
+  previewWindow.webContents.on("will-navigate", (event, url) => {
+    try {
+      requireWebUrl(url);
+    } catch {
+      event.preventDefault();
+    }
+  });
+  previewWindow.webContents.on("did-navigate", (_event, url) => {
+    void recordBrowserHistoryVisit(
+      { rootDir: workspaceStateRoot },
+      { url, title: previewWindow.webContents.getTitle() }
+    ).catch(() => undefined);
   });
   previewWindowRef = previewWindow;
   previewWindow.on("closed", () => {
@@ -6419,12 +6659,7 @@ async function ensurePreviewWindow(targetUrl: string) {
 }
 
 function requireWebUrl(value: unknown) {
-  const raw = String(value ?? "").trim();
-  const parsed = new URL(raw);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Browser navigation only supports http and https URLs.");
-  }
-  return parsed.toString();
+  return normalizeBrowserPreviewUrl(value);
 }
 
 function registerBrowserAgentTools() {
@@ -6435,7 +6670,7 @@ function registerBrowserAgentTools() {
     description: "Open an HTTP or HTTPS URL in the NewBrain browser.",
     kind: "read",
     risk: "low",
-    requiresApproval: false,
+    requiresApproval: true,
     namespace: "browser",
     inputSchema: {
       type: "object",
@@ -6444,8 +6679,20 @@ function registerBrowserAgentTools() {
       additionalProperties: false
     }
   }, async (input: { url?: string }) => {
+    const preferences = await getActiveDesktopPreferences();
     const url = requireWebUrl(input.url);
+    const origin = browserOriginFromUrl(url);
+    assertBrowserAgentPermission(preferences.browser, origin, "browse");
     const window = await ensurePreviewWindow(url);
+    if (preferences.browser.fullCdpAccess) {
+      await attachBrowserCdpIfAllowed({
+        fullCdpAccess: true,
+        webContents: window.webContents
+      });
+    }
+    if (preferences.browser.siteToolsEnabled) {
+      void probeBrowserSiteTools({ siteToolsEnabled: true, pageUrl: url }).catch(() => undefined);
+    }
     return {
       ok: true,
       exitCode: 0,
@@ -6463,7 +6710,9 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     const preferences = await getActiveDesktopPreferences();
-    const window = await ensurePreviewWindow(previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl);
+    const currentUrl = previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl;
+    assertBrowserAgentPermission(preferences.browser, browserOriginFromUrl(currentUrl), "browse");
+    const window = await ensurePreviewWindow(currentUrl);
     const page = await window.webContents.executeJavaScript(`(() => {
       const visible = (element) => {
         const style = window.getComputedStyle(element);
@@ -6499,6 +6748,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6528,6 +6783,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string; text?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6554,13 +6815,27 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const image = await previewWindowRef.webContents.capturePage();
     await ensureDirectory(workspaceStateRoot);
     await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+    const pageUrl = previewWindowRef.webContents.getURL();
+    const annotationPath = await writeBrowserScreenshotAnnotation({
+      mode: preferences.browser.annotatedScreenshots || "always",
+      path: desktopPreviewScreenshotPath,
+      url: pageUrl,
+      title: previewWindowRef.webContents.getTitle(),
+      ask: askBrowserAnnotationDialog
+    });
     return {
       ok: true,
       exitCode: 0,
-      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: previewWindowRef.webContents.getURL() })
+      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: pageUrl, annotationPath })
     };
   });
 }
@@ -6575,11 +6850,18 @@ async function capturePreviewWindow() {
   const image = await previewWindow.webContents.capturePage();
   await ensureDirectory(workspaceStateRoot);
   await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+  const annotationPath = await writeBrowserScreenshotAnnotation({
+    mode: preferences.browser.annotatedScreenshots || "always",
+    path: desktopPreviewScreenshotPath,
+    url: targetUrl,
+    title: previewWindow.webContents.getTitle(),
+    ask: askBrowserAnnotationDialog
+  });
   if (preferences.browser.highResScreenshots) {
     previewWindow.webContents.setZoomFactor(1);
   }
   await appendDiagnosticsLog(`captured preview screenshot ${desktopPreviewScreenshotPath}`);
-  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl };
+  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl, annotationPath };
 }
 
 function setupWorkspaceWatcher(preferences: DesktopPreferences) {
@@ -10107,25 +10389,74 @@ function registerIpc() {
     return saved.llm;
   });
 
-  ipcMain.handle("phase1:open-browser-preview", async (_event, url?: string) => {
-    const preferences = await getActiveDesktopPreferences();
-    const targetUrl = typeof url === "string" && url.trim() ? url.trim() : preferences.browser.previewUrl;
-    await ensurePreviewWindow(targetUrl);
-    await saveActiveThreadState(`已打开浏览器预览: ${targetUrl}`);
-    await appendDiagnosticsLog(`opened preview ${targetUrl}`);
-    return { ok: true, url: targetUrl };
-  });
-
-  ipcMain.handle("phase1:close-browser-preview", async () => {
-    if (previewWindowRef && !previewWindowRef.isDestroyed()) {
-      previewWindowRef.close();
+  const browserPreviewService = new BrowserPreviewService({
+    getPreferences: getActiveDesktopPreferences,
+    openWindow: ensurePreviewWindow,
+    closeWindow: () => {
+      if (previewWindowRef && !previewWindowRef.isDestroyed()) previewWindowRef.close();
+      previewWindowRef = null;
+    },
+    captureWindow: capturePreviewWindow,
+    saveThreadState: saveActiveThreadState,
+    appendDiagnostics: appendDiagnosticsLog,
+    openExternal: async (url) => {
+      const { shell } = await import("electron");
+      await shell.openExternal(url);
     }
-    previewWindowRef = null;
-    return { ok: true };
   });
-
-  ipcMain.handle("phase1:capture-browser-preview", async () => {
-    return capturePreviewWindow();
+  registerBrowserIpcHandlers({
+    openPreview: (url) => browserPreviewService.open(url),
+    closePreview: () => browserPreviewService.close(),
+    capturePreview: () => browserPreviewService.capture(),
+    clearBrowsingData: async () => {
+      await clearNewbrainBrowserSessionData("persist:newbrain-browser");
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true, detail: "已清除内置浏览器数据与历史。" };
+    },
+    listHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("访问浏览历史")
+      );
+      return listBrowserHistory({ rootDir: workspaceStateRoot });
+    },
+    removeHistoryEntry: async (id) => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("删除浏览历史")
+      );
+      return removeBrowserHistoryEntry({ rootDir: workspaceStateRoot }, id);
+    },
+    clearHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("清空浏览历史")
+      );
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true };
+    },
+    selectDownloadDir: () => pickBrowserDownloadDirectory(),
+    listCredentials: () => listBrowserCredentials({ rootDir: workspaceStateRoot }),
+    upsertCredential: (input) => upsertBrowserCredential({ rootDir: workspaceStateRoot }, input),
+    removeCredential: (id) => removeBrowserCredential({ rootDir: workspaceStateRoot }, id),
+    listContacts: () => listBrowserContacts({ rootDir: workspaceStateRoot }),
+    upsertContact: (input) => upsertBrowserContact({ rootDir: workspaceStateRoot }, input),
+    removeContact: (id) => removeBrowserContact({ rootDir: workspaceStateRoot }, id),
+    getCdpAccess: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      return resolveBrowserCdpAccess({ fullCdpAccess: Boolean(preferences.browser.fullCdpAccess) });
+    },
+    probeSiteTools: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      const pageUrl =
+        previewWindowRef && !previewWindowRef.isDestroyed()
+          ? previewWindowRef.webContents.getURL()
+          : preferences.browser.previewUrl;
+      return probeBrowserSiteTools({
+        siteToolsEnabled: preferences.browser.siteToolsEnabled !== false,
+        pageUrl
+      });
+    }
   });
 
   ipcMain.handle("phase1:save-mcp-servers", async (_event, servers: McpServerConfig[]) => {
@@ -10477,6 +10808,75 @@ function registerIpc() {
     },
     scheduleAutomaticUserKnowledgeSync
   });
+
+  registerDesktopAppUpdateComposition({
+    readControlPlaneState: async () => {
+      try {
+        return JSON.parse(await fs.readFile(desktopControlPlaneStatePath, "utf8"));
+      } catch {
+        return null;
+      }
+    },
+    syncControlPlane: () => syncAuthenticatedDesktopControlPlane(),
+    fetchAppUpdate: async () => {
+      const gatewayOrigin = await readGatewayOrigin();
+      const device = collectDesktopDeviceFingerprint();
+      const authState = await readDesktopAuthState();
+      const token = authState?.access_token?.trim() || "";
+      const headers = createDesktopAuthHeaders({
+        accessToken: token || undefined,
+        device
+      });
+      if (authState?.session_cookie?.trim()) {
+        headers.Cookie = authState.session_cookie.trim();
+      }
+      headers["X-Desktop-Package-Preference"] = "zip";
+      const response = await fetch(`${gatewayOrigin}/api/desktop/v1/app-update`, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(15_000)
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object"
+            ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "")
+            : "";
+        throw new Error(message || `app-update failed: HTTP ${response.status}`);
+      }
+      return payload;
+    },
+    verifyAppUpdate: async ({ releaseId, ok, appVersion }) => {
+      const authState = await readDesktopAuthState();
+      if (!authState) throw new Error("desktop session required");
+      const device = collectDesktopDeviceFingerprint();
+      const gatewayOrigin = await readGatewayOrigin();
+      const token = authState.access_token?.trim() || "";
+      const headers = createDesktopAuthHeaders({ accessToken: token, device });
+      const response = await fetch(`${gatewayOrigin}/api/desktop/v1/app-update/verify`, {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          release_id: releaseId,
+          ok,
+          app_version: appVersion
+        })
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object"
+            ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "")
+            : "";
+        throw new Error(message || `verify update failed: HTTP ${response.status}`);
+      }
+      return (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+    }
+  });
 }
 
 function setupAppMenu(window: BrowserWindow) {
@@ -10572,7 +10972,11 @@ const processQuitCoordinator = createAgentHostQuitCoordinator({
   quit: () => app.quit(),
   onError: (error) => console.error("BRAIN process shutdown failed", error)
 });
-app.on("before-quit", (event) => processQuitCoordinator.beforeQuit(event));
+app.on("before-quit", (event) => {
+  // Deferred zip apply waits for this process to exit; do not block quit.
+  if (isDesktopUpdateExitPending()) return;
+  processQuitCoordinator.beforeQuit(event);
+});
 
 app.whenReady().then(async () => {
   protocol.handle("newbrain-attachment", async (request) => {
@@ -10607,6 +11011,7 @@ app.whenReady().then(async () => {
     });
     runtime.setPolicyRules(await readPolicyRules());
     registerBrowserAgentTools();
+    installBrowserAgentPolicyGate(runtime);
     await activateConfiguredPlugins();
     await syncMcpToolsToRuntime();
     await restoreEnabledMcpServers();
