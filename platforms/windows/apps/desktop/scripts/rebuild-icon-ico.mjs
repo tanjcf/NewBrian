@@ -1,6 +1,7 @@
 /**
- * Build tray-only multi-size ICO (thick glyph for 16–32px).
- * Does NOT overwrite build/icon.ico — that stays the marketing logo for taskbar/exe.
+ * Build tray-only multi-size ICO from the real NewBrain brain logo (monochrome).
+ * Prefers build/tray-source-mono.png (faithful B&W logo); falls back to converting public/icon.png.
+ * Does NOT overwrite build/icon.ico (taskbar / exe marketing asset).
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -10,76 +11,104 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
+const monoSource = path.join(desktopRoot, "build", "tray-source-mono.png");
+const colorSource = path.join(desktopRoot, "public", "icon.png");
+const sourcePng = fs.existsSync(monoSource) ? monoSource : colorSource;
+const convertFromColor = sourcePng === colorSource;
 const targets = [
   path.join(desktopRoot, "build", "tray.ico"),
   path.join(desktopRoot, "public", "tray.ico")
 ];
+const previewPng = path.join(desktopRoot, "build", "tray-preview-32.png");
 const sizes = [16, 20, 24, 32, 48, 64];
 
-const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "nb-tray-only-"));
+if (!fs.existsSync(sourcePng)) {
+  throw new Error(`Missing logo source: ${sourcePng}`);
+}
+
+const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "nb-tray-logo-"));
+const localSource = path.join(workDir, "source-icon.png");
+fs.copyFileSync(sourcePng, localSource);
 const ps1 = path.join(workDir, "render.ps1");
+// Keep PowerShell on short ASCII temp paths — Chinese source roots break Bitmap.FromFile.
+const sourceEscaped = localSource.replace(/\\/g, "\\\\").replace(/'/g, "''");
+const outEscaped = workDir.replace(/\\/g, "\\\\").replace(/'/g, "''");
+const convertFlag = convertFromColor ? "$true" : "$false";
 
 fs.writeFileSync(
   ps1,
   `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$outDir = '${workDir.replace(/\\/g, "\\\\")}'
 
-function New-TrayGlyph([int]$size) {
-  $bmp = New-Object System.Drawing.Bitmap $size, $size
+$sourcePath = '${sourceEscaped}'
+$outDir = '${outEscaped}'
+$convertFromColor = ${convertFlag}
+
+function Convert-ToMonochromeLogo([System.Drawing.Bitmap]$src) {
+  $dst = New-Object System.Drawing.Bitmap $src.Width, $src.Height, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $dst.SetResolution($src.HorizontalResolution, $src.VerticalResolution)
+  for ($y = 0; $y -lt $src.Height; $y++) {
+    for ($x = 0; $x -lt $src.Width; $x++) {
+      $c = $src.GetPixel($x, $y)
+      if ($c.A -lt 8) {
+        $dst.SetPixel($x, $y, [System.Drawing.Color]::Transparent)
+        continue
+      }
+      $max = [Math]::Max($c.R, [Math]::Max($c.G, $c.B))
+      $min = [Math]::Min($c.R, [Math]::Min($c.G, $c.B))
+      $sat = $max - $min
+      $isPlate = ($max -ge 235 -and $sat -le 18)
+      if ($isPlate) {
+        $dst.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($c.A, 255, 255, 255))
+      } else {
+        $ink = [Math]::Max(0, [Math]::Min(255, [int]((255 - $max) * 1.15 + $sat * 0.55)))
+        if ($ink -lt 12) {
+          $dst.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($c.A, 255, 255, 255))
+        } else {
+          $dst.SetPixel($x, $y, [System.Drawing.Color]::FromArgb([Math]::Min(255, $ink), 12, 12, 12))
+        }
+      }
+    }
+  }
+  return $dst
+}
+
+function Resize-HighQuality([System.Drawing.Bitmap]$src, [int]$size) {
+  $bmp = New-Object System.Drawing.Bitmap $size, $size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
   $bmp.SetResolution(96, 96)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   try {
     $g.Clear([System.Drawing.Color]::Transparent)
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
+    $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-
-    $m = [Math]::Max(1, [int][Math]::Floor($size * 0.05))
-    $plate = New-Object System.Drawing.Rectangle $m, $m, ($size - 2 * $m), ($size - 2 * $m)
-    $r = [Math]::Max(2, [int][Math]::Floor($size * 0.2))
-    $gp = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $d = $r * 2
-    $gp.AddArc($plate.X, $plate.Y, $d, $d, 180, 90)
-    $gp.AddArc($plate.Right - $d, $plate.Y, $d, $d, 270, 90)
-    $gp.AddArc($plate.Right - $d, $plate.Bottom - $d, $d, $d, 0, 90)
-    $gp.AddArc($plate.X, $plate.Bottom - $d, $d, $d, 90, 90)
-    $gp.CloseFigure()
-    $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255,255,255,255))), $gp)
-
-    $stroke = [Math]::Max(1.6, $size / 11.0)
-    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (
-      (New-Object System.Drawing.Point 0, $size),
-      (New-Object System.Drawing.Point $size, 0),
-      [System.Drawing.Color]::FromArgb(255, 120, 80, 220),
-      [System.Drawing.Color]::FromArgb(255, 40, 200, 210)
-    )
-    $pen = New-Object System.Drawing.Pen $brush, $stroke
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-
-    $cx = $size / 2.0
-    $cy = $size / 2.0 + $size * 0.02
-    $w = $size * 0.58
-    $h = $size * 0.48
-    $left = $cx - $w / 2
-    $top = $cy - $h / 2
-    $g.DrawArc($pen, $left, $top, ($w * 0.95), ($h * 0.55), 200, 145)
-    $g.DrawArc($pen, ($left + $w * 0.04), ($top + $h * 0.16), ($w * 0.92), ($h * 0.5), 200, 150)
-    $g.DrawArc($pen, ($left + $w * 0.08), ($top + $h * 0.34), ($w * 0.84), ($h * 0.48), 200, 155)
-    $g.DrawArc($pen, ($left + $w * 0.16), ($top + $h * 0.5), ($w * 0.64), ($h * 0.42), 210, 145)
-    $g.DrawLine($pen, ($cx + $w * 0.16), ($cy + $h * 0.2), ($cx + $w * 0.28), ($cy + $h * 0.4))
-
-    $pen.Dispose(); $brush.Dispose(); $gp.Dispose()
-  } finally { $g.Dispose() }
+    $g.DrawImage($src, 0, 0, $size, $size)
+  } finally {
+    $g.Dispose()
+  }
   return $bmp
 }
 
-foreach ($size in @(16,20,24,32,48,64)) {
-  $bmp = New-TrayGlyph $size
-  $bmp.Save((Join-Path $outDir ("icon-" + $size + ".png")), [System.Drawing.Imaging.ImageFormat]::Png)
-  $bmp.Dispose()
+$src = [System.Drawing.Bitmap]::FromFile($sourcePath)
+try {
+  $logo = if ($convertFromColor) { Convert-ToMonochromeLogo $src } else { $src }
+  try {
+    foreach ($size in @(16, 20, 24, 32, 48, 64)) {
+      $sized = Resize-HighQuality $logo $size
+      try {
+        $sized.Save((Join-Path $outDir ("icon-" + $size + ".png")), [System.Drawing.Imaging.ImageFormat]::Png)
+      } finally {
+        $sized.Dispose()
+      }
+    }
+  } finally {
+    if ($convertFromColor) { $logo.Dispose() }
+  }
+} finally {
+  $src.Dispose()
 }
 `,
   "utf8"
@@ -132,4 +161,7 @@ for (const target of targets) {
   fs.writeFileSync(target, ico);
   console.log("wrote", target, ico.length);
 }
+fs.copyFileSync(path.join(workDir, "icon-32.png"), previewPng);
+console.log("source", sourcePng);
+console.log("preview", previewPng);
 fs.rmSync(workDir, { recursive: true, force: true });

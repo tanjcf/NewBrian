@@ -9,6 +9,7 @@ import {
 } from "electron";
 import { desktopIpcChannels, type DesktopPreferences, type ShowAppMenuInput } from "@codex-forge/protocol";
 import { createAppMenuTemplate } from "./app-menu-policy.js";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 
 export interface AppMenuServiceDependencies {
   getMainWindow: () => BrowserWindow | null;
@@ -54,7 +55,7 @@ export class AppMenuService {
           type: "info",
           title: "关于 NewBrain",
           message: "NewBrain",
-          detail: `版本 ${app.getVersion()}\n面向 Windows 的智能编程协作桌面应用。`
+          detail: `版本 ${resolveElectronAppVersion(app)}\n面向 Windows 的智能编程协作桌面应用。`
         });
       },
       controlWindow: (action) => {

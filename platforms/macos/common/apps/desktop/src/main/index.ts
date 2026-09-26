@@ -27,6 +27,7 @@ import type {
 import { isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { createLocalRuntime } from "../../../agentd/src/runtime.js";
 import { CodexStorage } from "./codex-storage.js";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { confirmBrainSceneUiAction } from "./brain-scene-auto-confirm.js";
@@ -412,7 +413,7 @@ const desktopErrorCollector = new DesktopErrorCollector({
     return desktopErrorOutbox.capture({
       ...failure,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: failure.context ?? {}
     });
   },
@@ -660,7 +661,7 @@ function collectDesktopErrorEnvironment() {
     osRelease: os.release(),
     architecture: process.arch,
     locale: app.getLocale(),
-    codecnVersion: app.getVersion(),
+    codecnVersion: resolveElectronAppVersion(app),
     packaged: app.isPackaged,
     electronVersion: process.versions.electron ?? "",
     chromiumVersion: process.versions.chrome ?? "",
@@ -673,7 +674,7 @@ async function reportRendererFailure(input: RendererFailureInput) {
   const record = await desktopErrorOutbox.capture({
     ...input,
     deviceId: device.device_id,
-    appVersion: app.getVersion(),
+    appVersion: resolveElectronAppVersion(app),
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
@@ -700,7 +701,7 @@ async function reportRendererDiagnostic(input: import("@codex-forge/protocol").R
       message: input.message,
       stackTrace: input.stackTrace,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: {
         ...(input.context ?? {}),
         environment: collectDesktopErrorEnvironment(),
@@ -1016,7 +1017,7 @@ function collectLiveDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
     device_type: "desktop",
     os_name: process.platform,
     os_version: os.release(),
-    app_version: app.getVersion(),
+    app_version: resolveElectronAppVersion(app),
     mac_id: safeMachineToken(primaryMac, machineGuid || os.hostname()),
     motherboard_id: safeMachineToken(boardSerial, machineGuid, os.hostname()),
     disk_id: safeMachineToken(diskSerial, machineGuid, workspacePath)
@@ -1182,7 +1183,7 @@ async function syncAuthenticatedDesktopControlPlane() {
   const state = await syncDesktopControlPlaneProtocol({
     gatewayOrigin: await readGatewayOrigin(),
     accessToken: authState.access_token,
-    clientVersion: app.getVersion(),
+    clientVersion: resolveElectronAppVersion(app),
     deviceId: device.device_id
   });
   await ensureDirectory(workspaceStateRoot);
@@ -9894,7 +9895,7 @@ function registerIpc() {
               type: "info",
               title: "关于 NewBrain",
               message: "NewBrain",
-              detail: `版本 ${app.getVersion()}\n面向 Windows 的智能编程协作桌面应用。`
+              detail: `版本 ${resolveElectronAppVersion(app)}\n面向 Windows 的智能编程协作桌面应用。`
             })
           }
         ]

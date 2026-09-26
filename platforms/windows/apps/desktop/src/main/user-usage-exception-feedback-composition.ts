@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { app } from "electron";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import type { ModelConfig } from "@codex-forge/protocol";
 import { UserUsageExceptionFeedbackService, type TrustedUsageExceptionContext } from "./user-usage-exception-feedback-service.js";
 import { registerUserUsageExceptionFeedbackIpc } from "./user-usage-exception-feedback-ipc.js";
@@ -46,7 +47,7 @@ export function registerUsageExceptionFeedbackComposition(deps: UsageExceptionFe
         diagnostics: `${diagnostics.slice(-8_000)}\n${debugLog.slice(-8_000)}`.trim(),
         stackTrace: "",
         deviceId: device.device_id,
-        appVersion: app.getVersion(),
+        appVersion: resolveElectronAppVersion(app),
         ownerKey: String(authState?.user?.id || authState?.user?.email || `device:${device.device_id}`)
       };
     },

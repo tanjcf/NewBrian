@@ -73,6 +73,7 @@ import {
   isUsableDesktopDeviceFingerprint,
   resolvePrimaryMacAddress,
   reusePersistedDesktopDeviceFingerprint,
+  shouldRequireLoginCodeLocally,
   type DesktopDeviceFingerprint
 } from "./desktop-device-policy.js";
 import { normalizeModelConfig as normalizeModelConfigValue } from "./model-config-policy.js";
@@ -222,6 +223,7 @@ import {
 import { ensureInternalChatWorkspaceCatalog } from "./internal-chat-workspace-catalog-service.js";
 import { ensureWorkspaceCatalogConda as ensureWorkspaceCatalogCondaValue } from "./workspace-catalog-conda-service.js";
 import { resolveExistingFileInsideRoot } from "./path-security.js";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import { formatWrittenArtifactSummary, type WrittenArtifact } from "./output-summary.js";
 import {
   makeOpenAiYaml,
@@ -434,7 +436,7 @@ import {
   resolveGatewayBaseUrl,
   resolveGatewayOrigin,
 } from "./model-gateway-protocol.js";
-import { selectModelRequestAuth } from "./model-request-auth-policy.js";
+import { resolveDevE2eBearerToken, selectModelRequestAuth } from "./model-request-auth-policy.js";
 import { readModelResponseBody } from "./model-response-stream.js";
 import {
   normalizeMcpServer as normalizeMcpServerConfig,
@@ -1478,7 +1480,7 @@ function collectDesktopErrorEnvironment() {
     osRelease: os.release(),
     architecture: process.arch,
     locale: app.getLocale(),
-    codecnVersion: app.getVersion(),
+    codecnVersion: resolveElectronAppVersion(app),
     packaged: app.isPackaged,
     electronVersion: process.versions.electron ?? "",
     chromiumVersion: process.versions.chrome ?? "",
@@ -1491,7 +1493,7 @@ async function reportRendererFailure(input: RendererFailureInput) {
   const record = await desktopErrorOutbox.capture({
     ...input,
     deviceId: device.device_id,
-    appVersion: app.getVersion(),
+    appVersion: resolveElectronAppVersion(app),
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
@@ -1522,7 +1524,7 @@ async function reportRendererDiagnostic(input: import("@codex-forge/protocol").R
       message: input.message,
       stackTrace: input.stackTrace,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: {
         ...(input.context ?? {}),
         environment: collectDesktopErrorEnvironment(),
@@ -1569,7 +1571,7 @@ const desktopErrorCollector = new DesktopErrorCollector({
     return desktopErrorOutbox.capture({
       ...failure,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: { ...(failure.context ?? {}), environment: collectDesktopErrorEnvironment() }
     });
   },
@@ -1745,7 +1747,7 @@ function collectLiveDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
     workspacePath,
     hostname: os.hostname(),
     osVersion: os.release(),
-    appVersion: app.getVersion(),
+    appVersion: resolveElectronAppVersion(app),
     machineGuid,
     primaryMac,
     boardSerial,
@@ -1846,7 +1848,7 @@ async function syncAuthenticatedDesktopControlPlane(): Promise<DesktopControlPla
         state = await syncDesktopControlPlaneProtocol({
           gatewayOrigin,
           accessToken,
-          clientVersion: app.getVersion(),
+          clientVersion: resolveElectronAppVersion(app),
           deviceId: device.device_id,
           headers: createDesktopAuthHeaders({ accessToken, device })
         });
@@ -1886,7 +1888,7 @@ async function syncAuthenticatedDesktopControlPlane(): Promise<DesktopControlPla
         gateway_origin: new URL(gatewayOrigin).origin,
         protocol_version: "1.0",
         minimum_client_version: "0.1.0",
-        client_version: app.getVersion(),
+        client_version: resolveElectronAppVersion(app),
         synced_at: nowIso(),
         bootstrap: { protocol_version: "1.0", minimum_client_version: "0.1.0" },
         model_config: {
@@ -1926,9 +1928,12 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
       value: accessTokenCredential,
       headers: createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
     } : null,
-    process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? { value: "newbrain-e2e", headers: { Authorization: "Bearer newbrain-e2e" } }
-      : null,
+    (() => {
+      const e2eToken = resolveDevE2eBearerToken();
+      return e2eToken
+        ? { value: e2eToken, headers: { Authorization: `Bearer ${e2eToken}` } }
+        : null;
+    })(),
     apiKeyCredential ? { value: apiKeyCredential, headers: { Authorization: `Bearer ${apiKeyCredential}` } } : null
   ].filter((item): item is { value: string; headers: Record<string, string> } => Boolean(item));
   let remoteModels: unknown[] = [];
@@ -3018,14 +3023,22 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
   if (!email || (!password && !captcha)) {
     await appendAuthAuditLog("login_rejected", "missing_credentials");
     throw new Error(
-      loginFlags.emailCodeLoginEnabled
+      !loginFlags.passwordLoginEnabled
         ? "请输入邮箱，并填写邮箱验证码。"
         : "请输入邮箱，并填写密码或验证码。"
     );
   }
-  if (loginFlags.emailCodeLoginEnabled && !captcha && !isE2eEmailCaptchaBypassEnabled()) {
+  // email_code_login_enabled only means OTP is available. Password login must reach the
+  // server so trusted MAC/IP devices can skip the code; only force code when password login is off.
+  if (
+    shouldRequireLoginCodeLocally({
+      passwordLoginEnabled: loginFlags.passwordLoginEnabled,
+      captcha,
+      e2eBypass: isE2eEmailCaptchaBypassEnabled()
+    })
+  ) {
     await appendAuthAuditLog("login_rejected", "missing_login_code");
-    throw new Error("已启用邮箱验证码，请先获取并填写验证码后再登录。");
+    throw new Error("当前仅支持邮箱验证码登录，请先获取并填写验证码。");
   }
   if (agreement.enabled && !input.agreement_accepted) {
     await appendAuthAuditLog("login_rejected", `${maskEmail(email)} agreement_missing`);
@@ -3178,6 +3191,14 @@ async function loginDesktopWithAlipayQr(input: { agreement_accepted: boolean }):
 
 function normalizeDesktopLoginError(payload: unknown, status: number, loginWithCode: boolean) {
   const rawMessage = extractDesktopAuthErrorMessage(payload, status).toLowerCase();
+  if (
+    rawMessage.includes("auth_login_code_required") ||
+    rawMessage.includes("login requires email verification code") ||
+    rawMessage.includes("email verification code is required") ||
+    rawMessage.includes("检测到新的登录环境")
+  ) {
+    return "检测到新设备或新网络，请先获取并填写邮箱验证码后再登录。";
+  }
   if (status === 401 || rawMessage.includes("unauthorized") || rawMessage.includes("invalid username/email or password")) {
     return loginWithCode ? "邮箱或验证码不正确，请检查后重试。" : "邮箱或密码不正确，请检查后重试。";
   }
@@ -8732,8 +8753,8 @@ async function callModelApi(input: {
   const authState = await readDesktopAuthState();
   const authSelection = selectModelRequestAuth(authState, input.apiKey);
   bearerToken = authSelection.bearerToken;
-  if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-    bearerToken = "newbrain-e2e";
+  if (!bearerToken) {
+    bearerToken = resolveDevE2eBearerToken();
   }
   if (authSelection.useGatewayBaseUrl) baseUrl = await readGatewayBaseUrl();
   if (!baseUrl) {
@@ -9220,9 +9241,7 @@ function createMainWindow() {
 function registerHolonRuntime(runtimeCommandService: RuntimeCommandService, modelChatService: ModelChatService) {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
-      : "";
+    const e2eCredential = !app.isPackaged ? resolveDevE2eBearerToken() : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("HOLON_AUTH_REQUIRED");
     const device = collectDesktopDeviceFingerprint();
@@ -9339,7 +9358,7 @@ async function waitForRemoteApprovalCompletion(requestId: string, signal: AbortS
 }
 
 function registerPluginRepositoryHandlers() {
-  registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: pluginRepositoryRoot, clientVersion: app.getVersion(), getConnection: async () => {
+  registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: pluginRepositoryRoot, clientVersion: resolveElectronAppVersion(app), getConnection: async () => {
       const authState = await readDesktopAuthState(), token = authState?.access_token?.trim() || "";
       if (!token) throw new Error("PLUGIN_AUTH_REQUIRED: 请先登录再使用插件仓库。");
       const device = collectDesktopDeviceFingerprint();
@@ -9365,9 +9384,7 @@ function registerPluginRepositoryHandlers() {
 function createAgentTurnControlPlane() {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
-      : "";
+    const e2eCredential = !app.isPackaged ? resolveDevE2eBearerToken() : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("AGENT_TURN_AUTH_REQUIRED");
     const device = collectDesktopDeviceFingerprint();
@@ -9469,8 +9486,8 @@ function registerIpc() {
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
       if (!bearerToken) throw new Error("媒体生成需要已登录的网关凭证。");
@@ -10306,13 +10323,18 @@ function registerIpc() {
       const authState = await readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (!bearerToken) {
         bearerToken = await refreshDesktopAccessTokenForGateway().catch(() => "");
       }
       if (!bearerToken) {
+        if (process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
+          throw new Error(
+            "E2E Auto 路由缺少凭证：请设置 NEWBRAIN_MODEL_BASE_URL，或启用 NEWBRAIN_E2E_REMOTE_DEBUG_PORT 远程调试会话。"
+          );
+        }
         throw new Error("Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。");
       }
       const gatewayBaseUrl = await readGatewayBaseUrl();
@@ -10499,8 +10521,8 @@ function registerIpc() {
           const authState = await readDesktopAuthState();
           const authSelection = selectModelRequestAuth(authState, "");
           let bearerToken = authSelection.bearerToken;
-          if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-            bearerToken = "newbrain-e2e";
+          if (!bearerToken) {
+            bearerToken = resolveDevE2eBearerToken();
           }
           if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
             baseUrl = await readGatewayBaseUrl();
@@ -10532,8 +10554,8 @@ function registerIpc() {
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-                bearerToken = "newbrain-e2e";
+              if (!bearerToken) {
+                bearerToken = resolveDevE2eBearerToken();
               }
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
                 baseUrl = await readGatewayBaseUrl();
@@ -10579,7 +10601,7 @@ function registerIpc() {
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) bearerToken = "newbrain-e2e";
+              if (!bearerToken) bearerToken = resolveDevE2eBearerToken();
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
               if (!bearerToken) throw new Error("配音生成需要已登录的网关凭证。");
               const { synthesizeMinimaxSyncTts, resolveMinimaxNarrationVoice, MINIMAX_DEFAULT_VOICE_ID } = await import("./minimax-tts-gateway.js");
@@ -10658,8 +10680,8 @@ function registerIpc() {
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-                bearerToken = "newbrain-e2e";
+              if (!bearerToken) {
+                bearerToken = resolveDevE2eBearerToken();
               }
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
                 baseUrl = await readGatewayBaseUrl();
@@ -10909,8 +10931,8 @@ function registerIpc() {
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
         baseUrl = await readGatewayBaseUrl();

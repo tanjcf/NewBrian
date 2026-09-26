@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BrowserWindow, app } from "electron";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import { desktopIpcChannels, type DesktopAppUpdateProgress } from "@codex-forge/protocol";
 import {
   buildDeferredMacZipApplyScript,
@@ -95,7 +96,7 @@ export function isDesktopUpdateExitPending(): boolean {
 export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompositionDeps) {
   const downloadDir = () => join(app.getPath("userData"), "updates");
   const service = new DesktopAppUpdateService({
-    getCurrentVersion: () => app.getVersion(),
+    getCurrentVersion: () => resolveElectronAppVersion(app),
     getExecutablePath: () => app.getPath("exe"),
     readCachedRelease: async () => controlPlaneCacheRelease(await deps.readControlPlaneState()),
     refreshRelease: async () => {

@@ -143,6 +143,21 @@ export function sanitizeDesktopHeaderValue(value: string, fallback = "desktop") 
   return normalized || fallback;
 }
 
+/**
+ * Local gate before calling spring-app password login.
+ * `email_code_login_enabled` must not force a captcha here — the server skips OTP for
+ * previously seen MAC or IP, and only requires a code for brand-new environments.
+ */
+export function shouldRequireLoginCodeLocally(input: {
+  passwordLoginEnabled: boolean;
+  captcha: string;
+  e2eBypass?: boolean;
+}): boolean {
+  if (input.e2eBypass) return false;
+  if (input.captcha.trim()) return false;
+  return !input.passwordLoginEnabled;
+}
+
 export function createDesktopAuthHeaders(input: {
   accessToken?: string;
   device: DesktopDeviceFingerprint;

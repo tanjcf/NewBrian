@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 
 const protocol = await import(new URL("./model-gateway-protocol.ts", import.meta.url).href);
@@ -36,8 +36,10 @@ test("selects model credentials with explicit secure precedence", () => {
 
   const previousBypass = process.env.NEWBRAIN_E2E_AUTH_BYPASS;
   const previousBaseUrl = process.env.NEWBRAIN_MODEL_BASE_URL;
+  const previousDebugPort = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
   process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
   process.env.NEWBRAIN_MODEL_BASE_URL = "http://127.0.0.1:8790/v1";
+  delete process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
   try {
     assert.deepEqual(authPolicy.selectModelRequestAuth({
       mode: "desktop_token", access_token: " live-user-token "
@@ -54,11 +56,71 @@ test("selects model credentials with explicit secure precedence", () => {
     else process.env.NEWBRAIN_E2E_AUTH_BYPASS = previousBypass;
     if (previousBaseUrl === undefined) delete process.env.NEWBRAIN_MODEL_BASE_URL;
     else process.env.NEWBRAIN_MODEL_BASE_URL = previousBaseUrl;
+    if (previousDebugPort === undefined) delete process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
+    else process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT = previousDebugPort;
   }
 
   assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, " configured ").source, "configured_api_key");
   assert.equal(authPolicy.selectModelRequestAuth({ mode: "session_cookie", session_cookie: " cookie " }, "").source, "none");
   assert.equal(authPolicy.selectModelRequestAuth(null, " ").source, "none");
+});
+
+test("E2E remote-debug session injects Auto bearer without MODEL_BASE_URL env", () => {
+  const previousBypass = process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+  const previousBaseUrl = process.env.NEWBRAIN_MODEL_BASE_URL;
+  const previousMediaUrl = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL;
+  const previousDebugPort = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
+  const previousToken = process.env.NEWBRAIN_E2E_AUTH_TOKEN;
+  process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
+  process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT = "9555";
+  delete process.env.NEWBRAIN_MODEL_BASE_URL;
+  delete process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL;
+  delete process.env.NEWBRAIN_E2E_AUTH_TOKEN;
+  try {
+    assert.equal(authPolicy.isDevE2eAuthBypassActive(), true);
+    assert.equal(authPolicy.resolveDevE2eBearerToken(), "newbrain-e2e");
+    assert.deepEqual(authPolicy.selectModelRequestAuth(null, ""), {
+      source: "dev_e2e_bypass",
+      bearerToken: "newbrain-e2e",
+      useGatewayBaseUrl: true
+    });
+  } finally {
+    if (previousBypass === undefined) delete process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+    else process.env.NEWBRAIN_E2E_AUTH_BYPASS = previousBypass;
+    if (previousBaseUrl === undefined) delete process.env.NEWBRAIN_MODEL_BASE_URL;
+    else process.env.NEWBRAIN_MODEL_BASE_URL = previousBaseUrl;
+    if (previousMediaUrl === undefined) delete process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL;
+    else process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL = previousMediaUrl;
+    if (previousDebugPort === undefined) delete process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
+    else process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT = previousDebugPort;
+    if (previousToken === undefined) delete process.env.NEWBRAIN_E2E_AUTH_TOKEN;
+    else process.env.NEWBRAIN_E2E_AUTH_TOKEN = previousToken;
+  }
+});
+
+test("E2E bypass alone without gateway env or remote-debug does not inject bearer", () => {
+  const previousBypass = process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+  const previousBaseUrl = process.env.NEWBRAIN_MODEL_BASE_URL;
+  const previousMediaUrl = process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL;
+  const previousDebugPort = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
+  process.env.NEWBRAIN_E2E_AUTH_BYPASS = "1";
+  delete process.env.NEWBRAIN_MODEL_BASE_URL;
+  delete process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL;
+  delete process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
+  try {
+    assert.equal(authPolicy.isDevE2eAuthBypassActive(), false);
+    assert.equal(authPolicy.resolveDevE2eBearerToken(), "");
+    assert.equal(authPolicy.selectModelRequestAuth(null, "").source, "none");
+  } finally {
+    if (previousBypass === undefined) delete process.env.NEWBRAIN_E2E_AUTH_BYPASS;
+    else process.env.NEWBRAIN_E2E_AUTH_BYPASS = previousBypass;
+    if (previousBaseUrl === undefined) delete process.env.NEWBRAIN_MODEL_BASE_URL;
+    else process.env.NEWBRAIN_MODEL_BASE_URL = previousBaseUrl;
+    if (previousMediaUrl === undefined) delete process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL;
+    else process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL = previousMediaUrl;
+    if (previousDebugPort === undefined) delete process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT;
+    else process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT = previousDebugPort;
+  }
 });
 
 test("builds wire-specific model request payloads", () => {

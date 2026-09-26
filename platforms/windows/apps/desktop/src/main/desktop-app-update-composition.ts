@@ -12,6 +12,7 @@ import {
 import { buildDeferredUlitZipApplyScript } from "./desktop-app-update-patch.js";
 import { registerDesktopAppUpdateIpc } from "./desktop-app-update-ipc.js";
 import { buildMsiUpdateRunner } from "./desktop-app-update-runner.js";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 
 interface DesktopAppUpdateCompositionDeps {
   readControlPlaneState: () => Promise<unknown>;
@@ -181,7 +182,7 @@ export function isDesktopUpdateExitPending(): boolean {
 export function registerDesktopAppUpdateComposition(deps: DesktopAppUpdateCompositionDeps) {
   const downloadDir = () => join(app.getPath("userData"), "updates");
   const service = new DesktopAppUpdateService({
-    getCurrentVersion: () => app.getVersion(),
+    getCurrentVersion: () => resolveElectronAppVersion(app),
     getExecutablePath: () => app.getPath("exe"),
     readCachedRelease: async () => {
       // Disk-only: never await the network here. Settings "软件版本" must render

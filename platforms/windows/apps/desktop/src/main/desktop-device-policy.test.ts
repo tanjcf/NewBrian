@@ -132,3 +132,35 @@ test("builds a fingerprint while exposing only hashed hardware identifiers", () 
   assert.equal(fingerprint.motherboard_id.length, 48);
   assert.equal(fingerprint.disk_id.length, 48);
 });
+
+test("password login is not blocked locally just because email OTP is available", () => {
+  assert.equal(
+    policy.shouldRequireLoginCodeLocally({
+      passwordLoginEnabled: true,
+      captcha: ""
+    }),
+    false
+  );
+  assert.equal(
+    policy.shouldRequireLoginCodeLocally({
+      passwordLoginEnabled: false,
+      captcha: ""
+    }),
+    true
+  );
+  assert.equal(
+    policy.shouldRequireLoginCodeLocally({
+      passwordLoginEnabled: false,
+      captcha: "123456"
+    }),
+    false
+  );
+  assert.equal(
+    policy.shouldRequireLoginCodeLocally({
+      passwordLoginEnabled: false,
+      captcha: "",
+      e2eBypass: true
+    }),
+    false
+  );
+});
