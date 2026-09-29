@@ -8,6 +8,7 @@ import { PolicyEngine } from "./policy-engine.js";
 import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
 import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { UserShadow } from "./user-shadow.js";
+import { updateCompanionMemoryFromExchange } from "./companion-memory.js";
 import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 import {
   emptyDeliveryPreferences,
@@ -487,6 +488,7 @@ export class LocalAgentRuntime {
       this.projectDeliveryPreferences = await this.userShadow.readDeliveryPreferences().catch(() => emptyDeliveryPreferences());
     }
     this.turnDeliveryPreferences = null;
+    await updateCompanionMemoryFromExchange(this.skillRegistry.roots, input);
     await this.skillRegistry.discover();
     this.sessionMachine.events.push({
       id: makeId("shadow-event"),

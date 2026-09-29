@@ -296,8 +296,11 @@ async function generatePdf(input, target) {
   });
 }
 
-async function generatePptx(input, target, workspaceRoot) {
-  await writePptxDeck(input, target, sections, { workspaceRoot });
+async function generatePptx(input, target, workspaceRoot, options = {}) {
+  await writePptxDeck(input, target, sections, {
+    workspaceRoot,
+    onSlideWritten: options.onSlideWritten
+  });
   // Companion web deck for Cursor-style browser presentation / side preview.
   const companion = target.replace(/\.pptx$/i, ".slides.html");
   if (companion !== target) {
@@ -523,7 +526,7 @@ function defaultArtifactTargetPath(title, format) {
 export async function generateArtifact(input, target, options = {}) {
   await fs.mkdir(path.dirname(target), { recursive: true });
   if (input.format === "pdf") await generatePdf(input, target);
-  if (input.format === "pptx") await generatePptx(input, target, options.workspacePath);
+  if (input.format === "pptx") await generatePptx(input, target, options.workspacePath, options);
   if (input.format === "html") await generateHtml(input, target);
   if (input.format === "xlsx") await generateXlsx(input, target);
   if (input.format === "docx") await generateDocx(input, target);

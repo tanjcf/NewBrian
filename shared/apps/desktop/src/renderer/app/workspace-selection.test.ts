@@ -354,6 +354,37 @@ test("opening files while BRAIN project panel is visible uses the right-hand pro
   assert.doesNotMatch(selectSearch, /setPreviewPlacement\("center"\)/);
 });
 
+test("markdown files open as a scrollable rendered preview", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const markdownBlock = source.slice(source.indexOf("isMarkdownPreviewFile(searchFilePreview)"), source.indexOf("workspace-artifact-text-shell"));
+  assert.match(source, /function isMarkdownPreviewFile/);
+  assert.match(markdownBlock, /data-testid="workspace-markdown-preview"/);
+  assert.match(markdownBlock, /<MarkdownMessage/);
+  assert.doesNotMatch(markdownBlock, /preview-line/);
+  assert.match(styles, /\.workspace-artifact-markdown[\s\S]*overflow:\s*auto/);
+  assert.match(styles, /\.workspace-artifact-text-shell,\s*\n\.workspace-artifact-markdown[\s\S]*overflow:\s*auto/);
+});
+
+test("pptx board thumbnails render scaled slide content previews", () => {
+  const source = readFileSync(new URL("./artifact-viewer-registry.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(source, /function PptxSlideThumb/);
+  assert.match(source, /renderThumbnailToContainer/);
+  assert.match(source, /pptx-thumb-preview/);
+  assert.match(styles, /\.pptx-thumb-preview[\s\S]*pointer-events:\s*none/);
+});
+
+test("pptx artifact creation auto-opens Tools preview and force-reloads as slides grow", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const notify = source.slice(source.indexOf("onDataWorkspaceUpdated"), source.indexOf("setDocumentAnnotationCandidate(null)"));
+  assert.match(notify, /artifact\\.create\|document\\.create_/);
+  assert.match(notify, /forceReload:\s*true/);
+  assert.match(notify, /setBrainSceneTab\("preview"\)/);
+  assert.match(source, /location\?\.forceReload/);
+  assert.match(readFileSync(new URL("./document-annotation-policy.ts", import.meta.url), "utf8"), /isPptxEditableShapeAnchor/);
+});
+
 test("docx preview fills the side panel and scrolls instead of using a fixed-height iframe", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");

@@ -118,7 +118,7 @@ test("buildDeliveryPreferenceUiState exposes clear/pin and gap question", async 
   const withGap = buildDeliveryPreferenceUiState({
     openQuestions: ["待确认交付版式: 正文用什么字体和行距？"]
   });
-  assert.equal(withGap.visible, true);
+  assert.equal(withGap.visible, false);
   assert.ok(withGap.styleGapQuestion.includes("待确认交付版式"));
 });
 

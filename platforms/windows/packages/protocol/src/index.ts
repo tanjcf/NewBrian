@@ -968,6 +968,7 @@ export const desktopIpcChannels = {
     openLocation: "phase1:open-workspace-location",
     addThread: "phase1:add-workspace-thread",
     forkThread: "phase1:fork-workspace-thread",
+    rewindThread: "phase1:rewind-workspace-thread",
     renameThread: "phase1:rename-workspace-thread",
     archiveThread: "phase1:archive-workspace-thread",
     deleteThread: "phase1:delete-workspace-thread",
@@ -1319,6 +1320,9 @@ export interface AddWorkspaceThreadInput extends WorkspaceIdInput {
   scope?: "project" | "chat";
   /** Scene affinity when creating INTERNAL_CHAT / standalone chat threads. */
   brainWorkspaceKey?: import("./workspace-types.js").BrainWorkspaceKey;
+}
+export interface RewindWorkspaceThreadInput extends WorkspaceThreadInput {
+  userMessageId: string;
 }
 export interface ForkWorkspaceThreadInput extends WorkspaceIdInput {
   sourceThreadId: string;

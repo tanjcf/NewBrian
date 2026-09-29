@@ -1,12 +1,27 @@
 import type { BrainAnnotationDto } from "@codex-forge/protocol";
 import type { DocumentAnchor, DocumentFormat, DocumentRect, DocumentViewport, DocxDocumentAnchor, PdfDocumentAnchor, PptxDocumentAnchor, TextDocumentAnchor, XlsxDocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import { unprojectDocumentRect } from "@codex-forge/protocol/document-anchor";
-import { rectOverlapArea, resolveNearestChunkAnchor } from "@codex-forge/protocol/document-chunk";
+import { rectOverlapArea, resolveNearestChunkAnchor, resolveNearestProjectedAnchor } from "@codex-forge/protocol/document-chunk";
 import { annotationPageNumber, buildMarkingAnchor, linesFromPreviewRect } from "@codex-forge/protocol/document-marking";
 
 const PPTX_SLIDE_BASIS = { width: 12_192_000, height: 6_858_000 };
 export const MIN_DOCUMENT_MARK_SIZE = 6;
 const CHUNK_ANCHOR_FORMATS = new Set<DocumentFormat>(["pdf", "docx", "pptx", "markdown", "txt", "xlsx"]);
+
+function isPptxSlideChunkAnchor(anchor: DocumentAnchor) {
+  if (anchor.format !== "pptx") return false;
+  if (anchor.chunk) return true;
+  if (anchor.locator.kind !== "pptx-shape") return false;
+  return /^slide-chunk-/i.test(String(anchor.locator.shapeId || ""));
+}
+
+function isPptxEditableShapeAnchor(anchor: DocumentAnchor): anchor is PptxDocumentAnchor {
+  if (anchor.format !== "pptx" || isPptxSlideChunkAnchor(anchor)) return false;
+  if (anchor.locator.kind !== "pptx-shape") return false;
+  const shapeId = String(anchor.locator.shapeId || "").trim();
+  if (!shapeId || /^mark-/i.test(shapeId) || /^slide-chunk-/i.test(shapeId)) return false;
+  return Boolean(anchor.rect && anchor.rect.width > 0 && anchor.rect.height > 0 && anchor.transform);
+}
 
 export function documentAnchorsNeedChunkRefresh(format: DocumentFormat | string | undefined, anchors: DocumentAnchor[]): boolean {
   if (!format || !CHUNK_ANCHOR_FORMATS.has(format as DocumentFormat)) return false;
@@ -163,8 +178,15 @@ export function buildPptxMarkingAnchor(input: { rect: DocumentRect; viewport: Do
 
 /** Resolve the nearest ingested PPTX shape/chunk anchor, or create a free-form mark anchor. */
 export function resolvePptxAnchorFromMark(rect: DocumentRect, viewport: DocumentViewport, slide: number, anchors: DocumentAnchor[]): PptxDocumentAnchor {
-  const structural = resolveNearestChunkAnchor(rect, viewport, anchors, { page: slide, format: "pptx" });
-  if (structural && structural.format === "pptx") return structural as PptxDocumentAnchor;
+  const pageAnchors = anchors.filter((anchor) =>
+    anchor.format === "pptx"
+    && ("page" in anchor ? Number(anchor.page) === slide : true)
+  );
+  // Prefer real editable shapes over full-slide chunks so revision can rewrite OOXML text.
+  const shapeHit = resolveNearestProjectedAnchor(rect, viewport, pageAnchors, isPptxEditableShapeAnchor);
+  if (shapeHit && shapeHit.format === "pptx") return shapeHit as PptxDocumentAnchor;
+  const chunkHit = resolveNearestProjectedAnchor(rect, viewport, pageAnchors, isPptxSlideChunkAnchor);
+  if (chunkHit && chunkHit.format === "pptx") return chunkHit as PptxDocumentAnchor;
   return buildPptxMarkingAnchor({ rect, viewport, slide });
 }
 
@@ -348,7 +370,15 @@ export function formatAnnotationLocation(annotation: BrainAnnotationDto): string
   }
   if (annotation.anchor.format === "pptx") {
     const page = annotationPageNumber(annotation.anchor) ?? 1;
-    return [`第 ${page} 页幻灯片`, markLabel, headingLabel].filter(Boolean).join(" · ")
+    const shapeId = annotation.anchor.locator.kind === "pptx-shape"
+      ? String(annotation.anchor.locator.shapeId || "").trim()
+      : "";
+    const shapeLabel = shapeId && !/^mark-/i.test(shapeId) && !/^slide-chunk-/i.test(shapeId)
+      ? `形状 ${shapeId}`
+      : null;
+    const selected = annotation.selectedText?.trim() || annotation.anchor.selectedText?.trim() || "";
+    const textLabel = selected ? `「${selected.slice(0, 48)}${selected.length > 48 ? "…" : ""}」` : null;
+    return [`第 ${page} 页幻灯片`, shapeLabel, markLabel, headingLabel, textLabel].filter(Boolean).join(" · ")
       || annotation.anchor.anchorId;
   }
   const page = annotationPageNumber(annotation.anchor);

@@ -6,7 +6,11 @@ import {
   type DesktopWebSearchItem,
   type DesktopWebSearchResult
 } from "./desktop-web-search-client.ts";
-import { attachDesktopWebSearchCitations, formatDesktopWebSearchUnavailable } from "./desktop-web-search-policy.ts";
+import {
+  attachDesktopWebSearchCitations,
+  describeDesktopWebSearchFailure,
+  formatDesktopWebSearchUnavailable
+} from "./desktop-web-search-policy.ts";
 
 interface ExternalToolRuntime {
   unregisterExternalTools(namespace?: string): unknown;
@@ -21,9 +25,15 @@ const FETCH_WARNING_WITHOUT_READ = 3;
 const FETCH_BLOCK_WITHOUT_BODY = 5;
 const IDENTICAL_URL_BLOCK = 3;
 
+// The agent loop only forwards ok/output to the model and counts ok=true as
+// progress; content/details stay for citation finalization.
 function toolResult(payload: Record<string, unknown>, isError = false) {
+  const text = JSON.stringify(payload);
   return {
-    content: [{ type: "text", text: JSON.stringify(payload) }],
+    ok: !isError,
+    exitCode: isError ? 1 : 0,
+    output: text,
+    content: [{ type: "text", text }],
     details: payload,
     ...(isError ? { isError: true } : {})
   };
@@ -56,7 +66,7 @@ export function registerDesktopWebSearchTools(
     {
       name: "news_search_free",
       title: "市场新闻搜索",
-      description: "Search market/finance news with free sources first through the company Spring orchestrator (AKShare → Baidu standard/enhanced → Bocha). Automatically upgrades to paid search only when free news is insufficient. May include TopK page fetches. Prefer this for latest stock news, announcements, and prices. Never call for greetings or casual chat.",
+      description: "Stock and finance news only: prices, announcements, earnings, indexes, and listed-company news. Free finance news first, then one finance search engine. Do not call for marketing plans, campaigns, copywriting, short-video cases, or general web questions. Never call for greetings.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -80,9 +90,10 @@ export function registerDesktopWebSearchTools(
           count: typeof input.count === "number" ? input.count : undefined
         });
         if (result.status === "unavailable" || !result.items.length) {
+          const failure = describeDesktopWebSearchFailure(result.message);
           return toolResult({
             status: "unavailable",
-            code: "WEB_SEARCH_UNAVAILABLE",
+            code: failure.code,
             message: formatDesktopWebSearchUnavailable(result.message || "No usable news sources were returned."),
             searchedAt: result.searchedAt,
             decision: result.decision,
@@ -127,7 +138,7 @@ export function registerDesktopWebSearchTools(
         return toolResult({
           status: "unavailable",
           code,
-          message: formatDesktopWebSearchUnavailable(message),
+          message: formatDesktopWebSearchUnavailable(message, code),
           items: [],
           fetches: []
         }, true);
@@ -139,7 +150,7 @@ export function registerDesktopWebSearchTools(
     {
       name: "web.search_paid",
       title: "全网付费搜索",
-      description: "Company web search via Spring orchestrator (Baidu standard/enhanced then Bocha). Use only when the user explicitly asks for full-web search or news_search_free is insufficient. Company API keys stay server-side. Never call for greetings or casual chat.",
+      description: "Scene web search. Marketing plans, cases, copy, Xiaohongshu, Douyin, and campaigns use Baidu standard, then Quark only if Baidu returns fewer than two links. Policy uses Baidu then Zhipu search_pro. Open questions use Baidu then Bocha. Do not call news_search_free for these. Call this tool once. Never call for greetings.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -163,14 +174,18 @@ export function registerDesktopWebSearchTools(
           count: typeof input.count === "number" ? input.count : undefined
         });
         if (!result.items.length) {
-          const emptyCode = result.provider === "none" ? "WEB_SEARCH_UNAVAILABLE" : "WEB_SEARCH_EMPTY";
+          const failure = describeDesktopWebSearchFailure(
+            result.message || "",
+            result.provider === "none" ? "WEB_SEARCH_UNAVAILABLE" : "WEB_SEARCH_EMPTY"
+          );
           return toolResult({
             status: "unavailable",
-            code: emptyCode,
+            code: failure.code,
             message: formatDesktopWebSearchUnavailable(
-              result.provider === "none"
+              result.message || (result.provider === "none"
                 ? "Web search returned no usable sources."
-                : "Paid web search returned no source URLs."
+                : "Paid web search returned no source URLs."),
+              failure.code
             ),
             searchedAt: result.searchedAt,
             provider: result.provider,
@@ -203,7 +218,7 @@ export function registerDesktopWebSearchTools(
         return toolResult({
           status: "unavailable",
           code,
-          message: formatDesktopWebSearchUnavailable(message),
+          message: formatDesktopWebSearchUnavailable(message, code),
           items: []
         }, true);
       }

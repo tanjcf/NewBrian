@@ -42,6 +42,13 @@ import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
+import { executeDelegatedModelStep } from "./delegated-model-step.js";
+import { ModelChatStepService } from "./model-chat-step-service.js";
+import {
+  containsPrivatePlanningNarration,
+  extractPrivatePlanningNarration,
+  sanitizeVisibleModelContent
+} from "./model-stream-visibility.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
 import { decodeMcpMessages, encodeMcpMessage } from "./mcp-framing.js";
 import {
@@ -7332,14 +7339,33 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
       content: currentTask.instruction,
       createdAt: nowIso()
     };
-    const response = await callModelApi({
-      ...config.llm,
-      systemPrompt: [
-        config.llm.systemPrompt,
-        `You are the ${currentTask.owner} child agent for parent thread ${currentTask.parentThreadId}.`,
-        "Work only on the bounded delegated instruction. Return evidence and a concise result for the parent agent."
-      ].filter(Boolean).join("\n\n"),
-      messages: [...state.messages.filter((message) => message.role !== "tool"), userMessage]
+    const childSystemPrompt = [
+      config.llm.systemPrompt,
+      `You are the ${currentTask.owner} child agent for parent thread ${currentTask.parentThreadId}.`,
+      "Work only on the bounded delegated instruction. Return evidence and a concise result for the parent agent."
+    ].filter(Boolean).join("\n\n");
+    const childMessages = [...state.messages.filter((message) => message.role !== "tool"), userMessage];
+    const childAbortController = new AbortController();
+    const response = await executeDelegatedModelStep(desktopModelChatStepService, {
+      modelInput: {
+        ...config.llm,
+        requestId: childThread.id,
+        workspaceId: workspace.id,
+        threadId: childThread.id,
+        systemPrompt: childSystemPrompt,
+        messages: []
+      },
+      messages: childMessages,
+      tools: [],
+      systemPrompt: childSystemPrompt,
+      abortSignal: childAbortController.signal,
+      requestId: childThread.id,
+      onReasoningDelta: () => undefined,
+      onRetry: (requestId, attempt, maxAttempts, delayMs) => {
+        void appendDesktopDebugLog(
+          `child model step retry child=${childThread.id} requestId=${requestId} attempt=${attempt} maxAttempts=${maxAttempts} delayMs=${delayMs}`
+        );
+      }
     });
     const assistantMessage: ChatMessage = {
       id: makeId("msg"),
@@ -9737,6 +9763,17 @@ function readModelUsageTokens(usage: unknown) {
   const output = Number(value.output_tokens ?? value.completion_tokens ?? value.outputTokens ?? 0);
   return Math.max(0, Math.trunc((Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0)));
 }
+function createDesktopModelChatStepService() {
+  return new ModelChatStepService({
+    callModel: (stepInput) => callModelApi(stepInput as Parameters<typeof callModelApi>[0]),
+    isRetryableError: isRetryableModelGatewayError,
+    readUsageTokens: (usage) => readModelUsageTokens(usage),
+    containsPrivatePlanning: containsPrivatePlanningNarration,
+    sanitizeVisibleContent: sanitizeVisibleModelContent,
+    extractPlanningNarration: extractPrivatePlanningNarration
+  });
+}
+const desktopModelChatStepService = createDesktopModelChatStepService();
 
 async function scheduleAutomaticUserKnowledgeSync(input?: {
   projectWorkspacePath?: string;

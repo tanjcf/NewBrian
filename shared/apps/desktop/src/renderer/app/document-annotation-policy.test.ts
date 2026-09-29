@@ -105,11 +105,24 @@ test("resolves pptx marks to ingested shapes or free-form slide anchors", () => 
     page: 1,
     locator: { kind: "pptx-shape" as const, slide: 1, shapeId: "8", zIndex: 2 },
     rect: { x: 0, y: 0, width: 6_096_000, height: 1_000_000 },
-    transform: { coordinateSpace: "slide-emu" as const, basisWidth: 12_192_000, basisHeight: 6_858_000, scale: 1 }
+    transform: { coordinateSpace: "slide-emu" as const, basisWidth: 12_192_000, basisHeight: 6_858_000, scale: 1 },
+    selectedText: "复购率 92%"
+  };
+  const slideChunk = {
+    anchorId: "pptx:s:1:chunk:0",
+    objectId: "pptx:s:1:chunk:0",
+    format: "pptx" as const,
+    page: 1,
+    locator: { kind: "pptx-shape" as const, slide: 1, shapeId: "slide-chunk-0", zIndex: 0 },
+    rect: { x: 0, y: 0, width: 12_192_000, height: 6_858_000 },
+    transform: { coordinateSpace: "slide-emu" as const, basisWidth: 12_192_000, basisHeight: 6_858_000, scale: 1 },
+    selectedText: "复购率 92%\n整页文本",
+    chunk: { chunkIndex: 0, pageOrSheet: 1, headingPath: ["复购率 92%"] }
   };
   const viewport = { width: 960, height: 540 };
-  const overlapping = resolvePptxAnchorFromMark({ x: 0, y: 0, width: 480, height: 80 }, viewport, 1, [ingested]);
+  const overlapping = resolvePptxAnchorFromMark({ x: 0, y: 0, width: 480, height: 80 }, viewport, 1, [slideChunk, ingested]);
   assert.equal(overlapping.objectId, "pptx:s:1:shape:8");
+  assert.equal(overlapping.locator.kind === "pptx-shape" ? overlapping.locator.shapeId : "", "8");
   const freeForm = buildPptxMarkingAnchor({ rect: { x: 700, y: 400, width: 120, height: 60 }, viewport, slide: 2 });
   assert.equal(freeForm.page, 2);
   assert.match(freeForm.objectId, /^pptx:s:2:mark:/);

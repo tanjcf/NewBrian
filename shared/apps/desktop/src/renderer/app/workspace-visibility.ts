@@ -172,6 +172,6 @@ export function projectSearchResults(
     if (!result.workspaceId) return true;
     const workspace = projectWorkspacesById.get(result.workspaceId);
     if (!workspace) return false;
-    return !result.threadId || workspace.threads.some((thread) => thread.id === result.threadId);
+    return !result.threadId || workspace.threads.some((thread) => thread.id === result.threadId && isUserVisibleThread(thread));
   });
 }

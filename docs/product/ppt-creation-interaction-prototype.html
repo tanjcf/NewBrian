@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BRAIN 演示文稿交互原型</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #6b7280;
+    --line: #e3e6eb;
+    --accent: #d88621;
+    --accent-soft: #fff6eb;
+    --blue: #1d4ed8;
+    --blue-soft: #eef4ff;
+    --paper: #f5f0e8;
+    --seal: #b8292e;
+    --ok: #0f766e;
+    --shadow: 0 10px 30px rgba(20, 24, 32, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  .app { height: 100%; display: grid; grid-template-rows: 56px 1fr 72px; }
+  header.appbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--ink); color: white; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  header.appbar strong { font-size: 14px; }
+  header.appbar span.sub { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  .pill { font-size: 12px; color: var(--muted); background: #f3f4f6; border-radius: 999px; padding: 4px 10px; }
+  main { display: grid; grid-template-columns: 420px 1fr; min-height: 0; }
+  main.wide { grid-template-columns: 1fr; }
+  main.wide .chat { display: none; }
+  .chat, .stage { min-height: 0; }
+  .chat { display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); }
+  .thread { flex: 1; overflow: auto; padding: 18px 16px 8px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble { max-width: 92%; padding: 10px 12px; border-radius: 12px; line-height: 1.55; font-size: 13px; }
+  .bubble.user { align-self: flex-end; background: #1f2430; color: white; border-bottom-right-radius: 4px; }
+  .bubble.agent { align-self: flex-start; background: #f6f7f9; border-bottom-left-radius: 4px; }
+  .card {
+    align-self: stretch; background: white; border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; box-shadow: var(--shadow); font-size: 13px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .card p { margin: 0 0 8px; color: #374151; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); }
+  .tag.warn { background: var(--accent-soft); color: #9a5b10; }
+  ol.outline { margin: 0; padding-left: 18px; color: #374151; }
+  ol.outline li { margin: 3px 0; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .btn {
+    border: 1px solid var(--line); background: white; border-radius: 8px; padding: 7px 10px; font-size: 13px;
+  }
+  .btn.primary { background: var(--ink); color: white; border-color: var(--ink); }
+  .btn.ghost { background: transparent; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .filechip {
+    display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; background: #fafafa; font-size: 13px;
+  }
+  .filechip b { font-weight: 600; }
+  .filechip small { color: var(--muted); }
+  .composer { border-top: 1px solid var(--line); padding: 10px; display: flex; gap: 8px; }
+  .composer input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .stage { display: flex; flex-direction: column; min-width: 0; }
+  .previewbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .preview-tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+  .previewbar .name { font-size: 13px; font-weight: 600; }
+  .previewbar .name small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 168px 1fr; gap: 12px; padding: 12px 14px 14px; }
+  .thumbs { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: auto; }
+  .thumbs { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .thumb {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--paper); aspect-ratio: 16/9;
+    position: relative; padding: 0; text-align: left;
+  }
+  .thumb { cursor: grab; touch-action: none; }
+  .thumb.active { outline: 2px solid var(--ink); }
+  .thumb.dragging { opacity: 0.72; outline: 2px dashed var(--ink); }
+  .thumb.hidden { opacity: 0.4; }
+  .thumb i { position: absolute; left: 6px; bottom: 4px; font-style: normal; font-size: 10px; color: #6b6258; }
+  .canvaswrap {
+    position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 12px;
+    background-color: #d5d6da;
+    background-image: radial-gradient(circle, #9a9da4 1.15px, transparent 1.25px);
+    background-size: 16px 16px;
+  }
+  .slide {
+    position: absolute; left: 50%; top: 50%; width: min(86%, 960px); aspect-ratio: 16 / 9;
+    background: var(--paper); border-radius: 12px; overflow: visible;
+    box-shadow: var(--shadow); user-select: none; touch-action: none;
+    transform: translate(calc(-50% + var(--px, 0px)), calc(-50% + var(--py, 0px)));
+  }
+  .slide.is-hidden { opacity: 0.38; }
+  .slide.marking { cursor: crosshair; }
+  .slide-inner { position: absolute; inset: 0; }
+  .seal-char { position: absolute; left: 7%; bottom: 10%; color: var(--seal); font-family: "Songti SC", "Noto Serif SC", serif; font-size: 92px; line-height: 1; }
+  .vbrand { position: absolute; right: 7%; top: 12%; writing-mode: vertical-rl; letter-spacing: 0.35em; font-size: 13px; color: var(--ink); }
+  .center-copy { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .center-copy strong { font-family: "Songti SC", "Noto Serif SC", serif; font-weight: 400; font-size: 48px; }
+  .center-copy em { display: block; margin-top: 10px; font-style: normal; color: #5c564e; font-size: 16px; }
+  .kpi { position: absolute; inset: 18% 8%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: center; }
+  .kpi article { text-align: center; }
+  .kpi b { display: block; font-family: "Songti SC", "Noto Serif SC", serif; font-weight: 400; font-size: 36px; }
+  .kpi span { color: #5c564e; font-size: 14px; }
+  .kpi article.hot { position: relative; }
+  .scroll { position: absolute; inset: 22% 8%; display: flex; flex-direction: row-reverse; gap: 18px; }
+  .scroll article { flex: 1; border-top: 1px solid #1a1a1a22; padding-top: 12px; text-align: right; }
+  .scroll b { display: block; font-family: "Songti SC", serif; font-weight: 400; margin-bottom: 8px; }
+  .scroll span { color: #5c564e; font-size: 13px; }
+  .markbox {
+    position: absolute; border: 2px solid var(--accent); background: rgba(216, 134, 33, 0.12); border-radius: 4px; pointer-events: none;
+  }
+  .marklabel { position: absolute; background: var(--accent); color: white; font-size: 11px; padding: 1px 6px; border-radius: 999px; }
+  .markprompt {
+    position: absolute; z-index: 4; display: flex; align-items: center; gap: 6px;
+    min-width: 240px; max-width: 92%; height: 40px; padding: 4px 6px 4px 14px;
+    background: white; border-radius: 999px; box-shadow: 0 8px 24px rgba(20, 24, 32, 0.12);
+  }
+  .markprompt input { flex: 1; border: 0; outline: none; background: transparent; font-size: 13px; min-width: 0; }
+  .markprompt button {
+    width: 28px; height: 28px; border: 0; border-radius: 999px; background: #f3f4f6; color: #3f3f46;
+    display: grid; place-items: center;
+  }
+  .markprompt button.send { background: #ececee; }
+  .markprompt button svg { width: 14px; height: 14px; }
+  footer.steps { display: flex; gap: 8px; align-items: center; padding: 0 14px; background: var(--panel); border-top: 1px solid var(--line); overflow: auto; }
+  footer.steps button.step { border: 0; background: transparent; color: var(--muted); padding: 8px 10px; border-radius: 8px; white-space: nowrap; }
+  footer.steps button.step.on { background: #f3f4f6; color: var(--ink); font-weight: 600; }
+  .empty { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .floatbar { position: absolute; z-index: 3; display: flex; align-items: center; }
+  .floatbar {
+    left: 50%; top: 12px; transform: translateX(-50%);
+    gap: 2px; padding: 4px 6px; background: white; border-radius: 999px;
+    box-shadow: 0 6px 18px rgba(20, 24, 32, 0.08); border: 1px solid #eee;
+  }
+  .iconbtn {
+    width: 32px; height: 32px; border: 0; border-radius: 999px; background: transparent; color: #3f3f46;
+    display: grid; place-items: center;
+  }
+  .iconbtn svg { width: 18px; height: 18px; display: block; }
+  .iconbtn.active { background: #f2f3f5; color: var(--ink); }
+  .iconbtn.pen.active { background: #fff6eb; color: #d88621; box-shadow: inset 0 0 0 1px #d88621; }
+  .pickable.picked { outline: 2px solid #2563eb; outline-offset: 6px; border-radius: 8px; }
+  .slide.selecting .pickable { cursor: move; }
+  .ctx {
+    position: fixed; z-index: 40; min-width: 232px; padding: 6px; border-radius: 12px;
+    background: #2b2e35; color: white; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  }
+  .ctx button {
+    width: 100%; border: 0; background: transparent; color: inherit; border-radius: 8px;
+    padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 18px; font-size: 13px;
+  }
+  .ctx button:hover { background: #3c404a; }
+  .ctx kbd { color: #c4c8d0; font-size: 12px; font-family: inherit; }
+  .ctx svg { width: 16px; height: 16px; }
+  .iconbtn:disabled { opacity: 0.35; cursor: default; }
+  .slide.hand { cursor: grab; }
+  .slide.selecting { cursor: default; }
+  .slide-inner { transform-origin: center center; }
+  .kpi article.picked { outline: 2px solid #2563eb; outline-offset: 6px; border-radius: 8px; }
+  .toast {
+    position: absolute; left: 50%; top: 58px; transform: translateX(-50%);
+    background: #1f2430; color: white; font-size: 12px; padding: 6px 10px; border-radius: 999px; z-index: 4;
+  }
+  .present {
+    position: fixed; inset: 0; background: #111; z-index: 20; display: flex; flex-direction: column;
+  }
+  .present .slide { margin: 24px auto; width: min(1100px, 92vw); height: min(618px, 78vh); flex: none; }
+  .present bar, .present .presentbar {
+    color: #d4d4d8; font-size: 12px; display: flex; justify-content: space-between; padding: 14px 18px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="appbar">
+    <div class="mark">B</div>
+    <div>
+      <strong>演示文稿</strong><br />
+      <span class="sub">本地生成 PPTX · 预览上标记 · 接受后另存新版本</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill" id="filepill">尚未生成文件</span>
+  </header>
+  <main>
+    <section class="chat" aria-label="对话">
+      <div class="thread" id="thread"></div>
+      <form class="composer" id="composer">
+        <input id="draft" placeholder="描述这一处要怎么改" />
+        <button class="btn primary" type="submit">发送</button>
+      </form>
+    </section>
+    <section class="stage" aria-label="幻灯片预览">
+      <div class="previewbar">
+        <div class="preview-tools" aria-label="预览操作">
+          <button class="iconbtn" id="refresh" type="button" title="刷新" aria-label="刷新"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg></button>
+          <button class="iconbtn" id="expand" type="button" title="收起对话" aria-label="收起对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="M9 21H3v-6"/><path d="m3 21 7-7"/></svg></button>
+        </div>
+      </div>
+      <div class="workspace">
+        <div class="thumbs" id="thumbs"></div>
+        <div class="canvaswrap" id="canvaswrap">
+          <div class="slide" id="slide"></div>
+          <div class="floatbar" id="floatbar" aria-label="画布工具">
+            <button class="iconbtn" id="toolSelect" type="button" title="拖动页面里的内容" aria-label="选择">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l7.1 16 2.2-6.7L20 11.1 4 4z"/></svg>
+            </button>
+            <button class="iconbtn" id="toolHand" type="button" title="拖动页面在画布中的位置" aria-label="抓手">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11.5V5.5a1.5 1.5 0 0 1 3 0V12"/><path d="M14 12.2V8a1.5 1.5 0 0 1 3 0v6.2c0 3.2-1.6 5.8-4.8 5.8h-.7C8.8 20 7 18.2 7 15.6V10a1.5 1.5 0 0 1 3 0"/></svg>
+            </button>
+            <button class="iconbtn pen" id="toolAi" type="button" title="画笔标注" aria-label="画笔标注">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="iconbtn" id="toolPlay" type="button" title="从当前页放映" aria-label="放映">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5L8 5.5z"/></svg>
+            </button>
+          </div>
+          <div class="toast" id="toast" hidden></div>
+          <div class="ctx" id="ctx" hidden>
+            <button type="button" id="ctxToggle"><span>显示/隐藏</span><kbd>Shift+Ctrl+H</kbd></button>
+            <button type="button" id="ctxDelete"><span>删除</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h11v12H8l-5-6 5-6z"/><path d="m11 10 4 4M15 10l-4 4"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="steps" id="steps"></footer>
+</div>
+<script>
+const slides = [
+  { id: 1, title: "封面", render: () => `<div class="seal-char pickable" data-id="seal">鮨</div><div class="vbrand pickable" data-id="brand">一期鮨 ICHIGO SUSHI</div>` },
+  { id: 2, title: "品牌哲学", render: () => `<div class="center-copy"><div class="pickable" data-id="motto"><strong>一期一会</strong><em>每一次相遇，都不可重来</em></div></div>` },
+  { id: 6, title: "经营", render: (revised) => `<div class="kpi">
+      <article class="pickable" data-id="cities"><b>十二城</b><span>在营城市</span></article>
+      <article class="pickable" data-id="stores"><b>二十六店</b><span>门店</span></article>
+      <article class="pickable hot" data-id="repeat" id="kpi"><b>${revised ? "【待核验】" : "92%"}</b><span>${revised ? "复购率待补充来源" : "复购"}</span></article>
+    </div>` },
+  { id: 7, title: "招商政策", render: () => `<div class="scroll">
+      <article class="pickable" data-id="invest"><b>投资门槛</b><span>单店八席，不含物业</span></article>
+      <article class="pickable" data-id="share"><b>分成</b><span>品牌与主厨分成另表</span></article>
+      <article class="pickable" data-id="cycle"><b>开业周期</b><span>选址确认后一百二十日</span></article>
+    </div>` }
+];
+
+const steps = [
+  { id: "ask", label: "1 提出需求" },
+  { id: "outline", label: "2 确认大纲" },
+  { id: "file", label: "3 生成 PPTX" },
+  { id: "mark", label: "4 框选位置" },
+  { id: "chat", label: "5 加入对话" },
+  { id: "review", label: "6 接受新版本" }
+];
+
+const state = {
+  step: "ask",
+  slide: 0,
+  marking: false,
+  marks: {},
+  instruction: "这个复购率没有来源，不要当成事实。改成待核验。",
+  saved: false,
+  sent: false,
+  accepted: false,
+  drag: null,
+  tool: "select",
+  pickedId: "",
+  pan: { x: 0, y: 0 },
+  pagePos: { x: 0, y: 0 },
+  panning: null,
+  moving: null,
+  offsets: {},
+  thumbDrag: null,
+  menuSlide: null,
+  wide: false,
+  toast: ""
+};
+
+const thread = document.getElementById("thread");
+const thumbs = document.getElementById("thumbs");
+const slideEl = document.getElementById("slide");
+const filepill = document.getElementById("filepill");
+const stepsEl = document.getElementById("steps");
+
+function currentFile() {
+  if (state.step === "ask" || state.step === "outline") return null;
+  return state.accepted ? "一期鮨招商-v2.pptx" : "一期鮨招商.pptx";
+}
+
+function addBubble(role, html) {
+  const el = document.createElement("div");
+  el.className = "bubble " + role;
+  el.innerHTML = html;
+  thread.appendChild(el);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function renderThread() {
+  thread.innerHTML = "";
+  addBubble("user", "制作一份 Omakase 日料品牌连锁招商 PPT，共 10 页。侘寂留白，米白、墨黑、朱砂。最终给我一份能用 PowerPoint 打开的文件。");
+  if (state.step === "ask") {
+    addBubble("agent", "先出大纲，不直接生成文件。风格、页数和每页一句话确认后，再写 PPTX。");
+    return;
+  }
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <h3>幻灯片大纲</h3>
+    <div class="meta">
+      <span class="tag">10 页</span>
+      <span class="tag">招商路演</span>
+      <span class="tag">风格已锁定：侘寂留白</span>
+      <span class="tag warn">经营数字来自示例，生成时标为待核验</span>
+    </div>
+    <p>交付文件：一期鮨招商.pptx。预览上可以框选后再改。</p>
+    <ol class="outline">
+      <li>封面 · 左下「鮨」</li>
+      <li>品牌哲学 · 一期一会</li>
+      <li>Omakase 之道</li>
+      <li>主厨</li>
+      <li>空间 · 八席 / 三十六道</li>
+      <li>经营 · 城市、门店、复购</li>
+      <li>招商政策 · 卷轴三项</li>
+      <li>支持体系 · 四枚印章</li>
+      <li>愿景</li>
+      <li>封底</li>
+    </ol>
+    <div class="row">
+      <button class="btn primary" id="approve" type="button">批准，生成 PPTX</button>
+      <button class="btn" id="revise" type="button">先改大纲</button>
+    </div>`;
+  thread.appendChild(card);
+  if (state.step === "outline") return;
+  addBubble("agent", "已写入 <b>一期鮨招商.pptx</b>。原文件只读。之后的修改会另存新版本。");
+  if (state.sent) {
+    addBubble("user", "【标记位置】第 6 页 · 标记 1 · 形状「复购」<br/>" + state.instruction);
+    const box = document.createElement("div");
+    box.className = "card";
+    box.innerHTML = state.accepted
+      ? `<h3>已导出新版本</h3><p>一期鮨招商.pptx 保持不动。</p><div class="filechip"><b>一期鮨招商-v2.pptx</b><small>当前预览</small></div>`
+      : `<h3>修改方案</h3><p>第 6 页「92% 复购」改为「【待核验】」。</p><div class="row"><button class="btn" id="reject" type="button">拒绝</button><button class="btn primary" id="accept" type="button">接受并导出</button></div>`;
+    thread.appendChild(box);
+  }
+}
+
+function renderThumbs() {
+  const ready = state.step !== "ask" && state.step !== "outline";
+  thumbs.innerHTML = "";
+  if (!ready) {
+    thumbs.innerHTML = `<p class="empty">大纲批准后，这里出现幻灯片缩略图。生成后可以拖动排序，右键可显示、隐藏或删除。</p>`;
+    return;
+  }
+  slides.forEach((slide) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "thumb" + (slides.indexOf(slide) === state.slide ? " active" : "") + (slide.hidden ? " hidden" : "");
+    button.innerHTML = `<i>${slide.id} ${slide.title}${slide.hidden ? " · 隐藏" : ""}</i>`;
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      openMenu(event.clientX, event.clientY, slide);
+    });
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      state.thumbDrag = { slide, startY: event.clientY, moved: false, pointerId: event.pointerId };
+      button.setPointerCapture(event.pointerId);
+    });
+    button.addEventListener("pointermove", onThumbMove);
+    button.addEventListener("pointerup", onThumbUp);
+    button.addEventListener("click", () => {
+      if (button.dataset.suppress === "1") {
+        delete button.dataset.suppress;
+        return;
+      }
+      state.slide = slides.indexOf(slide);
+      closeMenu();
+      render();
+    });
+    thumbs.appendChild(button);
+  });
+}
+
+function onThumbMove(event) {
+  const drag = state.thumbDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  if (!drag.moved && Math.abs(event.clientY - drag.startY) < 5) return;
+  drag.moved = true;
+  const node = event.currentTarget;
+  node.classList.add("dragging");
+  const items = [...thumbs.querySelectorAll(".thumb")].filter((el) => el !== node);
+  let to = items.length;
+  for (let i = 0; i < items.length; i++) {
+    const box = items[i].getBoundingClientRect();
+    if (event.clientY < box.top + box.height / 2) { to = i; break; }
+  }
+  const from = slides.indexOf(drag.slide);
+  if (to === from) return;
+  const current = slides[state.slide];
+  slides.splice(to, 0, slides.splice(from, 1)[0]);
+  state.slide = Math.max(0, slides.indexOf(current));
+  thumbs.insertBefore(node, items[to] || null);
+  [...thumbs.querySelectorAll(".thumb")].forEach((el, index) => el.classList.toggle("active", index === state.slide));
+}
+
+function onThumbUp(event) {
+  const drag = state.thumbDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  if (drag.moved) event.currentTarget.dataset.suppress = "1";
+  state.thumbDrag = null;
+  if (drag.moved) render();
+}
+
+function openMenu(x, y, slide) {
+  const menu = document.getElementById("ctx");
+  state.menuSlide = slide;
+  menu.hidden = false;
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  const box = menu.getBoundingClientRect();
+  if (box.right > window.innerWidth - 8) menu.style.left = Math.max(8, window.innerWidth - box.width - 8) + "px";
+  if (box.bottom > window.innerHeight - 8) menu.style.top = Math.max(8, window.innerHeight - box.height - 8) + "px";
+}
+
+function closeMenu() {
+  document.getElementById("ctx").hidden = true;
+  state.menuSlide = null;
+}
+
+function toggleSlideHidden(slide) {
+  if (!slide) return;
+  slide.hidden = !slide.hidden;
+  closeMenu();
+  render();
+}
+
+function deleteSlide(slide) {
+  const index = slides.indexOf(slide);
+  if (index < 0) return;
+  slides.splice(index, 1);
+  delete state.marks[slide.id];
+  delete state.offsets[slide.id];
+  if (!slides.length) state.slide = 0;
+  else if (state.slide >= slides.length) state.slide = slides.length - 1;
+  else if (index < state.slide) state.slide -= 1;
+  closeMenu();
+  render();
+}
+
+function renderSlide() {
+  const ready = state.step !== "ask" && state.step !== "outline";
+  slideEl.classList.toggle("marking", ready && state.marking && !state.accepted);
+  if (!ready) {
+    slideEl.innerHTML = `<div class="center-copy"><div><strong style="font-size:28px">等待大纲确认</strong><em>确认后才生成文件</em></div></div>`;
+    placePage();
+    return;
+  }
+  const slide = slides[state.slide];
+  if (!slide) {
+    slideEl.innerHTML = `<div class="center-copy"><div><strong style="font-size:28px">没有幻灯片</strong><em>左侧列表已空</em></div></div>`;
+    placePage();
+    return;
+  }
+  const revised = state.accepted && slide.id === 6;
+  slideEl.classList.toggle("hand", state.tool === "hand" && !state.marking);
+  slideEl.classList.toggle("selecting", state.tool === "select" && !state.marking);
+  slideEl.classList.toggle("is-hidden", !!slide.hidden);
+  slideEl.innerHTML = `<div class="slide-inner">${slide.render(revised)}</div>`;
+  const offsets = state.offsets[slide.id] || {};
+  slideEl.querySelectorAll(".pickable").forEach((node) => {
+    node.classList.toggle("picked", node.dataset.id === state.pickedId);
+    const off = offsets[node.dataset.id];
+    if (off) node.style.transform = `translate(${off.x}px, ${off.y}px)`;
+  });
+  placePage();
+  const mark = state.marks[slide.id];
+  if (mark && !state.accepted) {
+    const box = document.createElement("div");
+    box.className = "markbox";
+    box.style.left = mark.x + "%";
+    box.style.top = mark.y + "%";
+    box.style.width = mark.w + "%";
+    box.style.height = mark.h + "%";
+    const label = document.createElement("div");
+    label.className = "marklabel";
+    label.textContent = "标记 1";
+    label.style.left = mark.x + "%";
+    label.style.top = `calc(${mark.y}% - 18px)`;
+    slideEl.appendChild(box);
+    slideEl.appendChild(label);
+    if (!state.drag) {
+      const prompt = document.createElement("form");
+      prompt.className = "markprompt";
+      prompt.style.left = mark.x + "%";
+      prompt.style.top = `calc(${mark.y + mark.h}% + 10px)`;
+      prompt.style.width = Math.max(mark.w, 36) + "%";
+      prompt.innerHTML = `<input id="markText" placeholder="描述你想要的修改" value="${(mark.text || "").replace(/"/g, "&quot;")}" />
+        <button class="send" type="submit" aria-label="发送修改" title="发送修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6"/><path d="m6 11 6-6 6 6"/></svg></button>
+        <button type="button" id="markDelete" aria-label="删除标记" title="删除标记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>`;
+      prompt.addEventListener("pointerdown", (event) => event.stopPropagation());
+      prompt.onsubmit = (event) => {
+        event.preventDefault();
+        const text = prompt.querySelector("input").value.trim();
+        if (!text) return;
+        mark.text = text;
+        mark.saved = true;
+        state.instruction = text;
+        state.saved = true;
+        state.sent = true;
+        state.step = "chat";
+        render();
+      };
+      prompt.querySelector("#markDelete").onclick = () => {
+        delete state.marks[slide.id];
+        state.saved = false;
+        state.sent = false;
+        render();
+      };
+      prompt.querySelector("input").oninput = (event) => { mark.text = event.target.value; };
+      slideEl.appendChild(prompt);
+    }
+  }
+}
+
+function placePage() {
+  slideEl.style.setProperty("--px", state.pagePos.x + "px");
+  slideEl.style.setProperty("--py", state.pagePos.y + "px");
+}
+
+function slideIndex(id) {
+  const index = slides.findIndex((slide) => slide.id === id);
+  return index < 0 ? 0 : index;
+}
+
+function renderChrome() {
+  const file = currentFile();
+  filepill.textContent = file ? `${file} · ${state.accepted ? "v2" : "v1"}` : "尚未生成文件";
+  const ready = state.step !== "ask" && state.step !== "outline";
+  ["toolSelect", "toolHand", "toolAi", "toolPlay"].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = !ready;
+  });
+  document.getElementById("toolSelect").classList.toggle("active", state.tool === "select" && !state.marking);
+  document.getElementById("toolHand").classList.toggle("active", state.tool === "hand" && !state.marking);
+  document.getElementById("expand").classList.toggle("active", state.wide);
+  document.getElementById("toolAi").classList.toggle("active", state.marking);
+  document.querySelector("main").classList.toggle("wide", state.wide);
+  const expand = document.getElementById("expand");
+  expand.title = state.wide ? "展开对话" : "收起对话";
+  expand.setAttribute("aria-label", expand.title);
+  const toast = document.getElementById("toast");
+  toast.hidden = !state.toast;
+  toast.textContent = state.toast;
+  stepsEl.innerHTML = "";
+  steps.forEach((step) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "step" + (step.id === (state.accepted ? "review" : state.step) ? " on" : "");
+    button.textContent = step.label;
+    button.onclick = () => jump(step.id);
+    stepsEl.appendChild(button);
+  });
+}
+
+function render() {
+  renderThread();
+  renderThumbs();
+  renderSlide();
+  renderChrome();
+  bind();
+}
+
+function bind() {
+  const approve = document.getElementById("approve");
+  if (approve) approve.onclick = () => jump("file");
+  const revise = document.getElementById("revise");
+  if (revise) revise.onclick = () => addBubble("agent", "可以说要改哪一页。大纲文件会更新，仍然要你再次批准后才生成 PPTX。");
+  const acceptButton = document.getElementById("accept");
+  if (acceptButton) acceptButton.onclick = accept;
+  const rejectButton = document.getElementById("reject");
+  if (rejectButton) rejectButton.onclick = () => addBubble("agent", "已拒绝这版修改。v1 不变，可以重新框选。");
+}
+
+function accept() {
+  state.accepted = true;
+  state.marking = false;
+  state.step = "review";
+  state.slide = slideIndex(6);
+  render();
+}
+
+function jump(step) {
+  state.step = step;
+  if (step === "ask" || step === "outline") {
+    state.marks = {}; state.saved = false; state.sent = false; state.accepted = false; state.marking = false;
+  }
+  if (step === "file") {
+    state.marks = {}; state.saved = false; state.sent = false; state.accepted = false;
+    state.slide = slideIndex(6);
+  }
+  if (step === "mark") {
+    state.sent = false; state.accepted = false; state.marking = true;
+    state.slide = slideIndex(6);
+    state.marks = { 6: { x: 62, y: 28, w: 28, h: 36, saved: true } };
+    state.saved = true;
+  }
+  if (step === "chat") {
+    state.marking = true; state.accepted = false; state.saved = true; state.sent = true;
+    state.slide = slideIndex(6);
+    state.marks = { 6: { x: 62, y: 28, w: 28, h: 36, saved: true } };
+  }
+  if (step === "review") accept();
+  else render();
+}
+
+function flash(message) {
+  state.toast = message;
+  render();
+  clearTimeout(flash.timer);
+  flash.timer = setTimeout(() => { state.toast = ""; render(); }, 2200);
+}
+function fileReady() {
+  return state.step !== "ask" && state.step !== "outline";
+}
+document.getElementById("toolSelect").onclick = () => { state.tool = "select"; state.marking = false; render(); };
+document.getElementById("toolHand").onclick = () => { state.tool = "hand"; state.marking = false; render(); };
+document.getElementById("refresh").onclick = () => { state.pagePos = { x: 0, y: 0 }; state.pan = { x: 0, y: 0 }; flash("画布已刷新"); };
+document.getElementById("expand").onclick = () => { state.wide = !state.wide; render(); };
+document.getElementById("toolAi").onclick = () => {
+  if (!fileReady() || state.accepted) return;
+  state.marking = !state.marking;
+  state.tool = "select";
+  if (state.marking && state.step === "file") state.step = "mark";
+  render();
+};
+document.getElementById("toolPlay").onclick = () => {
+  if (!fileReady()) return;
+  const overlay = document.createElement("div");
+  overlay.className = "present";
+  const paint = () => {
+    const slide = slides[state.slide];
+    const revised = state.accepted && slide.id === 6;
+    overlay.innerHTML = `<div class="presentbar"><span>放映 · 方向键或点击翻页</span><button class="btn" id="exitPresent" type="button">退出</button></div><div class="slide">${slide.render(revised)}</div><div class="presentbar"><span>${slide.id} ${slide.title}</span><span>${slide.id} / 10</span></div>`;
+    overlay.querySelector("#exitPresent").onclick = () => { overlay.remove(); window.onkeydown = null; render(); };
+  };
+  paint();
+  overlay.addEventListener("click", (event) => {
+    if (event.target.closest("#exitPresent")) return;
+    state.slide = Math.min(slides.length - 1, state.slide + 1);
+    paint();
+  });
+  window.onkeydown = (event) => {
+    if (event.key === "Escape") { overlay.remove(); window.onkeydown = null; render(); }
+    if (event.key === "ArrowRight") { state.slide = Math.min(slides.length - 1, state.slide + 1); paint(); }
+    if (event.key === "ArrowLeft") { state.slide = Math.max(0, state.slide - 1); paint(); }
+  };
+  document.body.appendChild(overlay);
+};
+document.getElementById("composer").onsubmit = (event) => {
+  event.preventDefault();
+  const input = document.getElementById("draft");
+  const text = input.value.trim();
+  if (!text) return;
+  addBubble("user", text);
+  input.value = "";
+  addBubble("agent", state.sent ? "会按第 6 页标记 1 处理，不改其他页。" : "如果还没框选，先在预览上标出位置，再把标注加入对话。");
+};
+
+slideEl.addEventListener("click", (event) => {
+  if (!fileReady() || state.marking || state.tool !== "select") return;
+  const item = event.target.closest(".pickable");
+  state.pickedId = item ? item.dataset.id : "";
+  render();
+});
+slideEl.addEventListener("pointerdown", (event) => {
+  if (!fileReady() || !slides[state.slide]) return;
+  const pick = event.target.closest(".pickable");
+  if (pick && state.tool === "select" && !state.marking) {
+    const id = pick.dataset.id;
+    const slideId = slides[state.slide].id;
+    const off = (state.offsets[slideId] && state.offsets[slideId][id]) || { x: 0, y: 0 };
+    state.moving = { slideId, id, x: event.clientX - off.x, y: event.clientY - off.y, moved: false };
+    state.pickedId = id;
+    pick.classList.add("picked");
+    slideEl.setPointerCapture(event.pointerId);
+    return;
+  }
+  if (state.tool === "hand" && !state.marking) {
+    state.panning = { x: event.clientX - state.pagePos.x, y: event.clientY - state.pagePos.y };
+    slideEl.setPointerCapture(event.pointerId);
+    return;
+  }
+  if (!state.marking || state.accepted) return;
+  const rect = slideEl.getBoundingClientRect();
+  state.drag = {
+    slideId: slides[state.slide].id,
+    x: ((event.clientX - rect.left) / rect.width) * 100,
+    y: ((event.clientY - rect.top) / rect.height) * 100
+  };
+  slideEl.setPointerCapture(event.pointerId);
+});
+slideEl.addEventListener("pointermove", (event) => {
+  if (state.moving) {
+    if (!state.offsets[state.moving.slideId]) state.offsets[state.moving.slideId] = {};
+    const off = {
+      x: event.clientX - state.moving.x,
+      y: event.clientY - state.moving.y
+    };
+    state.offsets[state.moving.slideId][state.moving.id] = off;
+    const node = slideEl.querySelector(`[data-id="${state.moving.id}"]`);
+    if (node) node.style.transform = `translate(${off.x}px, ${off.y}px)`;
+    if (Math.abs(off.x) + Math.abs(off.y) > 3) state.moving.moved = true;
+    return;
+  }
+  if (state.panning) {
+    state.pagePos = { x: event.clientX - state.panning.x, y: event.clientY - state.panning.y };
+    placePage();
+    return;
+  }
+  if (!state.drag) return;
+  const rect = slideEl.getBoundingClientRect();
+  const x = ((event.clientX - rect.left) / rect.width) * 100;
+  const y = ((event.clientY - rect.top) / rect.height) * 100;
+  const left = Math.min(state.drag.x, x);
+  const top = Math.min(state.drag.y, y);
+  const previous = state.marks[state.drag.slideId];
+  state.marks[state.drag.slideId] = {
+    x: left,
+    y: top,
+    w: Math.abs(x - state.drag.x),
+    h: Math.abs(y - state.drag.y),
+    saved: false,
+    text: previous && previous.text ? previous.text : ""
+  };
+  state.saved = false;
+  state.sent = false;
+  renderSlide();
+});
+slideEl.addEventListener("pointerup", () => {
+  if (state.moving) { state.moving = null; return; }
+  if (state.panning) { state.panning = null; return; }
+  if (!state.drag) return;
+  const drawn = state.marks[state.drag.slideId];
+  state.drag = null;
+  if (drawn && drawn.w > 2 && drawn.h > 2) {
+    state.step = "mark";
+    render();
+  }
+});
+
+document.getElementById("ctxToggle").onclick = () => toggleSlideHidden(state.menuSlide);
+document.getElementById("ctxDelete").onclick = () => deleteSlide(state.menuSlide);
+document.addEventListener("pointerdown", (event) => {
+  if (event.target.closest("#ctx")) return;
+  closeMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.target.closest("input, textarea")) return;
+  if (event.shiftKey && event.ctrlKey && (event.key === "h" || event.key === "H") && fileReady() && slides[state.slide]) {
+    event.preventDefault();
+    toggleSlideHidden(slides[state.slide]);
+  }
+});
+
+jump("outline");
+</script>
+</body>
+</html>

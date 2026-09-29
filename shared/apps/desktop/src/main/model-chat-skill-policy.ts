@@ -70,6 +70,20 @@ export function isProjectManagerSkill(name: string): boolean {
   return String(name || "").toLowerCase().endsWith("-project-manager");
 }
 
+const COMPANION_MEMORY_SKILL_NAME = "companion-memory";
+
+export function withAlwaysOnCompanionMemory(
+  selectedLocalSkillNames: string[],
+  localSkillDescriptors: SkillDescriptor[]
+): string[] {
+  const present = localSkillDescriptors.some((skill) => skill.name === COMPANION_MEMORY_SKILL_NAME);
+  if (!present) return selectedLocalSkillNames.slice(0, 5);
+  return [
+    COMPANION_MEMORY_SKILL_NAME,
+    ...selectedLocalSkillNames.filter((name) => name !== COMPANION_MEMORY_SKILL_NAME)
+  ].slice(0, 5);
+}
+
 /** Always keep at most one project-manager shadow skill in the local skill set. */
 export function withAlwaysOnProjectManagerShadow(
   selectedLocalSkillNames: string[],
@@ -170,9 +184,12 @@ export function selectModelChatSkills(input: ModelChatSkillSelectionInput): Mode
 
   const goalRuntimeRequested = composerModes.includes("goal") || shouldUseGoalRuntimeForSkills(explicitSkillNames);
   const localNames = [...new Set([...explicitLocalSkillNames, ...automaticSkillNames])];
-  const selectedLocalSkillNames = isSimpleChatSkillExempt(input.latestUserRequest) && !explicitLocalSkillNames.length
-    ? []
-    : withAlwaysOnProjectManagerShadow(localNames, localSkillDescriptors);
+  const selectedLocalSkillNames = withAlwaysOnCompanionMemory(
+    isSimpleChatSkillExempt(input.latestUserRequest) && !explicitLocalSkillNames.length
+      ? []
+      : withAlwaysOnProjectManagerShadow(localNames, localSkillDescriptors),
+    localSkillDescriptors
+  );
   return {
     explicitSkillNames,
     composerModes,

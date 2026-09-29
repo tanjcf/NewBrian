@@ -1262,7 +1262,19 @@ async function executeArtifactCreate(input, context) {
   const outputPath = projectArtifactPath(styledInput.targetPath);
   const resolved = await resolveSafeWorkspaceTarget(context.workspacePath, outputPath);
   const previousStat = await fs.stat(resolved.target).catch(() => null);
-  const metadata = await generateArtifact(styledInput, resolved.target, { workspacePath: context.workspacePath });
+  const metadata = await generateArtifact(styledInput, resolved.target, {
+    workspacePath: context.workspacePath,
+    onSlideWritten: typeof context?.onArtifactProgress === "function"
+      ? async (progress) => {
+        await context.onArtifactProgress({
+          path: resolved.relativePath,
+          format: styledInput.format,
+          slideCount: progress.slideCount,
+          total: progress.total
+        });
+      }
+      : undefined
+  });
   const companionNote = styledInput.format === "pptx"
     ? ` Companion web deck: ${resolved.relativePath.replace(/\.pptx$/i, ".slides.html")}.`
     : styledInput.format === "html"

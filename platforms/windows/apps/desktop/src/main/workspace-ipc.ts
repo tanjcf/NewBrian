@@ -8,6 +8,7 @@ import {
   type CreateBlankWorkspaceInput,
   type ExportWorkspaceThreadHtmlInput,
   type ForkWorkspaceThreadInput,
+  type RewindWorkspaceThreadInput,
   type OpenWorkspaceLocationInput,
   type RenameWorkspaceInput,
   type RenameWorkspaceThreadInput,
@@ -32,6 +33,7 @@ interface WorkspaceIpcServices {
   openLocation: (input: OpenWorkspaceLocationInput) => MaybePromise<unknown>;
   addThread: (input: AddWorkspaceThreadInput) => MaybePromise<unknown>;
   forkThread: (input: ForkWorkspaceThreadInput) => MaybePromise<unknown>;
+  rewindThread: (input: RewindWorkspaceThreadInput) => MaybePromise<unknown>;
   renameThread: (input: RenameWorkspaceThreadInput) => MaybePromise<unknown>;
   archiveThread: (input: ArchiveWorkspaceThreadInput) => MaybePromise<unknown>;
   deleteThread: (input: WorkspaceThreadInput) => MaybePromise<unknown>;
@@ -101,6 +103,15 @@ function parseAddThread(input: unknown): AddWorkspaceThreadInput {
   const record = requireRecord(input, "Add workspace thread");
   if (record.scope !== undefined && record.scope !== "project" && record.scope !== "chat") throw new TypeError("Add workspace thread input is invalid.");
   return { workspaceId: requireString(record, "workspaceId", "Add workspace thread"), title: requireString(record, "title", "Add workspace thread"), summary: requireString(record, "summary", "Add workspace thread"), scope: record.scope };
+}
+
+function parseRewindThread(input: unknown): RewindWorkspaceThreadInput {
+  const record = requireRecord(input, "Rewind workspace thread");
+  return {
+    workspaceId: requireString(record, "workspaceId", "Rewind workspace thread"),
+    threadId: requireString(record, "threadId", "Rewind workspace thread"),
+    userMessageId: requireString(record, "userMessageId", "Rewind workspace thread")
+  };
 }
 
 function parseForkThread(input: unknown): ForkWorkspaceThreadInput {
@@ -174,6 +185,7 @@ export function registerWorkspaceIpcHandlers(services: WorkspaceIpcServices) {
   ipcMain.handle(desktopIpcChannels.workspace.openLocation, (_event, input: unknown) => services.openLocation(parseOpenLocation(input)));
   ipcMain.handle(desktopIpcChannels.workspace.addThread, (_event, input: unknown) => services.addThread(parseAddThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.forkThread, (_event, input: unknown) => services.forkThread(parseForkThread(input)));
+  ipcMain.handle(desktopIpcChannels.workspace.rewindThread, (_event, input: unknown) => services.rewindThread(parseRewindThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.renameThread, (_event, input: unknown) => services.renameThread(parseRenameThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.archiveThread, (_event, input: unknown) => services.archiveThread(parseArchiveThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.deleteThread, (_event, input: unknown) => services.deleteThread(parseWorkspaceThreadInput(input)));

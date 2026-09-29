@@ -174,6 +174,7 @@ import { registerOfficialGovernmentWebTools } from "./official-government-web-to
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
 import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
+import { messagesBeforeUserMessage } from "./rewind-thread-messages.js";
 import { registerDesktopWebSearchTools } from "./desktop-web-search-tools.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
@@ -343,6 +344,7 @@ import { ThreadRolloutRecoveryService } from "./thread-rollout-recovery-service.
 import { DelegatedAgentControlService } from "./delegated-agent-control-service.js";
 import { DelegatedAgentIpcService } from "./delegated-agent-ipc-service.js";
 import { runDelegatedAgentLoop } from "./delegated-agent-loop-service.js";
+import { executeDelegatedModelStep } from "./delegated-model-step.js";
 import { DelegatedAgentRunService } from "./delegated-agent-run-service.js";
 import { ComposerAttachmentService, resolveManagedAttachmentPath } from "./composer-attachment-service.js";
 import { DesktopArtifactPreviewService } from "./desktop-artifact-preview-service.js";
@@ -5286,6 +5288,17 @@ function readModelUsageTokens(usage: unknown) {
   const output = Number(value.output_tokens ?? value.completion_tokens ?? value.outputTokens ?? 0);
   return Math.max(0, Math.trunc((Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0)));
 }
+function createDesktopModelChatStepService() {
+  return new ModelChatStepService({
+    callModel: (stepInput) => callModelApi(stepInput as Parameters<typeof callModelApi>[0]),
+    isRetryableError: isRetryableModelGatewayError,
+    readUsageTokens: (usage) => readModelUsageTokens(usage),
+    containsPrivatePlanning: containsPrivatePlanningNarration,
+    sanitizeVisibleContent: sanitizeVisibleModelContent,
+    extractPlanningNarration: extractPrivatePlanningNarration
+  });
+}
+const desktopModelChatStepService = createDesktopModelChatStepService();
 async function restoreArchivedRolloutFiles(workspace: WorkspaceCatalogItem, threads: Array<{ id: string; archived: boolean }>) {
   await threadRolloutLifecycleService.reconcileArchived(workspace, threads);
 }
@@ -7141,6 +7154,22 @@ async function addWorkspaceThread(input: {
 }) {
   return workspaceThreadLifecycleService.add(input);
 }
+async function rewindWorkspaceThread(input: { workspaceId: string; threadId: string; userMessageId: string }) {
+  const catalog = await readWorkspaceCatalog();
+  const { workspace, thread } = requireWorkspaceThreadSelection(catalog.workspaces, input.workspaceId, input.threadId);
+  const state = await readThreadState(workspace, thread);
+  const kept = messagesBeforeUserMessage(state.messages ?? [], input.userMessageId);
+  if (!kept) {
+    throw new Error("找不到要编辑的这条消息。");
+  }
+  const nextState: ThreadStateFile = { ...state, messages: kept };
+  if (activeWorkspaceId === workspace.id && activeThreadId === thread.id) {
+    runtime.setThreadState(nextState);
+    nextState.messages = runtime.exportThreadState().messages;
+  }
+  await writeThreadState(workspace, thread, nextState);
+  return buildSnapshotWithThreadState(runtime.getSnapshot(), nextState);
+}
 async function forkWorkspaceThread(input: {
   workspaceId: string;
   sourceThreadId: string;
@@ -7200,18 +7229,57 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
     const state = await readThreadState(workspace, childThread);
     let agentWorkspacePath = workspace.path;
     let worktree: { repositoryRoot: string; worktreePath: string; branch: string; baseRef: string } | null = null;
-    if (currentTask.owner === "editor") {
-      const manager = new WorktreeManager({ workspacePath: workspace.path });
-      const createdWorktree = await manager.create({ taskId: currentTask.id });
-      worktree = createdWorktree;
-      agentWorkspacePath = createdWorktree.worktreePath;
-    }
     const userMessage: ChatMessage = {
       id: makeId("msg"),
       role: "user",
       content: currentTask.instruction,
       createdAt: nowIso()
     };
+    const persistChildFailure = async (reason: string) => {
+      const failureMessage: ChatMessage = {
+        id: makeId("msg"),
+        role: "assistant",
+        content: `子 Agent 执行失败：${reason}`,
+        createdAt: nowIso()
+      };
+      const latestState = await readThreadState(workspace, childThread);
+      latestState.messages = [...latestState.messages, userMessage, failureMessage];
+      latestState.timeline = [
+        createTimelineEvent("thread", "子 Agent 失败", reason.slice(0, 160)),
+        ...(latestState.timeline ?? [])
+      ].slice(0, 80);
+      await writeThreadState(workspace, childThread, latestState);
+      await appendThreadEvents(workspace, childThread, [
+        createThreadEvent("message", { role: "user", messageId: userMessage.id, content: userMessage.content }),
+        createThreadEvent("message", { role: "assistant", messageId: failureMessage.id, content: failureMessage.content })
+      ]);
+    };
+    if (currentTask.owner === "editor") {
+      const manager = new WorktreeManager({ workspacePath: workspace.path });
+      const isGitWorkspace = await manager.repositoryRoot().then(() => true, () => false);
+      if (isGitWorkspace) {
+        try {
+          const createdWorktree = await manager.create({ taskId: currentTask.id });
+          worktree = createdWorktree;
+          agentWorkspacePath = createdWorktree.worktreePath;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          await persistChildFailure(reason).catch(() => undefined);
+          await announceChildResultToParent({
+            workspaceId: workspace.id,
+            parentThreadId: currentTask.parentThreadId,
+            childThreadId: currentTask.childThreadId,
+            status: "failed",
+            error: reason
+          });
+          throw error;
+        }
+      } else {
+        void appendDesktopDebugLog(
+          `delegated editor child=${currentTask.childThreadId} runs in workspace directly (not a Git repository): ${workspace.path}`
+        );
+      }
+    }
     const childSystemPrompt = [
       config.llm.systemPrompt,
       `You are the ${currentTask.owner} child agent for parent thread ${currentTask.parentThreadId}.`,
@@ -7279,13 +7347,26 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
       const steeredMessages = followups.length > 0
         ? [...messages, ...followups.map((content) => ({ role: "user" as const, content }))]
         : messages;
-      const response = await callModelApi({
-        ...config.llm,
-        signal: childAbortController.signal,
-        systemPrompt: childSystemPrompt,
+      const response = await executeDelegatedModelStep(desktopModelChatStepService, {
+        modelInput: {
+          ...config.llm,
+          requestId: currentTask.childThreadId,
+          workspaceId: workspace.id,
+          threadId: childThread.id,
+          systemPrompt: childSystemPrompt,
+          messages: []
+        },
         messages: steeredMessages,
         tools,
-        onReasoningDelta: (delta) => { latestReasoningSummary += delta; }
+        systemPrompt: childSystemPrompt,
+        abortSignal: childAbortController.signal,
+        requestId: currentTask.childThreadId,
+        onReasoningDelta: (delta) => { latestReasoningSummary += delta; },
+        onRetry: (requestId, attempt, maxAttempts, delayMs) => {
+          void appendDesktopDebugLog(
+            `child model step retry child=${currentTask.childThreadId} requestId=${requestId} attempt=${attempt} maxAttempts=${maxAttempts} delayMs=${delayMs}`
+          );
+        }
       });
       recordChildModelUsage(response);
       return response;
@@ -7382,6 +7463,9 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
     });
     return { ...structuredResult, reasoningSummary: latestReasoningSummary.trim() };
     } catch (error) {
+      if (!childAbortController.signal.aborted) {
+        await persistChildFailure(error instanceof Error ? error.message : String(error)).catch(() => undefined);
+      }
       await announceChildResultToParent({
         workspaceId: workspace.id,
         parentThreadId: currentTask.parentThreadId,
@@ -9937,6 +10021,7 @@ function registerIpc() {
     openLocation: (input) => desktopNativeCapabilityService.openWorkspace(input),
     addThread: async (input) => (await addWorkspaceThread(input)).workspaces,
     forkThread: async (input) => (await forkWorkspaceThread(input)).workspaces,
+    rewindThread: (input) => rewindWorkspaceThread(input),
     renameThread: async (input) => (await renameWorkspaceThread(input)).workspaces,
     archiveThread: async (input) => (await archiveWorkspaceThread(input)).workspaces,
     deleteThread: (input) => workspaceThreadService.delete(input),
@@ -10382,14 +10467,7 @@ function registerIpc() {
     callModel: (compactionInput) => callModelApi(compactionInput as Parameters<typeof callModelApi>[0])
   });
   const modelChatEventProjector = new ModelChatEventProjector();
-  const modelChatStepService = new ModelChatStepService({
-    callModel: (stepInput) => callModelApi(stepInput as Parameters<typeof callModelApi>[0]),
-    isRetryableError: isRetryableModelGatewayError,
-    readUsageTokens: (usage) => readModelUsageTokens(usage),
-    containsPrivatePlanning: containsPrivatePlanningNarration,
-    sanitizeVisibleContent: sanitizeVisibleModelContent,
-    extractPlanningNarration: extractPrivatePlanningNarration
-  });
+  const modelChatStepService = desktopModelChatStepService;
   const governmentOutlineService = new GovernmentOutlineService({
     storage: codexStorage,
     readAuthorizedModelConfig: readAuthorizedDesktopModelConfig,

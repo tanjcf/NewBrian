@@ -253,14 +253,13 @@ try {
   evidence.steps.push("doc-request-running");
 
   await sendMessage("hello你好！");
-  await waitFor("queued quote", `Boolean(document.querySelector(".composer-queued-draft .queued-draft-guide"))`, 30_000);
-  assert.match(await evaluate(`document.querySelector(".queued-draft-text")?.textContent || ""`), /hello你好/);
-  assert.match(await evaluate(`document.querySelector(".queued-draft-guide")?.textContent || ""`), /引用/);
+  await waitFor("queued item", `Boolean(document.querySelector(".composer-queue-item"))`, 30_000);
+  assert.match(await evaluate(`document.querySelector(".composer-queue-item .composer-queue-text")?.textContent || ""`), /hello你好/);
   evidence.screenshots.push(await screenshot("05-guidance-queued"));
   await visiblePause();
-  await evaluate(`document.querySelector(".composer-queued-draft .queued-draft-guide")?.click()`);
-  await waitFor("guidance accepted", `!document.querySelector(".composer-queued-draft")`, 30_000);
-  evidence.steps.push("quote-clicked");
+  await evaluate(`document.querySelector('.composer-queue-item button[aria-label="立即发送"]')?.click()`);
+  await waitFor("guidance accepted", `!document.querySelector(".composer-queue")`, 30_000);
+  evidence.steps.push("send-now-clicked");
 
   await waitForTurnComplete(assistantCount, 240_000);
   evidence.steps.push("doc-and-guidance-completed");

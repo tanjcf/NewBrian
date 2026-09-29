@@ -17,6 +17,10 @@ export interface DesktopWebSearchResult {
   edition: string;
   /** True when Spring/search-gateway served a cache hit (no paid charge). */
   cacheHit: boolean;
+  /** Orchestrator status (ok / degraded / unavailable); older Spring builds omit it. */
+  status?: string;
+  /** Orchestrator failure reason such as "WEB_SEARCH_PAYMENT_REQUIRED: ...". */
+  message?: string;
   items: DesktopWebSearchItem[];
 }
 
@@ -150,6 +154,8 @@ export class DesktopWebSearchClient {
         searchedAt?: string;
         edition?: string;
         cacheHit?: boolean;
+        status?: string;
+        message?: string;
         items?: Array<Record<string, unknown>>;
       };
       message?: string;
@@ -180,6 +186,8 @@ export class DesktopWebSearchClient {
       searchedAt: String(payload.data.searchedAt || new Date().toISOString()),
       edition: String(payload.data.edition || ""),
       cacheHit: Boolean(payload.data.cacheHit),
+      status: String(payload.data.status || (items.length ? "ok" : "")),
+      message: String(payload.data.message || ""),
       items
     };
   }

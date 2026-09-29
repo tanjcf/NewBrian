@@ -190,8 +190,14 @@ test("web.search_paid surfaces baidu edition and treats provider none as unavail
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
   const ok = await tools.get("web.search_paid")!({ query: "q" }) as {
+    ok: boolean;
+    output: string;
     details: { status: string; provider: string; edition: string; cacheHit: boolean };
   };
+  // The agent loop only sends ok/output to the model; without them every search
+  // looks empty and the run stalls with "no tool progress".
+  assert.equal(ok.ok, true);
+  assert.match(ok.output, /https:\/\/example\.com\/n/);
   assert.equal(ok.details.status, "ok");
   assert.equal(ok.details.provider, "baidu_qianfan");
   assert.equal(ok.details.edition, "enhanced");
@@ -228,12 +234,78 @@ test("web.search_paid surfaces baidu edition and treats provider none as unavail
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
   const empty = await tools.get("web.search_paid")!({ query: "q" }) as {
+    ok: boolean;
+    output: string;
     details: { status: string; code: string };
     isError?: boolean;
   };
+  assert.equal(empty.ok, false);
+  assert.match(empty.output, /WEB_SEARCH_UNAVAILABLE/);
   assert.equal(empty.details.status, "unavailable");
   assert.equal(empty.details.code, "WEB_SEARCH_UNAVAILABLE");
   assert.equal(empty.isError, true);
+});
+
+test("web.search_paid tells the user when the orchestrator reports insufficient balance", async () => {
+  const client = new DesktopWebSearchClient({
+    readGatewayOrigin: async () => "https://gateway.example",
+    readAccessToken: async () => "token",
+    createHeaders: ({ accessToken }) => ({ Authorization: `Bearer ${accessToken}` }),
+    fetchImpl: (async () => new Response(JSON.stringify({
+      ok: true,
+      data: {
+        query: "贵州茅台",
+        provider: "none",
+        searchedAt: "2026-09-27T00:00:00.000Z",
+        edition: "",
+        cacheHit: false,
+        items: [],
+        status: "unavailable",
+        message: "WEB_SEARCH_PAYMENT_REQUIRED: insufficient balance"
+      }
+    }), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch
+  });
+  const raw = await client.search({ query: "贵州茅台" });
+  assert.equal(raw.status, "unavailable");
+  assert.match(raw.message ?? "", /WEB_SEARCH_PAYMENT_REQUIRED/);
+
+  const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
+  registerDesktopWebSearchTools({
+    unregisterExternalTools: () => undefined,
+    registerExternalTool: (definition, execute) => {
+      tools.set(String(definition.name), execute);
+    }
+  }, {
+    search: (input) => client.search(input),
+    searchMarketNews: async () => { throw new Error("unused"); },
+    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
+  });
+  const result = await tools.get("web.search_paid")!({ query: "贵州茅台" }) as {
+    details: { code: string; message: string };
+    isError?: boolean;
+  };
+  assert.equal(result.details.code, "WEB_SEARCH_PAYMENT_REQUIRED");
+  assert.match(result.details.message, /联网搜索余额不足/);
+  assert.equal(result.isError, true);
+});
+
+test("a thrown budget error keeps its code and Chinese hint", async () => {
+  const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
+  registerDesktopWebSearchTools({
+    unregisterExternalTools: () => undefined,
+    registerExternalTool: (definition, execute) => {
+      tools.set(String(definition.name), execute);
+    }
+  }, {
+    search: async () => { throw new DesktopWebSearchError("WEB_SEARCH_BUDGET_EXCEEDED", "daily paid search budget exhausted"); },
+    searchMarketNews: async () => { throw new DesktopWebSearchError("WEB_SEARCH_BUDGET_EXCEEDED", "daily paid search budget exhausted"); },
+    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
+  });
+  for (const name of ["web.search_paid", "news_search_free"]) {
+    const result = await tools.get(name)!({ query: "q" }) as { details: { code: string; message: string } };
+    assert.equal(result.details.code, "WEB_SEARCH_BUDGET_EXCEEDED");
+    assert.match(result.details.message, /今日联网搜索额度已用完/);
+  }
 });
 
 test("market news client maps orchestrator evidence pack and never logs tokens", async () => {
@@ -331,8 +403,9 @@ test("news_search_free prefers free-first pack and surfaces unavailable guidance
     isError?: boolean;
   };
   assert.equal(result.details.status, "unavailable");
-  assert.equal(result.details.code, "WEB_SEARCH_UNAVAILABLE");
+  assert.equal(result.details.code, "WEB_SEARCH_DISABLED");
   assert.match(result.details.message, /WEB_SEARCH_DISABLED/);
+  assert.match(result.details.message, /管理员已关闭联网搜索/);
   assert.equal(result.details.searchedAt, "2026-08-20T12:00:00.000Z");
   assert.equal(result.isError, true);
 });

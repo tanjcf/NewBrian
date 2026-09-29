@@ -82,6 +82,16 @@ test("resolveSidebarRowThreadTarget finds catalog threads and skips archived one
     sidebarRow: "project-thread:missing:thread-1",
     workspaces
   }), null);
+  assert.equal(resolveSidebarRowThreadTarget({
+    sidebarRow: "project-thread:workspace-a:child",
+    workspaces: [{
+      id: "workspace-a",
+      threads: [
+        { id: "thread-1", archived: false },
+        { id: "child", archived: false, kind: "subagent" }
+      ]
+    }]
+  }), null);
 });
 
 test("shouldPreferSidebarRowThreadRestore only when sidebar row disagrees with selection", () => {

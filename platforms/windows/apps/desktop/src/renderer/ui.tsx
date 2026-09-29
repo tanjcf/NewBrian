@@ -14,7 +14,7 @@ import { markThreadActiveInCatalog } from "./app/thread-order";
 import { compactModelAttachment } from "./app/model-attachment-policy";
 import { isComposerThreadRunning, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { snapshotToDisplayMessages } from "./app/thread-hydration";
-import { combineComposerQuote } from "./app/composer-quote";
+import { enqueueComposerDraft, takeNextComposerQueueItem } from "./app/composer-queue";
 import { markApprovalActivitiesSettling, mergeAssistantActivityItems } from "./app/assistant-activity-merge";
 import { parseUsageExceptionCommand } from "./app/usage-exception-command";
 import {
@@ -169,6 +169,7 @@ type ReviewChangeFile = {
 };
 
 type QueuedComposerDraft = {
+  id?: string;
   threadId: string;
   question: string;
   images: Array<{ name: string; path: string; url: string }>;
@@ -236,8 +237,12 @@ export function App() {
   const [composerImages, setComposerImages] = useState<
     Array<{ name: string; path: string; url: string }>
   >([]);
-  const [queuedComposerDraft, setQueuedComposerDraft] = useState<QueuedComposerDraft | null>(null);
-  const queuedComposerDraftRef = useRef<QueuedComposerDraft | null>(null);
+  const [queuedComposerDrafts, setQueuedComposerDraftsState] = useState<QueuedComposerDraft[]>([]);
+  const queuedComposerDraftsRef = useRef<QueuedComposerDraft[]>([]);
+  const setComposerQueue = (next: QueuedComposerDraft[]) => {
+    queuedComposerDraftsRef.current = next;
+    setQueuedComposerDraftsState(next);
+  };
   useEffect(() => {
     questionRef.current = question;
   }, [question]);
@@ -1661,14 +1666,15 @@ export function App() {
         modes: [...draftModes],
         createdAt: new Date().toISOString()
       };
-      queuedComposerDraftRef.current = nextDraft;
-      setQueuedComposerDraft(nextDraft);
+      const nextQueue = enqueueComposerDraft(queuedComposerDraftsRef.current, nextDraft);
+      setComposerQueue(nextQueue);
       setQuestion("");
       setComposerImages([]);
       setSelectedComposerTools([]);
       setComposerSkillContext("");
       setComposerModes([]);
-      setChatStatus("当前对话正在处理中，已将下一条消息加入排队。");
+      const position = nextQueue.filter((item) => item.threadId === nextDraft.threadId).length;
+      setChatStatus(`已加入排队（第 ${position} 条），当前轮结束后按顺序发送。`);
       return;
     }
     if (!isQueuedDraftReplay) {
@@ -2032,19 +2038,19 @@ export function App() {
           }
         }, 750);
       }
-      const queuedDraft = awaitingApproval || queuedComposerDraftRef.current?.threadId !== targetThreadId
-        ? null
-        : queuedComposerDraftRef.current;
-      if (queuedDraft) {
-        queuedComposerDraftRef.current = null;
-        setQueuedComposerDraft(null);
-        const typed = String(questionRef.current || "").trim();
-        const queuedText = String(queuedDraft.question || "").trim();
-        const mergedQuestion = combineComposerQuote(typed, queuedText);
-        setQuestion("");
-        window.setTimeout(() => void askModel({ ...queuedDraft, question: mergedQuestion }), 0);
+      // A failed or stopped turn pauses the queue; the user resumes it from the tray.
+      if (!awaitingApproval && !requestFailed) {
+        dispatchNextQueuedDraft(targetThreadId);
       }
     }
+  }
+
+  function dispatchNextQueuedDraft(threadId: string) {
+    if (!threadId || selectedThreadIdRef.current !== threadId) return;
+    const { next, rest } = takeNextComposerQueueItem(queuedComposerDraftsRef.current, threadId);
+    if (!next) return;
+    setComposerQueue(rest);
+    window.setTimeout(() => void askModel(next), 0);
   }
 
   async function startUsageExceptionFeedback(description: string, commandText = "") {
@@ -2171,18 +2177,7 @@ export function App() {
         ? selectedThreadIdRef.current
         : ""
     );
-    const queuedDraft = queuedComposerDraftRef.current?.threadId === threadId
-      ? queuedComposerDraftRef.current
-      : null;
-    if (queuedDraft) {
-      queuedComposerDraftRef.current = null;
-      setQueuedComposerDraft(null);
-      const typed = String(questionRef.current || "").trim();
-      const queuedText = String(queuedDraft.question || "").trim();
-      const mergedQuestion = combineComposerQuote(typed, queuedText);
-      setQuestion("");
-      window.setTimeout(() => void askModel({ ...queuedDraft, question: mergedQuestion }), 0);
-    }
+    dispatchNextQueuedDraft(threadId);
   }
 
   function releaseInactiveModelRequest(requestId: string, threadId: string) {
@@ -3080,9 +3075,9 @@ export function App() {
         setChatMessages={setChatMessages}
         composerImages={composerImages}
         setComposerImages={setComposerImages}
-        queuedComposerDraft={queuedComposerDraft}
-        setQueuedComposerDraft={setQueuedComposerDraft}
-        queuedComposerDraftRef={queuedComposerDraftRef}
+        queuedComposerDrafts={queuedComposerDrafts}
+        setComposerQueue={setComposerQueue}
+        queuedComposerDraftsRef={queuedComposerDraftsRef}
         questionRef={questionRef}
         usageExceptionFeedbackPreview={usageExceptionFeedbackPreview}
         usageExceptionFeedbackBusy={usageExceptionFeedbackBusy}

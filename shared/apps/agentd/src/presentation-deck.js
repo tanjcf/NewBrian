@@ -594,6 +594,7 @@ export async function writePptxDeck(input, target, sectionsFn, options = {}) {
   }
 
   const total = slides.length;
+  await fs.mkdir(path.dirname(target), { recursive: true });
   for (let index = 0; index < slides.length; index += 1) {
     const slideModel = slides[index];
     const page = index + 1;
@@ -629,9 +630,12 @@ export async function writePptxDeck(input, target, sectionsFn, options = {}) {
         renderBulletsSlide(deck, slideModel, theme, page, total);
         break;
     }
+    // Flush after each slide so the desktop Tools preview can open and grow one page at a time.
+    await deck.writeFile({ fileName: target });
+    if (typeof options.onSlideWritten === "function") {
+      await options.onSlideWritten({ slideCount: index + 1, total, path: target });
+    }
   }
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await deck.writeFile({ fileName: target });
   return { slideCount: total, deckTitle };
 }
 

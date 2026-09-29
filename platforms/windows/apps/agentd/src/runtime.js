@@ -12,6 +12,7 @@ import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
 import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { ToolHostClient } from "./tool-host-client.js";
 import { UserShadow } from "./user-shadow.js";
+import { updateCompanionMemoryFromExchange } from "./companion-memory.js";
 import { enrichShellEnvForTools } from "./shell-env.js";
 import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 import {
@@ -690,6 +691,7 @@ export class LocalAgentRuntime {
     }
     // Turn overlay was for this turn's tools only; clear after absorb.
     this.turnDeliveryPreferences = null;
+    await updateCompanionMemoryFromExchange(this.skillRegistry.roots, input);
     await this.skillRegistry.discover();
     this.sessionMachine.events.push({
       id: makeId("shadow-event"),

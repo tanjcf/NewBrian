@@ -63,6 +63,19 @@ test("composer toolbar places undo and redo beside send", () => {
   assert.ok(undoAt > 0 && redoAt > undoAt && sendAt > redoAt);
 });
 
+test("composer send button uses the shared arrow icon instead of a text glyph", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const sendButton = source.slice(
+    source.indexOf('data-testid="composer-send-button"'),
+    source.indexOf("</button>", source.indexOf('data-testid="composer-send-button"'))
+  );
+
+  assert.match(sendButton, /<SidebarIcon name="arrow-up" \/>/);
+  assert.doesNotMatch(sendButton, />\s*↑\s*$/);
+  assert.doesNotMatch(styles, /border-bottom:\s*8px solid #ffffff/);
+});
+
 test("submit composer does not auto-send after scene workspace alignment", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   const submitSource = source.slice(source.indexOf("function submitComposerRequest"), source.indexOf("function renderBrainChatModule"));

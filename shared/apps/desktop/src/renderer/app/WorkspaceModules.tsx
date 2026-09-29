@@ -73,7 +73,7 @@ import {
 } from "./thread-activity-policy";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import { resolveLocalArtifactHref } from "./local-file-link";
-import { crossSceneRecentProjects, filterWorkspaceCatalogByScene, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection, sceneChatWorkspaces } from "./workspace-visibility";
+import { crossSceneRecentProjects, filterWorkspaceCatalogByScene, isUserVisibleThread, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection, sceneChatWorkspaces } from "./workspace-visibility";
 import {
   buildLegacyConversationThreadMappings,
   mergeConversationThreadMappings,
@@ -194,6 +194,12 @@ import { recoverActiveThreadRetry } from "./generation-failure-recovery";
 import { GovernmentWritingSpecification } from "./GovernmentWritingSpecification";
 import { mergeRefreshedModelConfig } from "./model-config-refresh";
 import { combineComposerQuote } from "./composer-quote";
+import {
+  composerQueueForThread,
+  enqueueComposerDraft,
+  removeComposerQueueItem,
+  requeueComposerItemFirst
+} from "./composer-queue";
 import { isComposerAttachmentErrorMessage, normalizeComposerAttachmentError } from "./composer-attachment-errors";
 import {
   insertComposerAttachmentTokens,
@@ -721,6 +727,7 @@ export function WorkspaceModules(ctx: any) {
   const [brainChangeSets, setBrainChangeSets] = useState<any[]>([]);
   const [brainChangeSetPreview, setBrainChangeSetPreview] = useState<any>(null);
   const [documentAnnotationActive, setDocumentAnnotationActive] = useState(false);
+  const [pptxChatCollapsed, setPptxChatCollapsed] = useState(false);
   const [documentAnnotationCandidate, setDocumentAnnotationCandidate] = useState<any>(null);
   const [documentAnnotationInstruction, setDocumentAnnotationInstruction] = useState("");
   const [documentAnnotationBusy, setDocumentAnnotationBusy] = useState(false);
@@ -742,6 +749,8 @@ export function WorkspaceModules(ctx: any) {
   );
   const [brainSceneTab, setBrainSceneTab] = useState(initialWorkspaceSceneTab);
   const brainResourcePanelRef = useRef<HTMLElement | null>(null);
+  const pendingArtifactPreviewPathRef = useRef("");
+  const openLocalFilePreviewRef = useRef<(filePath: string, location?: { line?: number; endLine?: number; column?: number; workspaceId?: string; displayName?: string; forceReload?: boolean }) => void>(() => undefined);
   const [brainResourceWidth, setBrainResourceWidth] = useState(() => {
     try {
       const stored = Number(localStorage.getItem("brain.resource-panel-width"));
@@ -900,6 +909,19 @@ export function WorkspaceModules(ctx: any) {
     setSelectedThreadId(threadId);
     setIsComposingNewThread(!threadId);
   }, [selectedBrainWorkspaceKey, visibleWorkspaceCatalog, selectedWorkspace, selectedBrainConversationId, isComposingNewThread, newThreadScope, chatUsesProject, setSelectedWorkspaceId, setSelectedThreadId, setIsComposingNewThread]);
+  useEffect(() => {
+    const thread = selectedWorkspace?.threads?.find((item: { id?: string }) => item.id === selectedThreadId);
+    if (!thread || isUserVisibleThread(thread)) return;
+    const parentId = String((thread as { parentThreadId?: string }).parentThreadId || "").trim();
+    const parent = parentId
+      ? selectedWorkspace.threads.find((item: { id?: string }) => item.id === parentId && isUserVisibleThread(item))
+      : undefined;
+    const nextId = parent?.id || resolveUserVisibleThreadSelection(selectedWorkspace.threads, null)?.id || "";
+    if (!nextId || nextId === selectedThreadId) return;
+    setSelectedThreadId(nextId);
+    const scope = selectedWorkspace.threads.find((item: { id?: string; scope?: string }) => item.id === nextId)?.scope;
+    setSelectedSidebarRow(`${scope === "chat" ? "chat" : "project-thread"}:${selectedWorkspace.id}:${nextId}`);
+  }, [selectedWorkspace, selectedThreadId, setSelectedThreadId]);
   const refreshBrainProjects = useCallback(async (workspaceKey = selectedBrainWorkspaceKey) => {
     if (!window.newbrain?.listBrainProjects) return [];
     const [projects, recents] = await Promise.all([
@@ -1337,12 +1359,37 @@ export function WorkspaceModules(ctx: any) {
       window.newbrain?.listBrainChangeSets?.({ projectId: selectedBrainProjectId }) ?? Promise.resolve([])
     ]).then(([files, tasks, artifacts, annotations, changeSets]) => {
       if (disposed) return;
-      setBrainFiles(Array.isArray(files) ? files : []);
+      const nextFiles = Array.isArray(files) ? files : [];
+      setBrainFiles(nextFiles);
       setBrainTasks(Array.isArray(tasks) ? tasks : []);
       setBrainArtifacts(Array.isArray(artifacts) ? artifacts : []);
       setBrainAnnotations(Array.isArray(annotations) ? annotations : []);
       setBrainChangeSets(Array.isArray(changeSets) ? changeSets : []);
       setBrainChangeSetPreview(null);
+      const pendingPath = String(pendingArtifactPreviewPathRef.current || "").replace(/\\/g, "/");
+      if (pendingPath) {
+        const matched = nextFiles.find((file) => {
+          const storageKey = String(file.storageKey || "").replace(/\\/g, "/");
+          const logicalName = String(file.logicalName || "");
+          return storageKey === pendingPath
+            || storageKey.endsWith(`/${pendingPath}`)
+            || logicalName === pendingPath.split("/").pop();
+        });
+        if (matched?.id) {
+          setActiveBrainDocumentFileId(matched.id);
+          if (window.newbrain?.ingestBrainFile && !/\.(?:mp3|wav|flac|m4a|ogg)$/i.test(String(matched.logicalName || matched.storageKey || ""))) {
+            void window.newbrain.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: matched.id })
+              .then((result) => {
+                if (disposed) return;
+                setBrainDocumentAnchors(result.anchors || []);
+                if (result.warnings?.length) setChatStatus(result.warnings.join(" "));
+              })
+              .catch((error: unknown) => {
+                if (!disposed) setChatStatus(error instanceof Error ? error.message : "文档结构解析失败");
+              });
+          }
+        }
+      }
     }).catch((error) => {
       if (!disposed) setErrorMessage(error instanceof Error ? error.message : String(error));
     });
@@ -1363,6 +1410,19 @@ export function WorkspaceModules(ctx: any) {
         setBrainResourcePlacement((current) => (current === "hidden" ? "side" : current));
         setBrainResourceTab("scene");
         setBrainSceneTab(reason.includes("render") ? "export" : reason.includes("song.generate") ? "tracks" : "gen");
+      }
+      const artifactPathMatch = /^(?:artifact\.create|document\.create_[a-z]+|workspace\.write_file):(.+)$/i.exec(reason);
+      const artifactPath = String(artifactPathMatch?.[1] || "").trim().replace(/\\/g, "/");
+      if (artifactPath && /\.(?:pptx|pdf|docx)$/i.test(artifactPath)) {
+        setBrainResourcePlacement((current) => (current === "hidden" ? "side" : current));
+        if (/\.pptx$/i.test(artifactPath)) {
+          setBrainResourceTab("scene");
+          setBrainSceneTab("preview");
+        } else {
+          setBrainResourceTab((current) => (current === "tasks" ? current : "files"));
+        }
+        pendingArtifactPreviewPathRef.current = artifactPath;
+        openLocalFilePreviewRef.current?.(artifactPath, { forceReload: true });
       }
       setDataWorkspaceRefreshToken((value) => value + 1);
     });
@@ -1473,7 +1533,83 @@ export function WorkspaceModules(ctx: any) {
     }
   }, [sidebarOrganizeMode, sidebarSortMode]);
   const [composerMenu, setComposerMenu] = useState<"add" | "permission" | "context" | "reasoning" | "skill" | null>(null);
-  const [queuedComposerMenuOpen, setQueuedComposerMenuOpen] = useState(false);
+  const [composerQueueCollapsed, setComposerQueueCollapsed] = useState(false);
+  const [editingUserMessageId, setEditingUserMessageId] = useState("");
+  const [editingUserDraft, setEditingUserDraft] = useState("");
+  const [copiedUserMessageId, setCopiedUserMessageId] = useState("");
+  const copyUserMessage = (messageId: string, content: string) => {
+    writeClipboard(content);
+    setCopiedUserMessageId(messageId);
+    window.setTimeout(() => {
+      setCopiedUserMessageId((current) => current === messageId ? "" : current);
+    }, 1600);
+  };
+  const beginEditUserMessage = (messageId: string, content: string) => {
+    setEditingUserMessageId(messageId);
+    setEditingUserDraft(content);
+  };
+  const cancelEditUserMessage = () => {
+    setEditingUserMessageId("");
+    setEditingUserDraft("");
+  };
+  const submitEditedUserMessage = async (turn: any) => {
+    const content = editingUserDraft.trim();
+    const messageId = String(turn?.user?.id || "");
+    if (!content || !messageId || !selectedThread?.id) return;
+    if (isAskingModel || isGlobalModelBusy) {
+      await cancelCurrentModelRequest?.();
+    }
+    const keepBefore = (messages: any[]) => {
+      const index = messages.findIndex((message) => message?.id === messageId && message?.role === "user");
+      return index < 0 ? messages : messages.slice(0, index);
+    };
+    try {
+      if (typeof api?.rewindThreadToUserMessage === "function" && selectedWorkspace?.id) {
+        const nextSnapshot = await api.rewindThreadToUserMessage({
+          workspaceId: selectedWorkspace.id,
+          threadId: selectedThread.id,
+          userMessageId: messageId
+        });
+        syncSnapshot?.(nextSnapshot, selectedThread.id);
+      }
+    } catch (error) {
+      setChatStatus(error instanceof Error ? error.message : "没能从这条消息重新开始。");
+      return;
+    }
+    updateThreadMessages?.(selectedThread.id, (current: any[]) => keepBefore(current));
+    setEditingUserMessageId("");
+    setEditingUserDraft("");
+    void askModel({
+      question: content,
+      images: Array.isArray(turn.user.attachments) ? turn.user.attachments : [],
+      tools: [],
+      skill: null,
+      skillContext: "",
+      modes: []
+    });
+  };
+  // Windows hosts a multi-item queue; macOS/Ubuntu still pass a single slot,
+  // so writes there keep only the newest item.
+  const composerQueue: any[] = Array.isArray(ctx.queuedComposerDrafts)
+    ? ctx.queuedComposerDrafts
+    : (queuedComposerDraft ? [queuedComposerDraft] : []);
+  const readComposerQueue = (): any[] => {
+    if (Array.isArray(ctx.queuedComposerDraftsRef?.current)) return ctx.queuedComposerDraftsRef.current;
+    const single = queuedComposerDraftRef?.current ?? queuedComposerDraft;
+    return single ? [single] : [];
+  };
+  const commitComposerQueue = (next: any[]) => {
+    if (typeof ctx.setComposerQueue === "function") {
+      ctx.setComposerQueue(next);
+      return;
+    }
+    const head = next[next.length - 1] ?? null;
+    if (queuedComposerDraftRef) queuedComposerDraftRef.current = head;
+    setQueuedComposerDraft?.(head);
+  };
+  const enqueueComposerQueueDraft = (draft: any) => {
+    commitComposerQueue(enqueueComposerDraft(readComposerQueue(), draft));
+  };
   const [reasoningSubmenu, setReasoningSubmenu] = useState<"model" | "speed" | "optimize" | null>(null);
   const [reasoningMenuPosition, setReasoningMenuPosition] = useState<ComposerPickerMenuPosition | null>(null);
   const reasoningPickerWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2274,8 +2410,7 @@ export function WorkspaceModules(ctx: any) {
       const execution = await api.answerGoalQuestion({ threadId: selectedThread?.id, questionId: pendingQuestion.questionId, answer });
       setGoalExecution(execution);
       if (isGlobalModelBusy) {
-        queuedComposerDraftRef.current = continuationDraft;
-        setQueuedComposerDraft(continuationDraft);
+        enqueueComposerQueueDraft(continuationDraft);
         setChatStatus("已记录目标决策；当前轮次收尾后将自动继续执行。");
       } else {
         setChatStatus("已记录目标决策，正在从暂停位置继续执行。");
@@ -2296,8 +2431,7 @@ export function WorkspaceModules(ctx: any) {
       : `请指导我修改当前政务写作规格。要求：${instruction || "检查任务、核心要求、官方证据和结构模板"}。不要直接改写规格。请先逐条说明建议，再返回一个 JSON 代码块，内容必须是建议数组，每项严格使用 {"suggestionId":"s-1","target":{"kind":"task"},"reason":"原因","proposedValue":"建议的新值"}。target.kind 只能是 task、requirement 或 section-points；后两者分别补充 key 或 sectionId。不要起草文章正文。`;
     const draft = { threadId: selectedThread?.id || "", question: request, images: [], tools: [], skill: null, skillContext: "", modes: ["goal"], createdAt: new Date().toISOString() };
     if (isGlobalModelBusy) {
-      queuedComposerDraftRef.current = draft;
-      setQueuedComposerDraft(draft);
+      enqueueComposerQueueDraft(draft);
       setChatStatus("规格修改请求已排队。");
     } else {
       void askModel(draft);
@@ -2675,7 +2809,7 @@ export function WorkspaceModules(ctx: any) {
     setChatStatus(formatFilePreviewStatus(input.issue, reportId || undefined));
     return reportId;
   }, [api, setChatStatus]);
-  const openLocalFilePreview = useCallback((filePath: string, location?: { line?: number; endLine?: number; column?: number; workspaceId?: string; displayName?: string }) => {
+  const openLocalFilePreview = useCallback((filePath: string, location?: { line?: number; endLine?: number; column?: number; workspaceId?: string; displayName?: string; forceReload?: boolean }) => {
     const workspaceId = location?.workspaceId || selectedWorkspace?.id;
     const displayName = String(location?.displayName || "").trim();
     if (!api || !workspaceId || !filePath) {
@@ -2705,7 +2839,7 @@ export function WorkspaceModules(ctx: any) {
         : (/\.(?:docx|pdf|pptx|xlsx)$/i.test(filePath) ? "center" : "side")
     );
     const existing = findMatchingArtifactTab(artifactTabsRef.current, filePath);
-    if (existing && isReusableArtifactPreview(existing) && !location?.line) {
+    if (existing && isReusableArtifactPreview(existing) && !location?.line && !location?.forceReload) {
       activeArtifactPathRef.current = existing.tabPath;
       setActiveTreePath(existing.path || existing.tabPath);
       setSearchFilePreview(existing);
@@ -2864,6 +2998,7 @@ export function WorkspaceModules(ctx: any) {
       }
     })();
   }, [api, brainResourcePlacement, reportFilePreviewIssue, selectedWorkspace?.id, setActiveFeature, setActiveTreePath, setIsComposingNewThread, setPreviewMode, setPreviewPlacement, setSearchFilePreview, setSelectedWorkspaceId]);
+  openLocalFilePreviewRef.current = openLocalFilePreview;
 
   useEffect(() => {
     if (!api?.onOpenWorkspaceFilePreview) return;
@@ -3086,14 +3221,11 @@ export function WorkspaceModules(ctx: any) {
       maximumFractionDigits: amount > 0 && amount < 1 ? 6 : 2
     })}`;
   };
-  const clearQueuedComposerDraft = () => {
-    if (queuedComposerDraftRef) queuedComposerDraftRef.current = null;
-    setQueuedComposerDraft(null);
-    setQueuedComposerMenuOpen(false);
+  const selectedThreadQueue: any[] = composerQueueForThread(composerQueue, selectedThread?.id);
+  const selectedThreadRunning = Boolean(selectedThread?.id && activeThreadRequestIds?.[selectedThread.id]);
+  const removeQueuedComposerItem = (item: any) => {
+    commitComposerQueue(removeComposerQueueItem(readComposerQueue(), item?.id));
   };
-  const visibleQueuedComposerDraft = queuedComposerDraft?.threadId === selectedThread?.id
-    ? queuedComposerDraft
-    : null;
   const focusComposerInputWithContent = (content: string) => {
     composerTextareaRef.current?.setValue(content);
     setComposerLayoutDraft(content);
@@ -3102,80 +3234,53 @@ export function WorkspaceModules(ctx: any) {
       composerTextareaRef.current?.focus();
     });
   };
-  const quoteQueuedComposerDraftIntoInput = (draft = visibleQueuedComposerDraft) => {
-    if (!draft) return "";
+  const editQueuedComposerItem = (item: any) => {
+    if (!item) return;
     const typedText = String(questionRef?.current ?? question ?? "").trim();
-    const combined = combineComposerQuote(typedText, String(draft.question || ""));
-    if (!combined) return "";
     // Append onto whatever the user already typed; never wipe the newer input.
-    setQuestion(combined);
+    const combined = combineComposerQuote(typedText, String(item.question || ""));
     if (questionRef) questionRef.current = combined;
-    if (Array.isArray(draft.images) && draft.images.length) {
+    if (Array.isArray(item.images) && item.images.length) {
       setComposerImages((current: any[]) => {
         const seen = new Set((current || []).map((image: any) => image.path));
-        return [...(current || []), ...draft.images.filter((image: any) => image?.path && !seen.has(image.path))];
+        return [...(current || []), ...item.images.filter((image: any) => image?.path && !seen.has(image.path))];
       });
     }
-    if (Array.isArray(draft.tools) && draft.tools.length) {
+    if (Array.isArray(item.tools) && item.tools.length) {
       setSelectedComposerTools((current: any[]) => {
         const seen = new Set((current || []).map((tool: any) => tool.id));
-        return [...(current || []), ...draft.tools.filter((tool: any) => tool?.id && !seen.has(tool.id))];
+        return [...(current || []), ...item.tools.filter((tool: any) => tool?.id && !seen.has(tool.id))];
       });
     }
-    if (draft.skill) setSelectedComposerSkill(draft.skill);
-    if (draft.skillContext) setComposerSkillContext(draft.skillContext);
-    if (Array.isArray(draft.modes) && draft.modes.length) {
-      setComposerModes((current: Array<"goal" | "plan">) => [...new Set([...(current || []), ...draft.modes])]);
+    if (item.skill) setSelectedComposerSkill(item.skill);
+    if (item.skillContext) setComposerSkillContext(item.skillContext);
+    if (Array.isArray(item.modes) && item.modes.length) {
+      setComposerModes((current: Array<"goal" | "plan">) => [...new Set([...(current || []), ...item.modes])]);
     }
+    removeQueuedComposerItem(item);
     focusComposerInputWithContent(combined);
-    return combined;
   };
-  const editQueuedComposerDraft = () => {
-    if (!visibleQueuedComposerDraft) return;
-    // Editing replaces the composer with the queued draft so the user can revise it.
-    const quoted = String(visibleQueuedComposerDraft.question || "").trim();
-    setQuestion(quoted);
-    if (questionRef) questionRef.current = quoted;
-    setComposerImages(visibleQueuedComposerDraft.images || []);
-    setSelectedComposerTools(visibleQueuedComposerDraft.tools || []);
-    setSelectedComposerSkill(visibleQueuedComposerDraft.skill || null);
-    setComposerSkillContext(visibleQueuedComposerDraft.skillContext || "");
-    setComposerModes(visibleQueuedComposerDraft.modes || []);
-    clearQueuedComposerDraft();
-    focusComposerInputWithContent(quoted);
-  };
-  const guideQueuedComposerDraft = async (
-    delivery: "steer" | "followup" | "interrupt" = "steer"
-  ) => {
-    if (!visibleQueuedComposerDraft || !selectedThread?.id) return;
-    const continuationDraft = {
-      ...visibleQueuedComposerDraft,
-      question: String(visibleQueuedComposerDraft.question || "").trim(),
-      images: Array.isArray(visibleQueuedComposerDraft.images)
-        ? visibleQueuedComposerDraft.images.map((image: any) => ({ ...image }))
-        : []
-    };
-    const typedText = String(questionRef?.current ?? question ?? "").trim();
-    const combined = combineComposerQuote(typedText, continuationDraft.question);
-    if (!combined && !(continuationDraft.images || []).length) return;
-    const restoreQueuedDraft = (detail: string) => {
-      const restored = {
-        ...continuationDraft,
-        question: combined || continuationDraft.question,
-        createdAt: new Date().toISOString()
-      };
-      if (queuedComposerDraftRef) queuedComposerDraftRef.current = restored;
-      setQueuedComposerDraft(restored);
-      setQuestion(typedText);
-      if (questionRef) questionRef.current = typedText;
+  const sendQueuedComposerItemNow = async (item: any) => {
+    if (!item || !selectedThread?.id) return;
+    const threadId = selectedThread.id;
+    const message = String(item.question || "").trim() || "请查看附件";
+    // Leave the queue only after a successful dispatch; a failed send goes back to the front.
+    removeQueuedComposerItem(item);
+    const requeue = (detail: string) => {
+      commitComposerQueue(requeueComposerItemFirst(readComposerQueue(), item));
       setChatStatus(detail);
     };
-    const clearComposerAfterDispatch = () => {
-      setQuestion("");
-      if (questionRef) questionRef.current = "";
-      setComposerImages([]);
-    };
-    const attachmentPayload = (continuationDraft.images || [])
+    const requestId = activeThreadRequestIds[threadId] || "";
+    if (!requestId) {
+      setChatStatus("排队消息正在发送…");
+      window.setTimeout(() => void askModel(item), 0);
+      return;
+    }
+    if (!api?.guideModelRequest) {
+      requeue("当前运行不支持插入消息，已保持排队；本轮结束后会自动发送。");
+      return;
+    }
+    const attachments = (Array.isArray(item.images) ? item.images : [])
       .filter((image: any) => image?.path)
       .slice(0, 8)
       .map((image: any) => ({
@@ -3183,81 +3288,33 @@ export function WorkspaceModules(ctx: any) {
         path: String(image.path),
         url: typeof image.url === "string" ? image.url : undefined
       }));
-    setQueuedComposerMenuOpen(false);
-
-    if (delivery === "followup") {
-      // Keep the OpenClaw/Codex follow-up queue: send as the next turn after this run.
-      setChatStatus("已保持排队；当前轮结束后会自动发送。");
-      return;
-    }
-
-    // Leave the queue only after a successful dispatch. Dumping text back into the
-    // composer without sending is what users report as「又回到了输入框」.
-    clearQueuedComposerDraft();
-    const requestId = activeThreadRequestIds[selectedThread.id] || "";
-
-    if (delivery === "interrupt") {
-      clearComposerAfterDispatch();
-      setChatStatus("正在中断当前运行并改发引用消息…");
-      if (requestId && api?.cancelModelRequest) {
-        try {
-          await api.cancelModelRequest({ requestId });
-        } catch {
-          // Continue with the replacement turn even if cancel races the natural finish.
-        }
-        releaseInactiveModelRequest?.(requestId, selectedThread.id);
-      }
-      window.setTimeout(() => void askModel({
-        ...continuationDraft,
-        question: combined || continuationDraft.question || "请查看附件"
-      }), 0);
-      return;
-    }
-
-    if (!api?.guideModelRequest) {
-      restoreQueuedDraft("引用通道不可用，已保持排队；当前轮结束后会自动发送。");
-      return;
-    }
-    if (!requestId) {
-      clearComposerAfterDispatch();
-      setChatStatus("引用消息正在发送…");
-      window.setTimeout(() => void askModel({
-        ...continuationDraft,
-        question: combined || continuationDraft.question || "请查看附件"
-      }), 0);
-      return;
-    }
     try {
-      const result = await api.guideModelRequest({
-        requestId,
-        message: combined || continuationDraft.question || "请查看附件",
-        attachments: attachmentPayload,
-        delivery: "steer"
-      });
+      const result = await api.guideModelRequest({ requestId, message, attachments, delivery: "steer" });
       if (result?.ok === false && result.code === "request_not_active") {
-        releaseInactiveModelRequest?.(requestId, selectedThread.id);
-        clearComposerAfterDispatch();
-        setChatStatus("当前运行已结束；引用消息正在作为下一轮发送…");
-        window.setTimeout(() => void askModel({
-          ...continuationDraft,
-          question: combined || continuationDraft.question || "请查看附件"
-        }), 0);
+        releaseInactiveModelRequest?.(requestId, threadId);
+        setChatStatus("当前运行已结束，排队消息正在作为下一轮发送…");
+        window.setTimeout(() => void askModel(item), 0);
         return;
       }
       if (result?.ok === false) {
-        restoreQueuedDraft(result.detail || "引用未能发送到当前运行，已保持排队。");
+        requeue(result.detail || "未能插入当前运行，已保持排队。");
         return;
       }
-      clearComposerAfterDispatch();
-      setChatStatus(result.detail || "引用消息已发送到当前运行。");
+      setChatStatus(result?.detail || "已插入当前运行。");
     } catch (error) {
-      // Direct-draft / no-loop turns cannot be steered; keep the queue so finish auto-sends.
-      restoreQueuedDraft(
+      // Direct-draft / no-loop turns cannot be steered; keep the item so finish auto-sends.
+      requeue(
         error instanceof Error
-          ? `当前运行暂不可引导（${error.message}），已保持排队；结束后将自动发送。`
-          : "当前运行暂不可引导，已保持排队；结束后将自动发送。"
+          ? `当前运行暂不可插入消息（${error.message}），已保持排队；本轮结束后会自动发送。`
+          : "当前运行暂不可插入消息，已保持排队；本轮结束后会自动发送。"
       );
     }
+  };
+  const resumeComposerQueue = () => {
+    const [next] = selectedThreadQueue;
+    if (!next || selectedThreadRunning) return;
+    removeQueuedComposerItem(next);
+    window.setTimeout(() => void askModel(next), 0);
   };
 
   const parseDiffPreviewRows = (diff: string) => {
@@ -3917,7 +3974,7 @@ export function WorkspaceModules(ctx: any) {
   }
   const recentProjectThreads = visibleWorkspaceCatalog
     .flatMap((workspace: any) =>
-      sortThreadsForMenu((workspace.threads ?? []).filter((thread: any) => thread.scope !== "chat"))
+      sortThreadsForMenu((workspace.threads ?? []).filter((thread: any) => thread.scope !== "chat" && isUserVisibleThread(thread)))
         .map((thread: any) => ({ workspace, thread }))
     )
     .slice(0, 9);
@@ -3931,7 +3988,7 @@ export function WorkspaceModules(ctx: any) {
         .map((thread: any) => ({ workspace, thread }))
     );
   const allSidebarTasks = sceneWorkspaceCatalog.flatMap((workspace: any) =>
-    sortThreadsForMenu(workspace.threads ?? []).map((thread: any) => ({ workspace, thread }))
+    sortThreadsForMenu((workspace.threads ?? []).filter((thread: any) => isUserVisibleThread(thread))).map((thread: any) => ({ workspace, thread }))
   );
   const sortSidebarEntries = (entries: any[]) => {
     const sortedThreads = sortCodexSidebarThreads(entries.map((entry) => entry.thread), sidebarSortMode, pinnedThreadIds, unreadThreadIds);
@@ -4173,6 +4230,7 @@ export function WorkspaceModules(ctx: any) {
   const activeThreadIdSet = new Set(activeThreadIds);
   for (const workspace of visibleWorkspaceCatalog) {
     for (const thread of workspace.threads) {
+      if (!isUserVisibleThread(thread)) continue;
       if (thread.status === "running" || activeThreadIdSet.has(thread.id)) runningTaskKeys.add(`${workspace.id}:${thread.id}`);
     }
   }
@@ -4271,6 +4329,7 @@ export function WorkspaceModules(ctx: any) {
 
   for (const workspace of visibleWorkspaceCatalog) {
     const count = workspace.threads.filter((thread: any) => {
+      if (!isUserVisibleThread(thread)) return false;
       const key = `${workspace.id}:${thread.id}`;
       return thread.status === "running" || key === runningThreadKey || activeThreadIdSet.has(thread.id);
     }).length;
@@ -4588,7 +4647,7 @@ function renderSidebarModule() {
                   const expanded = expandedWorkspaceIds.has(workspace.id);
                   const active = selectedWorkspace?.id === workspace.id;
                   const threadListExpanded = expandedThreadListWorkspaceIds.has(workspace.id);
-                  const projectThreads = (workspace.threads ?? []).filter((thread: any) => thread.scope !== "chat");
+                  const projectThreads = (workspace.threads ?? []).filter((thread: any) => thread.scope !== "chat" && isUserVisibleThread(thread));
                   const menuSortedThreads = sortCodexSidebarThreads(
                     sortThreadsForMenu(projectThreads),
                     sidebarSortMode,
@@ -4928,7 +4987,7 @@ function renderSidebarModule() {
                         onClick={async () => {
                           const workspace = projectContextMenu.workspace;
                           const threadIds = workspace.threads
-                            .filter((thread: any) => thread.scope !== "chat")
+                            .filter((thread: any) => thread.scope !== "chat" && isUserVisibleThread(thread))
                             .map((thread: any) => thread.id);
                           setArchivedThreadIds((current) => new Set([...current, ...threadIds]));
                           setProjectContextMenu(null);
@@ -4959,7 +5018,7 @@ function renderSidebarModule() {
                               filterWorkspaceCatalogByScene(normalizeWorkspaceCatalog(nextCatalog), selectedBrainWorkspaceKey)
                             )[0];
                             if (selectedWorkspace?.id === workspace.id) {
-                              const fallbackThreadId = fallback?.threads[0]?.id ?? "";
+                              const fallbackThreadId = resolveUserVisibleThreadSelection(fallback?.threads ?? [], null)?.id ?? "";
                               setSelectedWorkspaceId(fallback?.id ?? "");
                               setSelectedThreadId(fallbackThreadId);
                               setIsComposingNewThread(!fallbackThreadId);
@@ -5240,7 +5299,7 @@ function renderSidebarModule() {
     if (!composerMentionQuery) return [] as ConversationRefCandidate[];
     const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
     const threadCandidates: ConversationRefCandidate[] = catalog.flatMap((workspace: any) =>
-      (workspace.threads || []).map((thread: any) => ({
+      (workspace.threads || []).filter((thread: any) => isUserVisibleThread(thread)).map((thread: any) => ({
         id: `thread-${workspace.id}-${thread.id}`,
         kind: "thread" as const,
         title: String(thread.title || "未命名线程"),
@@ -5643,6 +5702,19 @@ function renderSidebarModule() {
     const sidebarRow = String(selectedSidebarRow || "");
     const inProjectConversationContext = isBrainConversationSelection
       || sidebarRow.startsWith("project-thread:");
+    // An open INTERNAL_CHAT thread keeps receiving follow-ups in place; it is
+    // not scene-bound, so the project routing below must not claim it.
+    if (
+      !inProjectConversationContext
+      && !isComposingNewThread
+      && selectedWorkspace?.id === INTERNAL_CHAT_WORKSPACE_ID
+      && selectedThread?.id
+    ) {
+      setErrorMessage("");
+      void askModel(outbound);
+      clearComposerAfterSend();
+      return;
+    }
     // Match NewBrain: sidebar "新对话 / 聊天 +" stays on INTERNAL_CHAT and must
     // never be redirected into the scene's project thread on send.
     const wantsStandaloneChat = !inProjectConversationContext
@@ -5666,9 +5738,10 @@ function renderSidebarModule() {
     if (!sceneWorkspace) {
       // Project-scoped intent but this scene has no project: allow standalone
       // chat. Never borrow another scene's project (防串场).
+      // askModel owns the new-thread decision; flipping compose mode here
+      // strands the UI on the new-chat page when it reuses the current thread.
       setChatUsesProject?.(false);
       setNewThreadScope("chat");
-      setIsComposingNewThread(true);
       setErrorMessage("");
       setChatStatus("当前场景暂无项目，已使用独立聊天发送。");
       void askModel({ ...outbound, forceStandaloneChat: true, brainWorkspaceKey: selectedBrainWorkspaceKey });
@@ -6082,7 +6155,7 @@ function renderSidebarModule() {
 
 function renderChatModule() {
     return (
-      <section className={`task-column${isNewChatMode ? " new-chat-task" : ""}`}>
+      <section className={`task-column${isNewChatMode ? " new-chat-task" : ""}${pptxChatCollapsed && searchFilePreview?.kind === "pptx" ? " pptx-chat-collapsed" : ""}`}>
         <header className="task-topbar">
           <div className="task-thread-title">
             <span className="task-topbar-kicker">当前工作区</span>
@@ -6269,28 +6342,62 @@ function renderChatModule() {
                           })}
                         </div>
                       ) : null}
-                      <div className="request-bubble">{turn.user.content}</div>
+                      {editingUserMessageId === turn.user.id ? (
+                        <div className="request-edit" data-testid="user-message-edit">
+                          <textarea
+                            value={editingUserDraft}
+                            aria-label="编辑问题"
+                            rows={Math.min(8, Math.max(2, editingUserDraft.split("\n").length))}
+                            onChange={(event) => setEditingUserDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                cancelEditUserMessage();
+                              } else if (event.key === "Enter" && !event.shiftKey) {
+                                event.preventDefault();
+                                void submitEditedUserMessage(turn);
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <div className="request-edit-actions">
+                            <button type="button" onClick={cancelEditUserMessage}>取消</button>
+                            <button
+                              type="button"
+                              className="request-edit-send"
+                              aria-label="发送修改后的问题"
+                              disabled={!editingUserDraft.trim()}
+                              onClick={() => void submitEditedUserMessage(turn)}
+                            >
+                              发送
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="request-bubble">{turn.user.content}</div>
+                      )}
+                      {editingUserMessageId === turn.user.id ? null : (
                       <div className="request-actions" aria-label="问题操作">
                         <button
                           type="button"
-                          title="复制问题"
+                          title={copiedUserMessageId === turn.user.id ? "已复制" : "复制问题"}
+                          aria-label={copiedUserMessageId === turn.user.id ? "已复制" : "复制问题"}
                           className="message-action-copy"
-                          onClick={() => {
-                            writeClipboard(turn.user!.content);
-                            setChatStatus("复制成功");
-                          }}
+                          onClick={() => copyUserMessage(turn.user!.id, turn.user!.content)}
                         >
-                          <SidebarIcon name="copy" />
+                          <SidebarIcon name={copiedUserMessageId === turn.user.id ? "check" : "copy"} />
                         </button>
                         <button
                           type="button"
                           title="编辑问题"
+                          aria-label="编辑问题"
                           className="message-action-edit"
-                          onClick={() => setQuestion(turn.user!.content)}
+                          onClick={() => beginEditUserMessage(turn.user!.id, turn.user!.content)}
                         >
                           <SidebarIcon name="edit" />
                         </button>
                       </div>
+                      )}
                     </div>
                   </div>
                 ) : null}
@@ -7170,28 +7277,65 @@ function renderChatModule() {
                 </div>
               </section>
             ) : null}
-            {isGlobalModelBusy || brainMessageBusy ? <div className="composer-busy-note">当前对话正在处理中，完成前不能在其他线程同时发起对话。</div> : null}
-            {visibleQueuedComposerDraft ? (
-              <div className="composer-queued-draft">
-                <span className="queued-drag-handle" aria-hidden="true">⋮⋮</span>
-                <span className="queued-draft-icon" aria-hidden="true">↳</span>
-                <button type="button" className="queued-draft-text" title={visibleQueuedComposerDraft.question} onClick={editQueuedComposerDraft}>
-                  {visibleQueuedComposerDraft.question || "请查看附件"}
-                </button>
-                <button type="button" className="queued-draft-guide" title="立刻注入当前运行" onClick={() => void guideQueuedComposerDraft("steer")}>↪ 引用</button>
-                <button type="button" className="queued-draft-icon-button" aria-label="删除排队消息" title="删除排队消息" onClick={clearQueuedComposerDraft}>⌫</button>
-                <div className="queued-draft-menu-wrap">
-                  <button type="button" className="queued-draft-icon-button" aria-label="更多" title="更多" onClick={() => setQueuedComposerMenuOpen((current) => !current)}>…</button>
-                  {queuedComposerMenuOpen ? (
-                    <div className="queued-draft-menu">
-                      <button type="button" onClick={() => void guideQueuedComposerDraft("steer")}>↪ 立刻注入当前运行</button>
-                      <button type="button" onClick={() => void guideQueuedComposerDraft("followup")}>↳ 排队到下一轮</button>
-                      <button type="button" onClick={() => void guideQueuedComposerDraft("interrupt")}>⏹ 中断并改发</button>
-                      <button type="button" onClick={editQueuedComposerDraft}>✎ 编辑消息</button>
-                      <button type="button" onClick={clearQueuedComposerDraft}>↳ 关闭排队</button>
-                    </div>
+            {isGlobalModelBusy || brainMessageBusy ? <div className="composer-busy-note">处理中，发送后排队</div> : null}
+            {selectedThreadQueue.length ? (
+              <div className={`composer-queue${composerQueueCollapsed ? " collapsed" : ""}`} data-testid="composer-queue">
+                <div className="composer-queue-header">
+                  <button
+                    type="button"
+                    className="composer-queue-toggle"
+                    aria-expanded={!composerQueueCollapsed}
+                    onClick={() => setComposerQueueCollapsed((current) => !current)}
+                  >
+                    <SidebarIcon name={composerQueueCollapsed ? "chevron-right" : "chevron-down"} />
+                    <span>排队中 · {selectedThreadQueue.length}</span>
+                  </button>
+                  <span className="composer-queue-hint">
+                    {selectedThreadRunning ? "当前轮结束后按顺序发送" : "队列已暂停"}
+                  </span>
+                  {!selectedThreadRunning ? (
+                    <button type="button" className="composer-queue-resume" data-testid="composer-queue-resume" onClick={resumeComposerQueue}>
+                      发送下一条
+                    </button>
                   ) : null}
                 </div>
+                {!composerQueueCollapsed ? (
+                  <ol className="composer-queue-list">
+                    {selectedThreadQueue.map((item: any, index: number) => {
+                      const attachmentCount = Array.isArray(item.images) ? item.images.length : 0;
+                      return (
+                        <li key={item.id || `${item.createdAt}-${index}`} className="composer-queue-item" data-testid="composer-queue-item">
+                          <span className="composer-queue-index">{index + 1}</span>
+                          <button
+                            type="button"
+                            className="composer-queue-text"
+                            title={item.question || "请查看附件"}
+                            onClick={() => editQueuedComposerItem(item)}
+                          >
+                            {item.question || "请查看附件"}
+                          </button>
+                          {attachmentCount ? <span className="composer-queue-meta">{attachmentCount} 个附件</span> : null}
+                          <div className="composer-queue-actions">
+                            <button
+                              type="button"
+                              aria-label="立即发送"
+                              title={selectedThreadRunning ? "立即插入当前运行" : "立即发送"}
+                              onClick={() => void sendQueuedComposerItemNow(item)}
+                            >
+                              <SidebarIcon name="arrow-up" />
+                            </button>
+                            <button type="button" aria-label="编辑排队消息" title="放回输入框编辑" onClick={() => editQueuedComposerItem(item)}>
+                              <SidebarIcon name="edit" />
+                            </button>
+                            <button type="button" aria-label="删除排队消息" title="删除" onClick={() => removeQueuedComposerItem(item)}>
+                              <SidebarIcon name="remove" />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : null}
               </div>
             ) : null}
             {selectedComposerTools.some((tool: any) => tool.inputSchema) ? (
@@ -7250,10 +7394,10 @@ function renderChatModule() {
                 selectedComposerSkill?.name === RESEARCH_WRITING_SKILL
                   ? "描述您撰写或修改的文档，也可以上传材料..."
                   : isBrainConversationSelection
-                    ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息。输入 @ 引用其它对话；添加附件会插入到光标处`
+                    ? `给 ${selectedBrainWorkspace?.displayName || "BRAIN"} 发消息`
                   : isNewChatMode
-                    ? "可向 NewBrain 询问任何事。输入 @ 引用其它对话；添加附件会插入到光标处"
-                    : "要求后续变更。输入 @ 引用其它对话；添加附件会插入到光标处"
+                    ? "问任何事"
+                    : "继续输入"
               }
               onDraftChange={handleComposerDraftChange}
               onHistoryChange={setComposerDraftHistoryCaps}
@@ -7739,7 +7883,7 @@ function renderChatModule() {
                   void submitComposerRequest();
                 }}
               >
-                ↑
+                <SidebarIcon name="arrow-up" />
               </button>
             </div>
           </div>
@@ -8017,6 +8161,10 @@ function renderChatModule() {
     }
   };
 
+function isMarkdownPreviewFile(file: { name?: string; path?: string } | null | undefined) {
+  return /\.(?:md|markdown)$/i.test(String(file?.name || file?.path || ""));
+}
+
 function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "center">) {
     const isCenter = placement === "center";
     const savedFileAnnotations = brainAnnotations.filter((annotation) => annotation.fileId === activeBrainFile?.id);
@@ -8259,6 +8407,19 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     markingColor: documentMarkingColor,
                     savedAnnotations: savedFileAnnotations,
                     pendingMark: documentAnnotationPendingMark,
+                    instruction: documentAnnotationInstruction,
+                    chatCollapsed: pptxChatCollapsed,
+                    onToggleAnnotation: () => setDocumentAnnotationActive((current) => !current),
+                    onInstructionChange: setDocumentAnnotationInstruction,
+                    onSubmitInstruction: () => void saveDocumentAnnotation(),
+                    onClearPending: () => {
+                      setDocumentAnnotationPendingMark(null);
+                      setDocumentAnnotationInstruction("");
+                      setDocumentAnnotationCandidate(null);
+                      setDocumentAnnotationGeometry(null);
+                      setDocumentAnnotationSnapshot(null);
+                    },
+                    onToggleChat: () => setPptxChatCollapsed((current) => !current),
                     onMarkComplete: ({ rect, viewport, slide, captureTarget }) => handlePreviewMark({
                       format: "pptx",
                       rect,
@@ -8331,6 +8492,19 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               />
             ) : searchFilePreview.binary ? (
               <div className="search-file-preview-state">这是二进制文件，无法以文本方式预览。</div>
+            ) : isMarkdownPreviewFile(searchFilePreview) ? (
+              <>
+                {searchFilePreview.truncated ? (
+                  <div className="search-file-preview-notice">文件较大，仅显示前 512 KB。</div>
+                ) : null}
+                <div className="workspace-artifact-markdown" data-testid="workspace-markdown-preview">
+                  <MarkdownMessage
+                    content={String(searchFilePreview.content || "")}
+                    workspaceId={selectedWorkspace?.id}
+                    onOpenLocalFile={openLocalFilePreview}
+                  />
+                </div>
+              </>
             ) : (
               <>
                 {searchFilePreview.truncated ? (

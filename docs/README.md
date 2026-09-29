@@ -8,6 +8,7 @@
 |---|---|
 | 产品目标、七工作台、路线图 | [product/workspace-architecture.md](./product/workspace-architecture.md) |
 | 怎么落地（表、接口、阶段步骤） | [product/implementation-playbook.md](./product/implementation-playbook.md) |
+| 新手教学视频剧本（分场景） | [product/brain-newbie-tutorial-scripts.md](./product/brain-newbie-tutorial-scripts.md) |
 | 桌面架构、安全边界、Rust Core | [architecture/brain-product-architecture.md](./architecture/brain-product-architecture.md) |
 | 仓库分层 / materialize | [architecture/repository-layout.md](./architecture/repository-layout.md) |
 | 统一能力运行时 | [architecture/unified-capability-runtime-v1.md](./architecture/unified-capability-runtime-v1.md) |

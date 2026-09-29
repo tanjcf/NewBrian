@@ -56,6 +56,24 @@ async function listOptionalResources(skillPath) {
   return resources;
 }
 
+async function readReferenceContents(skillPath) {
+  const referencePath = path.join(skillPath, "references");
+  let entries;
+  try {
+    entries = await fs.readdir(referencePath, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  const contents = [];
+  for (const entry of entries.filter((item) => item.isFile()).sort((left, right) => left.name.localeCompare(right.name))) {
+    const source = await fs.readFile(path.join(referencePath, entry.name), "utf8");
+    const limit = entry.name === "user-output-rules.md" ? 16 * 1024 : 64 * 1024;
+    contents.push({ name: entry.name, content: source.slice(0, limit) });
+  }
+  return contents;
+}
+
 export class SkillRegistry {
   constructor(input = {}) {
     this.roots = [...new Set((input.roots ?? []).filter(Boolean).map((root) => path.resolve(root)))];
@@ -117,7 +135,8 @@ export class SkillRegistry {
     return {
       ...skill,
       instructions,
-      resources: await listOptionalResources(skill.path)
+      resources: await listOptionalResources(skill.path),
+      referenceContents: await readReferenceContents(skill.path)
     };
   }
 }
