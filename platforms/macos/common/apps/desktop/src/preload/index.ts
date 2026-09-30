@@ -515,6 +515,11 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.workspace.exportThreadHtml, input),
   saveModelConfig: (config: ModelConfig): Promise<ModelConfig> =>
     ipcRenderer.invoke(desktopIpcChannels.model.saveConfig, config),
+  listCustomModelEndpoints: () => ipcRenderer.invoke(desktopIpcChannels.customModels.list),
+  saveCustomModelEndpoint: (input: { label: string; baseUrl: string; apiKey: string; model: string }) =>
+    ipcRenderer.invoke(desktopIpcChannels.customModels.save, input),
+  deleteCustomModelEndpoint: (input: { id: string }) => ipcRenderer.invoke(desktopIpcChannels.customModels.delete, input),
+  selectCustomModelEndpoint: (input: { id: string }) => ipcRenderer.invoke(desktopIpcChannels.customModels.select, input),
   saveMcpServers: (servers: McpServerConfig[]) => ipcRenderer.invoke(desktopIpcChannels.mcp.saveServers, servers),
   testMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.testServer, server),
   startMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.startServer, server),

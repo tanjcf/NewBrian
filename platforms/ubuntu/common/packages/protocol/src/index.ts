@@ -1049,6 +1049,12 @@ export const desktopIpcChannels = {
     guideRequest: "phase1:guide-model-request",
     streamDelta: "phase1:model-stream-delta"
   },
+  customModels: {
+    list: "phase1:list-custom-model-endpoints",
+    save: "phase1:save-custom-model-endpoint",
+    delete: "phase1:delete-custom-model-endpoint",
+    select: "phase1:select-custom-model-endpoint"
+  },
   features: {
     getConfig: "phase1:get-feature-config",
     addItem: "phase1:add-feature-item",

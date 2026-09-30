@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { MarkdownMessage } from "./MarkdownMessage";
 import { useWorkspaceSceneState } from "./useWorkspaceSceneState";
 import { QuantMarketChart, type QuantChartDrillTarget } from "./QuantMarketChart";
 
@@ -736,7 +737,7 @@ export function QuantWorkspace({
       {skillRunStatus ? <small className="brain-quant-order-status">{skillRunStatus}</small> : null}
     </section> : null}
     {activeView === "research" ? <section className="brain-quant-skills" data-testid="brain-quant-research-notes"><header><h3>研究笔记</h3><span>由 AI 基于真实行情、组合和雷达结果总结并写入当前项目</span></header>
-      {Array.isArray(ui.notes) && ui.notes.length ? <div className="brain-quant-schedule-list">{ui.notes.map((note) => <article key={note.id}><strong>{note.title}</strong><span>{note.content}</span><em>{note.symbol ? `${note.symbol} · ` : ""}{String(note.createdAt).replace("T", " ").slice(0, 19)}</em></article>)}</div> : <div className="brain-quant-empty">尚无研究笔记。可在对话中要求 AI 总结当前行情或模拟结果并添加笔记。</div>}
+      {Array.isArray(ui.notes) && ui.notes.length ? <div className="brain-quant-research-list">{ui.notes.map((note) => <article className="brain-quant-research-note" key={note.id}><header><strong>{note.title}</strong><em>{note.symbol ? `${note.symbol} · ` : ""}{String(note.createdAt).replace("T", " ").slice(0, 19)}</em></header><MarkdownMessage content={String(note.content || "")} workspaceId={workspaceId} /></article>)}</div> : <div className="brain-quant-empty">尚无研究笔记。可在对话中要求 AI 总结当前行情或模拟结果并添加笔记。</div>}
     </section> : null}
   </main>;
 }

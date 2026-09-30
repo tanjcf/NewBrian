@@ -439,6 +439,22 @@ declare global {
       generatePatch: (input: PatchFormState) => Promise<PhaseOneSnapshot>;
       applyPatch: () => Promise<PhaseOneSnapshot>;
       getModelConfig: () => Promise<ModelConfigState>;
+      listCustomModelEndpoints?: () => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      saveCustomModelEndpoint?: (input: { label: string; baseUrl: string; apiKey: string; model: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      deleteCustomModelEndpoint?: (input: { id: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      selectCustomModelEndpoint?: (input: { id: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
       reviewResearchWriting: (payload: { title?: string; body: string; sources: Array<{ title: string; sourceType: string; url?: string; content: string }> }) => Promise<{ ok: boolean; source_count: number; risk_count: number; unsupported_count: number; risks: Array<{ category: string; label: string; claim: string; supported: boolean; source_titles: string[]; severity: string; suggestion: string }> }>;
       exportResearchWriting: (input: { payload: { title?: string; body: string; sources: Array<{ title: string; sourceType: string; url?: string; content: string }> }; format: "docx" | "txt" | "review-docx" | "review-txt" }) => Promise<{ ok: boolean; canceled: boolean; path?: string }>;
       exportWorkspaceThreadHtml?: (input: {

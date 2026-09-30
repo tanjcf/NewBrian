@@ -503,6 +503,22 @@ declare global {
       generatePatch: (input: PatchFormState) => Promise<PhaseOneSnapshot>;
       applyPatch: () => Promise<PhaseOneSnapshot>;
       getModelConfig: () => Promise<ModelConfigState>;
+      listCustomModelEndpoints?: () => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      saveCustomModelEndpoint?: (input: { label: string; baseUrl: string; apiKey: string; model: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      deleteCustomModelEndpoint?: (input: { id: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      selectCustomModelEndpoint?: (input: { id: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
       getDesktopPreferences: () => Promise<DesktopPreferencesState>;
       saveDesktopPreferences: (preferences: DesktopPreferencesState) => Promise<DesktopPreferencesState>;
       getDesktopBootstrapStatus: () => Promise<DesktopBootstrapStatusState>;

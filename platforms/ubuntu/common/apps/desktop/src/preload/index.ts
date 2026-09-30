@@ -492,6 +492,11 @@ contextBridge.exposeInMainWorld("newbrain", {
   }): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke("phase1:delete-workspace-thread", input),
   activateWorkspaceThread: (input: { workspaceId: string; threadId: string }) =>
     ipcRenderer.invoke("phase1:activate-workspace-thread", input),
+  listCustomModelEndpoints: () => ipcRenderer.invoke(desktopIpcChannels.customModels.list),
+  saveCustomModelEndpoint: (input: { label: string; baseUrl: string; apiKey: string; model: string }) =>
+    ipcRenderer.invoke(desktopIpcChannels.customModels.save, input),
+  deleteCustomModelEndpoint: (input: { id: string }) => ipcRenderer.invoke(desktopIpcChannels.customModels.delete, input),
+  selectCustomModelEndpoint: (input: { id: string }) => ipcRenderer.invoke(desktopIpcChannels.customModels.select, input),
   saveModelConfig: (config: {
     provider: string;
     baseUrl: string;

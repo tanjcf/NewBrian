@@ -138,6 +138,9 @@ import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
+import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
+import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
+import { isCustomModelSelection } from "../shared/custom-model-endpoint.js";
 import {
   resolveEffectiveGatewayBaseUrl,
   syncDesktopControlPlane as syncDesktopControlPlaneProtocol,
@@ -729,6 +732,10 @@ const desktopWindowControl = new DesktopWindowControl({
 });
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
+const customModelEndpointStore = new CustomModelEndpointStore(
+  join(workspaceStateRoot, "credentials", "custom-model-endpoints"),
+  safeStorage
+);
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
 const desktopAuthStatePath = join(workspaceStateRoot, "desktop-auth.json");
@@ -8922,11 +8929,29 @@ async function callModelApi(input: {
       attachments?: Array<{ name: string; path: string; url: string }>;
   }>;
 }) {
+  const ownedCustom = isCustomModelSelection(input.model)
+    ? await customModelEndpointStore.resolveChatRequest(input.model)
+    : null;
+  if (isCustomModelSelection(input.model) && !ownedCustom) {
+    throw new Error("自备模型不存在或已被删除。请在模型菜单里重新添加。");
+  }
+  if (ownedCustom) {
+    input = {
+      ...input,
+      provider: ownedCustom.label,
+      baseUrl: ownedCustom.baseUrl,
+      apiKey: ownedCustom.apiKey,
+      wireApi: ownedCustom.wireApi,
+      model: ownedCustom.model
+    };
+  }
   let baseUrl = input.baseUrl.trim();
   let bearerToken = "";
   const model = input.model.trim();
   const authState = await readDesktopAuthState();
-  const authSelection = selectModelRequestAuth(authState, input.apiKey);
+  const authSelection = ownedCustom
+    ? { source: "configured_api_key" as const, bearerToken: ownedCustom.apiKey, useGatewayBaseUrl: false }
+    : selectModelRequestAuth(authState, input.apiKey);
   bearerToken = authSelection.bearerToken;
   if (!bearerToken) {
     bearerToken = resolveDevE2eBearerToken();
@@ -8941,18 +8966,18 @@ async function callModelApi(input: {
   if (!model) {
     throw new Error("Model name is required.");
   }
-  const authorizedConfig = await readAuthorizedDesktopModelConfig();
-  const availableModels = authorizedConfig.availableModels ?? [];
+  const availableModels = ownedCustom ? [] : (await readAuthorizedDesktopModelConfig()).availableModels ?? [];
   // spring-app exposes only /v1/responses. Never downgrade to chat/completions.
   // Thinking models still use the responses wire; when the opaque reasoning trace
   // cannot be echoed (400), retry once on the same endpoint without thinking.
-  const thinkingCapable = requiresThinkingWireProtocol({
+  // A user-owned endpoint keeps the OpenAI chat/completions wire it was saved with.
+  const thinkingCapable = ownedCustom ? false : requiresThinkingWireProtocol({
     provider: input.provider,
     model,
     routedModel: lastGatewayRoutedModel,
     candidateModels: availableModels
   });
-  if (input.wireApi === "chat.completions") {
+  if (!ownedCustom && input.wireApi === "chat.completions") {
     input.wireApi = "responses";
   }
   const apiUrl = buildApiEndpoint(baseUrl, input.wireApi);
@@ -10034,6 +10059,7 @@ function registerIpc() {
     codexStorage,
     processUuid
   });
+  registerCustomModelEndpointIpc(customModelEndpointStore);
   registerExpertMarketplaceIpcHandlers(desktopIpcChannels.experts, {
     list: async () => listExpertsForRuntime(),
     install: (expertId) => installExpertFromBuiltin({
@@ -10438,6 +10464,7 @@ function registerIpc() {
     },
     readCatalog: readWorkspaceCatalog,
     readAuthorizedModelConfig: readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: (modelId) => customModelEndpointStore.find(modelId),
     resolveSkillRoutingHints: async ({ workspaceId, selectedSkillNames }) => {
       const hints: SkillRoutingHint[] = [];
       const catalog = await readWorkspaceCatalog();

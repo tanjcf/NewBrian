@@ -26,6 +26,7 @@ import type { SpringAppAutoRouteDecision } from "./spring-app-auto-route.ts";
 import {
   THREAD_ALREADY_RUNNING_ERROR_ZH
 } from "./thread-model-task-gate.ts";
+import { isCustomModelSelection, type CustomModelEndpointPublic } from "../shared/custom-model-endpoint.ts";
 
 interface WorkspaceCatalog {
   workspaces: WorkspaceCatalogItem[];
@@ -62,6 +63,8 @@ export interface ModelChatPreparationDependencies {
     workspaceId: string;
     threadId: string;
   }) => Promise<SpringAppAutoRouteDecision>;
+  /** User-owned OpenAI-compatible endpoint. Official catalog checks do not apply. */
+  resolveCustomModelEndpoint?: (modelId: string) => Promise<CustomModelEndpointPublic | null>;
 }
 
 export interface PreparedModelChat {
@@ -303,6 +306,23 @@ export class ModelChatPreparationService {
     }
     if (this.dependencies.isThreadActive(workspace.id, thread.id)) {
       throw new Error(THREAD_ALREADY_RUNNING_ERROR_ZH);
+    }
+
+    if (isCustomModelSelection(input.model)) {
+      const endpoint = await this.dependencies.resolveCustomModelEndpoint?.(input.model) ?? null;
+      if (!endpoint) throw new Error("自备模型不存在或已被删除。请在模型菜单里重新添加。");
+      return {
+        workspace,
+        thread,
+        input: {
+          ...input,
+          provider: endpoint.label,
+          baseUrl: endpoint.baseUrl,
+          apiKey: "",
+          wireApi: endpoint.wireApi,
+          model: endpoint.id
+        }
+      };
     }
 
     const authorized = await this.dependencies.readAuthorizedModelConfig();

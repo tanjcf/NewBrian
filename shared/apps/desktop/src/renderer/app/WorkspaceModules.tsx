@@ -59,6 +59,8 @@ import {
 } from "./composer-resize.ts";
 import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
+import { isCustomModelSelection } from "../../shared/custom-model-endpoint";
+import { CustomModelEndpointMenu } from "./CustomModelEndpointMenu";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
 import { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } from "../../shared/product-flags.js";
 import { isSubscriptionInactiveError } from "../../shared/model-user-facing-error.ts";
@@ -1612,6 +1614,13 @@ export function WorkspaceModules(ctx: any) {
     commitComposerQueue(enqueueComposerDraft(readComposerQueue(), draft));
   };
   const [reasoningSubmenu, setReasoningSubmenu] = useState<"model" | "speed" | "optimize" | null>(null);
+  const emptyCustomModelDraft = { label: "", baseUrl: "", apiKey: "", model: "" };
+  const [customModelEndpoints, setCustomModelEndpoints] = useState<Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>>([]);
+  const [customModelFormOpen, setCustomModelFormOpen] = useState(false);
+  const [customModelDraft, setCustomModelDraft] = useState(emptyCustomModelDraft);
+  const [customModelError, setCustomModelError] = useState("");
+  const [customModelSaving, setCustomModelSaving] = useState(false);
+  const customModelsLoadedRef = useRef(false);
   const [reasoningMenuPosition, setReasoningMenuPosition] = useState<ComposerPickerMenuPosition | null>(null);
   const reasoningPickerWrapRef = useRef<HTMLDivElement | null>(null);
   const [composerSpeed, setComposerSpeed] = useState<"standard" | "fast">("standard");
@@ -3173,7 +3182,101 @@ export function WorkspaceModules(ctx: any) {
   const modelLabel = isComposerAuto
     ? "Auto"
     : composerModelOptions.find((option) => option.id.toLowerCase() === modelConfig.model.toLowerCase())?.label
-      || (composerModelOptions.length <= 1 ? "无可用模型" : modelConfig.model);
+      || customModelEndpoints.find((item) => item.id.toLowerCase() === String(modelConfig.model || "").toLowerCase())?.label
+      || (composerModelOptions.length <= 1 && customModelEndpoints.length === 0 ? "无可用模型" : modelConfig.model);
+  const applyCustomModelEndpoint = (endpoint: { id: string; label: string; baseUrl: string; wireApi?: string }) => {
+    setModelConfig((current: any) => ({
+      ...current,
+      model: endpoint.id,
+      provider: endpoint.label,
+      baseUrl: endpoint.baseUrl,
+      wireApi: endpoint.wireApi || "chat.completions",
+      apiKey: ""
+    }));
+    void api?.selectCustomModelEndpoint?.({ id: endpoint.id }).then((snapshot: any) => {
+      if (Array.isArray(snapshot?.endpoints)) setCustomModelEndpoints(snapshot.endpoints);
+    }).catch((error: unknown) => {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
+  };
+  const selectOfficialComposerModel = (modelId: string) => {
+    if (isCustomModelSelection(String(modelConfig.model || ""))) {
+      void api?.selectCustomModelEndpoint?.({ id: "" }).catch(() => undefined);
+    }
+    setModelConfig((current: any) => ({ ...current, model: modelId }));
+    setReasoningSubmenu(null);
+    setComposerMenu(null);
+  };
+  const saveCustomModelEndpoint = async () => {
+    if (!api?.saveCustomModelEndpoint) {
+      setCustomModelError("当前环境无法保存自备模型。");
+      return;
+    }
+    setCustomModelSaving(true);
+    setCustomModelError("");
+    try {
+      const snapshot = await api.saveCustomModelEndpoint(customModelDraft);
+      const endpoints = Array.isArray(snapshot?.endpoints) ? snapshot.endpoints : [];
+      setCustomModelEndpoints(endpoints);
+      const created = endpoints.find((item: any) => item.id === snapshot?.selectedId) ?? endpoints.at(-1);
+      if (created) {
+        setModelConfig((current: any) => ({
+          ...current,
+          model: created.id,
+          provider: created.label,
+          baseUrl: created.baseUrl,
+          wireApi: created.wireApi || "chat.completions",
+          apiKey: ""
+        }));
+      }
+      setCustomModelDraft(emptyCustomModelDraft);
+      setCustomModelFormOpen(false);
+    } catch (error) {
+      setCustomModelError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCustomModelSaving(false);
+    }
+  };
+  const deleteCustomModelEndpoint = async (id: string) => {
+    if (!api?.deleteCustomModelEndpoint) return;
+    try {
+      const snapshot = await api.deleteCustomModelEndpoint({ id });
+      const endpoints = Array.isArray(snapshot?.endpoints) ? snapshot.endpoints : [];
+      setCustomModelEndpoints(endpoints);
+      if (String(modelConfig.model || "").toLowerCase() === id.toLowerCase()) {
+        setModelConfig((current: any) => ({ ...current, model: "auto", provider: current.provider }));
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const renderCustomModelMenu = (showForm: boolean) => (
+    <CustomModelEndpointMenu
+      endpoints={customModelEndpoints}
+      selectedModelId={String(modelConfig.model || "")}
+      formOpen={customModelFormOpen}
+      showForm={showForm}
+      draft={customModelDraft}
+      error={customModelError}
+      saving={customModelSaving}
+      onDraftChange={setCustomModelDraft}
+      onOpenForm={() => {
+        setCustomModelError("");
+        setCustomModelFormOpen(true);
+      }}
+      onCancel={() => {
+        setCustomModelFormOpen(false);
+        setCustomModelError("");
+      }}
+      onSave={() => { void saveCustomModelEndpoint(); }}
+      onSelect={(endpoint) => {
+        applyCustomModelEndpoint(endpoint);
+        setReasoningSubmenu(null);
+        setComposerMenu(null);
+      }}
+      onDelete={(id) => { void deleteCustomModelEndpoint(id); }}
+    />
+  );
   const compactModelLabel = isComposerAuto
     ? `Auto·${optimizeForLabel}`
     : modelLabel.replace(/^GPT-/i, "");
@@ -4285,18 +4388,31 @@ export function WorkspaceModules(ctx: any) {
   }, [newChatProjectMenu]);
 
   useEffect(() => {
+    if (customModelsLoadedRef.current || !api?.listCustomModelEndpoints) return;
+    customModelsLoadedRef.current = true;
+    let cancelled = false;
+    void api.listCustomModelEndpoints().then((snapshot: any) => {
+      if (cancelled || !snapshot) return;
+      setCustomModelEndpoints(Array.isArray(snapshot.endpoints) ? snapshot.endpoints : []);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [api]);
+
+  useEffect(() => {
     if (!composerMenu) return;
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Element && target.closest(".composer-picker-menu")) return;
+      if (target instanceof Element && target.closest(".composer-picker-menu, .composer-custom-model-card")) return;
       if (target instanceof Node && reasoningPickerWrapRef.current?.contains(target)) return;
       setComposerMenu(null);
       setReasoningSubmenu(null);
+      setCustomModelFormOpen(false);
     };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setComposerMenu(null);
       setReasoningSubmenu(null);
+      setCustomModelFormOpen(false);
     };
     document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("keydown", handleEscape);
@@ -4314,19 +4430,20 @@ export function WorkspaceModules(ctx: any) {
     const syncPosition = () => {
       const anchor = reasoningPickerWrapRef.current?.getBoundingClientRect();
       if (!anchor) return;
-      const modelRows = reasoningSubmenu === "model" ? composerModelOptions.length : 0;
+      const modelRows = reasoningSubmenu === "model" ? composerModelOptions.length + customModelEndpoints.length + 1 : 0;
       const estimatedHeight = Math.min(
-        420,
+        640,
         200
-          + Math.min(modelRows, 10) * 28
+          + Math.min(modelRows, 12) * 28
           + (reasoningSubmenu === "speed" ? 96 : 0)
           + (reasoningSubmenu === "optimize" ? 120 : 0)
           + (reasoningSubmenu === "model" ? 48 : 0)
+          + (customModelFormOpen ? 230 : 0)
       );
       setReasoningMenuPosition(positionComposerPickerMenu(anchor, {
         preferBelow: isNewChatMode,
         estimatedHeight,
-        menuWidth: 214,
+        menuWidth: customModelFormOpen ? 280 : 214,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight
       }));
@@ -4338,7 +4455,7 @@ export function WorkspaceModules(ctx: any) {
       window.removeEventListener("resize", syncPosition);
       window.removeEventListener("scroll", syncPosition, true);
     };
-  }, [composerMenu, composerModelOptions.length, isNewChatMode, reasoningSubmenu]);
+  }, [composerMenu, composerModelOptions.length, customModelEndpoints.length, customModelFormOpen, isNewChatMode, reasoningSubmenu]);
 
   for (const workspace of visibleWorkspaceCatalog) {
     const count = workspace.threads.filter((thread: any) => {
@@ -7712,10 +7829,11 @@ function renderChatModule() {
                         <div className="composer-picker-menu composer-model-submenu">
                           <span className="composer-menu-label">模型</span>
                           {composerModelOptions.map((option, index) => (
-                            <button key={`${option.id}-${index}`} type="button" onClick={() => { setModelConfig((current: any) => ({ ...current, model: option.id })); setReasoningSubmenu(null); setComposerMenu(null); }}>
+                            <button key={`${option.id}-${index}`} type="button" onClick={() => selectOfficialComposerModel(option.id)}>
                               <strong>{option.label}</strong><span>{modelConfig.model.toLowerCase() === option.id.toLowerCase() ? "✓" : ""}</span>
                             </button>
                           ))}
+                          {renderCustomModelMenu(true)}
                         </div>
                       ) : null}
                       {isComposerAuto ? (
@@ -7842,10 +7960,11 @@ function renderChatModule() {
                       <div className="composer-picker-menu composer-model-submenu">
                         <span className="composer-menu-label">模型</span>
                         {composerModelOptions.map((option, index) => (
-                          <button key={`legacy-model-${option.id}-${index}`} type="button" onClick={() => { setModelConfig((current: any) => ({ ...current, model: option.id })); setReasoningSubmenu(null); setComposerMenu(null); }}>
+                          <button key={`legacy-model-${option.id}-${index}`} type="button" onClick={() => selectOfficialComposerModel(option.id)}>
                             <strong>{option.label}</strong><span>{modelConfig.model.toLowerCase() === option.id.toLowerCase() ? "✓" : ""}</span>
                           </button>
                         ))}
+                        {renderCustomModelMenu(reasoningMenuPosition == null)}
                       </div>
                     ) : null}
                     <button type="button" className="composer-submenu-trigger" onClick={() => setReasoningSubmenu((current) => current === "speed" ? null : "speed")}>

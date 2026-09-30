@@ -86,6 +86,9 @@ import { DesktopErrorCollector } from "./desktop-error-collector.js";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
 import { createLinuxSecretProtector } from "./linux-secret-protector.js";
+import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
+import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
+import { isCustomModelSelection } from "../shared/custom-model-endpoint.js";
 import { GovernmentWritingSpecificationService } from "./government-writing-specification-service.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
@@ -221,9 +224,14 @@ const builtinPluginsRoot = app.isPackaged
 const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".newbrain");
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
+const linuxSecretProtector = createLinuxSecretProtector(safeStorage);
 const privateModelCredentialVault = new DesktopSecretVault(
   privateModelCredentialPath,
-  createLinuxSecretProtector(safeStorage)
+  linuxSecretProtector
+);
+const customModelEndpointStore = new CustomModelEndpointStore(
+  join(workspaceStateRoot, "credentials", "custom-model-endpoints"),
+  linuxSecretProtector
 );
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
@@ -9360,17 +9368,38 @@ async function callModelApi(input: {
       attachments?: Array<{ name: string; path: string; url: string }>;
   }>;
 }) {
+  const ownedCustom = isCustomModelSelection(input.model)
+    ? await customModelEndpointStore.resolveChatRequest(input.model)
+    : null;
+  if (isCustomModelSelection(input.model) && !ownedCustom) {
+    throw new Error("自备模型不存在或已被删除。请在模型菜单里重新添加。");
+  }
+  if (ownedCustom) {
+    input = {
+      ...input,
+      provider: ownedCustom.label,
+      baseUrl: ownedCustom.baseUrl,
+      apiKey: ownedCustom.apiKey,
+      wireApi: ownedCustom.wireApi,
+      model: ownedCustom.model
+    };
+  }
   let baseUrl = input.baseUrl.trim();
-  const configuredApiKey = await resolveTrustedPrivateModelCredential(
-    input.apiKey,
-    () => privateModelCredentialVault.readForTrustedRequest()
-  );
+  const configuredApiKey = ownedCustom
+    ? ownedCustom.apiKey
+    : await resolveTrustedPrivateModelCredential(
+      input.apiKey,
+      () => privateModelCredentialVault.readForTrustedRequest()
+    );
   let bearerToken = "";
   let authSource: "desktop_access_token" | "configured_api_key" | "none" = "none";
   const model = input.model.trim();
 
   const authState = await readDesktopAuthState();
-  if (authState?.mode === "desktop_token" && authState.access_token) {
+  if (ownedCustom) {
+    bearerToken = ownedCustom.apiKey;
+    authSource = "configured_api_key";
+  } else if (authState?.mode === "desktop_token" && authState.access_token) {
     bearerToken = authState.access_token;
     authSource = "desktop_access_token";
     baseUrl = await readGatewayBaseUrl();
@@ -10519,6 +10548,7 @@ function registerIpc() {
     const config = await readRootConfig();
     return config.llm;
   });
+  registerCustomModelEndpointIpc(customModelEndpointStore);
 
   ipcMain.handle("phase1:get-desktop-preferences", async () => {
     return getActiveDesktopPreferences();
@@ -10981,6 +11011,7 @@ function registerIpc() {
     activeThreadId: () => activeThreadId,
     getCachedAuthorizedModels: () => cachedAuthorizedModels,
     readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: (modelId: string) => customModelEndpointStore.find(modelId),
     readWorkspaceCatalog,
     readThreadState,
     writeThreadState,

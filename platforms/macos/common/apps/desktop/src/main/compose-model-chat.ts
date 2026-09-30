@@ -110,6 +110,7 @@ export interface MacModelChatCompositionDeps {
   activeThreadId: () => string;
   getCachedAuthorizedModels: () => AuthorizedModel[];
   readAuthorizedDesktopModelConfig: (candidate?: Partial<ModelConfig>) => Promise<ModelConfig>;
+  resolveCustomModelEndpoint?: (modelId: string) => Promise<import("../shared/custom-model-endpoint.js").CustomModelEndpointPublic | null>;
   readWorkspaceCatalog: () => Promise<{ workspaces: WorkspaceCatalogItem[] }>;
   readThreadState: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord) => Promise<ThreadStateFile>;
   writeThreadState: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord, state: ThreadStateFile) => Promise<void>;
@@ -222,6 +223,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
     },
     readCatalog: deps.readWorkspaceCatalog,
     readAuthorizedModelConfig: deps.readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: deps.resolveCustomModelEndpoint,
     resolveSkillRoutingHints: async ({ workspaceId, selectedSkillNames }) => {
       const hints: SkillRoutingHint[] = [];
       const catalog = await deps.readWorkspaceCatalog();

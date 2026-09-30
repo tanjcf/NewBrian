@@ -641,6 +641,20 @@ useEffect(() => {
       setBootstrapState(`${bootstrap.appName} · ${bootstrap.platform} · ${bootstrap.shell}`);
       setWorkspaceCatalog(normalizeWorkspaceCatalog(catalog));
       setModelConfig(model);
+      if (codecnApi.listCustomModelEndpoints) {
+        void codecnApi.listCustomModelEndpoints().then((snapshot) => {
+          const selected = snapshot?.endpoints?.find((item) => item.id === snapshot.selectedId);
+          if (!mounted || !selected) return;
+          setModelConfig((current) => ({
+            ...current,
+            model: selected.id,
+            provider: selected.label,
+            baseUrl: selected.baseUrl,
+            wireApi: selected.wireApi || "chat.completions",
+            apiKey: ""
+          }));
+        }).catch(() => undefined);
+      }
       setDesktopPreferences(preferences);
       applyVisualPreferences(preferences);
       setShellCommand(preferences.git.statusCommand);
