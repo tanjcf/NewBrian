@@ -1,19 +1,74 @@
-# NewBrian
+<p align="center">
+  <a href="README.en.md"><b>English</b></a>
+  &nbsp;·&nbsp;
+  简体中文
+</p>
 
-[English](README.en.md)
+<p align="center">
+  <img alt="MIT" src="https://img.shields.io/badge/license-MIT-111827?style=flat-square">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%2F%20Intel-111111?style=flat-square&logo=apple&logoColor=white">
+  <img alt="Ubuntu" src="https://img.shields.io/badge/Ubuntu-x64%20%2F%20arm64-E95420?style=flat-square&logo=ubuntu&logoColor=white">
+</p>
 
-官网：<https://www.sinnauze.cn/>
+<h1 align="center">NewBrian</h1>
 
-安装包下载：<https://www.sinnauze.cn/app/download>
+<p align="center">
+  <b>免费的本地 AI 工作台。</b><br>
+  在输入框写下内容并发送，就是一次操作。
+</p>
 
-NewBrian 桌面可以免费使用。在输入框写下内容并发送，就是一次操作。登录后的官方模型由 spring-app 接收并完成这次操作。spring-app 用户配置 API Key 后，可以把同一把钥匙接到下面这些工具：
+<p align="center">
+  <a href="https://www.sinnauze.cn/"><img alt="官网" src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-sinnauze.cn-111827?style=for-the-badge"></a>
+  &nbsp;
+  <a href="https://www.sinnauze.cn/app/download"><img alt="下载安装包" src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD%E5%AE%89%E8%A3%85%E5%8C%85-%E5%85%8D%E8%B4%B9%E4%BD%BF%E7%94%A8-15803d?style=for-the-badge"></a>
+</p>
 
-- Codex
-- Claude Code
-- Cursor
-- OpenClaw
+<p align="center">
+  <img src="docs/guide/send-chat.png" width="880" alt="在桌面发送一次操作">
+</p>
 
-![在桌面发送一次操作](docs/guide/send-chat.png)
+<p align="center">
+  <sub>登录后的官方模型由 spring-app 接收并完成这次操作。</sub>
+</p>
+
+---
+
+## 一眼看完
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>免费使用</h3>
+      桌面可以免费使用。打开、写下、发送，安装包不单独收费。
+    </td>
+    <td width="50%" valign="top">
+      <h3>官方模型走 spring-app</h3>
+      登录之后，官方模型由 spring-app 接收并完成这次操作。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>一把钥匙，四件工具</h3>
+      配置 API Key 后，同一把钥匙接到 Codex、Claude Code、Cursor、OpenClaw。
+    </td>
+    <td width="50%" valign="top">
+      <h3>自备模型留在本机</h3>
+      自己的 OpenAI 兼容接口直接请求你填写的地址，钥匙只留在本机。
+    </td>
+  </tr>
+</table>
+
+## 配置 API Key
+
+spring-app 用户配置 API Key 后，可以把同一把钥匙接到下面这些工具。
+
+<p align="center">
+  <img alt="Codex" src="https://img.shields.io/badge/Codex-111827?style=for-the-badge">
+  <img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-111827?style=for-the-badge">
+  <img alt="Cursor" src="https://img.shields.io/badge/Cursor-111827?style=for-the-badge">
+  <img alt="OpenClaw" src="https://img.shields.io/badge/OpenClaw-111827?style=for-the-badge">
+</p>
 
 ## 配置自备大模型
 
@@ -26,13 +81,15 @@ NewBrian 桌面可以免费使用。在输入框写下内容并发送，就是�
 
 图片、视频和语音仍使用官方模型。
 
-![添加自备模型](docs/guide/custom-model.png)
+<p align="center">
+  <img src="docs/guide/custom-model.png" width="420" alt="添加自备模型">
+</p>
 
 ## 后期：国外大模型额度
 
-后期会加入国外大模型。看广告可以获得赠送金额，再用这笔金额兑换国外大模型的使用额度。这项还没开放。现在可以配置自备模型，也可以在登录后使用官方模型。
+> 后期会加入国外大模型。看广告可以获得赠送金额，再用这笔金额兑换国外大模型的使用额度。这项还没开放。现在可以配置自备模型，也可以在登录后使用官方模型。
 
-## 打包
+## 从源码打包
 
 `rust/brain-core` 源码不在这个仓库里。打包前在 `rust-core-release.json` 填好官方程序的 url 和 sha256。脚本会下载并核对，不一致就停止。
 
@@ -42,34 +99,12 @@ NewBrian 桌面可以免费使用。在输入框写下内容并发送，就是�
 pnpm install
 ```
 
-Windows：
-
-```powershell
-pnpm package:windows:production
-```
-
-macOS Apple Silicon：
-
-```bash
-pnpm package:macos-arm64
-```
-
-macOS Intel：
-
-```bash
-pnpm package:macos-x64
-```
-
-Ubuntu x64：
-
-```bash
-pnpm package:ubuntu-x64
-```
-
-Ubuntu arm64：
-
-```bash
-pnpm package:ubuntu-arm64
-```
+| 系统 | 命令 |
+| --- | --- |
+| Windows | `pnpm package:windows:production` |
+| macOS Apple Silicon | `pnpm package:macos-arm64` |
+| macOS Intel | `pnpm package:macos-x64` |
+| Ubuntu x64 | `pnpm package:ubuntu-x64` |
+| Ubuntu arm64 | `pnpm package:ubuntu-arm64` |
 
 这些命令会生成对应系统的工程，下载官方 brain-core，再打安装包。公开源码使用 MIT 许可。brain-core 程序只允许原样随安装包分发。
