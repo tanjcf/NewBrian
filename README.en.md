@@ -6,7 +6,12 @@ Website: <https://www.sinnauze.cn/>
 
 Downloads: <https://www.sinnauze.cn/app/download>
 
-The NewBrian desktop is free to use. Type in the composer and send. That send is one operation. When you are logged in, an official model is handled by spring-app.
+The NewBrian desktop is free to use. Type in the composer and send. That send is one operation. When you are logged in, an official model is handled by spring-app. A spring-app user can set an API key and use that same key in these tools:
+
+- Codex
+- Claude Code
+- Cursor
+- OpenClaw
 
 ![Send an operation from the desktop](docs/guide/send-chat.png)
 

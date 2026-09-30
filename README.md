@@ -6,7 +6,12 @@
 
 安装包下载：<https://www.sinnauze.cn/app/download>
 
-NewBrian 桌面可以免费使用。在输入框写下内容并发送，就是一次操作。登录后的官方模型由 spring-app 接收并完成这次操作。
+NewBrian 桌面可以免费使用。在输入框写下内容并发送，就是一次操作。登录后的官方模型由 spring-app 接收并完成这次操作。spring-app 用户配置 API Key 后，可以把同一把钥匙接到下面这些工具：
+
+- Codex
+- Claude Code
+- Cursor
+- OpenClaw
 
 ![在桌面发送一次操作](docs/guide/send-chat.png)
 
