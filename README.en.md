@@ -23,6 +23,10 @@ Image, video, and voice stay on official models.
 
 ![Add your own model](docs/guide/custom-model.png)
 
+## Later: quota for models outside China
+
+Foreign models will be added later. Watching an advertisement grants account credit, and that credit can be spent as quota on those models. This is not open yet. Today you can add your own model, or use an official model after login.
+
 ## Package
 
 The `rust/brain-core` source is not in this repository. Before packaging, set the official binary url and sha256 in `rust-core-release.json`. The script downloads that binary and checks the hash. A mismatch stops the build.
