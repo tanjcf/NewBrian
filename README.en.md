@@ -59,6 +59,32 @@
   </tr>
 </table>
 
+## Basic functions
+
+One desktop does these things. Switching the scene at the top left also switches the project list, the conversation, and the tools on the right.
+
+| Function | What it does |
+| --- | --- |
+| Send | Type in the composer and send. That send is one operation. |
+| Project | One ongoing goal, with files, conversations, outputs, and tasks under it. |
+| Right panel | Files, outputs, and tasks stay put. A scene adds its own tools. |
+| Official model | After login, spring-app receives the operation and completes it. |
+| Your own model | Text chat calls the address you entered. The key stays on this computer. Image, video, and voice stay on official models. |
+
+Before you enter a specialty scene, NewBrian stays in scene exploration: the right side keeps only files, outputs, and tasks.
+
+## Seven scenes
+
+| Scene | What you use it for |
+| --- | --- |
+| Quant trading | Look up quotes, read candlesticks and volume, run a simulated portfolio, and write research notes. It does not connect to a real broker and does not place real orders. |
+| Game production | Manage levels, characters, world building, combat design, and project assets, then try the build. |
+| Video production | Write a script, lay out shots, generate a shot, edit its audio and video, then composite and export. |
+| Music | Write lyrics, set a style, generate a full piece, arrange tracks, and export audio. |
+| Data and decisions | Import CSV or Excel, read the table, summarize, chart, and write the conclusion. |
+| Software and automation | Read project files, change code, run an approved terminal, test, deploy, and arrange an automation flow. |
+| Document writing | Write a document, review annotations, outline, build slides, and export. |
+
 ## Set an API key
 
 A spring-app user can set an API key and use that same key in these tools:
