@@ -686,6 +686,11 @@ export interface DesktopPreferences {
   brain: {
     selectedWorkspaceKey: string;
   };
+  /**
+   * Start the desktop app when the OS user session starts.
+   * Missing saved values normalize to true.
+   */
+  launchAtLogin: boolean;
 }
 
 export interface McpServerConfig {

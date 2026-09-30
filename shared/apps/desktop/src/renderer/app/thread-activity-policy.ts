@@ -55,6 +55,32 @@ export function resolvePendingApprovalThreadKey(input: {
   return `${workspaceId}:${threadId}`;
 }
 
+/**
+ * Sidebar "等待批准" after the user already approved or rejected.
+ * Catalog status and a replayed snapshot of the same approval id stay sticky
+ * while the tool resume is still running; a different approval id may show.
+ */
+export function threadStillNeedsApproval(input: {
+  threadStatus?: string;
+  threadKey: string;
+  pendingApprovalThreadKey: string;
+  threadId?: string;
+  settledApprovalId?: string;
+  settledThreadId?: string;
+  snapshotApprovalId?: string;
+}): boolean {
+  const catalogPending = input.threadStatus === "awaiting-approval";
+  const livePending = Boolean(input.pendingApprovalThreadKey) && input.threadKey === input.pendingApprovalThreadKey;
+  if (!catalogPending && !livePending) return false;
+  const settledApprovalId = input.settledApprovalId?.trim() || "";
+  const settledThreadId = input.settledThreadId?.trim() || "";
+  if (settledApprovalId && settledThreadId && input.threadId === settledThreadId) {
+    const snapshotApprovalId = input.snapshotApprovalId?.trim() || "";
+    if (!snapshotApprovalId || snapshotApprovalId === settledApprovalId) return false;
+  }
+  return true;
+}
+
 type DisplayMessage = {
   id: string;
   role: string;

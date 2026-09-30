@@ -171,6 +171,7 @@ export interface DesktopPreferencesState {
   brain: {
     selectedWorkspaceKey: string;
   };
+  launchAtLogin: boolean;
 }
 
 export type ChatMessageRole = "user" | "assistant";
@@ -924,7 +925,8 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
   },
   brain: {
     selectedWorkspaceKey: ""
-  }
+  },
+  launchAtLogin: true
 };
 
 export const initialFeatureConfig: FeatureConfigPayload = {

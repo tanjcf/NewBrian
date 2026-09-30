@@ -8,7 +8,8 @@ const {
   reconcileThreadDisplayMessages,
   resolveActiveReasoningRequestId,
   resolvePendingApprovalThreadKey,
-  resolveSelectedThreadOwnsLiveApproval
+  resolveSelectedThreadOwnsLiveApproval,
+  threadStillNeedsApproval
 } = await import(
   new URL("./thread-activity-policy.ts", import.meta.url).href
 ) as typeof import("./thread-activity-policy.js");
@@ -339,4 +340,25 @@ test("groups persisted commands under the user message from the same turn", () =
   const grouped = groupActivitiesByUserMessage(events, activities);
   assert.deepEqual(grouped.get("user-1")?.map((item) => item.callId), ["call-1"]);
   assert.deepEqual(grouped.get("user-2")?.map((item) => item.callId), ["call-2"]);
+});
+
+test("an already decided approval does not keep the sidebar waiting badge", () => {
+  assert.equal(threadStillNeedsApproval({
+    threadStatus: "awaiting-approval",
+    threadKey: "workspace:thread",
+    pendingApprovalThreadKey: "workspace:thread",
+    threadId: "thread",
+    settledApprovalId: "approval-1",
+    settledThreadId: "thread",
+    snapshotApprovalId: "approval-1"
+  }), false);
+  assert.equal(threadStillNeedsApproval({
+    threadStatus: "awaiting-approval",
+    threadKey: "workspace:thread",
+    pendingApprovalThreadKey: "",
+    threadId: "thread",
+    settledApprovalId: "approval-1",
+    settledThreadId: "thread",
+    snapshotApprovalId: "approval-2"
+  }), true);
 });

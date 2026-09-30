@@ -96,6 +96,11 @@ export function resolveEffectiveApproval(input: {
   /** True after the user clicked approve/reject and snapshot.approval was cleared. */
   approvalDecisionPending?: boolean;
   /**
+   * Approval id the user already decided. Snapshot and activity replays of that
+   * same id must not put the card back while resume is still running.
+   */
+  settledApprovalId?: string;
+  /**
    * When false, ignore process-global snapshot.approval (owned by another thread)
    * and do not synthesize a banner from sticky catalog awaiting-approval alone.
    */
@@ -104,6 +109,11 @@ export function resolveEffectiveApproval(input: {
   selectedThreadHasLiveRequest?: boolean;
 }): { message: string; requiresConfirmation: boolean } | null {
   if (input.approvalDecisionPending && !input.snapshotApproval) {
+    return null;
+  }
+  const settledApprovalId = input.settledApprovalId?.trim() || "";
+  const snapshotApprovalId = input.snapshotApproval?.id?.trim() || "";
+  if (settledApprovalId && (!snapshotApprovalId || snapshotApprovalId === settledApprovalId)) {
     return null;
   }
   const ownsLiveApproval = input.selectedThreadOwnsLiveApproval !== false;

@@ -5,6 +5,20 @@ import test from "node:test";
 const { createDefaultDesktopPreferences, normalizeDesktopPreferencesValue } =
   await import(new URL("./desktop-preferences-config.ts", import.meta.url).href);
 
+test("launch at login defaults to enabled and keeps an explicit off value", () => {
+  const workspaceStateRoot = resolve("test-state");
+  const defaults = createDefaultDesktopPreferences(workspaceStateRoot, {});
+  assert.equal(defaults.launchAtLogin, true);
+  const omitted = normalizeDesktopPreferencesValue(undefined, {
+    defaults, workspaceStateRoot, isPackaged: false
+  });
+  assert.equal(omitted.launchAtLogin, true);
+  const disabled = normalizeDesktopPreferencesValue({ launchAtLogin: false } as never, {
+    defaults, workspaceStateRoot, isPackaged: true
+  });
+  assert.equal(disabled.launchAtLogin, false);
+});
+
 test("reconstructs desktop preference defaults", () => {
   const workspaceStateRoot = resolve("test-state");
   const defaults = createDefaultDesktopPreferences(workspaceStateRoot, {});

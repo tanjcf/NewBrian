@@ -26,6 +26,8 @@ import type {
 } from "@codex-forge/protocol";
 import { isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { createLocalRuntime } from "../../../agentd/src/runtime.js";
+import { applyLoginItemSettings } from "./login-item-settings.js";
+import { deliverStartupDailyBriefing, setDailyBriefingChatHost } from "./daily-briefing-delivery.js";
 import { CodexStorage } from "./codex-storage.js";
 import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
@@ -246,7 +248,7 @@ const shellLabel = process.platform === "win32" ? "PowerShell" : process.platfor
 const platformLabel = process.platform === "win32" ? "Windows" : process.platform === "linux" ? "Ubuntu Linux" : "macOS";
 const automationTickMs = 60_000;
 const configuredGatewayBaseUrlEnv = process.env.NEWBRAIN_MODEL_BASE_URL?.trim() || "";
-const productionGatewayBaseUrl = "http://120.48.151.202:8790/v1";
+const productionGatewayBaseUrl = "https://api.sinnauze.cn/v1";
 const defaultGatewayBaseUrl = app.isPackaged
   ? productionGatewayBaseUrl
   : "http://127.0.0.1:8790/v1";
@@ -2076,6 +2078,7 @@ interface DesktopPreferences {
     rootDir: string;
   };
   browser: BrowserUsePreferences;
+  launchAtLogin: boolean;
   shortcuts: Record<string, string>;
 }
 
@@ -2394,6 +2397,90 @@ async function deactivatePlugin(plugin: PluginSpec) {
   }
 }
 
+async function queueStartupDailyBriefing(): Promise<void> {
+  try {
+    const openedAtLogin = process.env.NEWBRAIN_DAILY_BRIEFING === "1"
+      || app.getLoginItemSettings().wasOpenedAtLogin === true;
+    if (!openedAtLogin) return;
+    const authState = await readDesktopAuthState();
+    const accessToken = authState?.access_token?.trim() || "";
+    if (!accessToken) return;
+    const catalog = await readWorkspaceCatalog();
+    await deliverStartupDailyBriefing({
+      openedAtLogin,
+      accessToken,
+      gatewayOrigin: await readGatewayOrigin(),
+      headers: createDesktopAuthHeaders({
+        accessToken,
+        device: collectDesktopDeviceFingerprint()
+      }),
+      catalog,
+      addThread: (workspaceId) => addWorkspaceThread({
+        workspaceId,
+        title: "今日简报",
+        summary: "开机后的今日热点",
+        scope: "chat"
+      }),
+      readMessages: async (workspaceId, threadId) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return [];
+        const state = await readThreadState(workspace, thread);
+        return state.messages ?? [];
+      },
+      appendAssistantMessage: async (workspaceId, threadId, content) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return;
+        const state = await readThreadState(workspace, thread);
+        state.messages = [...(state.messages ?? []), {
+          id: makeId("message"),
+          role: "assistant",
+          content,
+          createdAt: nowIso()
+        }];
+        await writeThreadState(workspace, thread, state);
+      },
+      activate: (workspaceId, threadId) => activateWorkspaceThread({ workspaceId, threadId })
+    });
+  } catch (error) {
+    await appendDesktopDebugLog(`daily briefing skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+setDailyBriefingChatHost({
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  readGatewayOrigin: () => readGatewayOrigin(),
+  createHeaders: (accessToken) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  }),
+  readThreadTitle: async (workspaceId, threadId) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    return workspace?.threads.find((item) => item.id === threadId)?.title || "";
+  },
+  appendMessages: async (workspaceId, threadId, messages) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    const thread = workspace?.threads.find((item) => item.id === threadId);
+    if (!workspace || !thread) return;
+    const state = await readThreadState(workspace, thread);
+    const known = new Set((state.messages ?? []).map((item) => item.id));
+    const next = messages.filter((item) => !known.has(item.id));
+    if (!next.length) return;
+    state.messages = [...(state.messages ?? []), ...next];
+    await writeThreadState(workspace, thread, state);
+    if (runtime && activeWorkspaceId === workspaceId && activeThreadId === threadId) {
+      runtime.setThreadState(state);
+    }
+  },
+  snapshot: async () => runtime?.getSnapshot?.() ?? { messages: [] },
+  nowIso
+});
+
 async function activateConfiguredPlugins() {
   const config = await readFeatureConfig();
   const nextPlugins: PluginSpec[] = [];
@@ -2675,6 +2762,7 @@ const defaultDesktopPreferences: DesktopPreferences = {
     highResScreenshots: false,
     previewUrl: "http://127.0.0.1:3000"
   },
+  launchAtLogin: true,
   shortcuts: {}
 };
 
@@ -3402,6 +3490,10 @@ function normalizeDesktopPreferences(input?: Partial<DesktopPreferences>): Deskt
       rootDir: normalizeWorktreeRootDir(input?.worktree?.rootDir)
     },
     browser: normalizeBrowserUsePreferencesPartial(input?.browser, defaultDesktopPreferences.browser),
+    launchAtLogin:
+      typeof input?.launchAtLogin === "boolean"
+        ? input.launchAtLogin
+        : defaultDesktopPreferences.launchAtLogin,
     shortcuts:
       input?.shortcuts && typeof input.shortcuts === "object"
         ? Object.fromEntries(
@@ -6605,6 +6697,11 @@ function registerDictationShortcuts(dictation: DesktopPreferences["dictation"]) 
 }
 
 async function applyDesktopPreferences(preferences: DesktopPreferences) {
+  try {
+    applyLoginItemSettings(app, preferences.launchAtLogin !== false);
+  } catch (error) {
+    void appendDesktopDebugLog(`login item update failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   cachedBrowserUsePreferences = preferences.browser;
   terminalSession.shell = preferences.environment.terminalShell;
   registerPopupShortcut(preferences.popup.shortcut);
@@ -11074,6 +11171,7 @@ app.whenReady().then(async () => {
       const threadState = await readThreadState(initialWorkspace, initialThread);
       runtime.setThreadState(threadState);
     }
+    await queueStartupDailyBriefing();
   } catch (error) {
     await appendDesktopDebugLog(`startup runtime init failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     throw error;

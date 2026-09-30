@@ -83,6 +83,49 @@ test("replaces loopback gateway with the bundled production endpoint", async () 
   );
 });
 
+test("packaged production builds file traffic on the production gateway instead of the test gateway", async () => {
+  const { resolveEffectiveGatewayBaseUrl } = await controlPlane;
+  const productionBaseUrl = "https://api.sinnauze.cn/v1";
+  const testBaseUrl = "http://120.48.151.202:8790/v1";
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: testBaseUrl,
+      bundledBaseUrl: testBaseUrl,
+      isPackaged: true,
+      productionBaseUrl
+    }),
+    productionBaseUrl
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: productionBaseUrl,
+      bundledBaseUrl: testBaseUrl,
+      envBaseUrl: testBaseUrl,
+      isPackaged: true,
+      productionBaseUrl
+    }),
+    productionBaseUrl
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: testBaseUrl,
+      bundledBaseUrl: testBaseUrl,
+      isPackaged: true,
+      productionBaseUrl: testBaseUrl
+    }),
+    testBaseUrl
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: testBaseUrl,
+      bundledBaseUrl: productionBaseUrl,
+      isPackaged: false,
+      productionBaseUrl
+    }),
+    testBaseUrl
+  );
+});
+
 test("development builds preserve an explicit loopback gateway", async () => {
   const { resolveEffectiveGatewayBaseUrl } = await controlPlane;
   assert.equal(

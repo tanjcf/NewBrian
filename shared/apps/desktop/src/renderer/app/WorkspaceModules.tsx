@@ -69,7 +69,8 @@ import {
   groupActivitiesByUserMessage,
   resolveActiveReasoningRequestId,
   resolvePendingApprovalThreadKey,
-  resolveSelectedThreadOwnsLiveApproval
+  resolveSelectedThreadOwnsLiveApproval,
+  threadStillNeedsApproval
 } from "./thread-activity-policy";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import { resolveLocalArtifactHref } from "./local-file-link";
@@ -1860,6 +1861,7 @@ export function WorkspaceModules(ctx: any) {
   }, []);
   const [localModeUsageOpen, setLocalModeUsageOpen] = useState(false);
   const [approvalResponding, setApprovalResponding] = useState(false);
+  const [settledApprovalId, setSettledApprovalId] = useState("");
   const [approvalError, setApprovalError] = useState("");
   const [newChatBranches, setNewChatBranches] = useState<any>({ current: "", branches: [], changedFiles: 0 });
   const activeReasoningRequestId = resolveActiveReasoningRequestId({
@@ -4045,6 +4047,7 @@ export function WorkspaceModules(ctx: any) {
     return () => window.clearInterval(timer);
   }, [selectedWorkspace?.id, selectedThread?.id]);
   useEffect(() => setDelegatedAgentDetailsOpen(false), [selectedThreadKey]);
+  useEffect(() => setSettledApprovalId(""), [selectedThread?.id]);
   const delegatedAgentSummary = summarizeDelegatedAgents(delegatedAgents);
   const completedDelegatedAgentCount = delegatedAgentSummary.completed;
   const awaitingDelegatedAgentCount = delegatedAgentSummary.awaiting;
@@ -4086,7 +4089,8 @@ export function WorkspaceModules(ctx: any) {
       : selectedThreadAwaitingApproval,
     selectedThreadMessage: selectedThread?.lastEventSummary || selectedThread?.statusLabel || "",
     liveActivities: approvalResponding && !snapshot?.approval ? [] : visibleAssistantActivities,
-    approvalDecisionPending: approvalResponding && !snapshot?.approval
+    approvalDecisionPending: approvalResponding && !snapshot?.approval,
+    settledApprovalId
   });
   const approvalTool = (selectedThreadOwnsLiveApproval ? snapshot?.pendingTool : null) || (() => {
     const liveApproval = findLivePendingApprovalActivity(visibleAssistantActivities);
@@ -4118,6 +4122,8 @@ export function WorkspaceModules(ctx: any) {
     if (!api) return;
     setApprovalResponding(true);
     setApprovalError("");
+    const decidedApprovalId = snapshot?.approval?.id || "pending";
+    setSettledApprovalId(decidedApprovalId);
     const requestId = selectedThread?.id ? activeThreadRequestIds[selectedThread.id] || "" : "";
     // Clear the approval card immediately on click. respondApproval waits for the
     // resumed tool/agent loop, which previously left the Approve/Reject banner stuck.
@@ -4138,7 +4144,7 @@ export function WorkspaceModules(ctx: any) {
       ));
     }
     try {
-      const approvalId = snapshot?.approval?.id || "";
+      const approvalId = decidedApprovalId === "pending" ? "" : decidedApprovalId;
       const nextSnapshot = await api.respondApproval({
         approved,
         ...(requestId ? { requestId } : {}),
@@ -4148,6 +4154,12 @@ export function WorkspaceModules(ctx: any) {
         syncSnapshot(nextSnapshot, selectedThread.id);
       } else {
         setSnapshot(nextSnapshot);
+      }
+      const returnedApprovalId = nextSnapshot?.approval?.id || "";
+      if (returnedApprovalId && returnedApprovalId === decidedApprovalId) {
+        setSettledApprovalId("");
+      } else if (returnedApprovalId && returnedApprovalId !== decidedApprovalId) {
+        setSettledApprovalId("");
       }
       if (typeof settleApprovalRequest === "function") {
         settleApprovalRequest(requestId, selectedThread?.id || "", nextSnapshot);
@@ -4176,6 +4188,7 @@ export function WorkspaceModules(ctx: any) {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      setSettledApprovalId("");
       setApprovalError(message);
       setErrorMessage(message);
       // Terminal resume failures must clear the live request, or the composer stays
@@ -4365,7 +4378,15 @@ function startNewChat() {
   function renderSidebarTaskEntry({ workspace, thread }: any) {
     const threadKey = `${workspace.id}:${thread.id}`;
     const active = selectedWorkspace?.id === workspace.id && selectedThread?.id === thread.id && !isComposingNewThread;
-    const needsApproval = thread.status === "awaiting-approval" || threadKey === pendingApprovalThreadKey;
+    const needsApproval = threadStillNeedsApproval({
+      threadStatus: thread.status,
+      threadKey,
+      pendingApprovalThreadKey,
+      threadId: thread.id,
+      settledApprovalId,
+      settledThreadId: selectedThread?.id,
+      snapshotApprovalId: snapshot?.approval?.id
+    });
     const running = (thread.status === "running" || threadKey === runningThreadKey || activeThreadIdSet.has(thread.id)) && !needsApproval;
     const failed = thread.status === "failed" && !needsApproval && !running;
     return (
@@ -4745,7 +4766,15 @@ function renderSidebarModule() {
                             const activeThread =
                               selectedWorkspace?.id === workspace.id && selectedThread?.id === thread.id && !isComposingNewThread;
                             const threadKey = `${workspace.id}:${thread.id}`;
-                            const isPendingApproval = thread.status === "awaiting-approval" || threadKey === pendingApprovalThreadKey;
+                            const isPendingApproval = threadStillNeedsApproval({
+                              threadStatus: thread.status,
+                              threadKey,
+                              pendingApprovalThreadKey,
+                              threadId: thread.id,
+                              settledApprovalId,
+                              settledThreadId: selectedThread?.id,
+                              snapshotApprovalId: snapshot?.approval?.id
+                            });
                             const isRunningThread =
                               (thread.status === "running" || threadKey === runningThreadKey || activeThreadIdSet.has(thread.id)) &&
                               !isPendingApproval;

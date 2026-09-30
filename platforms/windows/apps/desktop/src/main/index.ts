@@ -426,6 +426,8 @@ import {
   createDefaultDesktopPreferences,
   normalizeDesktopPreferencesValue
 } from "./desktop-preferences-config.js";
+import { applyLoginItemSettings } from "./login-item-settings.js";
+import { deliverStartupDailyBriefing, setDailyBriefingChatHost } from "./daily-briefing-delivery.js";
 import {
   buildApiEndpoint,
   buildModelRequestPayload,
@@ -3863,6 +3865,90 @@ async function reconcileLocalRepositoryPlugins() {
   }
 }
 
+async function queueStartupDailyBriefing(): Promise<void> {
+  try {
+    const openedAtLogin = process.env.NEWBRAIN_DAILY_BRIEFING === "1"
+      || app.getLoginItemSettings().wasOpenedAtLogin === true;
+    if (!openedAtLogin) return;
+    const authState = await readDesktopAuthState();
+    const accessToken = authState?.access_token?.trim() || "";
+    if (!accessToken) return;
+    const catalog = await readWorkspaceCatalog();
+    await deliverStartupDailyBriefing({
+      openedAtLogin,
+      accessToken,
+      gatewayOrigin: await readGatewayOrigin(),
+      headers: createDesktopAuthHeaders({
+        accessToken,
+        device: collectDesktopDeviceFingerprint()
+      }),
+      catalog,
+      addThread: (workspaceId) => addWorkspaceThread({
+        workspaceId,
+        title: "今日简报",
+        summary: "开机后的今日热点",
+        scope: "chat"
+      }),
+      readMessages: async (workspaceId, threadId) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return [];
+        const state = await readThreadState(workspace, thread);
+        return state.messages ?? [];
+      },
+      appendAssistantMessage: async (workspaceId, threadId, content) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return;
+        const state = await readThreadState(workspace, thread);
+        state.messages = [...(state.messages ?? []), {
+          id: makeId("message"),
+          role: "assistant",
+          content,
+          createdAt: nowIso()
+        }];
+        await writeThreadState(workspace, thread, state);
+      },
+      activate: (workspaceId, threadId) => activateWorkspaceThread({ workspaceId, threadId })
+    });
+  } catch (error) {
+    await appendDesktopDebugLog(`daily briefing skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+setDailyBriefingChatHost({
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  readGatewayOrigin: () => readGatewayOrigin(),
+  createHeaders: (accessToken) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  }),
+  readThreadTitle: async (workspaceId, threadId) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    return workspace?.threads.find((item) => item.id === threadId)?.title || "";
+  },
+  appendMessages: async (workspaceId, threadId, messages) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    const thread = workspace?.threads.find((item) => item.id === threadId);
+    if (!workspace || !thread) return;
+    const state = await readThreadState(workspace, thread);
+    const known = new Set((state.messages ?? []).map((item) => item.id));
+    const next = messages.filter((item) => !known.has(item.id));
+    if (!next.length) return;
+    state.messages = [...(state.messages ?? []), ...next];
+    await writeThreadState(workspace, thread, state);
+    if (runtime && activeWorkspaceId === workspaceId && activeThreadId === threadId) {
+      runtime.setThreadState(state);
+    }
+  },
+  snapshot: async () => runtime?.getSnapshot?.() ?? { messages: [] },
+  nowIso
+});
+
 async function activateConfiguredPlugins() {
   const config = await readFeatureConfig();
   const nextPlugins: PluginSpec[] = [];
@@ -6412,6 +6498,11 @@ function registerCommandShortcuts(shortcuts: DesktopPreferences["shortcuts"]) {
   }
 }
 async function applyDesktopPreferences(preferences: DesktopPreferences) {
+  try {
+    applyLoginItemSettings(app, preferences.launchAtLogin !== false);
+  } catch (error) {
+    void appendDesktopDebugLog(`login item update failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   cachedBrowserUsePreferences = preferences.browser;
   activeTerminalShell = preferences.environment.terminalShell;
   registerPopupShortcut(preferences.popup.shortcut);
@@ -11360,6 +11451,7 @@ app.whenReady().then(async () => {
       const threadState = await readThreadState(initialWorkspace, initialThread);
       runtime.setThreadState(threadState);
     }
+    await queueStartupDailyBriefing();
   } catch (error) {
     await appendDesktopDebugLog(`startup runtime init failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     throw error;

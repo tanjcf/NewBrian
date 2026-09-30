@@ -118,6 +118,29 @@ test("resolveEffectiveApproval ignores catalog status when live activities alrea
   }), null);
 });
 
+test("resolveEffectiveApproval ignores a replay of the approval the user already decided", () => {
+  assert.equal(resolveEffectiveApproval({
+    snapshotApproval: { id: "approval-1", message: "Run a shell command" },
+    selectedThreadAwaitingApproval: true,
+    selectedThreadOwnsLiveApproval: true,
+    selectedThreadHasLiveRequest: true,
+    settledApprovalId: "approval-1",
+    liveActivities: [{
+      type: "run",
+      title: "等待批准",
+      status: "approval",
+      callId: "call-1",
+      command: "git pull"
+    }]
+  }), null);
+  const next = resolveEffectiveApproval({
+    snapshotApproval: { id: "approval-2", message: "Run another command" },
+    selectedThreadOwnsLiveApproval: true,
+    settledApprovalId: "approval-1"
+  });
+  assert.equal(next?.message, "Run another command");
+});
+
 test("resolveEffectiveApproval stays cleared while approve click is in flight", () => {
   assert.equal(resolveEffectiveApproval({
     snapshotApproval: null,

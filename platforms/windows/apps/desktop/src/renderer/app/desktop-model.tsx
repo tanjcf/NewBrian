@@ -1072,7 +1072,8 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
   },
   brain: {
     selectedWorkspaceKey: ""
-  }
+  },
+  launchAtLogin: true
 };
 
 export const initialFeatureConfig: FeatureConfigPayload = {

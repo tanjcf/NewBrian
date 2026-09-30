@@ -1022,6 +1022,10 @@ function renderSettingsWorkspace() {
                 <section className="codex-settings-section">
                   <h4>常规</h4>
                   <div className="codex-setting-list">
+                    <button type="button" className="codex-setting-row" onClick={() => updateDesktopPreferences((current) => ({ ...current, launchAtLogin: current.launchAtLogin === false }))}>
+                      <span><strong>开机自启动</strong><em>登录系统后自动打开 newbrain</em></span>
+                      <SettingsSwitch enabled={desktopPreferences.launchAtLogin !== false} />
+                    </button>
                     <div className="codex-setting-row">
                       <span><strong>默认文件打开目标</strong><em>默认打开文件和文件夹的位置</em></span>
                       <select

@@ -116,6 +116,7 @@ export function createDefaultDesktopPreferences(workspaceStateRoot: string, envi
   brain: {
     selectedWorkspaceKey: ""
   },
+  launchAtLogin: true,
   shortcuts: {}
   };
 }
@@ -348,6 +349,10 @@ export function normalizeDesktopPreferencesValue(
         ? input.brain.selectedWorkspaceKey
         : context.defaults.brain.selectedWorkspaceKey
     },
+    launchAtLogin:
+      typeof input?.launchAtLogin === "boolean"
+        ? input.launchAtLogin
+        : context.defaults.launchAtLogin,
     shortcuts:
       input?.shortcuts && typeof input.shortcuts === "object"
         ? Object.fromEntries(
