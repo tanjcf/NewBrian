@@ -1,0 +1,83 @@
+name: Seven Workspace L2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "shared/**"
+      - "platforms/**"
+      - "scripts/**"
+      - "package.json"
+      - ".github/workflows/seven-workspace-l2.yml"
+
+jobs:
+  contract-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows, macos-x64, ubuntu-x64]
+    runs-on: ${{ matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'macos-x64' && 'macos-latest' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Materialize platform workspace
+        run: node scripts/materialize.mjs ${{ matrix.platform }}
+      - name: Run shared contract tests
+        working-directory: .materialized/${{ matrix.platform }}/apps/desktop
+        run: |
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/brain-workspace-storage.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/simulation-ledger.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/document-worker-formats.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/flow-execution-service.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/engine-discovery-service.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/quant-market-contract.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/music-media-service.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/desktop/src/main/pptx-shape-rewriter.test.ts
+          pnpm exec node --import tsx --test ../../../shared/apps/agentd/src/shell-env.test.js
+
+  windows-electron-l2:
+    needs: contract-tests
+    runs-on: windows-latest
+    env:
+      CODECN_E2E_AUTH_BYPASS: "1"
+      CODECN_E2E_FORCE_FRESH: "1"
+      BRAIN_ENGINE_AUTO_INSTALL: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install FFmpeg (media suites)
+        run: choco install ffmpeg -y
+      - run: pnpm install --frozen-lockfile
+      - name: Materialize Windows workspace
+        run: node scripts/materialize.mjs windows
+      - name: Build Electron desktop
+        working-directory: .materialized/windows/apps/desktop
+        run: |
+          pnpm install
+          node node_modules/electron/install.js
+          pnpm build
+          node --check out/main/index.js
+      - name: Run seven-workspace L2 aggregator
+        working-directory: .materialized/windows/apps/desktop
+        run: pnpm test:seven-workspace-l2
+      - name: Upload L2 evidence JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seven-workspace-l2-evidence
+          path: .materialized/windows/apps/desktop/seven-workspace-l2-run.json
+          if-no-files-found: ignore

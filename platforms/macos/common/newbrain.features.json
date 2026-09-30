@@ -1,0 +1,48 @@
+{
+  "skills": [
+    {
+      "id": "skill-thread-fork",
+      "name": "线程分叉",
+      "summary": "从当前线程快速复制上下文，适合并行推进不同方案。",
+      "status": "active"
+    },
+    {
+      "id": "skill-workspace-scan",
+      "name": "工作区扫描",
+      "summary": "重新扫描当前项目文件树，适合切换目录后刷新上下文。",
+      "status": "active"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "plugin-git-console",
+      "name": "Git 工作台",
+      "summary": "围绕当前项目空间执行 Git 状态检查并记录到线程时间线。",
+      "status": "connected"
+    },
+    {
+      "id": "plugin-shell-runner",
+      "name": "Shell 执行器",
+      "summary": "在审批链路控制下排队执行 PowerShell 命令。",
+      "status": "connected"
+    }
+  ],
+  "automations": [
+    {
+      "id": "automation-git-check",
+      "title": "Git 巡检",
+      "status": "idle",
+      "trigger": "按固定间隔刷新 Git 状态并写入时间线",
+      "action": "git_status",
+      "intervalMinutes": 60
+    },
+    {
+      "id": "automation-workspace-scan",
+      "title": "工作区扫描",
+      "status": "idle",
+      "trigger": "按固定间隔刷新文件树",
+      "action": "workspace_scan",
+      "intervalMinutes": 30
+    }
+  ]
+}

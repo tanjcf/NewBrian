@@ -1,0 +1,50 @@
+node_modules/
+.pnpm-store/
+.materialized/
+out/
+release/
+dist/
+coverage/
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.msi
+*.exe
+*.dmg
+*.zip
+__pycache__/
+*.pyc
+
+# Local Electron/UI E2E evidence dumps (do not commit)
+/evidence-*.png
+/evidence-*.json
+/evidence-*.jpg
+/evidence-*.jpeg
+/evidence-*.webp
+
+
+# Local E2E run artifacts under /evidence/ (keep docs/evidence/)
+/evidence/
+
+
+# Local temporary diagnostic / E2E helper scripts and captures
+/tmp-*
+
+# Software copyright (软著) materials — keep local only
+/BRAIN智能工作台*.docx
+/BRAIN智能工作台*.txt
+/build_softcode.py
+/verify_softcode.py
+/qa-softcode-*/
+
+# Local diagnostic / one-off helper junk (never commit)
+/_install_*.txt
+/_fix_*.txt
+/_uninstall_*.txt
+/_soft_remove_*.txt
+/inspect_*.py
+/check_builder_*.py
+/verify_header_*.py
+/verify_softcode.py
+/命令.txt

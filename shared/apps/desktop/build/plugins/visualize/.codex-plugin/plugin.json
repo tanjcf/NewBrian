@@ -1,0 +1,18 @@
+{
+  "name": "visualize",
+  "version": "0.1.0",
+  "description": "Create interactive local visualizations and diagrams.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Visualize",
+    "shortDescription": "Use Visualize in Codex.",
+    "longDescription": "Visualize adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Visualize."
+  }
+}

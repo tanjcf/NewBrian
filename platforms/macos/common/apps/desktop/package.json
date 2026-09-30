@@ -1,0 +1,133 @@
+{
+  "name": "@newbrain-mac/desktop",
+  "version": "1.4.0",
+  "description": "NewBrain desktop coding agent for macOS",
+  "author": "NewBrain",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
+    "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
+    "prebuild": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
+    "build": "node node_modules/electron-vite/bin/electron-vite.js build",
+    "prepare:package-resources": "node build/prepare-package-resources.cjs",
+    "build:rust-core": "node ../../scripts/build-rust-core.mjs",
+    "package:mac": "pnpm run package:mac:arm64",
+    "package:mac:arm64": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --arm64",
+    "package:mac:intel": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --x64",
+    "package:mac:dir": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dir",
+    "package:mac:arm64:test": "node build/package-mac-channel.cjs --channel test --arch arm64",
+    "package:mac:intel:test": "node build/package-mac-channel.cjs --channel test --arch x64",
+    "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test:main": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts",
+    "test:storage": "node --experimental-strip-types --test src/main/codex-storage.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts src/main/thread-message-reconciliation.test.ts",
+    "test:package-resources": "node --test build/prepare-package-resources.test.cjs"
+  },
+  "dependencies": {
+    "@aiden0z/pptx-renderer": "1.2.4",
+    "@codex-forge/protocol": "workspace:*",
+    "@codex-forge/ui": "workspace:*",
+    "@napi-rs/canvas": "0.1.80",
+    "@uzen/kokoro-js": "1.2.4",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.1",
+    "katex": "^0.18.0",
+    "mammoth": "^1.12.0",
+    "mermaid": "^11.16.0",
+    "parse5": "7.3.0",
+    "@pdf-lib/fontkit": "1.1.1",
+    "pdf-lib": "1.17.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "5.4.296",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "saxes": "5.0.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.0.0"
+  },
+  "main": "out/main/index.js",
+  "build": {
+    "appId": "cn.newbrain.mac.desktop",
+    "productName": "NewBrain Mac",
+    "electronVersion": "35.7.5",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "node_modules/jszip/**",
+      "node_modules/exceljs/**",
+      "node_modules/pdf-parse/**",
+      "node_modules/pdfjs-dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build/package-resources/newbrain.config.json",
+        "to": "newbrain.config.json"
+      },
+      {
+        "from": "build/package-resources/newbrain.features.json",
+        "to": "newbrain.features.json"
+      },
+      {
+        "from": "../../newbrain.bootstrap.json",
+        "to": "newbrain.bootstrap.json"
+      },
+      {
+        "from": "src/renderer/icon.ico",
+        "to": "newbrain.ico"
+      },
+      {
+        "from": "build/plugins",
+        "to": "plugins"
+      },
+      {
+        "from": "resources/novel-tts",
+        "to": "novel-tts"
+      },
+      {
+        "from": "document-worker.js",
+        "to": "document-worker.js"
+      },
+      {
+        "from": "build/rust-core/brain-core",
+        "to": "brain-core/brain-core"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": true,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "NewBrain uses the microphone for voice input.",
+        "NSSpeechRecognitionUsageDescription": "NewBrain uses speech recognition to create chat input.",
+        "NSLocalNetworkUsageDescription": "NewBrain uses the local network to connect trusted mobile devices and development services."
+      },
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BRAIN 视频音频工作台 · 交互原型</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --canvas: #fbfbfb;
+      --panel: #ffffff;
+      --panel-2: #f4f4f5;
+      --line: #e7e7e7;
+      --line-strong: #dddddd;
+      --muted: #8b919c;
+      --muted-2: #b4bac4;
+      --text: #20242c;
+      --soft: #f4f4f5;
+      --soft-2: #eeeeef;
+      --bubble: #f3f3f4;
+      --blue: #316fe8;
+      --blue-2: #225fd3;
+      --green: #18a957;
+      --amber: #c48412;
+      --red: #ef4444;
+      --purple: #7657c8;
+      --radius: 10px;
+      --shadow: 0 20px 48px rgba(24,31,42,.08);
+      --sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      --mono: "Cascadia Code", "Consolas", monospace;
+      font-family: var(--sans);
+      color-scheme: light;
+    }
+    html[data-theme="dark"] { --bg:#0f141b;--canvas:#151b24;--panel:#151b24;--panel-2:#18202b;--line:#273241;--line-strong:#334155;--muted:#9aa8ba;--muted-2:#708095;--text:#e5edf7;--soft:#18202b;--soft-2:#202a37;--bubble:#1d2633;--blue:#7aa2e8;--blue-2:#8eb4ff;--green:#18a957;--amber:#e7b85c;--shadow:0 20px 48px rgba(0,0,0,.28);color-scheme:dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; font:14px var(--sans); }
+    button, select, input { font: inherit; }
+    button { color: inherit; }
+    .app { height: 100vh; display: grid; grid-template-rows: 48px minmax(0,1fr); }
+    .topbar { display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--bg); }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: .3px; }
+    .brand-mark { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--blue-2); background: var(--soft); }
+    .workspace-switch { border: 1px solid var(--line); background: var(--soft); border-radius: 7px; padding: 6px 10px; color: var(--text); }
+    .crumb { color: var(--muted); font-size: 12px; }
+    .top-actions { margin-left: auto; display: flex; gap: 8px; }
+    .ghost, .primary, .icon-btn { border: 1px solid var(--line); border-radius: 7px; background: var(--bg); padding: 7px 11px; cursor: pointer; }
+    .ghost:hover, .icon-btn:hover { background: var(--soft); border-color: var(--line-strong); }
+    .primary { color:#fff; background: var(--blue); border-color: var(--blue); }
+    .primary:hover { background: var(--blue-2); }
+    .primary:disabled { cursor: not-allowed; opacity: .45; }
+    .layout { min-height: 0; display: grid; grid-template-columns: 230px minmax(360px,.8fr) minmax(560px,1.25fr); }
+    .layout.expanded { grid-template-columns: 390px minmax(620px,1fr); }
+    .layout.expanded .sidebar { display:none; }
+    .sidebar, .inspector { min-height: 0; background: var(--panel); }
+    .sidebar { border-right: 1px solid var(--line); padding: 12px; overflow: auto; }
+    .side-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; margin: 10px 7px 7px; }
+    .project { width:100%; min-height:34px; display:flex; align-items:center; gap:8px; padding:7px 8px; border:0; border-radius:8px; background:transparent; cursor:pointer; text-align:left; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px #61d69a66; }
+    .shot-list { display: grid; gap: 7px; }
+    .shot { border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 8px; cursor: pointer; display: grid; grid-template-columns: 48px 1fr; gap: 9px; text-align: left; }
+    .shot:hover { background: #171c25; }
+    .shot.active { background: #1b2534; border-color: #31445e; }
+    .thumb { height: 32px; border-radius: 5px; background: linear-gradient(135deg,#273b50,#6b4954); position: relative; overflow: hidden; }
+    .thumb::after { content:""; position:absolute; width:26px; height:18px; right:-6px; bottom:-5px; border-radius:50%; background:#dca77055; }
+    .shot:nth-child(2) .thumb { background: linear-gradient(135deg,#3f3026,#97733b); }
+    .shot:nth-child(3) .thumb { background: linear-gradient(135deg,#1d2c48,#315a75); }
+    .shot-name { font-size: 12px; font-weight: 600; }
+    .shot-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
+    .main { min-width: 0; min-height: 0; display:flex; flex-direction:column; background:#0c0f14; }
+    .chat-head { height:48px; display:flex; align-items:center; gap:9px; padding:0 16px; border-bottom:1px solid var(--line); }
+    .chat-head strong { font-size:13px; }
+    .chat-head small { color:var(--muted); }
+    .chat-scroll { flex:1; overflow:auto; padding:22px 18px; }
+    .message { max-width:92%; margin:0 0 18px; font-size:12px; line-height:1.65; }
+    .message.user { margin-left:auto; background:#202733; border:1px solid #303845; padding:10px 12px; border-radius:12px 12px 3px 12px; }
+    .assistant-row { display:grid; grid-template-columns:25px 1fr; gap:9px; }
+    .assistant-mark { width:25px; height:25px; display:grid; place-items:center; border-radius:7px; background:#1c2940; color:#9ab9ff; font-weight:700; }
+    .tool-card { margin-top:9px; border:1px solid #2d3440; border-radius:9px; background:#12171f; padding:10px; }
+    .tool-card-head { display:flex; justify-content:space-between; gap:8px; margin-bottom:7px; }
+    .tool-card small { color:var(--muted); }
+    .chat-actions { display:flex; gap:7px; margin-top:9px; }
+    .chat-actions button { font-size:10px; padding:6px 8px; }
+    .composer { position:relative; margin:0 14px 14px; border:1px solid #363e4b; background:#141922; border-radius:16px; padding:10px 12px 8px; }
+    .composer textarea { width:100%; height:58px; resize:none; border:0; outline:0; background:transparent; color:var(--text); font:12px inherit; }
+    .composer-foot { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:11px; }
+    .composer-control { min-height:30px; display:inline-flex; align-items:center; gap:5px; border:0; border-radius:999px; background:var(--soft); color:#5d6570; padding:0 10px; cursor:pointer; }
+    .composer-add { width:30px; padding:0; justify-content:center; font-size:20px; font-weight:300; }
+    .composer-send { margin-left:auto; width:34px; height:34px; border:0; border-radius:10px; background:#1293ea; color:#fff; cursor:pointer; font-size:18px; }
+    .composer-menu { position:absolute; left:12px; bottom:52px; z-index:8; width:230px; display:none; gap:4px; padding:8px; border:1px solid var(--line); border-radius:14px; background:var(--bg); box-shadow:var(--shadow); }
+    .composer-menu.show { display:grid; }
+    .composer-menu button { border:0; border-radius:9px; background:transparent; padding:9px 10px; text-align:left; color:var(--text); cursor:pointer; }
+    .composer-menu button:hover { background:var(--soft); }
+    .stage { min-width:0; min-height:0; display:grid; place-items:center; padding:14px; overflow:hidden; background:radial-gradient(circle at 50% 30%,#18202a 0,#0c0f14 58%); }
+    .viewer { width:auto; height:min(100%, 430px); max-width:94%; aspect-ratio:16/9; background:linear-gradient(160deg,#243546,#10151b 63%); border:1px solid #39404c; border-radius:8px; position:relative; overflow:hidden; box-shadow:0 18px 60px #0008; }
+    .scene-art { position: absolute; inset: 0; background: radial-gradient(circle at 66% 38%,#ddac6d55 0 8%,transparent 26%), linear-gradient(180deg,transparent 60%,#06080be8), linear-gradient(120deg,#172435,#4a2934 52%,#171a21); }
+    .scene-art::before { content:""; position:absolute; width:32%; height:72%; left:14%; bottom:-15%; background:linear-gradient(110deg,#101820,#342f35); border-radius:50% 50% 0 0; transform:skew(-6deg); box-shadow: 40px -20px 90px #c1844c22; }
+    .viewer-copy { position:absolute; left:5%; bottom:7%; max-width:70%; color:#f8fafc; text-shadow:0 2px 12px rgba(0,0,0,.72); }
+    .viewer-copy b { font-size: clamp(20px,2vw,34px); letter-spacing:.06em; }
+    .viewer-copy p { margin:8px 0 0; color:#dbe3ee; font-size:12px; }
+    .timecode { position:absolute; right:12px; top:10px; font:11px ui-monospace,monospace; color:#c3cad4; background:#080a0dbb; padding:5px 7px; border-radius:5px; }
+    .play { position:absolute; inset:0; margin:auto; width:54px; height:54px; border-radius:50%; border:1px solid #ffffff44; background:#0a0c10bb; cursor:pointer; font-size:20px; }
+    .timeline { position:relative; z-index:1; border-top:1px solid var(--line); background:#0d1015; min-width:0; min-height:0; overflow:hidden; }
+    .timeline-toolbar { height: 38px; display:flex; align-items:center; gap:8px; padding:0 10px; border-bottom:1px solid var(--line); font-size:11px; }
+    .timeline-scale { margin-left:auto; color:var(--muted); }
+    .tracks { position:relative; padding: 9px 10px 12px 68px; height: 178px; overflow:auto; }
+    .ruler { height:20px; display:flex; justify-content:space-between; color:#687285; font:9px ui-monospace,monospace; }
+    .track { position:relative; height:37px; margin-bottom:5px; border-top:1px solid #252a33; background:repeating-linear-gradient(90deg,#11151b 0,#11151b calc(12.5% - 1px),#1c212a calc(12.5% - 1px),#1c212a 12.5%); }
+    .track-label { position:absolute; left:-58px; top:8px; width:48px; display:flex; justify-content:space-between; color:#98a2b2; font-size:10px; }
+    .mute { border:0; background:transparent; color:#798394; cursor:pointer; padding:0; }
+    .mute.on { color:var(--amber); }
+    .clip { position:absolute; top:4px; height:28px; border:1px solid; border-radius:4px; padding:5px 7px; font-size:10px; white-space:nowrap; overflow:hidden; cursor:pointer; }
+    .clip.video { background:#253e62; border-color:#426698; }
+    .clip.voice { background:#244c43; border-color:#3e806e; }
+    .clip.music { background:#453568; border-color:#70569e; }
+    .clip.source { background:#4c3d29; border-color:#7a6543; }
+    .clip.selected { outline:2px solid #fff8; }
+    .playhead { position:absolute; left:47%; top:21px; bottom:0; width:1px; background:#ff7272; pointer-events:none; }
+    .playhead::before { content:""; position:absolute; top:-4px; left:-4px; border:4px solid transparent; border-top-color:#ff7272; }
+    .inspector { border-left:1px solid var(--line); display:grid; grid-template-rows:48px auto minmax(0,1fr); overflow:hidden; }
+    .tools-head { display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--line); }
+    .tools-head strong { font-size:12px; }
+    .tools-head small { color:var(--muted); font-size:10px; }
+    .tools-head .icon-btn { margin-left:auto; }
+    .scene-tabs { display:flex; align-items:center; gap:3px; padding:0 9px; border-bottom:1px solid var(--line); overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
+    .scene-tabs::-webkit-scrollbar { display:none; }
+    .scene-tab { white-space:nowrap; border:0; background:transparent; color:#8e98a8; padding:9px 8px; font-size:10px; cursor:pointer; border-bottom:2px solid transparent; }
+    .scene-tab.active { color:#eef3ff; border-bottom-color:var(--blue); }
+    .workbench { min-width:0; min-height:0; display:grid; grid-template-rows:minmax(190px,.8fr) 190px 44px minmax(230px,1fr); overflow:hidden; }
+    .workbench.scene-simple { grid-template-rows:minmax(0,1fr); }
+    .workbench.scene-simple > .timeline, .workbench.scene-simple > .tabs, .workbench.scene-simple > .pane { display:none !important; }
+    .workbench.scene-simple #scene-tracks { display:none; }
+    .scene-content { display:none; width:min(780px,calc(100% - 36px)); height:calc(100% - 28px); overflow:auto; border:1px solid var(--line); border-radius:10px; background:var(--bg); padding:18px; box-shadow:0 8px 24px rgba(15,23,42,.05); }
+    .scene-content.active { display:block; }
+    .scene-content h2 { margin:0 0 5px; font-size:17px; }
+    .scene-content > p { margin:0 0 14px; color:var(--muted); font-size:12px; }
+    .scene-editor { width:100%; min-height:230px; border:1px solid #d8dee9; border-radius:10px; padding:14px; resize:vertical; color:var(--text); background:var(--bg); font:13px/1.75 var(--mono); }
+    .story-grid { display:grid; grid-template-columns:repeat(3,minmax(140px,1fr)); gap:10px; }
+    .story-card { padding:9px; border:1px solid var(--line); border-radius:9px; cursor:pointer; }
+    .story-card.active { border-color:#8fb3fa; background:#f5f8ff; }
+    .story-thumb { height:90px; margin-bottom:8px; border-radius:6px; background:linear-gradient(135deg,#29394c,#875765); }
+    .generate-grid { display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:14px; }
+    .generate-preview { min-height:260px; display:grid; place-items:center; border-radius:9px; color:#fff; background:linear-gradient(145deg,#1e2b3a,#563b42); }
+    .tabs { height:44px; display:flex; padding:0 10px; align-items:end; gap:4px; border-block:1px solid var(--line); }
+    .tab { border:0; background:transparent; color:#8993a4; padding:12px 10px 9px; cursor:pointer; border-bottom:2px solid transparent; }
+    .tab:hover { color:#d3d9e2; }
+    .tab.active { color:#eef3ff; border-bottom-color:var(--blue); }
+    .pane { min-width:0; min-height:0; overflow:auto; padding:14px; display:none; }
+    .pane.active { display:block; }
+    .section { border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; background:#141820; overflow:hidden; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; padding:11px 12px; border-bottom:1px solid var(--line); }
+    .section-title { font-size:12px; font-weight:700; }
+    .section-body { padding:12px; }
+    .status { display:inline-flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); }
+    .status.good { color:var(--green); }
+    .field { margin-bottom:10px; }
+    .field label { display:block; color:#aeb6c4; font-size:10px; margin-bottom:5px; }
+    .field select, .field input[type=text] { width:100%; border:1px solid #333946; background:#0e1117; color:#e9edf4; border-radius:6px; padding:8px 9px; outline:none; }
+    .field select:focus, .field input:focus { border-color:#547ac2; }
+    .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .range-row { display:grid; grid-template-columns:1fr 38px; align-items:center; gap:8px; }
+    input[type=range] { width:100%; accent-color:var(--blue); }
+    .versions { display:flex; gap:6px; margin-bottom:10px; }
+    .version { border:1px solid var(--line); background:#10131a; color:#8f99a9; border-radius:999px; padding:4px 8px; font-size:10px; cursor:pointer; }
+    .version.active { color:#dfe9ff; background:#20365b; border-color:#3b6095; }
+    .actions { display:flex; gap:7px; }
+    .actions button { flex:1; }
+    .progress { height:4px; background:#252a33; border-radius:99px; overflow:hidden; margin-top:9px; display:none; }
+    .progress.show { display:block; }
+    .progress span { display:block; width:0; height:100%; background:linear-gradient(90deg,#5f8be6,#8fc2ff); transition:width .35s; }
+    .switch-row { display:flex; justify-content:space-between; align-items:center; font-size:11px; margin:8px 0; }
+    .switch { width:34px; height:18px; border:0; border-radius:20px; background:#333946; padding:2px; cursor:pointer; }
+    .switch::after { content:""; display:block; width:14px; height:14px; border-radius:50%; background:#9aa3b0; transition:.2s; }
+    .switch.on { background:#315fae; }
+    .switch.on::after { transform:translateX(16px); background:white; }
+    .check-list { display:grid; gap:8px; }
+    .check { display:flex; gap:8px; font-size:11px; align-items:center; color:#c5ccd7; }
+    .check i { width:17px; height:17px; display:grid; place-items:center; border-radius:50%; background:#183c30; color:var(--green); font-style:normal; font-size:10px; }
+    .check.warn i { background:#44371f; color:var(--amber); }
+    .hint { color:var(--muted); font-size:10px; line-height:1.6; margin-top:8px; }
+    .badge { font-size:9px; color:#aab6c7; background:#252b35; border-radius:4px; padding:3px 5px; }
+    .toast { position:fixed; left:50%; bottom:22px; transform:translate(-50%,20px); padding:9px 13px; background:#eef2f8; color:#11151b; border-radius:7px; font-size:11px; opacity:0; pointer-events:none; transition:.25s; box-shadow:0 10px 30px #0008; z-index:10; }
+    .toast.show { opacity:1; transform:translate(-50%,0); }
+    /* Match the live BRAIN surface, typography and interaction colors. */
+    .sidebar { background:#fcfcfc; }
+    .project.active { background:var(--soft-2); }
+    .project:hover { background:var(--soft); }
+    .shot:hover { background:var(--soft); }
+    .shot.active { background:#eaf1ff; border-color:#cbdcff; }
+    .main { background:var(--canvas); }
+    .chat-head, .tools-head, .scene-tabs, .tabs { background:var(--bg); }
+    .message.user { background:#f2f5fa; border-color:#e4e9f1; }
+    .assistant-mark { background:#eaf1ff; color:#225fd3; }
+    .tool-card { background:var(--bg); border-color:#dfe5ef; box-shadow:0 8px 24px rgba(15,23,42,.04); }
+    .composer { background:var(--bg); border-color:#dfe2e7; border-radius:16px; box-shadow:0 8px 24px rgba(15,23,42,.07); }
+    .composer textarea { color:var(--text); }
+    .inspector { background:var(--bg); }
+    .scene-tabs { gap:4px; padding:6px 10px; }
+    .scene-tab { min-height:30px; padding:0 9px; border-radius:7px; border-bottom:0; }
+    .scene-tab.active { color:#225fd3; background:#eaf1ff; border-bottom:0; }
+    .tab.active { color:#225fd3; border-bottom-color:#316fe8; }
+    .stage { background:var(--canvas); }
+    .timeline { background:#f7f8fa; }
+    .track { border-color:#e0e4ea; background:repeating-linear-gradient(90deg,#f7f8fa 0,#f7f8fa calc(12.5% - 1px),#e9edf2 calc(12.5% - 1px),#e9edf2 12.5%); }
+    .timeline-toolbar { background:#fff; }
+    .section { background:#fff; border-color:#e1e5eb; }
+    .field select, .field input[type=text] { background:#fff; color:var(--text); border-color:#d7dce4; }
+    .field select:focus, .field input:focus { border-color:#316fe8; box-shadow:0 0 0 2px rgba(49,111,232,.10); }
+    .version { background:#fff; color:#6f7784; }
+    .version.active { color:#225fd3; background:#eaf1ff; border-color:#cbdcff; }
+    .switch { background:#d8dde5; }
+    .switch.on { background:#316fe8; }
+    .badge { color:#626b78; background:#f0f2f5; }
+    html[data-theme="dark"] .sidebar { background:var(--bg); }
+    html[data-theme="dark"] .project.active, html[data-theme="dark"] .project:hover { background:var(--soft-2); }
+    html[data-theme="dark"] .main, html[data-theme="dark"] .stage { background:var(--bg); }
+    html[data-theme="dark"] .message.user, html[data-theme="dark"] .tool-card, html[data-theme="dark"] .composer, html[data-theme="dark"] .section, html[data-theme="dark"] .timeline-toolbar { background:var(--bubble); border-color:var(--line); }
+    html[data-theme="dark"] .field select, html[data-theme="dark"] .field input[type=text], html[data-theme="dark"] .version { background:var(--canvas); color:var(--text); border-color:var(--line-strong); }
+    html[data-theme="dark"] .timeline { background:var(--bg); }
+    html[data-theme="dark"] .track { border-color:var(--line); background:repeating-linear-gradient(90deg,var(--bg) 0,var(--bg) calc(12.5% - 1px),var(--soft) calc(12.5% - 1px),var(--soft) 12.5%); }
+    @media (max-width: 1100px) { .layout { grid-template-columns:200px minmax(320px,.7fr) minmax(500px,1.3fr); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">B</span><span>BRAIN</span></div>
+      <button class="workspace-switch">视频制作⌄</button>
+      <span class="crumb">品牌短片 / 秋日发布会</span>
+      <div class="top-actions">
+        <button class="ghost" id="saveBtn">保存草稿</button>
+        <button class="primary" data-open-tab="export">导出成片</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <button class="project" id="newChatBtn" style="margin-bottom:8px"><span>□＋</span><strong>新对话</strong></button>
+        <div class="side-title">视频项目</div>
+        <button class="project active" data-project="秋日发布会"><span class="dot"></span><span>秋日发布会<br><small class="shot-meta">3 个分镜 · 刚刚更新</small></span></button>
+        <button class="project" data-project="产品功能预告"><span class="dot" style="background:#70798a;box-shadow:none"></span><span>产品功能预告<br><small class="shot-meta">5 个分镜 · 昨天</small></span></button>
+        <div class="side-title">当前项目的对话</div>
+        <button class="project active" data-chat="完善短片旁白"><span>◫</span><span>完善短片旁白<br><small class="shot-meta">正在生成镜头 01 音频</small></span></button>
+        <button class="project" data-chat="秋日发布会脚本"><span>◫</span><span>秋日发布会脚本<br><small class="shot-meta">12 分钟前</small></span></button>
+        <button class="project" data-chat="分镜视觉风格"><span>◫</span><span>分镜视觉风格<br><small class="shot-meta">昨天</small></span></button>
+        <div class="side-title">项目资源</div>
+        <button class="project" data-resource="文件与素材"><span>▤</span><span>文件与素材</span></button>
+        <button class="project" data-resource="任务与产物"><span>✓</span><span>任务与产物</span></button>
+      </aside>
+
+      <main class="main">
+        <header class="chat-head"><span class="dot"></span><strong id="chatTitle">完善短片旁白</strong><small>Spring 智能中枢在线</small></header>
+        <section class="chat-scroll" id="chatScroll">
+          <div class="message user">给“秋日发布会”第 1 镜生成温暖、克制的女声旁白，背景音乐有人声时自动降低。</div>
+          <div class="message assistant-row"><span class="assistant-mark">B</span><div>我已读取当前视频项目。第 1 镜时长 6 秒，旁白文本预计 4.8 秒，适合保留约 1 秒画面呼吸。<div class="tool-card"><div class="tool-card-head"><strong>音频方案已准备</strong><span class="status good">● 可执行</span></div><small>知性女声 · 温暖 · 0.96× · 自动选择 TTS<br>BGM 闪避 −12dB · 输出到 A2/A3 音轨</small><div class="chat-actions"><button class="primary" id="applyPlan">生成并加入时间线</button><button class="ghost" data-focus-audio>调整参数</button></div></div></div></div>
+          <div class="message assistant-row"><span class="assistant-mark">B</span><div>右侧是视频制作 Tools。你可以直接修改参数，也可以继续用自然语言让我操作。展开后会隐藏左侧导航，但对话仍会保留。</div></div>
+        </section>
+        <section class="composer"><textarea id="promptInput" placeholder="给 BRAIN 发送消息"></textarea><div class="composer-menu" id="addMenu"><button data-add="上传文件">▤ 上传文件</button><button data-add="选择项目素材">▦ 选择项目素材</button><button data-add="调用技能">◇ 调用技能</button></div><div class="composer-foot"><button class="composer-control composer-add" id="addBtn">＋</button><button class="composer-control" id="modeBtn">◇ Agent⌄</button><button class="composer-control" id="modelBtn">GPT-5.6⌄</button><span>当前：镜头 01</span><button class="composer-send" id="sendPrompt" title="发送">↑</button></div></section>
+      </main>
+
+      <aside class="inspector">
+        <header class="tools-head"><strong>Tools · 视频制作</strong><small id="layoutLabel">侧栏模式</small><button class="icon-btn" id="expandBtn" title="展开工作台">⛶ 展开</button></header>
+        <nav class="scene-tabs"><button class="scene-tab" data-scene="script">脚本</button><button class="scene-tab" data-scene="storyboard">分镜</button><button class="scene-tab" data-scene="generate">单镜生成</button><button class="scene-tab active" data-scene="tracks">本镜音视频轨</button></nav>
+        <div class="workbench">
+          <section class="stage">
+            <div class="viewer" id="scene-tracks">
+              <div class="scene-art"></div><div class="timecode" id="timecode">00:03.12 / 00:22.00</div>
+              <button class="play" id="playBtn" aria-label="播放">▶</button>
+              <div class="viewer-copy"><b id="sceneTitle">让灵感，在清晨醒来</b><p id="sceneSub">镜头 01 · 清晨开场 · 旁白已生成</p></div>
+            </div>
+            <div class="scene-content" id="scene-script"><h2>秋日发布会 · 视频脚本</h2><p>编辑后可让 BRAIN 拆分镜或润色文案。</p><textarea class="scene-editor">【镜头 01｜清晨开场】\n清晨光线穿过工作室。旁白：每一次灵感，都从看见新的可能开始。\n\n【镜头 02｜产品亮相】\n镜头推进到产品界面，信息由复杂变得清晰。\n\n【镜头 03｜品牌收束】\n品牌标识出现。旁白：下一步，由你定义。</textarea><div class="actions" style="margin-top:10px"><button class="ghost" data-proto-action="脚本已保存">保存脚本</button><button class="primary" data-scene-jump="storyboard">让 BRAIN 拆分镜</button></div></div>
+            <div class="scene-content" id="scene-storyboard"><h2>分镜 · 3</h2><p>选择镜头后，可继续生成画面或进入本镜音视频轨。</p><div class="story-grid"><article class="story-card active"><div class="story-thumb"></div><strong>01 清晨开场</strong><small>6 秒 · 已生成</small></article><article class="story-card"><div class="story-thumb"></div><strong>02 产品亮相</strong><small>8 秒 · 已生成</small></article><article class="story-card"><div class="story-thumb"></div><strong>03 品牌收束</strong><small>8 秒 · 已生成</small></article></div><div class="actions" style="margin-top:12px"><button class="ghost" data-proto-action="已添加新分镜">＋ 添加分镜</button><button class="primary" data-scene-jump="generate">生成选中镜头</button></div></div>
+            <div class="scene-content" id="scene-generate"><h2>单镜生成 · 镜头 01</h2><p>使用当前分镜描述生成视频版本。</p><div class="generate-grid"><div class="generate-preview">镜头 01 预览</div><div><div class="field"><label>视频模型</label><select><option>自动选择</option><option>MiniMax Video</option><option>Runway</option></select></div><div class="field"><label>画面比例</label><select><option>16:9</option><option>9:16</option><option>1:1</option></select></div><div class="field"><label>时长</label><select><option>6 秒</option><option>10 秒</option></select></div><button class="primary" style="width:100%" data-proto-action="镜头生成任务已提交">生成新版本</button></div></div></div>
+          </section>
+          <section class="timeline">
+            <div class="timeline-toolbar"><button class="icon-btn" id="timelinePlay">▶</button><span>00:10.34</span><button class="icon-btn">−</button><button class="icon-btn">＋</button><span class="timeline-scale">22 秒 · 25 fps</span></div>
+            <div class="tracks" id="tracks">
+              <div class="ruler"><span>00:00</span><span>00:04</span><span>00:08</span><span>00:12</span><span>00:16</span><span>00:20</span></div>
+              <div class="track"><span class="track-label">V1 <button class="mute">●</button></span><span class="clip video" style="left:0;width:27%">01 清晨</span><span class="clip video" style="left:27.5%;width:36%">02 产品</span><span class="clip video" style="left:64%;width:36%">03 收束</span></div>
+              <div class="track"><span class="track-label">A1 <button class="mute">M</button></span><span class="clip source" style="left:0;width:100%">原始环境声</span></div>
+              <div class="track"><span class="track-label">A2 <button class="mute">M</button></span><span class="clip voice selected" style="left:1%;width:24%">旁白 v2</span><span class="clip voice" style="left:66%;width:30%">旁白 v1</span></div>
+              <div class="track"><span class="track-label">A3 <button class="mute">M</button></span><span class="clip music" style="left:0;width:100%">秋日微光 · BGM</span></div>
+              <div class="playhead"></div>
+            </div>
+          </section>
+        <nav class="tabs" aria-label="工具页签">
+          <button class="tab" data-tab="shots">分镜</button>
+          <button class="tab active" data-tab="audio">音频</button>
+          <button class="tab" data-tab="subtitle">字幕</button>
+          <button class="tab" data-tab="export">导出</button>
+        </nav>
+
+        <div class="pane" id="pane-shots">
+          <div class="section"><div class="section-head"><span class="section-title">镜头 01</span><span class="badge">6 秒</span></div><div class="section-body"><div class="field"><label>画面描述</label><input type="text" value="清晨光线穿过工作室，人物望向窗外"></div><button class="primary" style="width:100%">重新生成镜头</button></div></div>
+        </div>
+
+        <div class="pane active" id="pane-audio">
+          <div class="section">
+            <div class="section-head"><span class="section-title">镜头 01 · 旁白</span><span class="status good" id="voiceStatus">● 已就绪</span></div>
+            <div class="section-body">
+              <div class="versions"><button class="version">v1</button><button class="version active">v2 当前</button><button class="version">＋</button></div>
+              <div class="field"><label>旁白文本</label><input id="narration" type="text" value="每一次灵感，都从看见新的可能开始。"></div>
+              <div class="two">
+                <div class="field"><label>服务商</label><select id="provider"><option>自动选择</option><option>豆包</option><option>MiniMax</option><option>OpenAI TTS</option><option>ElevenLabs</option><option>火山引擎</option><option>本地 Kokoro</option></select></div>
+                <div class="field"><label>音色</label><select><option>知性女声</option><option>纪录片男声</option><option>自然中性</option></select></div>
+              </div>
+              <div class="two">
+                <div class="field"><label>语速</label><div class="range-row"><input id="speed" type="range" min="70" max="130" value="96"><span id="speedValue">0.96×</span></div></div>
+                <div class="field"><label>情绪</label><select><option>温暖</option><option>平静</option><option>坚定</option><option>活泼</option></select></div>
+              </div>
+              <div class="actions"><button class="ghost" id="previewVoice">试听当前</button><button class="primary" id="generateVoice">生成新版本</button></div>
+              <div class="progress" id="voiceProgress"><span></span></div>
+              <div class="hint">生成结果将绑定到当前镜头，不会替换其他镜头的旁白。</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-head"><span class="section-title">背景音乐</span><span class="status good">● 已加入 A3</span></div>
+            <div class="section-body">
+              <div class="field"><label>音乐描述</label><input type="text" value="温暖克制的钢琴与弦乐，22 秒，无人声"></div>
+              <div class="switch-row"><span>旁白出现时自动降低音乐</span><button class="switch on" data-switch></button></div>
+              <div class="field"><label>闪避强度</label><div class="range-row"><input type="range" min="0" max="24" value="12"><span>−12dB</span></div></div>
+              <div class="actions"><button class="ghost">试听 BGM</button><button class="primary" id="generateMusic">重新生成</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pane" id="pane-subtitle">
+          <div class="section"><div class="section-head"><span class="section-title">音频转字幕</span><span class="badge">Whisper / 云 ASR</span></div><div class="section-body"><div class="field"><label>识别来源</label><select><option>整条时间线</option><option>原始环境声 A1</option><option>旁白 A2</option></select></div><div class="field"><label>识别引擎</label><select><option>自动选择</option><option>本地 Whisper · 隐私模式</option><option>阿里云 Paraformer</option><option>腾讯云 ASR</option><option>火山引擎 ASR</option></select></div><button class="primary" id="transcribeBtn" style="width:100%">开始转写字幕</button><div class="progress" id="subtitleProgress"><span></span></div><p class="hint" id="subtitleHint">本地模式不会上传原始音频。识别结果先保存为字幕草稿。</p></div></div>
+        </div>
+
+        <div class="pane" id="pane-export">
+          <div class="section"><div class="section-head"><span class="section-title">导出前检查</span><span class="status good" id="checkStatus">● 4/5 通过</span></div><div class="section-body"><div class="check-list"><div class="check"><i>✓</i><span>所有镜头已有可解码视频</span></div><div class="check"><i>✓</i><span>旁白均绑定到对应镜头</span></div><div class="check"><i>✓</i><span>未检测到削波和异常静音</span></div><div class="check"><i>✓</i><span>背景音乐闪避已应用</span></div><div class="check warn" id="subtitleCheck"><i>!</i><span>字幕仍为草稿，建议人工确认</span></div></div><button class="primary" id="exportBtn" style="width:100%;margin-top:14px">按当前设置导出 MP4</button><p class="hint">原型只模拟交互，不会生成或上传文件。</p></div></div>
+        </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => [...document.querySelectorAll(s)];
+    const toast = (message) => {
+      const el = $('#toast'); el.textContent = message; el.classList.add('show');
+      clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => el.classList.remove('show'), 1900);
+    };
+    const openTab = (name) => {
+      $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === name));
+      $$('.pane').forEach(x => x.classList.toggle('active', x.id === `pane-${name}`));
+    };
+    $$('.tab').forEach(x => x.addEventListener('click', () => openTab(x.dataset.tab)));
+    $$('[data-open-tab]').forEach(x => x.addEventListener('click', () => openTab(x.dataset.openTab)));
+    $('#speed').addEventListener('input', e => $('#speedValue').textContent = `${(e.target.value/100).toFixed(2)}×`);
+    $$('[data-switch]').forEach(x => x.addEventListener('click', () => { x.classList.toggle('on'); toast(x.classList.contains('on') ? '已启用旁白闪避' : '已关闭旁白闪避'); }));
+    $$('.version').forEach(x => x.addEventListener('click', () => { if (x.textContent.trim() === '＋') return $('#generateVoice').click(); $$('.version').forEach(v => v.classList.remove('active')); x.classList.add('active'); toast(`已切换到旁白 ${x.textContent.trim()}`); }));
+    $$('.mute').forEach(x => x.addEventListener('click', () => { x.classList.toggle('on'); toast(x.classList.contains('on') ? '音轨已静音' : '音轨已恢复'); }));
+    $$('.clip').forEach(x => x.addEventListener('click', () => { $$('.clip').forEach(c => c.classList.remove('selected')); x.classList.add('selected'); toast(`已选择：${x.textContent}`); }));
+    $$('.shot').forEach(x => x.addEventListener('click', () => {
+      $$('.shot').forEach(s => s.classList.remove('active')); x.classList.add('active');
+      const n = x.dataset.shot; const titles = {1:'让灵感，在清晨醒来',2:'把复杂，变得清晰',3:'下一步，由你定义'};
+      $('#sceneTitle').textContent = titles[n]; $('#sceneSub').textContent = `镜头 0${n} · ${x.querySelector('.shot-name').textContent.split('·')[1].trim()}`;
+      toast(`已进入镜头 0${n}`);
+    }));
+    const togglePlay = (button) => { const playing = button.textContent === '❚❚'; button.textContent = playing ? '▶' : '❚❚'; toast(playing ? '已暂停预览' : '正在预览时间线'); };
+    $('#playBtn').addEventListener('click', () => togglePlay($('#playBtn')));
+    $('#timelinePlay').addEventListener('click', () => togglePlay($('#timelinePlay')));
+    $('#previewVoice').addEventListener('click', () => toast('正在试听旁白 v2'));
+    $('#saveBtn').addEventListener('click', () => toast('草稿已保存'));
+    const simulate = (progress, status, done) => {
+      progress.classList.add('show'); const bar = progress.querySelector('span'); bar.style.width='12%';
+      status && (status.textContent='● 生成中'); let n=12;
+      const timer=setInterval(()=>{ n=Math.min(100,n+24); bar.style.width=`${n}%`; if(n===100){ clearInterval(timer); setTimeout(()=>{progress.classList.remove('show');bar.style.width='0';status&&(status.textContent='● 已就绪');done();},350);}},280);
+    };
+    $('#generateVoice').addEventListener('click', () => {
+      const btn=$('#generateVoice'); btn.disabled=true;
+      simulate($('#voiceProgress'), $('#voiceStatus'), () => { btn.disabled=false; $$('.version').forEach(v=>v.classList.remove('active')); const add=$$('.version').at(-1); const v=document.createElement('button'); v.className='version active'; v.textContent='v3 当前'; add.before(v); v.addEventListener('click',()=>toast('已切换到旁白 v3')); toast('旁白 v3 已生成并绑定到镜头 01'); });
+    });
+    $('#generateMusic').addEventListener('click', e => { e.target.disabled=true; setTimeout(()=>{e.target.disabled=false;toast('BGM 新版本已加入素材，等待试听确认');},1200); toast('正在请求 spring-app 生成背景音乐'); });
+    $('#transcribeBtn').addEventListener('click', () => {
+      const btn=$('#transcribeBtn'); btn.disabled=true; $('#subtitleHint').textContent='正在识别时间戳与分段…';
+      simulate($('#subtitleProgress'), null, () => { btn.disabled=false; btn.textContent='重新转写'; $('#subtitleHint').textContent='已生成 7 条字幕草稿，请人工确认专有名词。'; $('#subtitleCheck').innerHTML='<i>✓</i><span>字幕草稿已生成，待人工确认</span>'; toast('字幕草稿已生成'); });
+    });
+    $('#exportBtn').addEventListener('click', () => toast('原型模式：导出检查已触发，不会写入文件'));
+    $('#expandBtn').addEventListener('click', () => {
+      const layout = $('.layout');
+      const expanded = layout.classList.toggle('expanded');
+      $('#expandBtn').textContent = expanded ? '↙ 还原' : '⛶ 展开';
+      $('#expandBtn').title = expanded ? '还原三栏布局' : '展开工作台';
+      $('#layoutLabel').textContent = expanded ? '工作台模式 · 保留对话' : '侧栏模式';
+      toast(expanded ? '已展开 Tools，左侧导航暂时收起' : '已还原 BRAIN 三栏布局');
+    });
+    $$('[data-focus-audio]').forEach(x => x.addEventListener('click', () => { openTab('audio'); toast('已定位到右侧音频参数'); }));
+    $('#applyPlan').addEventListener('click', () => $('#generateVoice').click());
+    $('#sendPrompt').addEventListener('click', () => {
+      const input = $('#promptInput'); const value = input.value.trim();
+      if (!value) return toast('请输入要让 BRAIN 执行的修改');
+      const message = document.createElement('div'); message.className = 'message user'; message.textContent = value;
+      $('#chatScroll').append(message); input.value = ''; $('#chatScroll').scrollTop = $('#chatScroll').scrollHeight;
+      setTimeout(() => {
+        const reply=document.createElement('div'); reply.className='message assistant-row';
+        reply.innerHTML='<span class="assistant-mark">B</span><div>已收到。我会按这条要求更新当前镜头，并把可调整参数同步到右侧 Tools。<div class="chat-actions"><button class="ghost" data-focus-audio>查看音频参数</button></div></div>';
+        $('#chatScroll').append(reply); $('#chatScroll').scrollTop=$('#chatScroll').scrollHeight;
+        reply.querySelector('[data-focus-audio]').addEventListener('click',()=>{ switchScene('tracks'); openTab('audio'); });
+        toast('BRAIN 已回复并同步右侧 Tools');
+      }, 500);
+    });
+    $('#promptInput').addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#sendPrompt').click();} });
+    const switchScene = (name) => {
+      $$('.scene-tab').forEach(x=>x.classList.toggle('active',x.dataset.scene===name));
+      const simple=name!=='tracks'; $('.workbench').classList.toggle('scene-simple',simple);
+      $$('.scene-content').forEach(x=>x.classList.toggle('active',x.id===`scene-${name}`));
+      toast(`已切换：${({script:'脚本',storyboard:'分镜',generate:'单镜生成',tracks:'本镜音视频轨'})[name]}`);
+    };
+    $$('.scene-tab').forEach(x=>x.addEventListener('click',()=>switchScene(x.dataset.scene)));
+    $$('[data-scene-jump]').forEach(x=>x.addEventListener('click',()=>switchScene(x.dataset.sceneJump)));
+    $$('.story-card').forEach(x=>x.addEventListener('click',()=>{$$('.story-card').forEach(c=>c.classList.remove('active'));x.classList.add('active');toast(`已选择：${x.querySelector('strong').textContent}`);}));
+    $$('[data-proto-action]').forEach(x=>x.addEventListener('click',()=>toast(x.dataset.protoAction)));
+    $$('[data-project]').forEach(x=>x.addEventListener('click',()=>{$$('[data-project]').forEach(p=>p.classList.remove('active'));x.classList.add('active');$('.crumb').textContent=`品牌短片 / ${x.dataset.project}`;toast(`已切换项目：${x.dataset.project}`);}));
+    $$('[data-chat]').forEach(x=>x.addEventListener('click',()=>{$$('[data-chat]').forEach(p=>p.classList.remove('active'));x.classList.add('active');$('#chatTitle').textContent=x.dataset.chat;toast(`已打开对话：${x.dataset.chat}`);}));
+    $$('[data-resource]').forEach(x=>x.addEventListener('click',()=>toast(`已打开${x.dataset.resource}侧栏（原型）`)));
+    $('#newChatBtn').addEventListener('click',()=>{$('#chatTitle').textContent='新对话';$('#chatScroll').innerHTML='<div class="message assistant-row"><span class="assistant-mark">B</span><div>想从视频的哪一步开始？你可以让我写脚本、拆分镜、生成单镜或处理音频。</div></div>';$('#promptInput').focus();});
+    $('#addBtn').addEventListener('click',()=>$('#addMenu').classList.toggle('show'));
+    $$('[data-add]').forEach(x=>x.addEventListener('click',()=>{$('#addMenu').classList.remove('show');toast(`${x.dataset.add}：原型入口已触发`);}));
+    $('#modeBtn').addEventListener('click',()=>{const b=$('#modeBtn');b.textContent=b.textContent.includes('Agent')?'◇ 对话⌄':'◇ Agent⌄';toast(`已切换为${b.textContent.replace('◇ ','').replace('⌄','')}模式`);});
+    $('#modelBtn').addEventListener('click',()=>{const b=$('#modelBtn');b.textContent=b.textContent.includes('5.6')?'GPT-6⌄':'GPT-5.6⌄';toast(`已选择 ${b.textContent.replace('⌄','')}`);});
+  </script>
+<style>
+/* Shell structure follows WorkspaceModules renderSidebarModule and renderBrainResourcePanel. */
+.layout{grid-template-columns:clamp(280px,24vw,372px) minmax(360px,1fr) 480px}.layout.expanded{grid-template-columns:clamp(340px,31vw,460px) minmax(560px,1fr)}
+.sidebar{display:flex;flex-direction:column;padding:12px 10px;background:#fcfcfc;position:relative}.sidebar button{font-family:var(--sans)}
+.shell-switch{display:flex;align-items:center;gap:9px;width:100%;min-height:42px;border:0;border-radius:8px;background:transparent;color:#20242c;padding:8px;text-align:left;font-size:15px;font-weight:600}.shell-switch span:last-child{margin-left:auto}
+.shell-nav{display:grid;padding-bottom:14px;border-bottom:1px solid #eceef2}.shell-nav button{display:flex;align-items:center;gap:8px;min-height:34px;border:0;border-radius:8px;padding:0 8px;background:transparent;text-align:left;font-size:14px;font-weight:400}.shell-nav button:hover{background:#e9eef0}
+.shell-icon{width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.shell-projects{flex:1;overflow:auto}.shell-project-head{display:flex;justify-content:space-between;align-items:center;min-height:42px}.shell-project-head button{border:0;background:transparent;color:#626b78;padding:8px;font-size:14px}.shell-projects details>summary{cursor:pointer;padding:10px 8px;font-size:14px}.shell-thread{display:block;width:calc(100% - 22px);margin:2px 0 2px 22px;border:0;border-radius:7px;background:transparent;text-align:left;padding:8px 10px;font-size:13px}.shell-thread.active{background:#e9eef0}.shell-account{border-top:1px solid var(--line);padding-top:12px;font-size:12px;color:var(--muted)}
+.shell-global{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid #e7eaee}.shell-global button{border:0;border-radius:7px;background:transparent;padding:0 9px;min-height:30px;font-size:12px;color:#626b78}.shell-global button.active{background:#eaf1ff;color:#225fd3}
+.inspector{grid-template-rows:58px auto auto minmax(0,1fr)}.tools-head strong{font-size:14px}.scene-tab{font-size:12px}.composer textarea{font:14px/1.5 var(--sans);height:54px}.composer-foot{height:34px}.composer-control{background:transparent}.composer-foot #modelBtn{margin-left:auto}.composer-foot #sendPrompt{margin-left:0}.composer-menu{max-height:260px;overflow:auto}.clip{color:#fff}.play{color:#fff}.shell-panel{padding:18px;overflow:auto;grid-row:4}.shell-panel button{display:block;width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:left;margin:8px 0}.shell-dialog{border:1px solid var(--line);border-radius:14px;padding:20px;min-width:320px;box-shadow:var(--shadow)}.shell-dialog::backdrop{background:#17203344}.shell-dialog input{display:block;width:100%;margin:14px 0;padding:10px;border:1px solid var(--line);border-radius:7px}
+</style>
+<dialog class="shell-dialog" id="shellDialog"><form method="dialog"><strong id="dialogTitle"></strong><div id="dialogBody"></div><button class="ghost">关闭</button></form></dialog>
+<script>
+(() => {
+ const svg=(path)=>`<svg class="shell-icon" viewBox="0 0 24 24">${path}</svg>`;
+ const plus=svg('<path d="M12 5v14M5 12h14"/>');
+ const search=svg('<circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4 4"/>');
+ const folder=svg('<path d="M3.5 6.5h6l2 2h9v8.5a2 2 0 0 1-2 2h-15v-12.5Z"/>');
+ const oldNew=$('#newChatBtn');
+ $('.sidebar').innerHTML=`<button class="shell-switch" id="shellSwitch">${folder}<strong>视频制作</strong><span>⌄</span></button><nav class="shell-nav"><button id="shellNew">${plus}新对话</button><button id="shellSearch">${search}搜索</button></nav><div class="shell-projects"><div class="shell-project-head"><button id="collapseProjects">项目 ⌄</button><button id="createProject" aria-label="添加项目">＋</button></div><div id="projectTree"><details open><summary>秋日发布会</summary><button class="shell-thread active">完善短片旁白</button><button class="shell-thread">秋日发布会脚本</button><button class="shell-thread">分镜视觉风格</button></details><details><summary>产品功能预告</summary><button class="shell-thread">产品短片方案</button></details></div></div><div class="shell-account">本地工作区 · HTML 交互预览</div>`;
+ $('.workspace-switch').remove();
+ $('#shellNew').onclick=()=>oldNew.click();
+ const history=new Map();let current='完善短片旁白';
+ $('.sidebar').addEventListener('click',e=>{if(!e.target.matches('.shell-thread'))return;history.set(current,$('#chatScroll').innerHTML);current=e.target.textContent;$('#chatTitle').textContent=current;$$('.shell-thread').forEach(b=>b.classList.toggle('active',b===e.target));$('#chatScroll').innerHTML=history.get(current)||'<div class="message">此对话尚无消息。可以在下方开始讨论。</div>';if(current.includes('脚本'))switchScene('script');else if(current.includes('分镜'))switchScene('storyboard');else switchScene('tracks');});
+ $('#collapseProjects').onclick=()=>$('#projectTree').hidden=!$('#projectTree').hidden;
+ const dialog=(title,body)=>{$('#dialogTitle').textContent=title;$('#dialogBody').replaceChildren(body);$('#shellDialog').showModal();};
+ $('#createProject').onclick=()=>{const box=document.createElement('div');box.innerHTML='<input placeholder="项目名称" required><button type="button" class="primary">新建空白项目</button>';box.querySelector('button').onclick=()=>{const name=box.querySelector('input').value.trim();if(!name)return;const d=document.createElement('details'),s=document.createElement('summary');s.textContent=name;d.append(s);$('#projectTree').append(d);$('#shellDialog').close();};dialog('添加项目',box);};
+ $('#shellSearch').onclick=()=>{const box=document.createElement('div');box.innerHTML='<input placeholder="搜索项目或对话"><div></div>';const results=box.querySelector('div');box.querySelector('input').oninput=e=>{results.textContent=$$('.shell-thread').filter(b=>b.textContent.includes(e.target.value)).map(b=>b.textContent).join(' · ')||'无匹配结果';};dialog('搜索',box);};
+ $('#shellSwitch').onclick=()=>{const box=document.createElement('div');['学习与探索','股票与量化','游戏制作','视频制作','音乐创作','数据与决策','软件与自动化','文档写作'].forEach(name=>{const b=document.createElement('button');b.type='button';b.className='project';b.textContent=name+(name==='视频制作'?' ✓':'');b.onclick=()=>{if(name==='视频制作')$('#shellDialog').close();else toast('此原型仅实现视频制作场景');};box.append(b);});dialog('工作台',box);};
+ const global=document.createElement('nav');global.className='shell-global';global.innerHTML='<button data-global="files">文件 3</button><button data-global="artifacts">产物 2</button><button data-global="tasks">任务 1</button>';
+ $('.tools-head').insertBefore(global, $('#expandBtn'));
+ const toolsButton=document.createElement('button');toolsButton.textContent='Tools';toolsButton.className='active';global.prepend(toolsButton);toolsButton.onclick=()=>{panel.hidden=true;$('.workbench').style.display='';global.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===toolsButton));};
+ const panel=document.createElement('div');panel.className='shell-panel';panel.hidden=true;$('.inspector').append(panel);
+ global.onclick=e=>{const key=e.target.dataset.global;if(!key)return;$('.workbench').style.display='none';panel.hidden=false;global.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===e.target));panel.replaceChildren();const entries={files:['脚本.md','镜头01.mp4','旁白-v2.wav'],artifacts:['短片预览.mp4','字幕草稿.srt'],tasks:['配音生成 · 已完成']}[key];entries.forEach(name=>{const b=document.createElement('button');b.textContent=name;b.onclick=()=>{const text=document.createElement('p');text.textContent=name+' · 示例资源，尚未连接实际项目文件。';dialog('资源预览',text);};panel.append(b);});};
+ $$('.scene-tab').forEach(b=>b.addEventListener('click',()=>{panel.hidden=true;$('.workbench').style.display='';global.querySelectorAll('button').forEach(x=>x.classList.remove('active'));}));
+ $('.composer-foot>span').remove();
+ for(const id of ['modeBtn','modelBtn']){const old=$('#'+id),button=old.cloneNode(true);old.replaceWith(button);button.textContent=id==='modeBtn'?'默认权限 ⌄':'自动选择 · 中等 ⌄';button.onclick=()=>{const menu=$('#addMenu');menu.replaceChildren();const options=id==='modeBtn'?['默认权限','完全访问']:['自动选择 · 低','自动选择 · 中等','自动选择 · 高'];options.forEach(label=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{button.textContent=label+' ⌄';menu.classList.remove('show');};menu.append(b);});menu.classList.add('show');};}
+ const addOld=$('#addBtn'),addNew=addOld.cloneNode(true);addOld.replaceWith(addNew);addNew.onclick=()=>{const menu=$('#addMenu');menu.replaceChildren();['文件和图片','当前工作区','调用技能'].forEach(label=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{menu.classList.remove('show');const input=document.createElement('input');input.placeholder=label==='调用技能'?'输入技能名称':'选择示例项目素材';dialog(label,input);};menu.append(b);});menu.classList.add('show');};
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#addMenu').classList.remove('show');});
+})();
+</script>
+<style>
+.workbench.scene-simple:has(#scene-script.active)>.stage{padding:0;display:block}
+#scene-script{width:100%;height:100%;margin:0;border:0;border-radius:0;padding:0;background:#fbfbfc;box-shadow:none;overflow:hidden}
+#scene-script.active{display:flex;flex-direction:column}.script-scroll{overflow:auto;min-height:0;flex:1;padding:20px}.script-heading{display:flex;justify-content:space-between;align-items:start;gap:10px}.script-heading h2{font-size:18px;margin:0 0 5px}.script-caption{font-size:12px;color:#8b919c;line-height:1.6}.script-summary{display:flex;gap:8px;margin:16px 0}.script-summary span{background:#f0f3f8;border-radius:6px;padding:5px 9px;font-size:12px;color:#5c6778}.script-brief{display:grid;gap:8px;margin:0 0 18px}.script-brief label,.script-segment label{font-size:12px;color:#737e8e;display:grid;gap:5px}.script-brief input,.script-brief select{min-width:0;width:100%;border:1px solid #e0e5ed;border-radius:7px;background:#fff;padding:8px;color:#293444;font:13px var(--sans)}.script-segment{border:1px solid #e0e5ed;border-radius:10px;background:#fff;padding:14px;margin-bottom:12px}.segment-head{display:flex;gap:8px;align-items:center;margin-bottom:12px}.segment-number{background:#edf2fc;color:#316fe8;font-size:11px;padding:4px 6px;border-radius:5px}.segment-head strong{font-size:13px;flex:1}.segment-head input{width:42px;border:1px solid #e0e5ed;border-radius:5px;padding:4px;font:12px var(--sans)}.segment-head small{font-size:11px;color:#8b919c}.script-segment textarea{width:100%;min-height:62px;resize:vertical;border:1px solid transparent;border-radius:7px;padding:8px;background:#f7f8fa;color:#293444;font:13px/1.7 var(--sans);margin-bottom:9px}.script-segment textarea:focus{outline:0;border-color:#9abaf7;background:#fff}.script-segment .voice-copy{background:#f4f7fd}.script-bottom{flex:none;border-top:1px solid #e7e7e7;background:#fff;padding:12px 18px}.script-bottom .actions{margin-top:8px}.script-add{width:100%;border:1px dashed #cfd7e5;border-radius:8px;background:transparent;padding:10px;color:#5f7190;cursor:pointer}.script-review{padding:12px;border:1px solid #cbdafa;border-radius:9px;background:#f4f7fd;margin:14px 0;font-size:13px;line-height:1.8}.script-review[hidden]{display:none}.script-tabs{display:flex;gap:6px;margin:16px 0}.script-tabs button{border:0;border-radius:6px;background:transparent;padding:7px 10px;color:#747e8e}.script-tabs button.active{background:#eaf1ff;color:#225fd3}.script-raw{width:100%;min-height:360px;border:1px solid #d8dee9;border-radius:9px;padding:12px;font:13px/1.8 var(--sans);resize:vertical}.script-raw[hidden]{display:none}
+</style>
+<script>
+(() => {
+ const root=document.querySelector('#scene-script');
+ const segments=[{title:'清晨开场',duration:6,visual:'清晨光线穿过工作室，人物望向窗外。镜头缓慢推进，保留自然光与空气感。',voice:'每一次灵感，都从看见新的可能开始。'},{title:'产品亮相',duration:8,visual:'镜头切入产品界面。信息从繁杂到有序，突出操作前后的变化。',voice:'把复杂留给我们，把清晰留给你。'},{title:'品牌收束',duration:8,visual:'画面渐入品牌标识，以简洁留白结束，标识停留两秒。',voice:'下一步，由你定义。'}];
+ root.innerHTML=`<div class="script-scroll"><div class="script-heading"><div><h2>先把故事讲清楚</h2><div class="script-caption">秋日发布会 · 脚本工作区</div></div><span class="badge">草稿</span></div><div class="script-summary"><span id="scriptCount"></span><span id="scriptDuration"></span><span>16:9 横屏</span></div><div class="script-brief"><label>创作目标<input id="scriptGoal" value="用一支温暖、克制的短片介绍新产品"></label><div class="two"><label>面向谁<input value="首次了解产品的用户"></label><label>叙事风格<select><option>温暖 · 克制</option><option>简洁 · 直接</option><option>轻快 · 活泼</option></select></label></div></div><div class="script-tabs"><button class="active" id="segmentView">分段编辑</button><button id="rawView">全文预览</button></div><div id="segmentList"></div><textarea class="script-raw" id="scriptRaw" readonly hidden aria-label="完整脚本预览"></textarea><button class="script-add" id="addSegment">＋ 添加一段</button><div class="script-review" id="scriptReview" hidden></div></div><footer class="script-bottom"><div class="script-caption" id="scriptSaveState">画面与旁白分开编辑，确认后再进入分镜。</div><div class="actions"><button class="ghost" id="saveScriptDraft">保存草稿</button><button class="primary" id="prepareStoryboard">预览分镜方案 →</button></div></footer>`;
+ const list=root.querySelector('#segmentList');
+ const text=()=>segments.map((s,i)=>`【${String(i+1).padStart(2,'0')} · ${s.title} · ${s.duration} 秒】\n画面：${s.visual}\n旁白：${s.voice}`).join('\n\n');
+ function update(){root.querySelector('#scriptCount').textContent=segments.length+' 段叙事';root.querySelector('#scriptDuration').textContent=segments.reduce((sum,s)=>sum+s.duration,0)+' 秒预计时长';root.querySelector('#scriptRaw').value=text();root.querySelector('#scriptReview').hidden=true;root.querySelector('#prepareStoryboard').textContent='预览分镜方案 →';}
+ function render(){list.replaceChildren();segments.forEach((s,i)=>{const card=document.createElement('section');card.className='script-segment';card.innerHTML=`<div class="segment-head"><span class="segment-number">${String(i+1).padStart(2,'0')}</span><strong></strong><input type="number" min="1" max="120" aria-label="段落时长"><small>秒</small></div><label>画面与动作<textarea aria-label="画面与动作"></textarea></label><label>旁白 / 对白<textarea class="voice-copy" aria-label="旁白或对白"></textarea></label>`;card.querySelector('strong').textContent=s.title;const duration=card.querySelector('input');duration.value=s.duration;duration.onchange=()=>{s.duration=Math.max(1,Math.min(120,Number(duration.value)||1));duration.value=s.duration;update();};const fields=card.querySelectorAll('textarea');fields[0].value=s.visual;fields[1].value=s.voice;fields.forEach((el,k)=>el.oninput=()=>{s[k?'voice':'visual']=el.value;update();root.querySelector('#scriptSaveState').textContent='有未保存的修改';});list.append(card);});update();}
+ root.querySelector('#addSegment').onclick=()=>{segments.push({title:'新增段落',duration:5,visual:'',voice:''});render();list.lastElementChild.scrollIntoView({block:'nearest'});};
+ for(const id of ['segmentView','rawView'])root.querySelector('#'+id).onclick=()=>{const raw=id==='rawView';list.hidden=raw;root.querySelector('#scriptRaw').hidden=!raw;root.querySelector('#addSegment').hidden=raw;root.querySelectorAll('.script-tabs button').forEach(b=>b.classList.toggle('active',b.id===id));update();};
+ root.querySelector('#saveScriptDraft').onclick=()=>{try{localStorage.setItem('brain.prototype.script.v2',JSON.stringify(segments));root.querySelector('#scriptSaveState').textContent='草稿已保存到此浏览器 · '+new Date().toLocaleTimeString();}catch{root.querySelector('#scriptSaveState').textContent='浏览器未允许保存，请复制全文预览留存。';}};
+ root.querySelector('#prepareStoryboard').onclick=()=>{const review=root.querySelector('#scriptReview');if(review.hidden){review.replaceChildren();const title=document.createElement('strong');title.textContent='分镜方案 · 等待你的确认';review.append(title);segments.forEach((s,i)=>{const row=document.createElement('div');row.textContent=`镜头 ${i+1}：${s.title} · ${s.duration} 秒`;review.append(row);});review.hidden=false;review.scrollIntoView({block:'nearest',behavior:'smooth'});root.querySelector('#prepareStoryboard').textContent='确认并进入分镜 →';}else{const grid=document.querySelector('.story-grid');grid.replaceChildren();segments.forEach((s,i)=>{const card=document.createElement('article');card.className='story-card';const thumbnail=document.createElement('div');thumbnail.className='story-thumb';const title=document.createElement('strong');title.textContent=`${String(i+1).padStart(2,'0')} ${s.title}`;const meta=document.createElement('p');meta.textContent=`${s.duration} 秒 · 待生成`;card.append(thumbnail,title,meta);card.onclick=()=>{grid.querySelectorAll('.story-card').forEach(c=>c.classList.remove('active'));card.classList.add('active');};grid.append(card);});document.querySelector('#scene-storyboard h2').textContent='分镜 · '+segments.length;document.querySelector('[data-scene="storyboard"]').click();}};
+ try{const saved=JSON.parse(localStorage.getItem('brain.prototype.script.v2'));if(Array.isArray(saved)&&saved.length&&saved.every(s=>typeof s.title==='string'&&typeof s.visual==='string'&&typeof s.voice==='string'&&Number.isFinite(s.duration)))segments.splice(0,segments.length,...saved);}catch{}
+ render();document.querySelector('[data-scene="script"]').click();
+})();
+</script>
+<style>
+/* Balanced navigation, conversation and editing space at desktop widths. */
+.layout{grid-template-columns:240px minmax(320px,.85fr) minmax(420px,1.15fr);width:100%;overflow:hidden}
+.layout.expanded{grid-template-columns:minmax(320px,.65fr) minmax(420px,1.35fr)}
+.layout>*{min-width:0}.chat-head{padding:0 22px;height:58px;flex:none}.chat-head small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.chat-scroll{padding:24px clamp(16px,3vw,36px);width:100%}.message{max-width:760px;width:100%;margin:0 auto 22px;font-size:14px;line-height:1.75}.message.user{width:fit-content;max-width:min(90%,680px);margin-left:auto;margin-right:0}.composer{width:calc(100% - 40px);max-width:760px;margin:0 auto 18px;flex:none}.composer-foot{min-width:0;gap:4px}.composer-control{white-space:nowrap;font-size:11px;padding:0 7px}.shell-nav{padding-bottom:12px}.shell-projects{padding-top:6px}.shell-thread{font-size:13px}.script-scroll{padding:20px clamp(16px,2vw,28px)}.generate-grid{grid-template-columns:minmax(0,1fr)}.story-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}.viewer-copy b{font-size:clamp(18px,1.5vw,26px)}.viewer-copy{max-width:85%}
+@media(min-width:1700px){.layout{grid-template-columns:260px minmax(400px,.85fr) minmax(560px,1.15fr)}}
+@media(max-width:1100px){.layout{grid-template-columns:190px minmax(290px,.8fr) minmax(340px,1fr)}.chat-scroll{padding:18px 14px}.composer{width:calc(100% - 24px)}.chat-head{padding:0 14px}.chat-head small{display:none}}
+@media(max-width:860px){.layout{grid-template-columns:minmax(280px,.8fr) minmax(320px,1fr)}.layout>.sidebar{display:none}.layout.expanded{grid-template-columns:minmax(260px,.65fr) minmax(320px,1fr)}}
+@media(max-width:620px){body{overflow:auto}.app{height:auto;min-height:100vh}.layout,.layout.expanded{display:flex;flex-direction:column;overflow:visible}.main{min-height:460px}.inspector{height:760px;flex:none}.topbar .crumb{display:none}.topbar{gap:8px}.chat-scroll{max-height:380px}}
+</style>
+<style>.inspector{grid-template-rows:58px auto minmax(0,1fr)}.shell-global{border:0;padding:0;margin-left:auto}.shell-panel{grid-row:3}.tools-head .icon-btn{margin-left:8px}</style>
+</body>
+</html>

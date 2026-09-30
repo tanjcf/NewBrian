@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>插件</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">插件市场/管理（占位实现）。</div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html"><div class="t">Start</div><div class="d">目录/预览</div></a>
+          <a class="nav-item" href="./新对话.html"><div class="t">新对话</div><div class="d">会话创建</div></a>
+          <a class="nav-item" href="./自动化.html"><div class="t">自动化</div><div class="d">定时/流程</div></a>
+          <a class="nav-item" href="./扩展.html"><div class="t">扩展</div><div class="d">扩展管理</div></a>
+          <a class="nav-item" href="./插件.html"><div class="t">插件</div><div class="d">插件市场/管理</div></a>
+          <a class="nav-item" href="./技能.html"><div class="t">技能</div><div class="d">技能列表/详情</div></a>
+          <a class="nav-item" href="./mcp服务器.html"><div class="t">MCP服务器</div><div class="d">MCP 管理</div></a>
+          <a class="nav-item" href="./设置.html"><div class="t">设置</div><div class="d">偏好/通用</div></a>
+          <a class="nav-item" href="./计费与订阅.html"><div class="t">计费与订阅</div><div class="d">套餐/账单</div></a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure：<a href="../0514原型/插件.html" target="_blank" rel="noreferrer">../0514原型/插件.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb></div>
+            <div class="page-title" data-page-title>插件</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <button class="btn" type="button">安装插件</button>
+            <a class="btn" href="../0514原型/插件.html" target="_blank" rel="noreferrer">对照原型</a>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="canvas">
+            <div class="layout">
+              <section class="pane">
+                <h1 class="h1">已安装插件</h1>
+                <p class="p">展示插件列表、版本、启用状态（占位）。</p>
+                <div style="margin-top:14px">
+                  <table class="table" aria-label="plugins">
+                    <thead>
+                      <tr>
+                        <th style="width:36%">名称</th>
+                        <th style="width:18%">版本</th>
+                        <th style="width:18%">状态</th>
+                        <th style="width:28%">来源</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Browser</td>
+                        <td>0.1.0</td>
+                        <td><span class="tag">Enabled</span></td>
+                        <td>bundled</td>
+                      </tr>
+                      <tr>
+                        <td>Presentations</td>
+                        <td>26.515</td>
+                        <td><span class="tag">Enabled</span></td>
+                        <td>openai-primary-runtime</td>
+                      </tr>
+                      <tr>
+                        <td>Spreadsheets</td>
+                        <td>26.515</td>
+                        <td><span class="tag">Disabled</span></td>
+                        <td>openai-primary-runtime</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="pane">
+                <h1 class="h1">插件详情</h1>
+                <p class="p">展示 README、能力（skills/tools/apps）、配置项与权限（待补齐）。</p>
+                <div class="list">
+                  <div class="card"><div class="k">名称</div><div class="v">Browser</div></div>
+                  <div class="card"><div class="k">能力</div><div class="v"><span class="tag">skill</span> browser:browser</div></div>
+                  <div class="card"><div class="k">状态</div><div class="v"><span class="tag">Enabled</span></div></div>
+                  <div class="card"><div class="k">操作</div><div class="v"><button class="btn" type="button">禁用</button> <button class="btn" type="button">查看配置</button></div></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

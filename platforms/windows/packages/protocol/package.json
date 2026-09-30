@@ -1,0 +1,29 @@
+{
+  "name": "@codex-forge/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./session-machine": "./dist/session-machine.js",
+    "./rust-core": "./dist/rust-core.js",
+    "./quant-types": "./dist/quant-types.js",
+    "./document-anchor": "./dist/document-anchor.js",
+    "./document-chunk": "./dist/document-chunk.js",
+    "./document-marking": "./dist/document-marking.js",
+    "./document-worker": "./dist/document-worker.js",
+    "./brain-game-runtime": "./dist/brain-game-runtime.js",
+    "./brain-video-runtime": "./dist/brain-video-runtime.js",
+    "./brain-music-runtime": "./dist/brain-music-runtime.js",
+    "./brain-data-runtime": "./dist/brain-data-runtime.js",
+    "./brain-quant-runtime": "./dist/brain-quant-runtime.js"
+  },
+  "scripts": {
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
+    "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test fixtures/agent-v1/validate.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

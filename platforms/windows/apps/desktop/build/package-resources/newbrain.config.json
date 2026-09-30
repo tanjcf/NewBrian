@@ -1,0 +1,49 @@
+{
+    "llm":  {
+                "provider":  "DeepSeek",
+                "baseUrl":  "http://203.0.113.10:8790/v1",
+                "apiKey":  "",
+                "wireApi":  "responses",
+                "model":  "auto",
+                "reviewModel":  "deepseek-v4-pro",
+                "reasoningEffort":  "medium",
+                "disableResponseStorage":  true,
+                "systemPrompt":  "You are a helpful coding assistant for the NewBrain desktop workspace."
+            },
+    "preferences":  {
+                        "hooks":  {
+                                      "beforeCommand":  false,
+                                      "afterCommand":  false,
+                                      "beforeCommit":  false,
+                                      "afterTask":  false,
+                                      "beforeCommandScript":  "",
+                                      "afterCommandScript":  "",
+                                      "beforeCommitScript":  "",
+                                      "afterTaskScript":  ""
+                                  },
+                        "environment":  {
+                                            "terminalShell":  "powershell.exe",
+                                            "extraEnv":  {
+
+                                                         },
+                                            "autoBootstrapConda":  true
+                                        },
+                        "worktree":  {
+                                         "defaultIsolated":  true,
+                                         "keepArchived":  false,
+                                         "rootDir":  ""
+                                     },
+                        "browser":  {
+                                        "autoOpenPreview":  true,
+                                        "preserveTabs":  true,
+                                        "highResScreenshots":  false,
+                                        "previewUrl":  "http://203.0.113.10:3000"
+                                    }
+                    },
+    "mcpServers":  [
+
+                   ],
+    "mcpDiscoveredTools":  [
+
+                           ]
+}

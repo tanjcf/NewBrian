@@ -1,0 +1,2959 @@
+{
+  "finishedAt": "2026-08-22T14:02:10.666Z",
+  "reports": [
+    {
+      "scene": "game",
+      "displayName": "游戏制作",
+      "catalogVersion": "2026-08-22",
+      "totalOperations": 171,
+      "executed": 171,
+      "passed": 56,
+      "failed": 108,
+      "skipped": 7,
+      "startedAt": "2026-08-22T13:55:49.441Z",
+      "finishedAt": "2026-08-22T14:02:10.664Z",
+      "go": false,
+      "results": [
+        {
+          "index": 1,
+          "opId": "game.L0.NAV.001",
+          "title": "打开工作台场景切换菜单",
+          "precondition": "应用已启动",
+          "steps": [
+            "点击左上角工作台切换器"
+          ],
+          "expected": "弹出 7 个场景选项",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:52.711Z",
+          "status": "PASS",
+          "durationMs": 544,
+          "observation": {}
+        },
+        {
+          "index": 2,
+          "opId": "game.L0.NAV.002",
+          "title": "切换到「量化交易」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 quant"
+          ],
+          "expected": "selectedWorkspaceKey === \"quant\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:53.256Z",
+          "status": "PASS",
+          "durationMs": 758,
+          "observation": {}
+        },
+        {
+          "index": 3,
+          "opId": "game.L0.NAV.003",
+          "title": "切换到「游戏制作」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 game"
+          ],
+          "expected": "selectedWorkspaceKey === \"game\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:54.014Z",
+          "status": "PASS",
+          "durationMs": 1458,
+          "observation": {}
+        },
+        {
+          "index": 4,
+          "opId": "game.L0.NAV.004",
+          "title": "切换到「视频制作」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 video"
+          ],
+          "expected": "selectedWorkspaceKey === \"video\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:55.473Z",
+          "status": "PASS",
+          "durationMs": 1589,
+          "observation": {}
+        },
+        {
+          "index": 5,
+          "opId": "game.L0.NAV.005",
+          "title": "切换到「音乐创作」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 music"
+          ],
+          "expected": "selectedWorkspaceKey === \"music\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:57.063Z",
+          "status": "PASS",
+          "durationMs": 1464,
+          "observation": {}
+        },
+        {
+          "index": 6,
+          "opId": "game.L0.NAV.006",
+          "title": "切换到「数据与决策」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 data"
+          ],
+          "expected": "selectedWorkspaceKey === \"data\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:58.527Z",
+          "status": "PASS",
+          "durationMs": 1266,
+          "observation": {}
+        },
+        {
+          "index": 7,
+          "opId": "game.L0.NAV.007",
+          "title": "切换到「软件与自动化」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 software"
+          ],
+          "expected": "selectedWorkspaceKey === \"software\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:55:59.793Z",
+          "status": "PASS",
+          "durationMs": 1292,
+          "observation": {}
+        },
+        {
+          "index": 8,
+          "opId": "game.L0.NAV.008",
+          "title": "切换到「文档创作」场景",
+          "precondition": "切换菜单已打开",
+          "steps": [
+            "点击 document"
+          ],
+          "expected": "selectedWorkspaceKey === \"document\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:01.086Z",
+          "status": "PASS",
+          "durationMs": 1290,
+          "observation": {}
+        },
+        {
+          "index": 9,
+          "opId": "game.L0.NAV.009",
+          "title": "切回「游戏制作」场景",
+          "precondition": "当前在其他场景",
+          "steps": [
+            "切换到 game"
+          ],
+          "expected": "selectedWorkspaceKey === \"game\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:02.376Z",
+          "status": "PASS",
+          "durationMs": 2050,
+          "observation": {}
+        },
+        {
+          "index": 10,
+          "opId": "game.L0.NAV.010",
+          "title": "点击新对话",
+          "precondition": "在 game",
+          "steps": [
+            "点击新对话"
+          ],
+          "expected": "进入对话态",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:04.427Z",
+          "status": "PASS",
+          "durationMs": 570,
+          "observation": {}
+        },
+        {
+          "index": 11,
+          "opId": "game.L0.NAV.011",
+          "title": "打开全局搜索",
+          "precondition": "在 game",
+          "steps": [
+            "Ctrl+K"
+          ],
+          "expected": "搜索面板可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:04.997Z",
+          "status": "PASS",
+          "durationMs": 330,
+          "observation": {}
+        },
+        {
+          "index": 12,
+          "opId": "game.L0.NAV.012",
+          "title": "折叠项目分区",
+          "precondition": "分区展开",
+          "steps": [
+            "点击折叠"
+          ],
+          "expected": "项目列表隐藏",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:05.327Z",
+          "status": "PASS",
+          "durationMs": 944,
+          "observation": {}
+        },
+        {
+          "index": 13,
+          "opId": "game.L0.NAV.013",
+          "title": "展开项目分区",
+          "precondition": "分区折叠",
+          "steps": [
+            "再次点击"
+          ],
+          "expected": "项目列表可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:06.271Z",
+          "status": "PASS",
+          "durationMs": 547,
+          "observation": {}
+        },
+        {
+          "index": 14,
+          "opId": "game.L0.NAV.014",
+          "title": "折叠聊天分区",
+          "precondition": "分区展开",
+          "steps": [
+            "点击折叠"
+          ],
+          "expected": "聊天列表隐藏",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:06.819Z",
+          "status": "PASS",
+          "durationMs": 554,
+          "observation": {}
+        },
+        {
+          "index": 15,
+          "opId": "game.L0.NAV.015",
+          "title": "展开聊天分区",
+          "precondition": "分区折叠",
+          "steps": [
+            "再次点击"
+          ],
+          "expected": "聊天列表可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:07.374Z",
+          "status": "PASS",
+          "durationMs": 544,
+          "observation": {}
+        },
+        {
+          "index": 16,
+          "opId": "game.L0.NAV.016",
+          "title": "侧栏整理：project",
+          "precondition": "organize 菜单",
+          "steps": [
+            "选 project"
+          ],
+          "expected": "sidebarOrganizeMode === \"project\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:07.919Z",
+          "status": "PASS",
+          "durationMs": 1640,
+          "observation": {}
+        },
+        {
+          "index": 17,
+          "opId": "game.L0.NAV.017",
+          "title": "侧栏整理：list",
+          "precondition": "organize 菜单",
+          "steps": [
+            "选 list"
+          ],
+          "expected": "sidebarOrganizeMode === \"list\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:09.560Z",
+          "status": "PASS",
+          "durationMs": 1617,
+          "observation": {}
+        },
+        {
+          "index": 18,
+          "opId": "game.L0.NAV.018",
+          "title": "侧栏整理：priority",
+          "precondition": "organize 菜单",
+          "steps": [
+            "选 priority"
+          ],
+          "expected": "sidebarOrganizeMode === \"priority\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:11.177Z",
+          "status": "PASS",
+          "durationMs": 1651,
+          "observation": {}
+        },
+        {
+          "index": 19,
+          "opId": "game.L0.NAV.019",
+          "title": "侧栏整理：updated",
+          "precondition": "organize 菜单",
+          "steps": [
+            "选 updated"
+          ],
+          "expected": "sidebarOrganizeMode === \"updated\"",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:12.829Z",
+          "status": "PASS",
+          "durationMs": 1608,
+          "observation": {}
+        },
+        {
+          "index": 20,
+          "opId": "game.L0.NAV.020",
+          "title": "项目显示更多",
+          "precondition": "项目>5",
+          "steps": [
+            "点击显示更多"
+          ],
+          "expected": "全量展示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:14.438Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "前置不满足：legacy 项目≤5，无「显示更多」"
+        },
+        {
+          "index": 21,
+          "opId": "game.L0.NAV.021",
+          "title": "项目显示更少",
+          "precondition": "已展开",
+          "steps": [
+            "点击显示更少"
+          ],
+          "expected": "仅前5项",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:14.439Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "前置不满足：项目列表未展开，无「显示更少」"
+        },
+        {
+          "index": 22,
+          "opId": "game.L0.PROJ.001",
+          "title": "打开添加项目菜单",
+          "precondition": "在 game",
+          "steps": [
+            "点击+"
+          ],
+          "expected": "菜单可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:14.440Z",
+          "status": "PASS",
+          "durationMs": 3288,
+          "observation": {}
+        },
+        {
+          "index": 23,
+          "opId": "game.L0.PROJ.002",
+          "title": "打开新建空白项目对话框",
+          "precondition": "菜单已开",
+          "steps": [
+            "点新建空白"
+          ],
+          "expected": "dialog 可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:17.728Z",
+          "status": "PASS",
+          "durationMs": 544,
+          "observation": {}
+        },
+        {
+          "index": 24,
+          "opId": "game.L0.PROJ.003",
+          "title": "新建：输入名称",
+          "precondition": "dialog 开",
+          "steps": [
+            "输入名称"
+          ],
+          "expected": "input 非空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:18.272Z",
+          "status": "PASS",
+          "durationMs": 748,
+          "observation": {
+            "typedName": "STgame1787406975541"
+          }
+        },
+        {
+          "index": 25,
+          "opId": "game.L0.PROJ.004",
+          "title": "新建：提交",
+          "precondition": "名称已填",
+          "steps": [
+            "点保存"
+          ],
+          "expected": "primaryWorkspaceKey === \"game\"",
+          "automation": "CDP",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:19.021Z",
+          "status": "PASS",
+          "durationMs": 4436,
+          "observation": {
+            "project": {
+              "id": "project_c4f766c5-1029-4bf0-802c-63242d45920a",
+              "name": "STgame1787406975541",
+              "localWorkspaceId": "workspace-1787406979409-abe2cc",
+              "primaryWorkspaceKey": "game",
+              "status": "ACTIVE",
+              "lastConversationId": "conversation_f55c8b93-d039-4d31-9969-5b08f4c777ba",
+              "createdAt": "2026-08-22T13:56:19.628Z",
+              "updatedAt": "2026-08-22T13:56:21.492Z",
+              "lastOpenedAt": "2026-08-22T13:56:21.492Z"
+            },
+            "localWorkspaceId": "workspace-1787406979409-abe2cc",
+            "catalogName": "STgame1787406975541",
+            "catalogBrainWorkspaceKey": "game",
+            "inSceneCount": 1,
+            "allCount": 2
+          }
+        },
+        {
+          "index": 26,
+          "opId": "game.L0.PROJ.005",
+          "title": "新建：取消",
+          "precondition": "dialog 开",
+          "steps": [
+            "点取消"
+          ],
+          "expected": "dialog 关闭",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:23.458Z",
+          "status": "PASS",
+          "durationMs": 2765,
+          "observation": {}
+        },
+        {
+          "index": 27,
+          "opId": "game.L0.PROJ.006",
+          "title": "新建：空名禁用",
+          "precondition": "dialog 开",
+          "steps": [
+            "清空名称"
+          ],
+          "expected": "保存 disabled",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:26.224Z",
+          "status": "PASS",
+          "durationMs": 2748,
+          "observation": {}
+        },
+        {
+          "index": 28,
+          "opId": "game.L0.PROJ.007",
+          "title": "选 BRAIN 项目第一项",
+          "precondition": "列表非空",
+          "steps": [
+            "点击第一项"
+          ],
+          "expected": "selectedBrainProjectId 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:28.995Z",
+          "status": "FAIL",
+          "durationMs": 10579,
+          "error": "Timed out: Boolean(document.querySelector('.brain-project-list button.active'))\n文件\n编辑\n查看\n窗口\n帮助\n游戏制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\nSTgame1787406975541\nBRAIN 项目\nSTgame1787406975541\n聊天\n+\n暂无聊天\n最近\n暂无其他工作台的最近项目\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该在 STgame1787406975541 中做什么？\n＋\n请求批准\n选择技能\ncodeCN E2E Model 中\n↑\nSTgame1787406975541\n本地模式\nmain\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作"
+        },
+        {
+          "index": 29,
+          "opId": "game.L0.PROJ.008",
+          "title": "选 BRAIN 对话第一项",
+          "precondition": "对话非空",
+          "steps": [
+            "点击第一项"
+          ],
+          "expected": "selectedBrainConversationId 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:39.575Z",
+          "status": "FAIL",
+          "durationMs": 20224,
+          "error": "Timed out: Boolean(document.querySelector('.brain-conversation-list button'))\n文件\n编辑\n查看\n窗口\n帮助\n游戏制作\n新对话\n搜索\nHolon\n技能\n插件\n自动化\ncodeCN 移动版\nMCP 集成\n项目\n+\nSTgame1787406975541\nBRAIN 项目\nSTgame1787406975541\n聊天\n+\n暂无聊天\n最近\n暂无其他工作台的最近项目\nE2E\ncodeCN E2E\ne2e\n⚙\n我们该在 STgame1787406975541 中做什么？\n＋\n请求批准\n选择技能\ncodeCN E2E Model 中\n↑\nSTgame1787406975541\n本地模式\nmain\n✣\n连接消息传送\n了解工程对话线程动态\n●\n连接 GitHub\n审查 PR、代码和 CI 检查项\n◒\n连接 Linear\n跟踪缺陷和实施工作"
+        },
+        {
+          "index": 30,
+          "opId": "game.L0.PROJ.009",
+          "title": "验证项目仅当前场景",
+          "precondition": "刚创建",
+          "steps": [
+            "listBrainProjects workspaceKey=game"
+          ],
+          "expected": "命中；其他场景不含",
+          "automation": "IPC",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:56:59.801Z",
+          "status": "PASS",
+          "durationMs": 1482,
+          "observation": {}
+        },
+        {
+          "index": 31,
+          "opId": "game.L0.PROJ.010",
+          "title": "使用现有文件夹",
+          "precondition": "菜单已开",
+          "steps": [
+            "点使用现有文件夹"
+          ],
+          "expected": "文件夹选择器",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.283Z",
+          "status": "SKIP",
+          "durationMs": 0,
+          "error": "NATIVE folder picker requires OS dialog automation"
+        },
+        {
+          "index": 32,
+          "opId": "game.L0.PROJ.011",
+          "title": "跨场景最近可见",
+          "precondition": "有其他场景项目",
+          "steps": [
+            "查看最近"
+          ],
+          "expected": "不含当前场景项",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.284Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L0.PROJ.011: unverified expected: 不含当前场景项"
+        },
+        {
+          "index": 33,
+          "opId": "game.L0.PROJ.012",
+          "title": "点击跨场景最近",
+          "precondition": "最近非空",
+          "steps": [
+            "点击一项"
+          ],
+          "expected": "跳转对应场景",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.284Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": "game.L0.PROJ.012: unverified expected: 跳转对应场景"
+        },
+        {
+          "index": 34,
+          "opId": "game.L0.PROJ.013",
+          "title": "legacy 展开线程",
+          "precondition": "有 legacy 项目",
+          "steps": [
+            "点展开"
+          ],
+          "expected": "线程可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.285Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "legacy catalog requires seeded legacy project fixture"
+        },
+        {
+          "index": 35,
+          "opId": "game.L0.PROJ.014",
+          "title": "legacy 折叠线程",
+          "precondition": "已展开",
+          "steps": [
+            "点折叠"
+          ],
+          "expected": "线程隐藏",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.285Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "legacy catalog requires seeded legacy project fixture"
+        },
+        {
+          "index": 36,
+          "opId": "game.L0.PROJ.015",
+          "title": "选 legacy 项目",
+          "precondition": "catalog 非空",
+          "steps": [
+            "点击项目"
+          ],
+          "expected": "selectedWorkspaceId 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.285Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "legacy catalog requires seeded legacy project fixture"
+        },
+        {
+          "index": 37,
+          "opId": "game.L0.PROJ.016",
+          "title": "BRAIN 项目空态",
+          "precondition": "无项目",
+          "steps": [
+            "查看空态"
+          ],
+          "expected": "当前场景还没有 BRAIN 项目",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.286Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L0.PROJ.016: BRAIN 项目列表非空，与「无项目」前置矛盾"
+        },
+        {
+          "index": 38,
+          "opId": "game.L0.CONV.001",
+          "title": "对话空态",
+          "precondition": "有项目无对话",
+          "steps": [
+            "查看列表"
+          ],
+          "expected": "当前项目还没有对话",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.286Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": ""
+        },
+        {
+          "index": 39,
+          "opId": "game.L0.CONV.002",
+          "title": "切换对话第二项",
+          "precondition": "对话≥2",
+          "steps": [
+            "点第二项"
+          ],
+          "expected": "选中更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.287Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "second conversation missing"
+        },
+        {
+          "index": 40,
+          "opId": "game.L0.CONV.003",
+          "title": "对话相对时间",
+          "precondition": "有 updatedAt",
+          "steps": [
+            "读 time"
+          ],
+          "expected": "非空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.288Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "missing relative time"
+        },
+        {
+          "index": 41,
+          "opId": "game.L0.CONV.004",
+          "title": "对话 sidebar 同步",
+          "precondition": "点对话",
+          "steps": [
+            "查 row"
+          ],
+          "expected": "brain-conversation:id",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.288Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "sidebar sync requires prior click observation"
+        },
+        {
+          "index": 42,
+          "opId": "game.L0.CONV.005",
+          "title": "项目 sidebar 同步",
+          "precondition": "点项目",
+          "steps": [
+            "查 row"
+          ],
+          "expected": "brain-project:id",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.288Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": "sidebar sync requires prior click observation"
+        },
+        {
+          "index": 43,
+          "opId": "game.L0.CONV.006",
+          "title": "选 chat 线程",
+          "precondition": "有 chat 线程",
+          "steps": [
+            "点击"
+          ],
+          "expected": "selectedThreadId 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.289Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "legacy chat thread requires legacy fixture"
+        },
+        {
+          "index": 44,
+          "opId": "game.L0.CONV.007",
+          "title": "pin 线程",
+          "precondition": "hover",
+          "steps": [
+            "pin"
+          ],
+          "expected": "状态切换",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.289Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "legacy chat thread requires legacy fixture"
+        },
+        {
+          "index": 45,
+          "opId": "game.L0.CONV.008",
+          "title": "archive 线程",
+          "precondition": "hover",
+          "steps": [
+            "archive"
+          ],
+          "expected": "archived",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.289Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "legacy chat thread requires legacy fixture"
+        },
+        {
+          "index": 46,
+          "opId": "game.L0.CONV.009",
+          "title": "新对话绑场景",
+          "precondition": "在 game",
+          "steps": [
+            "新对话"
+          ],
+          "expected": "绑定当前场景",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.289Z",
+          "status": "FAIL",
+          "durationMs": 560,
+          "error": "game.L0.CONV.009: unverified expected: 绑定当前场景"
+        },
+        {
+          "index": 47,
+          "opId": "game.L0.CONV.010",
+          "title": "composer 可用",
+          "precondition": "选 brain 对话",
+          "steps": [
+            "查 input"
+          ],
+          "expected": "可输入",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.851Z",
+          "status": "PASS",
+          "durationMs": 2,
+          "observation": {}
+        },
+        {
+          "index": 48,
+          "opId": "game.L0.RES.001",
+          "title": "全局资源 Tab files",
+          "precondition": "右栏可见",
+          "steps": [
+            "点 files"
+          ],
+          "expected": "active === files",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:01.854Z",
+          "status": "PASS",
+          "durationMs": 3521,
+          "observation": {}
+        },
+        {
+          "index": 49,
+          "opId": "game.L0.RES.002",
+          "title": "全局资源 Tab artifacts",
+          "precondition": "右栏可见",
+          "steps": [
+            "点 artifacts"
+          ],
+          "expected": "active === artifacts",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:05.375Z",
+          "status": "PASS",
+          "durationMs": 3467,
+          "observation": {}
+        },
+        {
+          "index": 50,
+          "opId": "game.L0.RES.003",
+          "title": "全局资源 Tab tasks",
+          "precondition": "右栏可见",
+          "steps": [
+            "点 tasks"
+          ],
+          "expected": "active === tasks",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:08.842Z",
+          "status": "PASS",
+          "durationMs": 3419,
+          "observation": {}
+        },
+        {
+          "index": 51,
+          "opId": "game.L0.RES.004",
+          "title": "场景 Tab project",
+          "precondition": "在 game",
+          "steps": [
+            "点 project"
+          ],
+          "expected": "workspaceSceneTab === project",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:12.261Z",
+          "status": "FAIL",
+          "durationMs": 3434,
+          "error": "game.L0.RES.004: scene tab undefined"
+        },
+        {
+          "index": 52,
+          "opId": "game.L0.RES.005",
+          "title": "场景 Tab design",
+          "precondition": "在 game",
+          "steps": [
+            "点 design"
+          ],
+          "expected": "workspaceSceneTab === design",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:15.695Z",
+          "status": "FAIL",
+          "durationMs": 3496,
+          "error": "game.L0.RES.005: scene tab undefined"
+        },
+        {
+          "index": 53,
+          "opId": "game.L0.RES.006",
+          "title": "场景 Tab world",
+          "precondition": "在 game",
+          "steps": [
+            "点 world"
+          ],
+          "expected": "workspaceSceneTab === world",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:19.191Z",
+          "status": "FAIL",
+          "durationMs": 3480,
+          "error": "game.L0.RES.006: scene tab undefined"
+        },
+        {
+          "index": 54,
+          "opId": "game.L0.RES.007",
+          "title": "场景 Tab level",
+          "precondition": "在 game",
+          "steps": [
+            "点 level"
+          ],
+          "expected": "workspaceSceneTab === level",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:22.672Z",
+          "status": "FAIL",
+          "durationMs": 3545,
+          "error": "game.L0.RES.007: scene tab undefined"
+        },
+        {
+          "index": 55,
+          "opId": "game.L0.RES.008",
+          "title": "场景 Tab combat",
+          "precondition": "在 game",
+          "steps": [
+            "点 combat"
+          ],
+          "expected": "workspaceSceneTab === combat",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:26.217Z",
+          "status": "FAIL",
+          "durationMs": 3574,
+          "error": "game.L0.RES.008: scene tab undefined"
+        },
+        {
+          "index": 56,
+          "opId": "game.L0.RES.009",
+          "title": "场景 Tab assets",
+          "precondition": "在 game",
+          "steps": [
+            "点 assets"
+          ],
+          "expected": "workspaceSceneTab === assets",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:29.791Z",
+          "status": "FAIL",
+          "durationMs": 3576,
+          "error": "game.L0.RES.009: scene tab undefined"
+        },
+        {
+          "index": 57,
+          "opId": "game.L0.RES.010",
+          "title": "选文件行",
+          "precondition": "files 有文件",
+          "steps": [
+            "点击"
+          ],
+          "expected": "selectedFileId 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:33.368Z",
+          "status": "FAIL",
+          "durationMs": 3790,
+          "error": "game.L0.RES.010: no selected file row"
+        },
+        {
+          "index": 58,
+          "opId": "game.L0.RES.011",
+          "title": "产物列表",
+          "precondition": "artifacts Tab",
+          "steps": [
+            "打开"
+          ],
+          "expected": "列表或空态",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:37.158Z",
+          "status": "PASS",
+          "durationMs": 3645,
+          "observation": {}
+        },
+        {
+          "index": 59,
+          "opId": "game.L0.RES.012",
+          "title": "任务列表",
+          "precondition": "tasks Tab",
+          "steps": [
+            "打开"
+          ],
+          "expected": "列表或空态",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:40.803Z",
+          "status": "PASS",
+          "durationMs": 3418,
+          "observation": {}
+        },
+        {
+          "index": 60,
+          "opId": "game.L0.RES.013",
+          "title": "右栏标题含场景名",
+          "precondition": "在 game",
+          "steps": [
+            "读 header"
+          ],
+          "expected": "含 游戏制作",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:44.222Z",
+          "status": "FAIL",
+          "durationMs": 2327,
+          "error": "game.L0.RES.013: missing label 游戏制作"
+        },
+        {
+          "index": 61,
+          "opId": "game.L0.COMP.001",
+          "title": "Composer 输入空文本",
+          "precondition": "聚焦",
+          "steps": [
+            "不输入"
+          ],
+          "expected": "send 拦截或 disabled",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:46.549Z",
+          "status": "FAIL",
+          "durationMs": 553,
+          "error": "game.L0.COMP.001: unverified expected: send 拦截或 disabled"
+        },
+        {
+          "index": 62,
+          "opId": "game.L0.COMP.002",
+          "title": "Composer 输入短文本",
+          "precondition": "聚焦",
+          "steps": [
+            "输入测试"
+          ],
+          "expected": "value 正确",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:47.103Z",
+          "status": "FAIL",
+          "durationMs": 1313,
+          "error": "game.L0.COMP.002: unverified expected: value 正确"
+        },
+        {
+          "index": 63,
+          "opId": "game.L0.COMP.003",
+          "title": "Composer Enter 发送",
+          "precondition": "有文本",
+          "steps": [
+            "Enter"
+          ],
+          "expected": "消息发出",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:48.417Z",
+          "status": "FAIL",
+          "durationMs": 895,
+          "error": "game.L0.COMP.003: unverified expected: 消息发出"
+        },
+        {
+          "index": 64,
+          "opId": "game.L0.COMP.004",
+          "title": "Composer 点击发送",
+          "precondition": "有文本",
+          "steps": [
+            "点 send"
+          ],
+          "expected": "消息发出",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.312Z",
+          "status": "FAIL",
+          "durationMs": 102,
+          "error": "element not found: 发送"
+        },
+        {
+          "index": 65,
+          "opId": "game.L0.COMP.005",
+          "title": "Composer 停止生成",
+          "precondition": "回复中",
+          "steps": [
+            "点停止"
+          ],
+          "expected": "取消 in-flight",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.414Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": "composer op L0.COMP.005 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 66,
+          "opId": "game.L0.COMP.006",
+          "title": "Composer 打开+菜单",
+          "precondition": "可见",
+          "steps": [
+            "点+"
+          ],
+          "expected": "菜单展开",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.415Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.006 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 67,
+          "opId": "game.L0.COMP.007",
+          "title": "Composer 权限审批",
+          "precondition": "可见",
+          "steps": [
+            "选 approval"
+          ],
+          "expected": "mode=approval",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.415Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.007 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 68,
+          "opId": "game.L0.COMP.008",
+          "title": "Composer 权限 Agent",
+          "precondition": "可见",
+          "steps": [
+            "选 agent"
+          ],
+          "expected": "mode=agent",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.415Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.008 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 69,
+          "opId": "game.L0.COMP.009",
+          "title": "Composer 权限完全",
+          "precondition": "可见",
+          "steps": [
+            "选 full"
+          ],
+          "expected": "mode=full",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.415Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": "composer op L0.COMP.009 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 70,
+          "opId": "game.L0.COMP.010",
+          "title": "Composer Skill 打开",
+          "precondition": "可见",
+          "steps": [
+            "开 picker"
+          ],
+          "expected": "列表可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.416Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.010 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 71,
+          "opId": "game.L0.COMP.011",
+          "title": "Composer Skill 清除",
+          "precondition": "已选",
+          "steps": [
+            "清除"
+          ],
+          "expected": "空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.416Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.011 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 72,
+          "opId": "game.L0.COMP.012",
+          "title": "Composer @上下文",
+          "precondition": "可见",
+          "steps": [
+            "toggle"
+          ],
+          "expected": "状态切换",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.416Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.012 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 73,
+          "opId": "game.L0.COMP.013",
+          "title": "Composer 模型菜单",
+          "precondition": "可见",
+          "steps": [
+            "打开"
+          ],
+          "expected": "列表可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.416Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.013 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 74,
+          "opId": "game.L0.COMP.014",
+          "title": "Composer 推理切换",
+          "precondition": "菜单开",
+          "steps": [
+            "切换"
+          ],
+          "expected": "变化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.416Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": "composer op L0.COMP.014 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 75,
+          "opId": "game.L0.COMP.015",
+          "title": "Composer 速度切换",
+          "precondition": "菜单开",
+          "steps": [
+            "切换"
+          ],
+          "expected": "变化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.417Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.015 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 76,
+          "opId": "game.L0.COMP.016",
+          "title": "Composer 语音切换",
+          "precondition": "可见",
+          "steps": [
+            "点 voice"
+          ],
+          "expected": "dictation 切换",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.417Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.016 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 77,
+          "opId": "game.L0.COMP.017",
+          "title": "Composer 附件移除",
+          "precondition": "有附件",
+          "steps": [
+            "移除"
+          ],
+          "expected": "减少",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.417Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.017 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 78,
+          "opId": "game.L0.COMP.018",
+          "title": "Composer 队列编辑",
+          "precondition": "有 draft",
+          "steps": [
+            "edit"
+          ],
+          "expected": "可编辑",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.417Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.018 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 79,
+          "opId": "game.L0.COMP.019",
+          "title": "Composer 队列 steer",
+          "precondition": "有 draft",
+          "steps": [
+            "steer"
+          ],
+          "expected": "生效",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.417Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.019 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 80,
+          "opId": "game.L0.COMP.020",
+          "title": "Composer 队列 followup",
+          "precondition": "有 draft",
+          "steps": [
+            "followup"
+          ],
+          "expected": "排队",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.418Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.020 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 81,
+          "opId": "game.L0.COMP.021",
+          "title": "Composer 队列 interrupt",
+          "precondition": "有 draft",
+          "steps": [
+            "interrupt"
+          ],
+          "expected": "生效",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.418Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.021 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 82,
+          "opId": "game.L0.COMP.022",
+          "title": "Composer 队列清除",
+          "precondition": "有 draft",
+          "steps": [
+            "clear"
+          ],
+          "expected": "空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.418Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.022 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 83,
+          "opId": "game.L0.COMP.023",
+          "title": "Composer 回到底部",
+          "precondition": "已滚动",
+          "steps": [
+            "jump"
+          ],
+          "expected": "到底",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.418Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "composer op L0.COMP.023 not yet mapped to mouse/keyboard steps"
+        },
+        {
+          "index": 84,
+          "opId": "game.L0.COMP.024",
+          "title": "Composer 添加文件",
+          "precondition": "+菜单",
+          "steps": [
+            "文件和图片"
+          ],
+          "expected": "系统对话框",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.419Z",
+          "status": "SKIP",
+          "durationMs": 0,
+          "error": "NATIVE file dialog"
+        },
+        {
+          "index": 85,
+          "opId": "game.L1.workspace.001",
+          "title": "进入项目与文件",
+          "precondition": "已选项目",
+          "steps": [
+            "project Tab"
+          ],
+          "expected": "brain-game-workspace",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:49.419Z",
+          "status": "PASS",
+          "durationMs": 3429,
+          "observation": {}
+        },
+        {
+          "index": 86,
+          "opId": "game.L1.workspace.002",
+          "title": "无项目 idle",
+          "precondition": "无 projectId",
+          "steps": [
+            "打开 Tab"
+          ],
+          "expected": "brain-game-idle",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:52.848Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "前置不满足：当前已有 BRAIN 项目，无法验证 idle 空态"
+        },
+        {
+          "index": 87,
+          "opId": "game.L1.workspace.003",
+          "title": "重新检查工程",
+          "precondition": "有项目",
+          "steps": [
+            "点重新检查"
+          ],
+          "expected": "status=loading→ready",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:52.848Z",
+          "status": "FAIL",
+          "durationMs": 3668,
+          "error": "element not found: 重新检查"
+        },
+        {
+          "index": 88,
+          "opId": "game.L1.workspace.004",
+          "title": "读引擎类型",
+          "precondition": "inspect 成功",
+          "steps": [
+            "brain-game-engine"
+          ],
+          "expected": "Web/Godot/Unity/Unreal",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:57:56.516Z",
+          "status": "FAIL",
+          "durationMs": 3503,
+          "error": "game.L1.workspace.004: engine text empty"
+        },
+        {
+          "index": 89,
+          "opId": "game.L1.workspace.005",
+          "title": "读扫描范围",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 scannedEntries"
+          ],
+          "expected": "数字显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:00.020Z",
+          "status": "FAIL",
+          "durationMs": 3622,
+          "error": "game.L1.workspace.005: workspace content too short"
+        },
+        {
+          "index": 90,
+          "opId": "game.L1.workspace.006",
+          "title": "读工程标记",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 markers"
+          ],
+          "expected": "字符串",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:03.642Z",
+          "status": "FAIL",
+          "durationMs": 3789,
+          "error": "game.L1.workspace.006: workspace content too short"
+        },
+        {
+          "index": 91,
+          "opId": "game.L1.workspace.007",
+          "title": "资产计数：脚本",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:07.432Z",
+          "status": "FAIL",
+          "durationMs": 3653,
+          "error": "game.L1.workspace.007: workspace content too short"
+        },
+        {
+          "index": 92,
+          "opId": "game.L1.workspace.008",
+          "title": "资产计数：场景",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:11.086Z",
+          "status": "FAIL",
+          "durationMs": 3653,
+          "error": "game.L1.workspace.008: workspace content too short"
+        },
+        {
+          "index": 93,
+          "opId": "game.L1.workspace.009",
+          "title": "资产计数：图片",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:14.739Z",
+          "status": "FAIL",
+          "durationMs": 3646,
+          "error": "game.L1.workspace.009: workspace content too short"
+        },
+        {
+          "index": 94,
+          "opId": "game.L1.workspace.010",
+          "title": "资产计数：音频",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:18.385Z",
+          "status": "FAIL",
+          "durationMs": 3629,
+          "error": "game.L1.workspace.010: workspace content too short"
+        },
+        {
+          "index": 95,
+          "opId": "game.L1.workspace.011",
+          "title": "资产计数：视频",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:22.014Z",
+          "status": "FAIL",
+          "durationMs": 3525,
+          "error": "game.L1.workspace.011: workspace content too short"
+        },
+        {
+          "index": 96,
+          "opId": "game.L1.workspace.012",
+          "title": "资产计数：模型",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:25.540Z",
+          "status": "FAIL",
+          "durationMs": 3634,
+          "error": "game.L1.workspace.012: workspace content too short"
+        },
+        {
+          "index": 97,
+          "opId": "game.L1.workspace.013",
+          "title": "资产计数：其他",
+          "precondition": "inspect 成功",
+          "steps": [
+            "读 article"
+          ],
+          "expected": "计数显示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:29.175Z",
+          "status": "FAIL",
+          "durationMs": 3506,
+          "error": "game.L1.workspace.013: workspace content too short"
+        },
+        {
+          "index": 98,
+          "opId": "game.L1.workspace.014",
+          "title": "Web 模板向导可见",
+          "precondition": "Web 项目",
+          "steps": [
+            "查 wizard"
+          ],
+          "expected": "创建 Web 模板按钮",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:32.682Z",
+          "status": "FAIL",
+          "durationMs": 2904,
+          "error": "game.L1.workspace.014: unverified expected: 创建 Web 模板按钮"
+        },
+        {
+          "index": 99,
+          "opId": "game.L1.workspace.015",
+          "title": "创建 Web 模板",
+          "precondition": "有 localWorkspace",
+          "steps": [
+            "点创建"
+          ],
+          "expected": "目录生成",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:35.586Z",
+          "status": "SKIP",
+          "durationMs": 3036,
+          "error": "game.L1.workspace.015: NATIVE 步骤需 OS 对话框/子进程"
+        },
+        {
+          "index": 100,
+          "opId": "game.L1.workspace.016",
+          "title": "预览命令显示",
+          "precondition": "preview.supported",
+          "steps": [
+            "读 code"
+          ],
+          "expected": "含 npm/node",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:38.622Z",
+          "status": "FAIL",
+          "durationMs": 2432,
+          "error": "game.L1.workspace.016: missing label npm/node"
+        },
+        {
+          "index": 101,
+          "opId": "game.L1.workspace.017",
+          "title": "启动试玩",
+          "precondition": "有 preview",
+          "steps": [
+            "启动试玩"
+          ],
+          "expected": "status STARTING",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:41.055Z",
+          "status": "SKIP",
+          "durationMs": 2325,
+          "error": "game.L1.workspace.017: NATIVE 步骤需 OS 对话框/子进程"
+        },
+        {
+          "index": 102,
+          "opId": "game.L1.workspace.018",
+          "title": "轮询预览状态",
+          "precondition": "STARTING",
+          "steps": [
+            "等待"
+          ],
+          "expected": "READY 或 FAILED",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:43.380Z",
+          "status": "FAIL",
+          "durationMs": 1884,
+          "error": "game.L1.workspace.018: 前置条件未满足（preview/无绑定）"
+        },
+        {
+          "index": 103,
+          "opId": "game.L1.workspace.019",
+          "title": "打开试玩",
+          "precondition": "READY",
+          "steps": [
+            "打开试玩"
+          ],
+          "expected": "openBrowserPreview",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:45.264Z",
+          "status": "FAIL",
+          "durationMs": 2341,
+          "error": "game.L1.workspace.019: 前置条件未满足（preview/无绑定）"
+        },
+        {
+          "index": 104,
+          "opId": "game.L1.workspace.020",
+          "title": "保存截图",
+          "precondition": "READY",
+          "steps": [
+            "保存试玩截图"
+          ],
+          "expected": "evidence path",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:47.606Z",
+          "status": "SKIP",
+          "durationMs": 1892,
+          "error": "game.L1.workspace.020: NATIVE 步骤需 OS 对话框/子进程"
+        },
+        {
+          "index": 105,
+          "opId": "game.L1.workspace.021",
+          "title": "停止试玩",
+          "precondition": "运行中",
+          "steps": [
+            "停止试玩"
+          ],
+          "expected": "CANCELLED/SUCCEEDED",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:49.499Z",
+          "status": "FAIL",
+          "durationMs": 2347,
+          "error": "game.L1.workspace.021: 前置条件未满足（preview/无绑定）"
+        },
+        {
+          "index": 106,
+          "opId": "game.L1.workspace.022",
+          "title": "预览日志",
+          "precondition": "有 output",
+          "steps": [
+            "展开 details"
+          ],
+          "expected": "pre 非空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:51.846Z",
+          "status": "FAIL",
+          "durationMs": 1887,
+          "error": "game.L1.workspace.022: 前置条件未满足（preview/无绑定）"
+        },
+        {
+          "index": 107,
+          "opId": "game.L1.workspace.023",
+          "title": "无 localWorkspace 错误",
+          "precondition": "无绑定",
+          "steps": [
+            "inspect 失败"
+          ],
+          "expected": "关联本地文件夹提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:53.734Z",
+          "status": "FAIL",
+          "durationMs": 2303,
+          "error": "game.L1.workspace.023: 前置条件未满足（preview/无绑定）"
+        },
+        {
+          "index": 108,
+          "opId": "game.L1.workspace.024",
+          "title": "跨场景产物列表",
+          "precondition": "有 artifacts",
+          "steps": [
+            "brain-game-artifacts"
+          ],
+          "expected": "含 sourceWorkspaceKey",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:56.037Z",
+          "status": "FAIL",
+          "durationMs": 2424,
+          "error": "game.L1.workspace.024: missing label sourceWorkspaceKey"
+        },
+        {
+          "index": 109,
+          "opId": "game.L1.workspace.025",
+          "title": "Unreal Epic 引导",
+          "precondition": "engine=unreal",
+          "steps": [
+            "检测 Epic"
+          ],
+          "expected": "ensureBrainEngine",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:58:58.462Z",
+          "status": "FAIL",
+          "durationMs": 2838,
+          "error": "game.L1.workspace.025: unverified expected: ensureBrainEngine"
+        },
+        {
+          "index": 110,
+          "opId": "game.L1.workspace.026",
+          "title": "注意事项列表",
+          "precondition": "有 warnings",
+          "steps": [
+            "读 warnings"
+          ],
+          "expected": "p 非空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:01.300Z",
+          "status": "FAIL",
+          "durationMs": 3551,
+          "error": "game.L1.workspace.026: unverified expected: p 非空"
+        },
+        {
+          "index": 111,
+          "opId": "game.L1.section.design.001",
+          "title": "游戏策划：进入编辑器",
+          "precondition": "已选项目",
+          "steps": [
+            "打开 design Tab"
+          ],
+          "expected": "brain-section-design 可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:04.851Z",
+          "status": "PASS",
+          "durationMs": 4335,
+          "observation": {}
+        },
+        {
+          "index": 112,
+          "opId": "game.L1.section.design.002",
+          "title": "游戏策划：加载内容",
+          "precondition": "编辑器可见",
+          "steps": [
+            "等待 load"
+          ],
+          "expected": "state=ready 或 idle",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:09.187Z",
+          "status": "PASS",
+          "durationMs": 3540,
+          "observation": {}
+        },
+        {
+          "index": 113,
+          "opId": "game.L1.section.design.003",
+          "title": "游戏策划：编辑内容",
+          "precondition": "ready",
+          "steps": [
+            "textarea 输入文本"
+          ],
+          "expected": "dirty 标记",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:12.727Z",
+          "status": "PASS",
+          "durationMs": 4133,
+          "observation": {}
+        },
+        {
+          "index": 114,
+          "opId": "game.L1.section.design.004",
+          "title": "游戏策划：保存",
+          "precondition": "有改动",
+          "steps": [
+            "点保存"
+          ],
+          "expected": "revision+1",
+          "automation": "CDP",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:16.860Z",
+          "status": "FAIL",
+          "durationMs": 4466,
+          "error": "game.L1.section.design.004: revision 0 not > 0",
+          "blockingFailure": true
+        },
+        {
+          "index": 115,
+          "opId": "game.L1.section.design.005",
+          "title": "游戏策划：保存后标签",
+          "precondition": "已保存",
+          "steps": [
+            "读 updatedLabel"
+          ],
+          "expected": "含修订号",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:21.326Z",
+          "status": "FAIL",
+          "durationMs": 3537,
+          "error": "game.L1.section.design.005: missing revision label: 尚未保存"
+        },
+        {
+          "index": 116,
+          "opId": "game.L1.section.design.006",
+          "title": "游戏策划：无项目空态",
+          "precondition": "无 projectId",
+          "steps": [
+            "打开 Tab"
+          ],
+          "expected": "请先选择项目",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:24.863Z",
+          "status": "FAIL",
+          "durationMs": 547,
+          "error": "前置不满足：已有 projectId，无法验证无项目空态"
+        },
+        {
+          "index": 117,
+          "opId": "game.L1.section.design.007",
+          "title": "游戏策划：冲突重载",
+          "precondition": "模拟冲突",
+          "steps": [
+            "点重新加载"
+          ],
+          "expected": "content 刷新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:25.410Z",
+          "status": "FAIL",
+          "durationMs": 2880,
+          "error": "前置不满足：需模拟冲突态"
+        },
+        {
+          "index": 118,
+          "opId": "game.L1.design.world.001",
+          "title": "角色与世界观：进入面板",
+          "precondition": "已选项目",
+          "steps": [
+            "Tab world"
+          ],
+          "expected": "brain-design-world 可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:28.290Z",
+          "status": "PASS",
+          "durationMs": 4192,
+          "observation": {}
+        },
+        {
+          "index": 119,
+          "opId": "game.L1.design.world.002",
+          "title": "角色与世界观：编辑核心体验",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 coreExperience"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:32.482Z",
+          "status": "PASS",
+          "durationMs": 4133,
+          "observation": {}
+        },
+        {
+          "index": 120,
+          "opId": "game.L1.design.world.003",
+          "title": "角色与世界观：编辑核心循环",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 coreLoop"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:36.615Z",
+          "status": "PASS",
+          "durationMs": 4276,
+          "observation": {}
+        },
+        {
+          "index": 121,
+          "opId": "game.L1.design.world.004",
+          "title": "角色与世界观：编辑玩家目标",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 playerGoal"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:40.893Z",
+          "status": "PASS",
+          "durationMs": 4271,
+          "observation": {}
+        },
+        {
+          "index": 122,
+          "opId": "game.L1.design.world.005",
+          "title": "角色与世界观：编辑版本范围",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 scope"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:45.165Z",
+          "status": "PASS",
+          "durationMs": 4115,
+          "observation": {}
+        },
+        {
+          "index": 123,
+          "opId": "game.L1.design.world.006",
+          "title": "角色与世界观：保存 JSON",
+          "precondition": "已编辑",
+          "steps": [
+            "点保存"
+          ],
+          "expected": "revision+1",
+          "automation": "CDP",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:49.280Z",
+          "status": "PASS",
+          "durationMs": 4460,
+          "observation": {}
+        },
+        {
+          "index": 124,
+          "opId": "game.L1.design.world.007",
+          "title": "角色与世界观：保存成功消息",
+          "precondition": "保存后",
+          "steps": [
+            "读 message"
+          ],
+          "expected": "策划稿已保存",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:53.740Z",
+          "status": "FAIL",
+          "durationMs": 3666,
+          "error": ""
+        },
+        {
+          "index": 125,
+          "opId": "game.L1.design.level.001",
+          "title": "关卡设计：进入面板",
+          "precondition": "已选项目",
+          "steps": [
+            "Tab level"
+          ],
+          "expected": "brain-design-level 可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T13:59:57.406Z",
+          "status": "PASS",
+          "durationMs": 3480,
+          "observation": {}
+        },
+        {
+          "index": 126,
+          "opId": "game.L1.design.level.002",
+          "title": "关卡设计：编辑核心体验",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 coreExperience"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:00.886Z",
+          "status": "PASS",
+          "durationMs": 4312,
+          "observation": {}
+        },
+        {
+          "index": 127,
+          "opId": "game.L1.design.level.003",
+          "title": "关卡设计：编辑核心循环",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 coreLoop"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:05.199Z",
+          "status": "PASS",
+          "durationMs": 4339,
+          "observation": {}
+        },
+        {
+          "index": 128,
+          "opId": "game.L1.design.level.004",
+          "title": "关卡设计：编辑玩家目标",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 playerGoal"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:09.539Z",
+          "status": "PASS",
+          "durationMs": 4306,
+          "observation": {}
+        },
+        {
+          "index": 129,
+          "opId": "game.L1.design.level.005",
+          "title": "关卡设计：编辑版本范围",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 scope"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:13.846Z",
+          "status": "PASS",
+          "durationMs": 4278,
+          "observation": {}
+        },
+        {
+          "index": 130,
+          "opId": "game.L1.design.level.006",
+          "title": "关卡设计：保存 JSON",
+          "precondition": "已编辑",
+          "steps": [
+            "点保存"
+          ],
+          "expected": "revision+1",
+          "automation": "CDP",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:18.126Z",
+          "status": "PASS",
+          "durationMs": 4496,
+          "observation": {}
+        },
+        {
+          "index": 131,
+          "opId": "game.L1.design.level.007",
+          "title": "关卡设计：保存成功消息",
+          "precondition": "保存后",
+          "steps": [
+            "读 message"
+          ],
+          "expected": "策划稿已保存",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:22.622Z",
+          "status": "FAIL",
+          "durationMs": 3389,
+          "error": ""
+        },
+        {
+          "index": 132,
+          "opId": "game.L1.design.combat.001",
+          "title": "战斗设计：进入面板",
+          "precondition": "已选项目",
+          "steps": [
+            "Tab combat"
+          ],
+          "expected": "brain-design-combat 可见",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:26.011Z",
+          "status": "PASS",
+          "durationMs": 3556,
+          "observation": {}
+        },
+        {
+          "index": 133,
+          "opId": "game.L1.design.combat.002",
+          "title": "战斗设计：编辑核心体验",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 coreExperience"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:29.568Z",
+          "status": "PASS",
+          "durationMs": 4255,
+          "observation": {}
+        },
+        {
+          "index": 134,
+          "opId": "game.L1.design.combat.003",
+          "title": "战斗设计：编辑核心循环",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 coreLoop"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:33.823Z",
+          "status": "PASS",
+          "durationMs": 4289,
+          "observation": {}
+        },
+        {
+          "index": 135,
+          "opId": "game.L1.design.combat.004",
+          "title": "战斗设计：编辑玩家目标",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 playerGoal"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:38.112Z",
+          "status": "PASS",
+          "durationMs": 4324,
+          "observation": {}
+        },
+        {
+          "index": 136,
+          "opId": "game.L1.design.combat.005",
+          "title": "战斗设计：编辑版本范围",
+          "precondition": "面板可见",
+          "steps": [
+            "输入 scope"
+          ],
+          "expected": "fields 更新",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:42.437Z",
+          "status": "PASS",
+          "durationMs": 4168,
+          "observation": {}
+        },
+        {
+          "index": 137,
+          "opId": "game.L1.design.combat.006",
+          "title": "战斗设计：保存 JSON",
+          "precondition": "已编辑",
+          "steps": [
+            "点保存"
+          ],
+          "expected": "revision+1",
+          "automation": "CDP",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:46.607Z",
+          "status": "PASS",
+          "durationMs": 4847,
+          "observation": {}
+        },
+        {
+          "index": 138,
+          "opId": "game.L1.design.combat.007",
+          "title": "战斗设计：保存成功消息",
+          "precondition": "保存后",
+          "steps": [
+            "读 message"
+          ],
+          "expected": "策划稿已保存",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:51.454Z",
+          "status": "FAIL",
+          "durationMs": 3541,
+          "error": ""
+        },
+        {
+          "index": 139,
+          "opId": "game.L1.assets.001",
+          "title": "进入资产与测试 Tab",
+          "precondition": "已选项目",
+          "steps": [
+            "assets Tab"
+          ],
+          "expected": "同 brain-game-workspace",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:54.995Z",
+          "status": "FAIL",
+          "durationMs": 2308,
+          "error": "game.L1.assets.001: L1 步骤未映射: assets Tab"
+        },
+        {
+          "index": 140,
+          "opId": "game.L2.chain.001",
+          "title": "模板→inspect",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "Web模板",
+            "重新检查"
+          ],
+          "expected": "engine=web",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.303Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.001: unverified expected: engine=web"
+        },
+        {
+          "index": 141,
+          "opId": "game.L2.chain.002",
+          "title": "四 section 保存链",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "design/world/level/combat"
+          ],
+          "expected": "revision 各+1",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.303Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.002: unverified expected: revision 各+1"
+        },
+        {
+          "index": 142,
+          "opId": "game.L2.chain.003",
+          "title": "试玩全链",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "启动",
+            "打开",
+            "截图",
+            "停止"
+          ],
+          "expected": "evidence 存在",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.304Z",
+          "status": "SKIP",
+          "durationMs": 0,
+          "error": "game.L2.chain.003: unverified expected: evidence 存在"
+        },
+        {
+          "index": 143,
+          "opId": "game.L2.chain.004",
+          "title": "对话@截图",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "截图",
+            "@产物"
+          ],
+          "expected": "消息引用",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.304Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.004: unverified expected: 消息引用"
+        },
+        {
+          "index": 144,
+          "opId": "game.L2.chain.005",
+          "title": "assets=project 同面板",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "切 Tab"
+          ],
+          "expected": "同 workspace",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.304Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.005: unverified expected: 同 workspace"
+        },
+        {
+          "index": 145,
+          "opId": "game.L2.chain.006",
+          "title": "无绑定错误链",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "无 local",
+            "inspect"
+          ],
+          "expected": "错误提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.304Z",
+          "status": "FAIL",
+          "durationMs": 1,
+          "error": "game.L2.chain.006: unverified expected: 错误提示"
+        },
+        {
+          "index": 146,
+          "opId": "game.L2.chain.007",
+          "title": "preview 拒绝",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "拒绝确认"
+          ],
+          "expected": "DECLINED",
+          "automation": "NATIVE",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.305Z",
+          "status": "SKIP",
+          "durationMs": 0,
+          "error": "game.L2.chain.007: unverified expected: DECLINED"
+        },
+        {
+          "index": 147,
+          "opId": "game.L2.chain.008",
+          "title": "artifacts lineage",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "截图后"
+          ],
+          "expected": "sourceWorkspaceKey=game",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.305Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.008: unverified expected: sourceWorkspaceKey=game"
+        },
+        {
+          "index": 148,
+          "opId": "game.L2.chain.009",
+          "title": "world→combat 跨 Tab",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "保存 world",
+            "切 combat"
+          ],
+          "expected": "不串",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.305Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.009: unverified expected: 不串"
+        },
+        {
+          "index": 149,
+          "opId": "game.L2.chain.010",
+          "title": "重新检查刷新资产",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "改文件",
+            "重新检查"
+          ],
+          "expected": "计数变",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.306Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.010: unverified expected: 计数变"
+        },
+        {
+          "index": 150,
+          "opId": "game.L2.chain.011",
+          "title": "Epic 引导链",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "unreal",
+            "检测"
+          ],
+          "expected": "ensure engine",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.306Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.011: unverified expected: ensure engine"
+        },
+        {
+          "index": 151,
+          "opId": "game.L2.chain.012",
+          "title": "warnings 显示链",
+          "precondition": "game 项目就绪",
+          "steps": [
+            "有问题工程"
+          ],
+          "expected": "warnings 非空",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.306Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "game.L2.chain.012: unverified expected: warnings 非空"
+        },
+        {
+          "index": 152,
+          "opId": "game.L3.001",
+          "title": "重启恢复 1",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 1 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:00:57.306Z",
+          "status": "FAIL",
+          "durationMs": 4471,
+          "error": "game.L3.001: unverified expected: 状态 1 持久化"
+        },
+        {
+          "index": 153,
+          "opId": "game.L3.002",
+          "title": "重启恢复 2",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 2 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:01.778Z",
+          "status": "FAIL",
+          "durationMs": 3170,
+          "error": "game.L3.002: unverified expected: 状态 2 持久化"
+        },
+        {
+          "index": 154,
+          "opId": "game.L3.003",
+          "title": "重启恢复 3",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 3 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:04.949Z",
+          "status": "FAIL",
+          "durationMs": 3193,
+          "error": "game.L3.003: unverified expected: 状态 3 持久化"
+        },
+        {
+          "index": 155,
+          "opId": "game.L3.004",
+          "title": "重启恢复 4",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 4 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:08.142Z",
+          "status": "FAIL",
+          "durationMs": 3180,
+          "error": "game.L3.004: unverified expected: 状态 4 持久化"
+        },
+        {
+          "index": 156,
+          "opId": "game.L3.005",
+          "title": "重启恢复 5",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 5 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:11.323Z",
+          "status": "FAIL",
+          "durationMs": 3237,
+          "error": "game.L3.005: unverified expected: 状态 5 持久化"
+        },
+        {
+          "index": 157,
+          "opId": "game.L3.006",
+          "title": "重启恢复 6",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 6 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:14.560Z",
+          "status": "FAIL",
+          "durationMs": 3172,
+          "error": "game.L3.006: unverified expected: 状态 6 持久化"
+        },
+        {
+          "index": 158,
+          "opId": "game.L3.007",
+          "title": "重启恢复 7",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 7 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:17.732Z",
+          "status": "FAIL",
+          "durationMs": 3181,
+          "error": "game.L3.007: unverified expected: 状态 7 持久化"
+        },
+        {
+          "index": 159,
+          "opId": "game.L3.008",
+          "title": "重启恢复 8",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 8 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:20.913Z",
+          "status": "FAIL",
+          "durationMs": 3174,
+          "error": "game.L3.008: unverified expected: 状态 8 持久化"
+        },
+        {
+          "index": 160,
+          "opId": "game.L3.009",
+          "title": "重启恢复 9",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 9 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:24.088Z",
+          "status": "FAIL",
+          "durationMs": 3214,
+          "error": "game.L3.009: unverified expected: 状态 9 持久化"
+        },
+        {
+          "index": 161,
+          "opId": "game.L3.010",
+          "title": "重启恢复 10",
+          "precondition": "深案例完成",
+          "steps": [
+            "重启应用"
+          ],
+          "expected": "状态 10 持久化",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:27.303Z",
+          "status": "FAIL",
+          "durationMs": 3309,
+          "error": "game.L3.010: unverified expected: 状态 10 持久化"
+        },
+        {
+          "index": 162,
+          "opId": "game.L3.011",
+          "title": "异常用例 1",
+          "precondition": "边界条件",
+          "steps": [
+            "触发异常"
+          ],
+          "expected": "友好提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:30.613Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "boundary exception case needs scripted fault injection"
+        },
+        {
+          "index": 163,
+          "opId": "game.L3.012",
+          "title": "异常用例 2",
+          "precondition": "边界条件",
+          "steps": [
+            "触发异常"
+          ],
+          "expected": "友好提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:30.613Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "boundary exception case needs scripted fault injection"
+        },
+        {
+          "index": 164,
+          "opId": "game.L3.013",
+          "title": "异常用例 3",
+          "precondition": "边界条件",
+          "steps": [
+            "触发异常"
+          ],
+          "expected": "友好提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:30.614Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "boundary exception case needs scripted fault injection"
+        },
+        {
+          "index": 165,
+          "opId": "game.L3.014",
+          "title": "异常用例 4",
+          "precondition": "边界条件",
+          "steps": [
+            "触发异常"
+          ],
+          "expected": "友好提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:30.614Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "boundary exception case needs scripted fault injection"
+        },
+        {
+          "index": 166,
+          "opId": "game.L3.015",
+          "title": "异常用例 5",
+          "precondition": "边界条件",
+          "steps": [
+            "触发异常"
+          ],
+          "expected": "友好提示",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:30.614Z",
+          "status": "FAIL",
+          "durationMs": 0,
+          "error": "boundary exception case needs scripted fault injection"
+        },
+        {
+          "index": 167,
+          "opId": "game.L3.016",
+          "title": "隔离：game 项目不在 quant",
+          "precondition": "有项目",
+          "steps": [
+            "切 quant"
+          ],
+          "expected": "列表不含",
+          "automation": "IPC",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:30.614Z",
+          "status": "FAIL",
+          "durationMs": 2867,
+          "error": "game.L3.016: unverified expected: 列表不含",
+          "blockingFailure": true
+        },
+        {
+          "index": 168,
+          "opId": "game.L3.017",
+          "title": "隔离：game 项目不在 video",
+          "precondition": "有项目",
+          "steps": [
+            "切 video"
+          ],
+          "expected": "列表不含",
+          "automation": "IPC",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:33.481Z",
+          "status": "FAIL",
+          "durationMs": 4376,
+          "error": "game.L3.017: unverified expected: 列表不含",
+          "blockingFailure": true
+        },
+        {
+          "index": 169,
+          "opId": "game.L3.018",
+          "title": "隔离：game 项目不在 music",
+          "precondition": "有项目",
+          "steps": [
+            "切 music"
+          ],
+          "expected": "列表不含",
+          "automation": "IPC",
+          "blocking": true,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:37.858Z",
+          "status": "FAIL",
+          "durationMs": 4327,
+          "error": "game.L3.018: unverified expected: 列表不含",
+          "blockingFailure": true
+        },
+        {
+          "index": 170,
+          "opId": "game.L3.019",
+          "title": "快速切场景 5 次",
+          "precondition": "多场景",
+          "steps": [
+            "连切 5 次"
+          ],
+          "expected": "UI 正常",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:42.186Z",
+          "status": "PASS",
+          "durationMs": 10128,
+          "observation": {}
+        },
+        {
+          "index": 171,
+          "opId": "game.L3.020",
+          "title": "快速切场景 10 次",
+          "precondition": "多场景",
+          "steps": [
+            "连切 10 次"
+          ],
+          "expected": "无 exit 70",
+          "automation": "CDP",
+          "blocking": false,
+          "scene": "game",
+          "startedAt": "2026-08-22T14:01:52.314Z",
+          "status": "PASS",
+          "durationMs": 18349,
+          "observation": {}
+        }
+      ]
+    }
+  ]
+}

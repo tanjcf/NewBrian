@@ -1,0 +1,4 @@
+version: 1
+display_name: Codex PM
+short_description: Product-management guidance for building or analyzing a Codex-like AI coding agent.
+default_prompt: Analyze Codex product behavior from public facts and turn it into PM deliverables for our product.

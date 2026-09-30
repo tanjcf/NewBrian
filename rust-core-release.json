@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "windows": {
+    "fileName": "brain-core.exe",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
+  "unix": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  }
+}

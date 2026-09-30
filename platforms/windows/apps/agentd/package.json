@@ -1,0 +1,21 @@
+{
+  "name": "@codex-forge/agentd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "build": "node scripts/build.mjs",
+    "check": "node --check src/runtime.js && node --check src/agent-event.js && node --check src/agent-result.js && node --check src/context-capsule.js && node --check src/worktree-manager.js && node --check src/task-graph.js && node --check src/artifact-service.js && node --check src/artifact-generator.js && node --check src/tool-registry.js && node --check src/workspace-search.js && node --check src/workspace-fs.js && node --check src/shell-process-registry.js && node --check src/tool-host-client.js && node --check src/tool-host-worker.js && node --check src/command-output.js && node --check src/windows-encoding.js && node --check src/shell-env.js && node --check src/skill-registry.js && node --check src/agent-loop.js && node --check src/tool-loop-detection.js && node --check src/multi-agent-orchestrator.js && node --check src/policy-engine.js && node --check src/memory-index.js",
+    "test": "node --test src/*.test.js"
+  },
+  "dependencies": {
+    "yaml": "2.8.1",
+    "@codex-forge/protocol": "workspace:*",
+    "docx": "9.5.1",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.1",
+    "pdfkit": "0.17.2",
+    "pptxgenjs": "4.0.1"
+  }
+}

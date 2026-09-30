@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>技能</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">技能管理：列表/详情/启用（占位实现）。</div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html"><div class="t">Start</div><div class="d">目录/预览</div></a>
+          <a class="nav-item" href="./新对话.html"><div class="t">新对话</div><div class="d">会话创建</div></a>
+          <a class="nav-item" href="./自动化.html"><div class="t">自动化</div><div class="d">定时/流程</div></a>
+          <a class="nav-item" href="./扩展.html"><div class="t">扩展</div><div class="d">扩展管理</div></a>
+          <a class="nav-item" href="./插件.html"><div class="t">插件</div><div class="d">插件市场/管理</div></a>
+          <a class="nav-item" href="./技能.html"><div class="t">技能</div><div class="d">技能列表/详情</div></a>
+          <a class="nav-item" href="./mcp服务器.html"><div class="t">MCP服务器</div><div class="d">MCP 管理</div></a>
+          <a class="nav-item" href="./设置.html"><div class="t">设置</div><div class="d">偏好/通用</div></a>
+          <a class="nav-item" href="./计费与订阅.html"><div class="t">计费与订阅</div><div class="d">套餐/账单</div></a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure：<a href="../0514原型/技能.html" target="_blank" rel="noreferrer">../0514原型/技能.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb></div>
+            <div class="page-title" data-page-title>技能</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <button class="btn" type="button">新建技能</button>
+            <a class="btn" href="../0514原型/技能.html" target="_blank" rel="noreferrer">对照原型</a>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="canvas">
+            <div class="layout">
+              <section class="pane">
+                <h1 class="h1">技能列表</h1>
+                <p class="p">展示可用技能、类别、启用状态（占位）。</p>
+                <div style="margin-top:14px">
+                  <table class="table" aria-label="skills">
+                    <thead>
+                      <tr>
+                        <th style="width:42%">技能</th>
+                        <th style="width:22%">来源</th>
+                        <th style="width:18%">状态</th>
+                        <th style="width:18%">范围</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>openai-docs</td>
+                        <td>system</td>
+                        <td><span class="tag">Enabled</span></td>
+                        <td><span class="tag">global</span></td>
+                      </tr>
+                      <tr>
+                        <td>presentations:Presentations</td>
+                        <td>plugin</td>
+                        <td><span class="tag">Enabled</span></td>
+                        <td><span class="tag">workspace</span></td>
+                      </tr>
+                      <tr>
+                        <td>qingqiu-ui-ux</td>
+                        <td>local</td>
+                        <td><span class="tag">Disabled</span></td>
+                        <td><span class="tag">workspace</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="pane">
+                <h1 class="h1">技能详情</h1>
+                <p class="p">展示说明、触发规则、文件路径与示例（待补齐）。</p>
+                <div class="list">
+                  <div class="card"><div class="k">名称</div><div class="v">openai-docs</div></div>
+                  <div class="card"><div class="k">描述</div><div class="v">用于查询并引用官方 OpenAI 文档的工作流</div></div>
+                  <div class="card"><div class="k">路径</div><div class="v"><span class="tag">SKILL.md</span>（占位）</div></div>
+                  <div class="card"><div class="k">操作</div><div class="v"><button class="btn" type="button">启用/禁用</button> <button class="btn" type="button">查看源码</button></div></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

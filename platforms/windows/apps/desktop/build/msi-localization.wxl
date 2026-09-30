@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiX UI localization overrides Product/@Codepage. Preserve Chinese resource names. -->
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="en-us" Codepage="936" />

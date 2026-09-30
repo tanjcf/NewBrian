@@ -1,0 +1,114 @@
+{
+  "llm": {
+    "provider": "DeepSeek",
+    "baseUrl": "http://203.0.113.10:8790/v1",
+    "apiKey": "",
+    "wireApi": "responses",
+    "model": "auto",
+    "reviewModel": "deepseek-v4-pro",
+    "reasoningEffort": "low",
+    "disableResponseStorage": true,
+    "systemPrompt": "You are a helpful coding assistant for the NewBrain desktop workspace.",
+    "optimizeFor": "balanced"
+  },
+  "preferences": {
+    "appearance": {
+      "theme": "light",
+      "density": "comfortable",
+      "reduceMotion": false,
+      "accentColor": "#339CFF",
+      "backgroundColor": "#FFFFFF",
+      "foregroundColor": "#1A1C1F",
+      "uiFontFamily": "Segoe UI, Microsoft YaHei UI, Microsoft YaHei, sans-serif",
+      "codeFontFamily": "Cascadia Code, Consolas, monospace",
+      "contrast": 60,
+      "uiFontSize": 14,
+      "codeFontSize": 12,
+      "sidebarTranslucent": true,
+      "pointerCursor": false,
+      "diffMarks": "color"
+    },
+    "configuration": {
+      "requireApprovalForShell": true,
+      "saveResponses": true,
+      "telemetryEnabled": true
+    },
+    "personalization": {
+      "workMode": "coding",
+      "proactiveUpdates": true,
+      "includeVerificationSummary": true,
+      "reviewFindingsFirst": true,
+      "autoSkillEnabled": false
+    },
+    "permissions": {
+      "fullAccess": false
+    },
+    "hooks": {
+      "beforeCommand": true,
+      "afterCommand": true,
+      "beforeCommit": true,
+      "afterTask": true,
+      "beforeCommandScript": "",
+      "afterCommandScript": "",
+      "beforeCommitScript": "",
+      "afterTaskScript": ""
+    },
+    "git": {
+      "statusCommand": "git status --short --branch",
+      "branchPrefix": "codex/",
+      "showDiffBeforeCommit": true,
+      "confirmBeforePush": true,
+      "pullRequestMergeMethod": "merge",
+      "forcePushWithLease": false,
+      "createDraftPullRequests": true,
+      "autoDeleteOldWorktrees": true,
+      "autoDeleteWorktreeLimit": 15,
+      "commitInstructions": ""
+    },
+    "environment": {
+      "defaultOpenTarget": "visual-studio",
+      "terminalShell": "powershell.exe",
+      "extraEnv": {},
+      "autoBootstrapConda": true
+    },
+    "editor": {
+      "language": "auto",
+      "sendShortcut": "enter",
+      "followBehavior": "queue"
+    },
+    "popup": {
+      "shortcut": "",
+      "defaultProjectlessChat": false
+    },
+    "dictation": {
+      "microphone": "system",
+      "holdShortcut": "",
+      "toggleShortcut": "",
+      "keepBarVisible": false,
+      "dictionaryOpen": true,
+      "dictionaryEntries": []
+    },
+    "notifications": {
+      "turnComplete": "when-unfocused",
+      "permission": true,
+      "question": true
+    },
+    "worktree": {
+      "defaultIsolated": true,
+      "keepArchived": false,
+      "rootDir": "G:\\workrpase\\NewBrain\\windows\\.newbrain\\worktrees"
+    },
+    "browser": {
+      "autoOpenPreview": true,
+      "preserveTabs": true,
+      "highResScreenshots": false,
+      "previewUrl": "http://127.0.0.1:3000"
+    },
+    "market": {
+      "directClawhubAllowed": false
+    },
+    "shortcuts": {}
+  },
+  "mcpServers": [],
+  "mcpDiscoveredTools": []
+}

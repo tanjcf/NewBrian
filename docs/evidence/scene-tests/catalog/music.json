@@ -1,0 +1,1701 @@
+{
+  "version": "2026-08-22",
+  "scene": "music",
+  "displayName": "音乐创作",
+  "totalOperations": 153,
+  "layers": {
+    "L0": 84,
+    "L1": 37,
+    "L2": 12,
+    "L3": 20
+  },
+  "operations": [
+    {
+      "opId": "music.L0.NAV.001",
+      "title": "打开工作台场景切换菜单",
+      "precondition": "应用已启动",
+      "steps": [
+        "点击左上角工作台切换器"
+      ],
+      "expected": "弹出 7 个场景选项",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.002",
+      "title": "切换到「量化交易」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 quant"
+      ],
+      "expected": "selectedWorkspaceKey === \"quant\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.003",
+      "title": "切换到「游戏制作」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 game"
+      ],
+      "expected": "selectedWorkspaceKey === \"game\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.004",
+      "title": "切换到「视频制作」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 video"
+      ],
+      "expected": "selectedWorkspaceKey === \"video\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.005",
+      "title": "切换到「音乐创作」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 music"
+      ],
+      "expected": "selectedWorkspaceKey === \"music\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.006",
+      "title": "切换到「数据与决策」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 data"
+      ],
+      "expected": "selectedWorkspaceKey === \"data\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.007",
+      "title": "切换到「软件与自动化」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 software"
+      ],
+      "expected": "selectedWorkspaceKey === \"software\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.008",
+      "title": "切换到「文档创作」场景",
+      "precondition": "切换菜单已打开",
+      "steps": [
+        "点击 document"
+      ],
+      "expected": "selectedWorkspaceKey === \"document\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.009",
+      "title": "切回「音乐创作」场景",
+      "precondition": "当前在其他场景",
+      "steps": [
+        "切换到 music"
+      ],
+      "expected": "selectedWorkspaceKey === \"music\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.010",
+      "title": "点击新对话",
+      "precondition": "在 music",
+      "steps": [
+        "点击新对话"
+      ],
+      "expected": "进入对话态",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.011",
+      "title": "打开全局搜索",
+      "precondition": "在 music",
+      "steps": [
+        "Ctrl+K"
+      ],
+      "expected": "搜索面板可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.012",
+      "title": "折叠项目分区",
+      "precondition": "分区展开",
+      "steps": [
+        "点击折叠"
+      ],
+      "expected": "项目列表隐藏",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.013",
+      "title": "展开项目分区",
+      "precondition": "分区折叠",
+      "steps": [
+        "再次点击"
+      ],
+      "expected": "项目列表可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.014",
+      "title": "折叠聊天分区",
+      "precondition": "分区展开",
+      "steps": [
+        "点击折叠"
+      ],
+      "expected": "聊天列表隐藏",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.015",
+      "title": "展开聊天分区",
+      "precondition": "分区折叠",
+      "steps": [
+        "再次点击"
+      ],
+      "expected": "聊天列表可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.016",
+      "title": "侧栏整理：project",
+      "precondition": "organize 菜单",
+      "steps": [
+        "选 project"
+      ],
+      "expected": "sidebarOrganizeMode === \"project\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.017",
+      "title": "侧栏整理：list",
+      "precondition": "organize 菜单",
+      "steps": [
+        "选 list"
+      ],
+      "expected": "sidebarOrganizeMode === \"list\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.018",
+      "title": "侧栏整理：priority",
+      "precondition": "organize 菜单",
+      "steps": [
+        "选 priority"
+      ],
+      "expected": "sidebarOrganizeMode === \"priority\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.019",
+      "title": "侧栏整理：updated",
+      "precondition": "organize 菜单",
+      "steps": [
+        "选 updated"
+      ],
+      "expected": "sidebarOrganizeMode === \"updated\"",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.020",
+      "title": "项目显示更多",
+      "precondition": "项目>5",
+      "steps": [
+        "点击显示更多"
+      ],
+      "expected": "全量展示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.NAV.021",
+      "title": "项目显示更少",
+      "precondition": "已展开",
+      "steps": [
+        "点击显示更少"
+      ],
+      "expected": "仅前5项",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.001",
+      "title": "打开添加项目菜单",
+      "precondition": "在 music",
+      "steps": [
+        "点击+"
+      ],
+      "expected": "菜单可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.002",
+      "title": "打开新建空白项目对话框",
+      "precondition": "菜单已开",
+      "steps": [
+        "点新建空白"
+      ],
+      "expected": "dialog 可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.003",
+      "title": "新建：输入名称",
+      "precondition": "dialog 开",
+      "steps": [
+        "输入名称"
+      ],
+      "expected": "input 非空",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.004",
+      "title": "新建：提交",
+      "precondition": "名称已填",
+      "steps": [
+        "点保存"
+      ],
+      "expected": "primaryWorkspaceKey === \"music\"",
+      "automation": "CDP",
+      "blocking": true
+    },
+    {
+      "opId": "music.L0.PROJ.005",
+      "title": "新建：取消",
+      "precondition": "dialog 开",
+      "steps": [
+        "点取消"
+      ],
+      "expected": "dialog 关闭",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.006",
+      "title": "新建：空名禁用",
+      "precondition": "dialog 开",
+      "steps": [
+        "清空名称"
+      ],
+      "expected": "保存 disabled",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.007",
+      "title": "选 BRAIN 项目第一项",
+      "precondition": "列表非空",
+      "steps": [
+        "点击第一项"
+      ],
+      "expected": "selectedBrainProjectId 更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.008",
+      "title": "选 BRAIN 对话第一项",
+      "precondition": "对话非空",
+      "steps": [
+        "点击第一项"
+      ],
+      "expected": "selectedBrainConversationId 更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.009",
+      "title": "验证项目仅当前场景",
+      "precondition": "刚创建",
+      "steps": [
+        "listBrainProjects workspaceKey=music"
+      ],
+      "expected": "命中；其他场景不含",
+      "automation": "IPC",
+      "blocking": true
+    },
+    {
+      "opId": "music.L0.PROJ.010",
+      "title": "使用现有文件夹",
+      "precondition": "菜单已开",
+      "steps": [
+        "点使用现有文件夹"
+      ],
+      "expected": "文件夹选择器",
+      "automation": "NATIVE",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.011",
+      "title": "跨场景最近可见",
+      "precondition": "有其他场景项目",
+      "steps": [
+        "查看最近"
+      ],
+      "expected": "不含当前场景项",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.012",
+      "title": "点击跨场景最近",
+      "precondition": "最近非空",
+      "steps": [
+        "点击一项"
+      ],
+      "expected": "跳转对应场景",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.013",
+      "title": "legacy 展开线程",
+      "precondition": "有 legacy 项目",
+      "steps": [
+        "点展开"
+      ],
+      "expected": "线程可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.014",
+      "title": "legacy 折叠线程",
+      "precondition": "已展开",
+      "steps": [
+        "点折叠"
+      ],
+      "expected": "线程隐藏",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.015",
+      "title": "选 legacy 项目",
+      "precondition": "catalog 非空",
+      "steps": [
+        "点击项目"
+      ],
+      "expected": "selectedWorkspaceId 更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.PROJ.016",
+      "title": "BRAIN 项目空态",
+      "precondition": "无项目",
+      "steps": [
+        "查看空态"
+      ],
+      "expected": "当前场景还没有 BRAIN 项目",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.001",
+      "title": "对话空态",
+      "precondition": "有项目无对话",
+      "steps": [
+        "查看列表"
+      ],
+      "expected": "当前项目还没有对话",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.002",
+      "title": "切换对话第二项",
+      "precondition": "对话≥2",
+      "steps": [
+        "点第二项"
+      ],
+      "expected": "选中更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.003",
+      "title": "对话相对时间",
+      "precondition": "有 updatedAt",
+      "steps": [
+        "读 time"
+      ],
+      "expected": "非空",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.004",
+      "title": "对话 sidebar 同步",
+      "precondition": "点对话",
+      "steps": [
+        "查 row"
+      ],
+      "expected": "brain-conversation:id",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.005",
+      "title": "项目 sidebar 同步",
+      "precondition": "点项目",
+      "steps": [
+        "查 row"
+      ],
+      "expected": "brain-project:id",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.006",
+      "title": "选 chat 线程",
+      "precondition": "有 chat 线程",
+      "steps": [
+        "点击"
+      ],
+      "expected": "selectedThreadId 更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.007",
+      "title": "pin 线程",
+      "precondition": "hover",
+      "steps": [
+        "pin"
+      ],
+      "expected": "状态切换",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.008",
+      "title": "archive 线程",
+      "precondition": "hover",
+      "steps": [
+        "archive"
+      ],
+      "expected": "archived",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.009",
+      "title": "新对话绑场景",
+      "precondition": "在 music",
+      "steps": [
+        "新对话"
+      ],
+      "expected": "绑定当前场景",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.CONV.010",
+      "title": "composer 可用",
+      "precondition": "选 brain 对话",
+      "steps": [
+        "查 input"
+      ],
+      "expected": "可输入",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.001",
+      "title": "全局资源 Tab files",
+      "precondition": "右栏可见",
+      "steps": [
+        "点 files"
+      ],
+      "expected": "active === files",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.002",
+      "title": "全局资源 Tab artifacts",
+      "precondition": "右栏可见",
+      "steps": [
+        "点 artifacts"
+      ],
+      "expected": "active === artifacts",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.003",
+      "title": "全局资源 Tab tasks",
+      "precondition": "右栏可见",
+      "steps": [
+        "点 tasks"
+      ],
+      "expected": "active === tasks",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.004",
+      "title": "场景 Tab audio",
+      "precondition": "在 music",
+      "steps": [
+        "点 audio"
+      ],
+      "expected": "workspaceSceneTab === audio",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.005",
+      "title": "场景 Tab lyrics",
+      "precondition": "在 music",
+      "steps": [
+        "点 lyrics"
+      ],
+      "expected": "workspaceSceneTab === lyrics",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.006",
+      "title": "场景 Tab arrangement",
+      "precondition": "在 music",
+      "steps": [
+        "点 arrangement"
+      ],
+      "expected": "workspaceSceneTab === arrangement",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.007",
+      "title": "场景 Tab tracks",
+      "precondition": "在 music",
+      "steps": [
+        "点 tracks"
+      ],
+      "expected": "workspaceSceneTab === tracks",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.008",
+      "title": "场景 Tab mix",
+      "precondition": "在 music",
+      "steps": [
+        "点 mix"
+      ],
+      "expected": "workspaceSceneTab === mix",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.009",
+      "title": "场景 Tab export",
+      "precondition": "在 music",
+      "steps": [
+        "点 export"
+      ],
+      "expected": "workspaceSceneTab === export",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.010",
+      "title": "选文件行",
+      "precondition": "files 有文件",
+      "steps": [
+        "点击"
+      ],
+      "expected": "selectedFileId 更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.011",
+      "title": "产物列表",
+      "precondition": "artifacts Tab",
+      "steps": [
+        "打开"
+      ],
+      "expected": "列表或空态",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.012",
+      "title": "任务列表",
+      "precondition": "tasks Tab",
+      "steps": [
+        "打开"
+      ],
+      "expected": "列表或空态",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.RES.013",
+      "title": "右栏标题含场景名",
+      "precondition": "在 music",
+      "steps": [
+        "读 header"
+      ],
+      "expected": "含 音乐创作",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.001",
+      "title": "Composer 输入空文本",
+      "precondition": "聚焦",
+      "steps": [
+        "不输入"
+      ],
+      "expected": "send 拦截或 disabled",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.002",
+      "title": "Composer 输入短文本",
+      "precondition": "聚焦",
+      "steps": [
+        "输入测试"
+      ],
+      "expected": "value 正确",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.003",
+      "title": "Composer Enter 发送",
+      "precondition": "有文本",
+      "steps": [
+        "Enter"
+      ],
+      "expected": "消息发出",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.004",
+      "title": "Composer 点击发送",
+      "precondition": "有文本",
+      "steps": [
+        "点 send"
+      ],
+      "expected": "消息发出",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.005",
+      "title": "Composer 停止生成",
+      "precondition": "回复中",
+      "steps": [
+        "点停止"
+      ],
+      "expected": "取消 in-flight",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.006",
+      "title": "Composer 打开+菜单",
+      "precondition": "可见",
+      "steps": [
+        "点+"
+      ],
+      "expected": "菜单展开",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.007",
+      "title": "Composer 权限审批",
+      "precondition": "可见",
+      "steps": [
+        "选 approval"
+      ],
+      "expected": "mode=approval",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.008",
+      "title": "Composer 权限 Agent",
+      "precondition": "可见",
+      "steps": [
+        "选 agent"
+      ],
+      "expected": "mode=agent",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.009",
+      "title": "Composer 权限完全",
+      "precondition": "可见",
+      "steps": [
+        "选 full"
+      ],
+      "expected": "mode=full",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.010",
+      "title": "Composer Skill 打开",
+      "precondition": "可见",
+      "steps": [
+        "开 picker"
+      ],
+      "expected": "列表可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.011",
+      "title": "Composer Skill 清除",
+      "precondition": "已选",
+      "steps": [
+        "清除"
+      ],
+      "expected": "空",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.012",
+      "title": "Composer @上下文",
+      "precondition": "可见",
+      "steps": [
+        "toggle"
+      ],
+      "expected": "状态切换",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.013",
+      "title": "Composer 模型菜单",
+      "precondition": "可见",
+      "steps": [
+        "打开"
+      ],
+      "expected": "列表可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.014",
+      "title": "Composer 推理切换",
+      "precondition": "菜单开",
+      "steps": [
+        "切换"
+      ],
+      "expected": "变化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.015",
+      "title": "Composer 速度切换",
+      "precondition": "菜单开",
+      "steps": [
+        "切换"
+      ],
+      "expected": "变化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.016",
+      "title": "Composer 语音切换",
+      "precondition": "可见",
+      "steps": [
+        "点 voice"
+      ],
+      "expected": "dictation 切换",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.017",
+      "title": "Composer 附件移除",
+      "precondition": "有附件",
+      "steps": [
+        "移除"
+      ],
+      "expected": "减少",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.018",
+      "title": "Composer 队列编辑",
+      "precondition": "有 draft",
+      "steps": [
+        "edit"
+      ],
+      "expected": "可编辑",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.019",
+      "title": "Composer 队列 steer",
+      "precondition": "有 draft",
+      "steps": [
+        "steer"
+      ],
+      "expected": "生效",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.020",
+      "title": "Composer 队列 followup",
+      "precondition": "有 draft",
+      "steps": [
+        "followup"
+      ],
+      "expected": "排队",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.021",
+      "title": "Composer 队列 interrupt",
+      "precondition": "有 draft",
+      "steps": [
+        "interrupt"
+      ],
+      "expected": "生效",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.022",
+      "title": "Composer 队列清除",
+      "precondition": "有 draft",
+      "steps": [
+        "clear"
+      ],
+      "expected": "空",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.023",
+      "title": "Composer 回到底部",
+      "precondition": "已滚动",
+      "steps": [
+        "jump"
+      ],
+      "expected": "到底",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L0.COMP.024",
+      "title": "Composer 添加文件",
+      "precondition": "+菜单",
+      "steps": [
+        "文件和图片"
+      ],
+      "expected": "系统对话框",
+      "automation": "NATIVE",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.audio.001",
+      "title": "进入项目与音频",
+      "precondition": "已选项目",
+      "steps": [
+        "audio Tab"
+      ],
+      "expected": "brain-music-workspace",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.audio.002",
+      "title": "选音频文件",
+      "precondition": "有 files",
+      "steps": [
+        "brain-music-file-select"
+      ],
+      "expected": "fileId 更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.audio.003",
+      "title": "加入音频 clip",
+      "precondition": "已选 file",
+      "steps": [
+        "brain-music-add-audio"
+      ],
+      "expected": "clips 增加",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.audio.004",
+      "title": "加入 MIDI clip",
+      "precondition": "已选 file",
+      "steps": [
+        "加入 MIDI"
+      ],
+      "expected": "midi clip 增加",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.audio.005",
+      "title": "源文件 preview audio",
+      "precondition": "有 previewUrl",
+      "steps": [
+        "audio controls"
+      ],
+      "expected": "可播放",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.audio.006",
+      "title": "刷新时间线",
+      "precondition": "audio Tab",
+      "steps": [
+        "刷新"
+      ],
+      "expected": "getMusicTimeline",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.lyrics.001",
+      "title": "歌词：进入编辑器",
+      "precondition": "已选项目",
+      "steps": [
+        "打开 lyrics Tab"
+      ],
+      "expected": "brain-section-lyrics 可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.lyrics.002",
+      "title": "歌词：加载内容",
+      "precondition": "编辑器可见",
+      "steps": [
+        "等待 load"
+      ],
+      "expected": "state=ready 或 idle",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.lyrics.003",
+      "title": "歌词：编辑内容",
+      "precondition": "ready",
+      "steps": [
+        "textarea 输入文本"
+      ],
+      "expected": "dirty 标记",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.lyrics.004",
+      "title": "歌词：保存",
+      "precondition": "有改动",
+      "steps": [
+        "点保存"
+      ],
+      "expected": "revision+1",
+      "automation": "CDP",
+      "blocking": true
+    },
+    {
+      "opId": "music.L1.section.lyrics.005",
+      "title": "歌词：保存后标签",
+      "precondition": "已保存",
+      "steps": [
+        "读 updatedLabel"
+      ],
+      "expected": "含修订号",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.lyrics.006",
+      "title": "歌词：无项目空态",
+      "precondition": "无 projectId",
+      "steps": [
+        "打开 Tab"
+      ],
+      "expected": "请先选择项目",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.lyrics.007",
+      "title": "歌词：冲突重载",
+      "precondition": "模拟冲突",
+      "steps": [
+        "点重新加载"
+      ],
+      "expected": "content 刷新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.001",
+      "title": "进入编曲 Tab",
+      "precondition": "已选项目",
+      "steps": [
+        "arrangement Tab"
+      ],
+      "expected": "brain-music-composition",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.002",
+      "title": "编辑主题",
+      "precondition": "面板可见",
+      "steps": [
+        "输入 theme"
+      ],
+      "expected": "更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.003",
+      "title": "编辑 BPM",
+      "precondition": "面板可见",
+      "steps": [
+        "bpm=120"
+      ],
+      "expected": "更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.004",
+      "title": "编辑调性",
+      "precondition": "面板可见",
+      "steps": [
+        "keySignature"
+      ],
+      "expected": "更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.005",
+      "title": "编辑歌词区",
+      "precondition": "面板可见",
+      "steps": [
+        "lyrics textarea"
+      ],
+      "expected": "更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.006",
+      "title": "编辑编曲说明",
+      "precondition": "面板可见",
+      "steps": [
+        "arrangement textarea"
+      ],
+      "expected": "更新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.arrangement.007",
+      "title": "保存并同步",
+      "precondition": "已编辑",
+      "steps": [
+        "保存并同步时间线"
+      ],
+      "expected": "lyrics+arrangement revision+1",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.tracks.008",
+      "title": "进入音轨 Tab",
+      "precondition": "已选项目",
+      "steps": [
+        "tracks Tab"
+      ],
+      "expected": "timeline 视图",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.tracks.009",
+      "title": "audio 轨 clip",
+      "precondition": "有 clip",
+      "steps": [
+        "audio lane"
+      ],
+      "expected": "可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.tracks.010",
+      "title": "midi 轨 clip",
+      "precondition": "有 midi",
+      "steps": [
+        "midi lane"
+      ],
+      "expected": "可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.mix.001",
+      "title": "混音：进入编辑器",
+      "precondition": "已选项目",
+      "steps": [
+        "打开 mix Tab"
+      ],
+      "expected": "brain-section-mix 可见",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.mix.002",
+      "title": "混音：加载内容",
+      "precondition": "编辑器可见",
+      "steps": [
+        "等待 load"
+      ],
+      "expected": "state=ready 或 idle",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.mix.003",
+      "title": "混音：编辑内容",
+      "precondition": "ready",
+      "steps": [
+        "textarea 输入文本"
+      ],
+      "expected": "dirty 标记",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.mix.004",
+      "title": "混音：保存",
+      "precondition": "有改动",
+      "steps": [
+        "点保存"
+      ],
+      "expected": "revision+1",
+      "automation": "CDP",
+      "blocking": true
+    },
+    {
+      "opId": "music.L1.section.mix.005",
+      "title": "混音：保存后标签",
+      "precondition": "已保存",
+      "steps": [
+        "读 updatedLabel"
+      ],
+      "expected": "含修订号",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.mix.006",
+      "title": "混音：无项目空态",
+      "precondition": "无 projectId",
+      "steps": [
+        "打开 Tab"
+      ],
+      "expected": "请先选择项目",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.section.mix.007",
+      "title": "混音：冲突重载",
+      "precondition": "模拟冲突",
+      "steps": [
+        "点重新加载"
+      ],
+      "expected": "content 刷新",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.001",
+      "title": "进入导出 Tab",
+      "precondition": "已选项目",
+      "steps": [
+        "export Tab"
+      ],
+      "expected": "brain-music-preview",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.002",
+      "title": "渲染混音",
+      "precondition": "有 clip",
+      "steps": [
+        "brain-music-render"
+      ],
+      "expected": "STARTING",
+      "automation": "NATIVE",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.003",
+      "title": "取消渲染",
+      "precondition": "RUNNING",
+      "steps": [
+        "brain-music-cancel"
+      ],
+      "expected": "CANCELLED",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.004",
+      "title": "混音成功",
+      "precondition": "SUCCEEDED",
+      "steps": [
+        "brain-music-preview-result"
+      ],
+      "expected": "outputFileId",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.005",
+      "title": "波形显示",
+      "precondition": "SUCCEEDED",
+      "steps": [
+        "brain-music-waveform"
+      ],
+      "expected": "span 非空",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.006",
+      "title": "inspect 时长采样率",
+      "precondition": "SUCCEEDED",
+      "steps": [
+        "brain-music-media-info"
+      ],
+      "expected": "duration+sampleRate",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L1.export.007",
+      "title": "混音 audio 播放",
+      "precondition": "有 mixPreviewUrl",
+      "steps": [
+        "audio 控件"
+      ],
+      "expected": "可播",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.001",
+      "title": "词曲编混链",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "lyrics",
+        "arrangement",
+        "save"
+      ],
+      "expected": "revision+1",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.002",
+      "title": "audio+midi clip",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "各加1"
+      ],
+      "expected": "2 clips",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.003",
+      "title": "render 混音",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "render"
+      ],
+      "expected": "wav fileId",
+      "automation": "NATIVE",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.004",
+      "title": "波形+inspect",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "SUCCESS"
+      ],
+      "expected": "waveform+mediaInfo",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.005",
+      "title": "源 preview 播放",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "选 wav"
+      ],
+      "expected": "audio 可播",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.006",
+      "title": "mix section 保存",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "mix",
+        "save"
+      ],
+      "expected": "revision",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.007",
+      "title": "tracks 视图",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "2 clips"
+      ],
+      "expected": "lanes",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.008",
+      "title": "cancel render",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "cancel"
+      ],
+      "expected": "CANCELLED",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.009",
+      "title": "重启 timeline",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "重启"
+      ],
+      "expected": "clips 在",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.010",
+      "title": "BPM/key 持久化",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "改 BPM",
+        "save"
+      ],
+      "expected": "重启仍在",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.011",
+      "title": "export preview audio",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "SUCCESS"
+      ],
+      "expected": "mix 可播",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L2.chain.012",
+      "title": "无 clip render",
+      "precondition": "music 项目就绪",
+      "steps": [
+        "无 clip"
+      ],
+      "expected": "仍可触发或提示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.001",
+      "title": "重启恢复 1",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 1 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.002",
+      "title": "重启恢复 2",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 2 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.003",
+      "title": "重启恢复 3",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 3 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.004",
+      "title": "重启恢复 4",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 4 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.005",
+      "title": "重启恢复 5",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 5 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.006",
+      "title": "重启恢复 6",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 6 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.007",
+      "title": "重启恢复 7",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 7 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.008",
+      "title": "重启恢复 8",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 8 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.009",
+      "title": "重启恢复 9",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 9 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.010",
+      "title": "重启恢复 10",
+      "precondition": "深案例完成",
+      "steps": [
+        "重启应用"
+      ],
+      "expected": "状态 10 持久化",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.011",
+      "title": "异常用例 1",
+      "precondition": "边界条件",
+      "steps": [
+        "触发异常"
+      ],
+      "expected": "友好提示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.012",
+      "title": "异常用例 2",
+      "precondition": "边界条件",
+      "steps": [
+        "触发异常"
+      ],
+      "expected": "友好提示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.013",
+      "title": "异常用例 3",
+      "precondition": "边界条件",
+      "steps": [
+        "触发异常"
+      ],
+      "expected": "友好提示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.014",
+      "title": "异常用例 4",
+      "precondition": "边界条件",
+      "steps": [
+        "触发异常"
+      ],
+      "expected": "友好提示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.015",
+      "title": "异常用例 5",
+      "precondition": "边界条件",
+      "steps": [
+        "触发异常"
+      ],
+      "expected": "友好提示",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.016",
+      "title": "隔离：music 项目不在 quant",
+      "precondition": "有项目",
+      "steps": [
+        "切 quant"
+      ],
+      "expected": "列表不含",
+      "automation": "IPC",
+      "blocking": true
+    },
+    {
+      "opId": "music.L3.017",
+      "title": "隔离：music 项目不在 game",
+      "precondition": "有项目",
+      "steps": [
+        "切 game"
+      ],
+      "expected": "列表不含",
+      "automation": "IPC",
+      "blocking": true
+    },
+    {
+      "opId": "music.L3.018",
+      "title": "隔离：music 项目不在 video",
+      "precondition": "有项目",
+      "steps": [
+        "切 video"
+      ],
+      "expected": "列表不含",
+      "automation": "IPC",
+      "blocking": true
+    },
+    {
+      "opId": "music.L3.019",
+      "title": "快速切场景 5 次",
+      "precondition": "多场景",
+      "steps": [
+        "连切 5 次"
+      ],
+      "expected": "UI 正常",
+      "automation": "CDP",
+      "blocking": false
+    },
+    {
+      "opId": "music.L3.020",
+      "title": "快速切场景 10 次",
+      "precondition": "多场景",
+      "steps": [
+        "连切 10 次"
+      ],
+      "expected": "无 exit 70",
+      "automation": "CDP",
+      "blocking": false
+    }
+  ]
+}

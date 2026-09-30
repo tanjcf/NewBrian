@@ -1,0 +1,1456 @@
+version: "2026-08-22"
+scene: quant
+displayName: 量化交易
+totalOperations: 180
+layers:
+  L0: 83
+  L1: 65
+  L2: 12
+  L3: 20
+operations:
+  - opId: quant.L0.NAV.001
+    title: "打开工作台场景切换菜单"
+    precondition: "应用已启动"
+    steps:
+      - "点击左上角工作台切换器"
+    expected: "弹出 7 个场景选项"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.002
+    title: "切换到「量化交易」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 quant"
+    expected: "selectedWorkspaceKey === \"quant\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.003
+    title: "切换到「游戏制作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 game"
+    expected: "selectedWorkspaceKey === \"game\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.004
+    title: "切换到「视频制作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 video"
+    expected: "selectedWorkspaceKey === \"video\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.005
+    title: "切换到「音乐创作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 music"
+    expected: "selectedWorkspaceKey === \"music\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.006
+    title: "切换到「数据与决策」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 data"
+    expected: "selectedWorkspaceKey === \"data\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.007
+    title: "切换到「软件与自动化」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 software"
+    expected: "selectedWorkspaceKey === \"software\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.008
+    title: "切换到「文档创作」场景"
+    precondition: "切换菜单已打开"
+    steps:
+      - "点击 document"
+    expected: "selectedWorkspaceKey === \"document\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.009
+    title: "切回「量化交易」场景"
+    precondition: "当前在其他场景"
+    steps:
+      - "切换到 quant"
+    expected: "selectedWorkspaceKey === \"quant\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.010
+    title: "点击新对话"
+    precondition: "在 quant"
+    steps:
+      - "点击新对话"
+    expected: "进入对话态"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.011
+    title: "打开全局搜索"
+    precondition: "在 quant"
+    steps:
+      - "Ctrl+K"
+    expected: "搜索面板可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.012
+    title: "折叠项目分区"
+    precondition: "分区展开"
+    steps:
+      - "点击折叠"
+    expected: "项目列表隐藏"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.013
+    title: "展开项目分区"
+    precondition: "分区折叠"
+    steps:
+      - "再次点击"
+    expected: "项目列表可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.014
+    title: "折叠聊天分区"
+    precondition: "分区展开"
+    steps:
+      - "点击折叠"
+    expected: "聊天列表隐藏"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.015
+    title: "展开聊天分区"
+    precondition: "分区折叠"
+    steps:
+      - "再次点击"
+    expected: "聊天列表可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.016
+    title: "侧栏整理：project"
+    precondition: "organize 菜单"
+    steps:
+      - "选 project"
+    expected: "sidebarOrganizeMode === \"project\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.017
+    title: "侧栏整理：list"
+    precondition: "organize 菜单"
+    steps:
+      - "选 list"
+    expected: "sidebarOrganizeMode === \"list\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.018
+    title: "侧栏整理：priority"
+    precondition: "organize 菜单"
+    steps:
+      - "选 priority"
+    expected: "sidebarOrganizeMode === \"priority\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.019
+    title: "侧栏整理：updated"
+    precondition: "organize 菜单"
+    steps:
+      - "选 updated"
+    expected: "sidebarOrganizeMode === \"updated\""
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.020
+    title: "项目显示更多"
+    precondition: "项目>5"
+    steps:
+      - "点击显示更多"
+    expected: "全量展示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.NAV.021
+    title: "项目显示更少"
+    precondition: "已展开"
+    steps:
+      - "点击显示更少"
+    expected: "仅前5项"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.001
+    title: "打开添加项目菜单"
+    precondition: "在 quant"
+    steps:
+      - "点击+"
+    expected: "菜单可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.002
+    title: "打开新建空白项目对话框"
+    precondition: "菜单已开"
+    steps:
+      - "点新建空白"
+    expected: "dialog 可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.003
+    title: "新建：输入名称"
+    precondition: "dialog 开"
+    steps:
+      - "输入名称"
+    expected: "input 非空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.004
+    title: "新建：提交"
+    precondition: "名称已填"
+    steps:
+      - "点保存"
+    expected: "primaryWorkspaceKey === \"quant\""
+    automation: CDP
+    blocking: true
+  - opId: quant.L0.PROJ.005
+    title: "新建：取消"
+    precondition: "dialog 开"
+    steps:
+      - "点取消"
+    expected: "dialog 关闭"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.006
+    title: "新建：空名禁用"
+    precondition: "dialog 开"
+    steps:
+      - "清空名称"
+    expected: "保存 disabled"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.007
+    title: "选 BRAIN 项目第一项"
+    precondition: "列表非空"
+    steps:
+      - "点击第一项"
+    expected: "selectedBrainProjectId 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.008
+    title: "选 BRAIN 对话第一项"
+    precondition: "对话非空"
+    steps:
+      - "点击第一项"
+    expected: "selectedBrainConversationId 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.009
+    title: "验证项目仅当前场景"
+    precondition: "刚创建"
+    steps:
+      - "listBrainProjects workspaceKey=quant"
+    expected: "命中；其他场景不含"
+    automation: IPC
+    blocking: true
+  - opId: quant.L0.PROJ.010
+    title: "使用现有文件夹"
+    precondition: "菜单已开"
+    steps:
+      - "点使用现有文件夹"
+    expected: "文件夹选择器"
+    automation: NATIVE
+    blocking: false
+  - opId: quant.L0.PROJ.011
+    title: "跨场景最近可见"
+    precondition: "有其他场景项目"
+    steps:
+      - "查看最近"
+    expected: "不含当前场景项"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.012
+    title: "点击跨场景最近"
+    precondition: "最近非空"
+    steps:
+      - "点击一项"
+    expected: "跳转对应场景"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.013
+    title: "legacy 展开线程"
+    precondition: "有 legacy 项目"
+    steps:
+      - "点展开"
+    expected: "线程可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.014
+    title: "legacy 折叠线程"
+    precondition: "已展开"
+    steps:
+      - "点折叠"
+    expected: "线程隐藏"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.015
+    title: "选 legacy 项目"
+    precondition: "catalog 非空"
+    steps:
+      - "点击项目"
+    expected: "selectedWorkspaceId 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.PROJ.016
+    title: "BRAIN 项目空态"
+    precondition: "无项目"
+    steps:
+      - "查看空态"
+    expected: "当前场景还没有 BRAIN 项目"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.001
+    title: "对话空态"
+    precondition: "有项目无对话"
+    steps:
+      - "查看列表"
+    expected: "当前项目还没有对话"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.002
+    title: "切换对话第二项"
+    precondition: "对话≥2"
+    steps:
+      - "点第二项"
+    expected: "选中更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.003
+    title: "对话相对时间"
+    precondition: "有 updatedAt"
+    steps:
+      - "读 time"
+    expected: "非空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.004
+    title: "对话 sidebar 同步"
+    precondition: "点对话"
+    steps:
+      - "查 row"
+    expected: "brain-conversation:id"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.005
+    title: "项目 sidebar 同步"
+    precondition: "点项目"
+    steps:
+      - "查 row"
+    expected: "brain-project:id"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.006
+    title: "选 chat 线程"
+    precondition: "有 chat 线程"
+    steps:
+      - "点击"
+    expected: "selectedThreadId 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.007
+    title: "pin 线程"
+    precondition: "hover"
+    steps:
+      - "pin"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.008
+    title: "archive 线程"
+    precondition: "hover"
+    steps:
+      - "archive"
+    expected: "archived"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.009
+    title: "新对话绑场景"
+    precondition: "在 quant"
+    steps:
+      - "新对话"
+    expected: "绑定当前场景"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.CONV.010
+    title: "composer 可用"
+    precondition: "选 brain 对话"
+    steps:
+      - "查 input"
+    expected: "可输入"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.001
+    title: "全局资源 Tab files"
+    precondition: "右栏可见"
+    steps:
+      - "点 files"
+    expected: "active === files"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.002
+    title: "全局资源 Tab artifacts"
+    precondition: "右栏可见"
+    steps:
+      - "点 artifacts"
+    expected: "active === artifacts"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.003
+    title: "全局资源 Tab tasks"
+    precondition: "右栏可见"
+    steps:
+      - "点 tasks"
+    expected: "active === tasks"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.004
+    title: "场景 Tab market"
+    precondition: "在 quant"
+    steps:
+      - "点 market"
+    expected: "workspaceSceneTab === market"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.005
+    title: "场景 Tab portfolio"
+    precondition: "在 quant"
+    steps:
+      - "点 portfolio"
+    expected: "workspaceSceneTab === portfolio"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.006
+    title: "场景 Tab strategy"
+    precondition: "在 quant"
+    steps:
+      - "点 strategy"
+    expected: "workspaceSceneTab === strategy"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.007
+    title: "场景 Tab radar"
+    precondition: "在 quant"
+    steps:
+      - "点 radar"
+    expected: "workspaceSceneTab === radar"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.008
+    title: "场景 Tab research"
+    precondition: "在 quant"
+    steps:
+      - "点 research"
+    expected: "workspaceSceneTab === research"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.009
+    title: "选文件行"
+    precondition: "files 有文件"
+    steps:
+      - "点击"
+    expected: "selectedFileId 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.010
+    title: "产物列表"
+    precondition: "artifacts Tab"
+    steps:
+      - "打开"
+    expected: "列表或空态"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.011
+    title: "任务列表"
+    precondition: "tasks Tab"
+    steps:
+      - "打开"
+    expected: "列表或空态"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.RES.012
+    title: "右栏标题含场景名"
+    precondition: "在 quant"
+    steps:
+      - "读 header"
+    expected: "含 量化交易"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.001
+    title: "Composer 输入空文本"
+    precondition: "聚焦"
+    steps:
+      - "不输入"
+    expected: "send 拦截或 disabled"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.002
+    title: "Composer 输入短文本"
+    precondition: "聚焦"
+    steps:
+      - "输入测试"
+    expected: "value 正确"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.003
+    title: "Composer Enter 发送"
+    precondition: "有文本"
+    steps:
+      - "Enter"
+    expected: "消息发出"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.004
+    title: "Composer 点击发送"
+    precondition: "有文本"
+    steps:
+      - "点 send"
+    expected: "消息发出"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.005
+    title: "Composer 停止生成"
+    precondition: "回复中"
+    steps:
+      - "点停止"
+    expected: "取消 in-flight"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.006
+    title: "Composer 打开+菜单"
+    precondition: "可见"
+    steps:
+      - "点+"
+    expected: "菜单展开"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.007
+    title: "Composer 权限审批"
+    precondition: "可见"
+    steps:
+      - "选 approval"
+    expected: "mode=approval"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.008
+    title: "Composer 权限 Agent"
+    precondition: "可见"
+    steps:
+      - "选 agent"
+    expected: "mode=agent"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.009
+    title: "Composer 权限完全"
+    precondition: "可见"
+    steps:
+      - "选 full"
+    expected: "mode=full"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.010
+    title: "Composer Skill 打开"
+    precondition: "可见"
+    steps:
+      - "开 picker"
+    expected: "列表可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.011
+    title: "Composer Skill 清除"
+    precondition: "已选"
+    steps:
+      - "清除"
+    expected: "空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.012
+    title: "Composer @上下文"
+    precondition: "可见"
+    steps:
+      - "toggle"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.013
+    title: "Composer 模型菜单"
+    precondition: "可见"
+    steps:
+      - "打开"
+    expected: "列表可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.014
+    title: "Composer 推理切换"
+    precondition: "菜单开"
+    steps:
+      - "切换"
+    expected: "变化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.015
+    title: "Composer 速度切换"
+    precondition: "菜单开"
+    steps:
+      - "切换"
+    expected: "变化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.016
+    title: "Composer 语音切换"
+    precondition: "可见"
+    steps:
+      - "点 voice"
+    expected: "dictation 切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.017
+    title: "Composer 附件移除"
+    precondition: "有附件"
+    steps:
+      - "移除"
+    expected: "减少"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.018
+    title: "Composer 队列编辑"
+    precondition: "有 draft"
+    steps:
+      - "edit"
+    expected: "可编辑"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.019
+    title: "Composer 队列 steer"
+    precondition: "有 draft"
+    steps:
+      - "steer"
+    expected: "生效"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.020
+    title: "Composer 队列 followup"
+    precondition: "有 draft"
+    steps:
+      - "followup"
+    expected: "排队"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.021
+    title: "Composer 队列 interrupt"
+    precondition: "有 draft"
+    steps:
+      - "interrupt"
+    expected: "生效"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.022
+    title: "Composer 队列清除"
+    precondition: "有 draft"
+    steps:
+      - "clear"
+    expected: "空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.023
+    title: "Composer 回到底部"
+    precondition: "已滚动"
+    steps:
+      - "jump"
+    expected: "到底"
+    automation: CDP
+    blocking: false
+  - opId: quant.L0.COMP.024
+    title: "Composer 添加文件"
+    precondition: "+菜单"
+    steps:
+      - "文件和图片"
+    expected: "系统对话框"
+    automation: NATIVE
+    blocking: false
+  - opId: quant.L1.market.001
+    title: "行情：输入代码 600519"
+    precondition: "market Tab"
+    steps:
+      - "symbol=600519"
+    expected: "input 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.002
+    title: "行情：输入代码 000001"
+    precondition: "market Tab"
+    steps:
+      - "symbol=000001"
+    expected: "input 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.003
+    title: "行情：输入代码 300750"
+    precondition: "market Tab"
+    steps:
+      - "symbol=300750"
+    expected: "input 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.004
+    title: "行情：选周期 日线"
+    precondition: "market Tab"
+    steps:
+      - "interval=日线"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.005
+    title: "行情：选周期 周线"
+    precondition: "market Tab"
+    steps:
+      - "interval=周线"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.006
+    title: "行情：选周期 月线"
+    precondition: "market Tab"
+    steps:
+      - "interval=月线"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.007
+    title: "行情：选复权 前复权"
+    precondition: "market Tab"
+    steps:
+      - "adjustment=前复权"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.008
+    title: "行情：选复权 后复权"
+    precondition: "market Tab"
+    steps:
+      - "adjustment=后复权"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.009
+    title: "行情：选复权 不复权"
+    precondition: "market Tab"
+    steps:
+      - "adjustment=不复权"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.010
+    title: "行情：设开始日期"
+    precondition: "market Tab"
+    steps:
+      - "选 startDate"
+    expected: "ui.startDate 有值"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.011
+    title: "行情：设结束日期"
+    precondition: "market Tab"
+    steps:
+      - "选 endDate"
+    expected: "ui.endDate 有值"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.012
+    title: "行情：点击查询"
+    precondition: "参数已设"
+    steps:
+      - "点查询行情"
+    expected: "queryQuantBars 调用"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.013
+    title: "行情：K 线渲染"
+    precondition: "有 bars"
+    steps:
+      - "查 svg"
+    expected: "brain-quant-market-chart 有 rect"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.014
+    title: "行情：空态文案"
+    precondition: "无 bars"
+    steps:
+      - "查 empty"
+    expected: "暂无行情数据"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.015
+    title: "行情：状态栏"
+    precondition: "market Tab"
+    steps:
+      - "读 status"
+    expected: "含不连接真实券商"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.016
+    title: "行情：区间涨跌幅"
+    precondition: "有 bars"
+    steps:
+      - "读 span"
+    expected: "含 %"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.market.017
+    title: "行情：轴标签"
+    precondition: "有 bars"
+    steps:
+      - "读 axis"
+    expected: "最高/最低"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.001
+    title: "组合：进入 Tab"
+    precondition: "已选项目"
+    steps:
+      - "portfolio Tab"
+    expected: "brain-quant-portfolio-view"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.002
+    title: "组合：总资产卡"
+    precondition: "portfolio Tab"
+    steps:
+      - "读 article"
+    expected: "totalValue 显示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.003
+    title: "组合：收益率卡"
+    precondition: "portfolio Tab"
+    steps:
+      - "读收益率"
+    expected: "percent 显示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.004
+    title: "组合：资金曲线"
+    precondition: "有成交"
+    steps:
+      - "读 svg path"
+    expected: "equityPath 非空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.005
+    title: "组合：无成交曲线空态"
+    precondition: "无成交"
+    steps:
+      - "读 small"
+    expected: "完成第一笔模拟交易"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.006
+    title: "组合：模拟买入第 1 次"
+    precondition: "有行情"
+    steps:
+      - "点 brain-quant-buy"
+    expected: "orderStatus 含买入；fills 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.007
+    title: "组合：模拟买入第 2 次"
+    precondition: "有行情"
+    steps:
+      - "点 brain-quant-buy"
+    expected: "orderStatus 含买入；fills 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.008
+    title: "组合：模拟买入第 3 次"
+    precondition: "有行情"
+    steps:
+      - "点 brain-quant-buy"
+    expected: "orderStatus 含买入；fills 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.009
+    title: "组合：模拟买入第 4 次"
+    precondition: "有行情"
+    steps:
+      - "点 brain-quant-buy"
+    expected: "orderStatus 含买入；fills 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.010
+    title: "组合：模拟买入第 5 次"
+    precondition: "有行情"
+    steps:
+      - "点 brain-quant-buy"
+    expected: "orderStatus 含买入；fills 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.011
+    title: "组合：模拟卖出第 1 次"
+    precondition: "有持仓"
+    steps:
+      - "点 brain-quant-sell"
+    expected: "orderStatus 含卖出"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.012
+    title: "组合：模拟卖出第 2 次"
+    precondition: "有持仓"
+    steps:
+      - "点 brain-quant-sell"
+    expected: "orderStatus 含卖出"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.013
+    title: "组合：模拟卖出第 3 次"
+    precondition: "有持仓"
+    steps:
+      - "点 brain-quant-sell"
+    expected: "orderStatus 含卖出"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.014
+    title: "组合：改数量 100"
+    precondition: "portfolio"
+    steps:
+      - "quantity=100"
+    expected: "input 值 100"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.015
+    title: "组合：改数量 500"
+    precondition: "portfolio"
+    steps:
+      - "quantity=500"
+    expected: "input 值 500"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.016
+    title: "组合：ledger 守恒"
+    precondition: "多笔交易后"
+    steps:
+      - "cash+marketValue=totalValue"
+    expected: "守恒成立"
+    automation: IPC
+    blocking: true
+  - opId: quant.L1.portfolio.017
+    title: "组合：持仓列表"
+    precondition: "有持仓"
+    steps:
+      - "brain-quant-positions"
+    expected: "li 非空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.018
+    title: "组合：成交记录"
+    precondition: "有 fills"
+    steps:
+      - "fill-list"
+    expected: "article 非空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.portfolio.019
+    title: "组合：无行情禁买"
+    precondition: "bars 空"
+    steps:
+      - "点买入"
+    expected: "暂无真实行情"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.strategy.001
+    title: "策略：进入 Tab"
+    precondition: "已选项目"
+    steps:
+      - "strategy Tab"
+    expected: "brain-quant-skills"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.strategy.002
+    title: "策略：空态"
+    precondition: "无 performance"
+    steps:
+      - "读 empty"
+    expected: "尚无 Skill 模拟收益"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.strategy.003
+    title: "策略：performance 列表"
+    precondition: "有 run"
+    steps:
+      - "读 schedule-list"
+    expected: "含 skillId 与收益"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.001
+    title: "雷达：进入 Tab"
+    precondition: "已选项目"
+    steps:
+      - "radar Tab"
+    expected: "股市雷达 header"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.002
+    title: "雷达：输入 skillId"
+    precondition: "radar Tab"
+    steps:
+      - "改 skillId"
+    expected: "input 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.003
+    title: "雷达：选交易所 SSE"
+    precondition: "radar Tab"
+    steps:
+      - "exchange=SSE"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.004
+    title: "雷达：选交易所 SZSE"
+    precondition: "radar Tab"
+    steps:
+      - "exchange=SZSE"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.005
+    title: "雷达：选交易所 BSE"
+    precondition: "radar Tab"
+    steps:
+      - "exchange=BSE"
+    expected: "select 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.006
+    title: "雷达：设执行时间"
+    precondition: "radar Tab"
+    steps:
+      - "runAt=15:10"
+    expected: "time input 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.007
+    title: "雷达：创建计划第 1 个"
+    precondition: "参数已设"
+    steps:
+      - "创建模拟计划"
+    expected: "schedules 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.008
+    title: "雷达：创建计划第 2 个"
+    precondition: "参数已设"
+    steps:
+      - "创建模拟计划"
+    expected: "schedules 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.009
+    title: "雷达：创建计划第 3 个"
+    precondition: "参数已设"
+    steps:
+      - "创建模拟计划"
+    expected: "schedules 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.010
+    title: "雷达：创建计划第 4 个"
+    precondition: "参数已设"
+    steps:
+      - "创建模拟计划"
+    expected: "schedules 增加"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.011
+    title: "雷达：启用/暂停第 1 个"
+    precondition: "有 schedule"
+    steps:
+      - "toggle enabled"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.012
+    title: "雷达：启用/暂停第 2 个"
+    precondition: "有 schedule"
+    steps:
+      - "toggle enabled"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.013
+    title: "雷达：启用/暂停第 3 个"
+    precondition: "有 schedule"
+    steps:
+      - "toggle enabled"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.014
+    title: "雷达：启用/暂停第 4 个"
+    precondition: "有 schedule"
+    steps:
+      - "toggle enabled"
+    expected: "状态切换"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.015
+    title: "雷达：展开记录第 1 个"
+    precondition: "有 schedule"
+    steps:
+      - "查看记录"
+    expected: "run-list 可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.016
+    title: "雷达：展开记录第 2 个"
+    precondition: "有 schedule"
+    steps:
+      - "查看记录"
+    expected: "run-list 可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.017
+    title: "雷达：展开记录第 3 个"
+    precondition: "有 schedule"
+    steps:
+      - "查看记录"
+    expected: "run-list 可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.018
+    title: "雷达：展开记录第 4 个"
+    precondition: "有 schedule"
+    steps:
+      - "查看记录"
+    expected: "run-list 可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.radar.019
+    title: "雷达：空态"
+    precondition: "无 schedule"
+    steps:
+      - "读 empty"
+    expected: "尚未创建量化 Skill 计划"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.section.research.001
+    title: "研究笔记：进入编辑器"
+    precondition: "已选项目"
+    steps:
+      - "打开 research Tab"
+    expected: "brain-section-research 可见"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.section.research.002
+    title: "研究笔记：加载内容"
+    precondition: "编辑器可见"
+    steps:
+      - "等待 load"
+    expected: "state=ready 或 idle"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.section.research.003
+    title: "研究笔记：编辑内容"
+    precondition: "ready"
+    steps:
+      - "textarea 输入文本"
+    expected: "dirty 标记"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.section.research.004
+    title: "研究笔记：保存"
+    precondition: "有改动"
+    steps:
+      - "点保存"
+    expected: "revision+1"
+    automation: CDP
+    blocking: true
+  - opId: quant.L1.section.research.005
+    title: "研究笔记：保存后标签"
+    precondition: "已保存"
+    steps:
+      - "读 updatedLabel"
+    expected: "含修订号"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.section.research.006
+    title: "研究笔记：无项目空态"
+    precondition: "无 projectId"
+    steps:
+      - "打开 Tab"
+    expected: "请先选择项目"
+    automation: CDP
+    blocking: false
+  - opId: quant.L1.section.research.007
+    title: "研究笔记：冲突重载"
+    precondition: "模拟冲突"
+    steps:
+      - "点重新加载"
+    expected: "content 刷新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.001
+    title: "行情查询→买入→ledger"
+    precondition: "quant 项目就绪"
+    steps:
+      - "设 symbol"
+      - "查询"
+      - "买入"
+    expected: "fills+ledger"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.002
+    title: "切换标的→再查询"
+    precondition: "quant 项目就绪"
+    steps:
+      - "改 symbol"
+      - "查询"
+    expected: "chart 更新"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.003
+    title: "创建 radar→启用"
+    precondition: "quant 项目就绪"
+    steps:
+      - "创建计划"
+      - "启用"
+    expected: "schedule enabled"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.004
+    title: "research 链 scheduleId"
+    precondition: "quant 项目就绪"
+    steps:
+      - "写笔记"
+      - "保存"
+    expected: "含 schedule 引用"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.005
+    title: "多笔买卖守恒"
+    precondition: "quant 项目就绪"
+    steps:
+      - "买3卖2"
+    expected: "ledger 守恒"
+    automation: IPC
+    blocking: true
+  - opId: quant.L2.chain.006
+    title: "strategy performance 出现"
+    precondition: "quant 项目就绪"
+    steps:
+      - "run schedule"
+    expected: "performance 非空"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.007
+    title: "portfolio 曲线"
+    precondition: "quant 项目就绪"
+    steps:
+      - "2笔交易"
+    expected: "equity svg"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.008
+    title: "三周期各查一次"
+    precondition: "quant 项目就绪"
+    steps:
+      - "日/周/月"
+    expected: "三次 query"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.009
+    title: "三复权各查一次"
+    precondition: "quant 项目就绪"
+    steps:
+      - "前/后/不复"
+    expected: "三次 query"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.010
+    title: "activity 时间线"
+    precondition: "quant 项目就绪"
+    steps:
+      - "交易后"
+    expected: "getQuantActivity"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.011
+    title: "雷达展开 runs"
+    precondition: "quant 项目就绪"
+    steps:
+      - "创建"
+      - "展开"
+    expected: "run-list"
+    automation: CDP
+    blocking: false
+  - opId: quant.L2.chain.012
+    title: "会话 createQuantSession"
+    precondition: "quant 项目就绪"
+    steps:
+      - "进场景"
+    expected: "session 创建"
+    automation: IPC
+    blocking: false
+  - opId: quant.L3.001
+    title: "重启恢复 1"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 1 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.002
+    title: "重启恢复 2"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 2 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.003
+    title: "重启恢复 3"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 3 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.004
+    title: "重启恢复 4"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 4 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.005
+    title: "重启恢复 5"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 5 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.006
+    title: "重启恢复 6"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 6 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.007
+    title: "重启恢复 7"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 7 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.008
+    title: "重启恢复 8"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 8 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.009
+    title: "重启恢复 9"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 9 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.010
+    title: "重启恢复 10"
+    precondition: "深案例完成"
+    steps:
+      - "重启应用"
+    expected: "状态 10 持久化"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.011
+    title: "异常用例 1"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.012
+    title: "异常用例 2"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.013
+    title: "异常用例 3"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.014
+    title: "异常用例 4"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.015
+    title: "异常用例 5"
+    precondition: "边界条件"
+    steps:
+      - "触发异常"
+    expected: "友好提示"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.016
+    title: "隔离：quant 项目不在 game"
+    precondition: "有项目"
+    steps:
+      - "切 game"
+    expected: "列表不含"
+    automation: IPC
+    blocking: true
+  - opId: quant.L3.017
+    title: "隔离：quant 项目不在 video"
+    precondition: "有项目"
+    steps:
+      - "切 video"
+    expected: "列表不含"
+    automation: IPC
+    blocking: true
+  - opId: quant.L3.018
+    title: "隔离：quant 项目不在 music"
+    precondition: "有项目"
+    steps:
+      - "切 music"
+    expected: "列表不含"
+    automation: IPC
+    blocking: true
+  - opId: quant.L3.019
+    title: "快速切场景 5 次"
+    precondition: "多场景"
+    steps:
+      - "连切 5 次"
+    expected: "UI 正常"
+    automation: CDP
+    blocking: false
+  - opId: quant.L3.020
+    title: "快速切场景 10 次"
+    precondition: "多场景"
+    steps:
+      - "连切 10 次"
+    expected: "无 exit 70"
+    automation: CDP
+    blocking: false

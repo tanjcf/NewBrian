@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Start</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">
+            本目录为“可实现版”页面集合：不再用截图当 UI，而是用 HTML/CSS 结构化实现。<br />
+            原 Axure 导出仍保留在 <code>../0514原型</code>。
+          </div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html"><div class="t">Start</div><div class="d">目录/预览</div></a>
+          <a class="nav-item" href="./新对话.html"><div class="t">新对话</div><div class="d">会话创建</div></a>
+          <a class="nav-item" href="./自动化.html"><div class="t">自动化</div><div class="d">定时/流程</div></a>
+          <a class="nav-item" href="./扩展.html"><div class="t">扩展</div><div class="d">扩展管理</div></a>
+          <a class="nav-item" href="./插件.html"><div class="t">插件</div><div class="d">插件市场/管理</div></a>
+          <a class="nav-item" href="./技能.html"><div class="t">技能</div><div class="d">技能列表/详情</div></a>
+          <a class="nav-item" href="./mcp服务器.html"><div class="t">MCP服务器</div><div class="d">MCP 管理</div></a>
+          <a class="nav-item" href="./设置.html"><div class="t">设置</div><div class="d">偏好/通用</div></a>
+          <a class="nav-item" href="./计费与订阅.html"><div class="t">计费与订阅</div><div class="d">套餐/账单</div></a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure 入口：<a href="../0514原型/start.html" target="_blank" rel="noreferrer">../0514原型/start.html</a></div>
+          <div>建议先从左侧选页开始浏览。</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb>0514原型（CSS实现版）</div>
+            <div class="page-title" data-page-title>Start</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <a class="btn" href="../0514原型/preview-all.html" target="_blank" rel="noreferrer">原型全览</a>
+            <a class="btn" href="../0514原型/start.html" target="_blank" rel="noreferrer">查看原型</a>
+          </div>
+        </div>
+        <div class="content">
+          <div class="canvas">
+            <div class="layout">
+              <section class="pane">
+                <h1 class="h1">实现说明</h1>
+                <p class="p">
+                  这个目录用于替代 Axure 导出中“图片拼 UI”的方式：把界面结构拆成可维护的 HTML/CSS。
+                  当前版本是一个可扩展的骨架（导航、布局、组件样式变量）。
+                </p>
+                <div class="list">
+                  <div class="card">
+                    <div class="k">保留源文件</div>
+                    <div class="v">不会修改 <code>../0514原型</code> 内任何文件</div>
+                  </div>
+                  <div class="card">
+                    <div class="k">实现策略</div>
+                    <div class="v">优先结构/交互语义，其次再做像素级还原</div>
+                  </div>
+                  <div class="card">
+                    <div class="k">下一步</div>
+                    <div class="v">逐页补齐列表、表格、表单、对话框等组件</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="pane">
+                <h1 class="h1">页面清单</h1>
+                <p class="p">点击右侧按钮或左侧导航进入页面。</p>
+                <div class="list">
+                  <div class="card">
+                    <div class="k">新对话</div>
+                    <div class="v"><a href="./新对话.html">打开</a></div>
+                  </div>
+                  <div class="card">
+                    <div class="k">自动化</div>
+                    <div class="v"><a href="./自动化.html">打开</a></div>
+                  </div>
+                  <div class="card">
+                    <div class="k">扩展 / 插件 / 技能 / MCP服务器</div>
+                    <div class="v">从左侧导航进入</div>
+                  </div>
+                  <div class="card">
+                    <div class="k">设置 / 计费与订阅</div>
+                    <div class="v">从左侧导航进入</div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

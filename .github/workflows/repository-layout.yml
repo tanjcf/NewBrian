@@ -1,0 +1,23 @@
+name: Repository layout
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify-layout:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [macos-arm64, macos-x64, ubuntu-arm64, ubuntu-x64, windows]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify source layers
+        run: node scripts/verify-layout.mjs
+      - name: Materialize platform workspace
+        run: node scripts/materialize.mjs ${{ matrix.platform }}
+      - name: Verify platform manifest
+        run: node -e "const fs=require('node:fs'); const p='.materialized/${{ matrix.platform }}/package.json'; JSON.parse(fs.readFileSync(p, 'utf8'));"

@@ -1,0 +1,17 @@
+{
+  "name": "newbrain-ubuntu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NewBrain desktop workspace for Ubuntu Linux.",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev:desktop": "pnpm --dir apps/desktop dev",
+    "dev:agentd": "pnpm --dir apps/agentd dev",
+    "build:desktop": "pnpm --dir apps/desktop build",
+    "package:linux:x64": "pnpm --dir apps/desktop package:linux:x64",
+    "package:linux:arm64": "pnpm --dir apps/desktop package:linux:arm64",
+    "build": "pnpm -r build",
+    "check": "pnpm -r check",
+    "check:desktop": "pnpm --dir apps/desktop check"
+  }
+}

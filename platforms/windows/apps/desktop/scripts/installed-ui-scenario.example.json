@@ -1,0 +1,15 @@
+{
+  "id": "HOLON-GENERIC-EXAMPLE",
+  "windowTitle": "NewBrain",
+  "steps": [
+    { "action": "screenshot", "output": "01-before.png" },
+    { "action": "click", "name": "Holon" },
+    { "action": "assertVisible", "name": "远程任务" },
+    { "action": "click", "name": "刷新并领取" },
+    { "action": "assertVisible", "name": "准备执行" },
+    { "action": "click", "name": "准备执行" },
+    { "action": "assertVisible", "name": "确认执行" },
+    { "action": "click", "name": "确认执行" },
+    { "action": "assertVisible", "automationId": "approval-dialog", "timeoutMs": 30000 }
+  ]
+}

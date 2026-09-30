@@ -1,0 +1,43 @@
+.brain-quant-chart-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  color: var(--text-secondary, #666);
+  font-size: 11px;
+}
+.brain-quant-chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.brain-quant-chart-legend i { width: 15px; height: 3px; border-radius: 2px; background: currentColor; }
+.brain-quant-chart-legend i.candle { height: 10px; background: #ef4444; }
+.brain-quant-chart-legend i.ma5 { color: #f0a020; }
+.brain-quant-chart-legend i.ma10 { color: #3b82f6; }
+.brain-quant-chart-legend i.ma20 { color: #8b5cf6; }
+.brain-quant-chart-legend i.volume { height: 10px; color: #c7cdd5; }
+.brain-quant-datazoom {
+  position: relative;
+  height: 22px;
+  margin-top: 8px;
+  border: 1px solid #bfd0ee;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #f2f6ff, #dce8fc);
+}
+.brain-quant-datazoom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  appearance: none;
+}
+.brain-quant-datazoom input::-webkit-slider-thumb {
+  width: 8px;
+  height: 20px;
+  border: 1px solid #8aa9db;
+  border-radius: 2px;
+  background: #f8fbff;
+  pointer-events: auto;
+  appearance: none;
+  cursor: ew-resize;
+}

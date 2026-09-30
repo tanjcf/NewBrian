@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>开机简报 · 交互原型</title>
+  <style>
+    :root {
+      --bg: #ededed;
+      --ink: #191919;
+      --mute: #6b7280;
+      --line: #e5e5e5;
+      --paper: #ffffff;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--ink);
+      background: #e8eaee;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+
+    .proto-bar {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      background: #1c2430;
+      color: #fff;
+    }
+    .proto-bar strong { font-size: 13px; }
+    .proto-bar span { color: #b8c0cc; font-size: 12px; }
+    .proto-bar .spacer { flex: 1; }
+    .proto-bar button {
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .app {
+      height: calc(100% - 48px);
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      background: var(--bg);
+    }
+    .side {
+      background: #f7f7f7;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+      padding: 14px 12px;
+      gap: 6px;
+    }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 2px 6px 10px; }
+    .logo { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(145deg, #2f6bff, #7aa2ff); }
+    .side-label { font-size: 11px; color: var(--mute); padding: 8px 8px 2px; }
+    .thread {
+      text-align: left;
+      border: 0;
+      background: transparent;
+      border-radius: 8px;
+      padding: 9px 10px;
+    }
+    .thread.active { background: #fff; }
+    .thread b { display: block; font-size: 13px; }
+    .thread em { font-style: normal; color: var(--mute); font-size: 12px; }
+    .account {
+      margin-top: auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #2457d6; color: #fff;
+      display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    }
+    .account b { display: block; font-size: 13px; }
+    .account em { font-style: normal; color: #067647; font-size: 12px; }
+
+    .main { display: flex; flex-direction: column; min-width: 0; background: #ededed; }
+    .top {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      background: #f7f7f7;
+      border-bottom: 1px solid #ddd;
+    }
+    .top b { font-size: 14px; }
+    .pill {
+      font-size: 12px;
+      color: #067647;
+      background: #ecfdf3;
+      border-radius: 999px;
+      padding: 3px 8px;
+    }
+
+    .stage { flex: 1; overflow: auto; padding: 18px 16px 8px; }
+    .column { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+    .msg { display: flex; gap: 8px; align-items: flex-start; }
+    .msg.user { flex-direction: row-reverse; }
+    .dot {
+      width: 36px; height: 36px; border-radius: 6px; flex: none;
+      background: #2457d6; color: #fff;
+      display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    }
+    .msg.user .dot { background: #5b6573; }
+    .bubble {
+      max-width: min(560px, calc(100% - 48px));
+      background: #fff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      line-height: 1.75;
+      font-size: 15px;
+      white-space: pre-wrap;
+    }
+    .bubble.digest {
+      background: var(--paper);
+      border: 1px solid #e6e6e6;
+    }
+    .msg.user .bubble { background: #e8eefe; }
+
+    .composer-wrap { padding: 8px 16px 16px; }
+    .composer {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px;
+    }
+    .suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .suggestions button {
+      border: 0;
+      background: #f3f4f6;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    .row { display: flex; gap: 8px; align-items: flex-end; }
+    textarea {
+      flex: 1;
+      border: 0;
+      resize: none;
+      outline: none;
+      min-height: 42px;
+      padding: 8px;
+      font: inherit;
+      line-height: 1.5;
+    }
+    .send {
+      border: 0;
+      background: #2457d6;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 14px;
+    }
+
+    .handoff {
+      position: absolute;
+      inset: 48px 0 0 0;
+      background: rgba(237,237,237,.96);
+      display: grid;
+      place-items: center;
+      z-index: 5;
+    }
+    .handoff[hidden] { display: none; }
+    .handoff-card {
+      width: min(420px, calc(100% - 32px));
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .handoff-card h2 { margin: 0 0 8px; font-size: 18px; }
+    .handoff-card p { margin: 0; color: var(--mute); line-height: 1.6; font-size: 14px; }
+    .pair { margin-top: 14px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+    .device { border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 13px; }
+    .device b { display: block; }
+    .device em { font-style: normal; color: #067647; font-size: 12px; }
+
+    @media (max-width: 800px) {
+      .app { grid-template-columns: 1fr; }
+      .side { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="proto-bar">
+    <strong>交互原型</strong>
+    <span>正常对话输出。正文是示意，不是真实新闻。</span>
+    <div class="spacer"></div>
+    <button type="button" id="replay">重播开机</button>
+    <button type="button" id="fail">某一类没搜到</button>
+    <button type="button" id="seen">当天已看过</button>
+  </div>
+
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><i class="logo"></i> newbrain</div>
+      <div class="side-label">固定</div>
+      <button class="thread active" type="button"><b>今日简报</b><em>开机自动打开</em></button>
+      <div class="side-label">最近</div>
+      <button class="thread" type="button"><b>核聚变阶段梳理</b><em>昨天</em></button>
+      <div class="account">
+        <div class="avatar">林</div>
+        <div><b>林舟</b><em>网页和桌面同一账号</em></div>
+      </div>
+    </aside>
+    <section class="main">
+      <header class="top">
+        <b>今日简报</b>
+        <span class="pill" id="day-pill">今天第一次开机</span>
+      </header>
+      <div class="stage"><div class="column" id="feed"></div></div>
+      <div class="composer-wrap">
+        <div class="composer">
+          <div class="suggestions" id="suggestions"></div>
+          <div class="row">
+            <textarea id="input" rows="2" placeholder="直接说，例如：把国际换成科技"></textarea>
+            <button class="send" id="send" type="button">发送</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="handoff" id="handoff" hidden>
+    <div class="handoff-card">
+      <h2>正在交给网页版</h2>
+      <p>桌面软件已经登录。网页版不另输密码，接上同一个账号后再发早报。</p>
+      <div class="pair">
+        <div class="device"><b>桌面软件</b><em>已登录 · 林舟</em></div>
+        <div>→</div>
+        <div class="device"><b>网页版 /app</b><em id="web-state">交接中</em></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const LINES = {
+      国际: [
+        "示例 · 多边峰会就航运通道发联合声明",
+        "示例 · 欧洲能源价格一夜上涨",
+        "示例 · 世卫通报西非聚集性病例仍在追踪"
+      ],
+      国内: [
+        "示例 · 长三角城际时刻表今天调整",
+        "示例 · 新一批消费补贴细则公布",
+        "示例 · 气象台提示未来两天有较强降雨"
+      ],
+      科技: [
+        "示例 · 开源模型发布新的长上下文版本",
+        "示例 · 芯片厂宣布下一代封装量产",
+        "示例 · 商业航天完成一次回收试飞"
+      ],
+      杭州: [
+        "示例 · 西湖景区周末发布限流通知",
+        "示例 · 地铁 5 号线早高峰加密"
+      ],
+      上海: [
+        "示例 · 外滩夜间灯光测试提前结束",
+        "示例 · 浦东机场早班有延误提示"
+      ],
+      成都: [
+        "示例 · 春熙路周末步行街交通管制",
+        "示例 · 地铁 18 号线短时限流"
+      ],
+      新能源: [
+        "示例 · 沿海风电本日出力偏高",
+        "示例 · 动力电池回收试点扩围"
+      ]
+    };
+
+    const state = {
+      first: "国际",
+      city: "杭州",
+      cityNote: "按网络位置估计",
+      interest: "",
+      missing: "",
+      greeted: false
+    };
+
+    const feed = document.getElementById("feed");
+    const input = document.getElementById("input");
+
+    function node(tag, className, text) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (text != null) el.textContent = text;
+      return el;
+    }
+
+    function digestText() {
+      const cityLabel = state.city + (state.cityNote ? "（" + state.cityNote + "）" : "");
+      const blocks = [
+        ["国际", state.first === "国际" ? LINES.国际 : null],
+        ["国内", LINES.国内],
+        [cityLabel, LINES[state.city] || LINES.杭州],
+        ["科技", state.first === "科技" ? LINES.科技 : null]
+      ].filter((pair) => pair[1]);
+
+      if (state.interest === "新能源") {
+        blocks.unshift(["新能源", LINES.新能源]);
+      }
+
+      const lines = [];
+      lines.push("早，林舟。今天是 9 月 30 日，星期三。下面是今天的热点，每条一行。");
+      lines.push("");
+      let n = 1;
+      blocks.forEach(([label, items]) => {
+        if (state.missing && (label === state.missing || label.indexOf(state.missing) === 0)) {
+          lines.push(n + "、" + label + "：今天没有拉到可用来源。");
+          n += 1;
+          return;
+        }
+        items.forEach((item) => {
+          lines.push(n + "、" + label + "：" + item);
+          n += 1;
+        });
+      });
+      return lines.join("\n");
+    }
+
+    function renderDigest() {
+      let row = document.getElementById("digest");
+      if (!row) {
+        row = node("div", "msg");
+        row.id = "digest";
+        row.appendChild(node("div", "dot", "新"));
+        const bubble = node("div", "bubble digest");
+        bubble.id = "digest-text";
+        row.appendChild(bubble);
+        feed.prepend(row);
+      }
+      document.getElementById("digest-text").textContent = digestText();
+    }
+
+    function push(role, text) {
+      const row = node("div", "msg" + (role === "user" ? " user" : ""));
+      row.appendChild(node("div", "dot", role === "user" ? "林" : "新"));
+      row.appendChild(node("div", "bubble", text));
+      feed.appendChild(row);
+      document.querySelector(".stage").scrollTop = document.querySelector(".stage").scrollHeight;
+    }
+
+    function showBrief() {
+      feed.replaceChildren();
+      state.greeted = true;
+      state.missing = "";
+      document.getElementById("day-pill").textContent = "今天第一次开机";
+      renderDigest();
+    }
+
+    function apply(raw) {
+      const text = String(raw || "").trim();
+      if (!text) return;
+      if (!state.greeted) showBrief();
+      push("user", text);
+      state.missing = "";
+
+      if (/刷新/.test(text)) {
+        renderDigest();
+        push("assistant", "按现在的方向又整理了一条。");
+        return;
+      }
+      if (/上海/.test(text)) {
+        state.city = "上海";
+        state.cityNote = "你改过的城市";
+        renderDigest();
+        push("assistant", "城市改成上海了，明天还按上海。");
+        return;
+      }
+      if (/成都/.test(text)) {
+        state.city = "成都";
+        state.cityNote = "你改过的城市";
+        renderDigest();
+        push("assistant", "城市改成成都了。");
+        return;
+      }
+      if (/科技/.test(text)) {
+        state.first = "科技";
+        renderDigest();
+        push("assistant", "国际那一块换成科技了，国内和所在城市还在。");
+        return;
+      }
+      if (/国际/.test(text)) {
+        state.first = "国际";
+        renderDigest();
+        push("assistant", "第一块改回国际了。");
+        return;
+      }
+      if (/新能源/.test(text)) {
+        state.interest = "新能源";
+        renderDigest();
+        push("assistant", "加上新能源了，还是同一条早报。");
+        return;
+      }
+      push("assistant", "可以说「把国际换成科技」「我在上海」或「多看新能源」。");
+    }
+
+    ["把国际换成科技", "我在上海", "多看新能源", "再刷新一次"].forEach((text) => {
+      const button = node("button", "", text);
+      button.type = "button";
+      button.addEventListener("click", () => apply(text));
+      document.getElementById("suggestions").appendChild(button);
+    });
+
+    document.getElementById("send").addEventListener("click", () => {
+      apply(input.value);
+      input.value = "";
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        apply(input.value);
+        input.value = "";
+      }
+    });
+
+    function play() {
+      const handoff = document.getElementById("handoff");
+      document.getElementById("web-state").textContent = "交接中";
+      handoff.hidden = false;
+      feed.replaceChildren();
+      window.setTimeout(() => {
+        document.getElementById("web-state").textContent = "已登录 · 林舟";
+      }, 600);
+      window.setTimeout(() => {
+        handoff.hidden = true;
+        showBrief();
+      }, 1200);
+    }
+
+    document.getElementById("replay").addEventListener("click", play);
+    document.getElementById("seen").addEventListener("click", () => {
+      document.getElementById("handoff").hidden = true;
+      feed.replaceChildren();
+      state.greeted = true;
+      document.getElementById("day-pill").textContent = "今天已经看过";
+      push("assistant", "早。今天这份已经发过了，我不再重复发。要改方向就直接说。");
+    });
+    document.getElementById("fail").addEventListener("click", () => {
+      document.getElementById("handoff").hidden = true;
+      if (!state.greeted) showBrief();
+      state.missing = state.first;
+      renderDigest();
+      push("assistant", "这一类今天没有来源，我空着，不另编一条。");
+    });
+
+    play();
+  </script>
+</body>
+</html>

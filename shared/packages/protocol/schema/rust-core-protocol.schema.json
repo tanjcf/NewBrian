@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brain.local/schema/rust-core-protocol-v1.json",
+  "protocol_version": "1",
+  "request": {
+    "required": [
+      "protocol_version",
+      "request_id",
+      "project_id",
+      "workspace_type",
+      "operation",
+      "approval_token",
+      "resource_limits",
+      "payload"
+    ],
+    "resource_limits": {
+      "timeout_ms": { "description": "Compatibility field. BRAIN execution is event-driven and this value must be 0.", "const": 0 },
+      "max_output_bytes": { "minimum": 1, "maximum": 16777216 }
+    },
+    "additionalProperties": false
+  },
+  "response": {
+    "required": [
+      "protocol_version",
+      "request_id",
+      "status",
+      "error_code",
+      "artifacts"
+    ],
+    "status": ["accepted", "running", "completed", "failed", "cancelled"],
+    "additionalProperties": false
+  }
+}

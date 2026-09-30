@@ -1,0 +1,13 @@
+{
+  "protocol": "newbrain.agent.v1",
+  "runtime_protocol_version": 1,
+  "transport": {
+    "control_plane": "https-json",
+    "runtime_events": "sse",
+    "local_ipc": "same-dto"
+  },
+  "authority_mode": "hybrid_local_checkpoint_spring_policy",
+  "market": {
+    "direct_clawhub_allowed": false
+  }
+}

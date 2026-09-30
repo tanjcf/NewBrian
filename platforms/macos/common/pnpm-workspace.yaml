@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  electron: true
+  esbuild: true
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+overrides:
+  rollup: npm:@rollup/wasm-node@4.60.2

@@ -1,0 +1,250 @@
+{
+  "skills": [
+    {
+      "id": "skill-windows-project-manager",
+      "name": "windows-project-manager",
+      "summary": "Always-on Project OS + preference shadow. Durable architecture in repo-root NEWBRAIN.md; preferences learned under .newbrain via PAHF.",
+      "status": "enabled"
+    },
+    {
+      "id": "skill-i-eat-tomatoes-author",
+      "name": "i-eat-tomatoes-author",
+      "summary": "Chinese web-novel authoring skill for original xuanhuan, xianxia, cultivation, adventure, progression, emotional stakes, and cinematic battle scenes inspired by common genre techniques without copying any living author's protected expression.",
+      "status": "enabled"
+    },
+    {
+      "id": "skill-codex-pm",
+      "name": "codex-pm",
+      "summary": "Use when the user needs product-management help for Codex or a Codex-like AI coding product, including product analysis, PRD drafting, roadmap planning, UX review, safety workflow design, skill strategy, or competitive teardown.",
+      "status": "enabled"
+    },
+    {
+      "id": "skill-tomato-novel-author",
+      "name": "tomato-novel-author",
+      "summary": "Codex skill",
+      "status": "enabled"
+    },
+    {
+      "id": "skill-thread-fork",
+      "name": "线程分叉",
+      "summary": "从当前线程快速复制上下文，适合并行推进不同方案。",
+      "status": "enabled"
+    },
+    {
+      "id": "skill-workspace-scan",
+      "name": "工作区扫描",
+      "summary": "重新扫描当前项目文件树，适合切换目录后刷新上下文。",
+      "status": "enabled"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "plugin-browser",
+      "name": "Browser",
+      "summary": "使用 NewBrain 浏览器预览打开并验证页面。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:browser",
+      "manifestPath": "builtin:browser/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "browser",
+        "preview",
+        "verification"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\browser\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-computer",
+      "name": "Computer",
+      "summary": "通过审批保护的本机工具安全操作 Windows。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:computer",
+      "manifestPath": "builtin:computer/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "computer",
+        "windows",
+        "approval"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\computer\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-documents",
+      "name": "Documents",
+      "summary": "创建、编辑、检查并验证 Word 文档。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:documents",
+      "manifestPath": "builtin:documents/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "docx",
+        "documents",
+        "artifact-verification"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\documents\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-pdf",
+      "name": "PDF",
+      "summary": "读取、创建、渲染并验证 PDF 文件。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:pdf",
+      "manifestPath": "builtin:pdf/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "pdf",
+        "render",
+        "artifact-verification"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\pdf\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-spreadsheets",
+      "name": "Spreadsheets",
+      "summary": "创建、编辑、分析并验证电子表格。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:spreadsheets",
+      "manifestPath": "builtin:spreadsheets/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "xlsx",
+        "csv",
+        "charts"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\spreadsheets\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-presentations",
+      "name": "Presentations",
+      "summary": "创建、编辑、检查并验证演示文稿。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:presentations",
+      "manifestPath": "builtin:presentations/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "pptx",
+        "slides",
+        "artifact-verification"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\presentations\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-template-creator",
+      "name": "Template Creator",
+      "summary": "从 Office 文件创建可复用模板。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:template-creator",
+      "manifestPath": "builtin:template-creator/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "templates",
+        "artifacts"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\template-creator\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-sites",
+      "name": "Sites",
+      "summary": "构建并验证本地网站和 Web 应用。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:sites",
+      "manifestPath": "builtin:sites/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "sites",
+        "html",
+        "local-preview"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\sites\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-visualize",
+      "name": "Visualize",
+      "summary": "创建可交互的本地可视化、图表和说明工具。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:visualize",
+      "manifestPath": "builtin:visualize/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "visualize",
+        "html",
+        "charts"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\visualize\\skills"
+      ],
+      "mcpServerIds": []
+    },
+    {
+      "id": "plugin-default-templates",
+      "name": "Default Templates",
+      "summary": "使用经过验证的默认模板创建办公文件。",
+      "version": "1.0.0",
+      "status": "enabled",
+      "source": "builtin:default-templates",
+      "manifestPath": "builtin:default-templates/.codex-plugin/plugin.json",
+      "publisher": "NewBrain",
+      "capabilities": [
+        "templates",
+        "documents",
+        "spreadsheets",
+        "presentations"
+      ],
+      "skillRoots": [
+        "I:\\G盘迁移备份\\workrpase\\NewBrain\\windows\\apps\\desktop\\build\\plugins\\default-templates\\skills"
+      ],
+      "mcpServerIds": []
+    }
+  ],
+  "automations": [
+    {
+      "id": "automation-git-check",
+      "title": "Git 巡检",
+      "status": "idle",
+      "trigger": "按固定间隔刷新 Git 状态并写入时间线",
+      "action": "git_status",
+      "intervalMinutes": 60
+    },
+    {
+      "id": "automation-workspace-scan",
+      "title": "工作区扫描",
+      "status": "idle",
+      "trigger": "按固定间隔刷新文件树",
+      "action": "workspace_scan",
+      "intervalMinutes": 30
+    }
+  ]
+}

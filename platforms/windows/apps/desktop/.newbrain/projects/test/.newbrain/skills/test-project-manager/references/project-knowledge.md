@@ -1,0 +1,8 @@
+# Project Knowledge
+
+## 2026-07-18T11:40:17.713Z
+- Project path: G:\workrpase\NewBrain\windows\apps\desktop\.newbrain\projects\test
+- Each project maintains its own knowledge files for project description, architecture, feature details, and phase summaries.
+
+## 2026-07-18T11:41:08.379Z
+- User request: 请起草一篇约300字的市级政务服务内部工作部署讲话，面向部门工作人员，不虚构政策名称、数据或日期；提纲确认后再形成正文。; Assistant result: 本轮使用 Skill：government-research-writing。 提纲将以精简结构呈现，聚焦核心部署方向。 --- ## 写作提纲 **一、开篇（约40字）** - 简要肯定近期工作状态，点明会议目的：统一认识、明确重点。 **二、核心部署（约200字）** - **服务提质**：强调窗口服务标准化、办事流程优化，提升群众体验。 - **效率提速**：推动事项办理时限压缩，强化首问负责、限时办结。 - **协作提效**：打破科室壁垒，加强信息共享与联动配合。 **三、收尾（约60字）** - 号召全体以务实作风抓落实，用实际成效检验工作。 --- 请确认以上提纲是否符合预期，可选择：

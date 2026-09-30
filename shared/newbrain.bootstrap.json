@@ -1,0 +1,24 @@
+{
+  "environments": [
+    {
+      "id": "conda",
+      "label": "Conda 环境",
+      "enabled": true
+    },
+    {
+      "id": "python",
+      "label": "Python 运行时",
+      "enabled": true
+    },
+    {
+      "id": "node",
+      "label": "Node.js 运行时",
+      "enabled": true
+    },
+    {
+      "id": "project-deps",
+      "label": "项目依赖",
+      "enabled": true
+    }
+  ]
+}

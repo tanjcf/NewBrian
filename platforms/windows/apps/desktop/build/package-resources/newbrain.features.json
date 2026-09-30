@@ -1,0 +1,34 @@
+﻿{
+    "skills":  [
+
+               ],
+    "plugins":  [
+                    {
+                        "id":  "plugin-git-console",
+                        "name":  "Git Console",
+                        "summary":  "Built-in Git workspace helper.",
+                        "status":  "connected",
+                        "version":  "builtin",
+                        "source":  "builtin",
+                        "capabilities":  [
+                                             "git",
+                                             "workspace"
+                                         ]
+                    },
+                    {
+                        "id":  "plugin-shell-runner",
+                        "name":  "Shell Runner",
+                        "summary":  "Built-in shell command runner.",
+                        "status":  "connected",
+                        "version":  "builtin",
+                        "source":  "builtin",
+                        "capabilities":  [
+                                             "shell",
+                                             "approval"
+                                         ]
+                    }
+                ],
+    "automations":  [
+
+                    ]
+}

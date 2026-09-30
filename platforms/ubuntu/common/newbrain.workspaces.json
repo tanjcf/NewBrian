@@ -1,0 +1,18 @@
+{
+  "workspaces": [
+    {
+      "id": "workspace-newbrain",
+      "name": "mac",
+      "path": "G:\\workrpase\\NewBrain\\mac",
+      "threads": [
+        {
+          "id": "thread-default",
+          "title": "默认线程",
+          "summary": "线程 默认线程 已创建，可在这里积累该项目空间下的上下文记忆。",
+          "updatedAt": "2026-05-20T11:55:42.246Z",
+          "lastEventSummary": "线程内容已更新"
+        }
+      ]
+    }
+  ]
+}

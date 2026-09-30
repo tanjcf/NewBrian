@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "baseUrl": "../../",
+    "paths": {
+      "@codex-forge/protocol": ["packages/protocol/src/index.ts"],
+      "@codex-forge/ui": ["packages/ui/src/index.ts"]
+    }
+  },
+  "include": ["src", "electron.vite.config.ts"]
+}

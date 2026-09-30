@@ -1,0 +1,18 @@
+{
+  "name": "default-templates",
+  "version": "0.1.0",
+  "description": "Create artifacts from verified default templates.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Default Templates",
+    "shortDescription": "Use Default Templates in Codex.",
+    "longDescription": "Default Templates adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Default Templates."
+  }
+}

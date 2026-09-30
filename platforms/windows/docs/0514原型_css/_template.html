@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{TITLE}}</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="sb-title">0514原型（CSS实现版）</div>
+          <div class="sb-sub">保留原 Axure 版本不改，本目录为可实现/可维护的 HTML+CSS 重做版。</div>
+        </div>
+        <nav class="sb-nav" data-nav>
+          <a class="nav-item" href="./start.html">
+            <div class="t">Start</div><div class="d">目录/预览</div>
+          </a>
+          <a class="nav-item" href="./新对话.html">
+            <div class="t">新对话</div><div class="d">会话创建</div>
+          </a>
+          <a class="nav-item" href="./自动化.html">
+            <div class="t">自动化</div><div class="d">定时/流程</div>
+          </a>
+          <a class="nav-item" href="./扩展.html">
+            <div class="t">扩展</div><div class="d">扩展管理</div>
+          </a>
+          <a class="nav-item" href="./插件.html">
+            <div class="t">插件</div><div class="d">插件市场/管理</div>
+          </a>
+          <a class="nav-item" href="./技能.html">
+            <div class="t">技能</div><div class="d">技能列表/详情</div>
+          </a>
+          <a class="nav-item" href="./mcp服务器.html">
+            <div class="t">MCP服务器</div><div class="d">MCP 管理</div>
+          </a>
+          <a class="nav-item" href="./设置.html">
+            <div class="t">设置</div><div class="d">偏好/通用</div>
+          </a>
+          <a class="nav-item" href="./计费与订阅.html">
+            <div class="t">计费与订阅</div><div class="d">套餐/账单</div>
+          </a>
+        </nav>
+        <div class="sb-foot">
+          <div>原 Axure 入口：<a href="../0514原型/start.html" target="_blank" rel="noreferrer">../0514原型/start.html</a></div>
+          <div>本目录入口：<a href="./start.html">./start.html</a></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="crumb" data-crumb></div>
+            <div class="page-title" data-page-title>{{TITLE}}</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-copy-link>复制链接</button>
+            <a class="btn" href="../0514原型/start.html" target="_blank" rel="noreferrer">查看原型</a>
+          </div>
+        </div>
+        <div class="content">
+          <div class="canvas">
+            {{BODY}}
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

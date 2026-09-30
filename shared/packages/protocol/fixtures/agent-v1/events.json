@@ -1,0 +1,25 @@
+{
+  "events": [
+    "session.updated",
+    "message.created",
+    "message.delta",
+    "turn.started",
+    "turn.status",
+    "turn.completed",
+    "tool.proposed",
+    "approval.required",
+    "approval.resolved",
+    "tool.started",
+    "tool.progress",
+    "tool.completed",
+    "skill.context_injected",
+    "error",
+    "heartbeat"
+  ],
+  "commands": [
+    "turn.start",
+    "turn.cancel",
+    "approval.resolve",
+    "skill.set_enabled"
+  ]
+}

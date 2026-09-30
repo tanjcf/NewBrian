@@ -1,0 +1,18 @@
+{
+  "name": "sites",
+  "version": "0.1.0",
+  "description": "Build and verify local websites and web applications.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Sites",
+    "shortDescription": "Use Sites in Codex.",
+    "longDescription": "Sites adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Sites."
+  }
+}

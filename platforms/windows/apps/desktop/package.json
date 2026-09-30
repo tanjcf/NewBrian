@@ -1,0 +1,237 @@
+{
+  "name": "@codex-forge/desktop",
+  "version": "1.4.23",
+  "private": true,
+  "description": "Desktop shell for the NewBrain local-first coding agent workbench.",
+  "author": "NewBrain",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
+    "dev": "node node_modules/electron-vite/bin/electron-vite.js dev",
+    "prebuild": "pnpm --filter @codex-forge/protocol build && node scripts/sync-document-worker.mjs",
+    "build": "node node_modules/electron-vite/bin/electron-vite.js build && node scripts/repair-bundle-cjs-shim.mjs",
+    "package:win-msi": "node node_modules/electron-builder/cli.js --win msi",
+    "package:mac": "node node_modules/electron-builder/cli.js --mac dmg zip",
+    "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test:settings": "node --test src/renderer/app/settings-general.test.mjs src/renderer/app/composer-layout.test.mjs",
+    "test:application-services": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/internal-chat-workspace-catalog-service.test.ts src/main/workspace-catalog-conda-service.test.ts src/main/environment-discovery-service.test.ts src/main/bootstrap-state-service.test.ts src/main/managed-conda-installer-service.test.ts src/main/thread-state-service.test.ts src/main/workspace-thread-lifecycle-service.test.ts src/main/workspace-worktree-service.test.ts src/main/thread-rollout-lifecycle-service.test.ts src/main/thread-rollout-recovery-service.test.ts src/main/delegated-agent-control-service.test.ts src/main/delegated-agent-ipc-service.test.ts src/main/delegated-agent-loop-service.test.ts src/main/delegated-model-step.test.ts src/main/delegated-agent-run-service.test.ts src/main/composer-attachment-service.test.ts src/main/desktop-artifact-preview-service.test.ts src/main/desktop-native-capability-service.test.ts src/main/workspace-file-service.test.ts src/main/model-config-service.test.ts src/main/browser-preview-service.test.ts src/main/agent-host-agent-service.test.ts src/main/agent-host-model-callbacks.test.ts src/main/model-chat-preparation-service.test.ts src/main/model-auto-router.test.ts src/main/authorized-model-catalog.test.ts src/main/skill-routing.test.ts src/main/model-chat-goal-service.test.ts src/main/model-chat-task-service.test.ts src/main/model-chat-service.test.ts src/main/model-chat-timing.test.ts src/main/model-chat-agent-loop-service.test.ts src/main/model-chat-event-projector.test.ts src/main/model-chat-step-service.test.ts src/main/model-chat-failure-service.test.ts src/main/model-chat-run-persistence-service.test.ts src/main/agent-loop-boundary-persistence.test.ts src/main/model-stream-visibility.test.ts src/main/native-tool-prompt-policy.test.ts",
+    "test:agent-host-runtime": "node scripts/test-agent-host-lifecycle.mjs",
+    "test:agent-host-chat": "node --experimental-strip-types scripts/test-agent-host-chat-lifecycle.mjs",
+    "test:agent-host-electron": "node scripts/test-electron-agent-host.mjs",
+    "test:ui-runtime": "node scripts/test-electron-ui.mjs",
+    "test:usage-exception-feedback-runtime": "node scripts/test-electron-usage-exception-feedback.mjs",
+    "test:usage-exception-feedback-two-user": "node scripts/test-electron-usage-exception-two-user.mjs",
+    "test:usage-exception-feedback-msi": "node scripts/test-msi-usage-exception-feedback.mjs",
+    "test:holon-runtime": "node scripts/test-electron-holon-flow.mjs && node scripts/test-electron-holon-restart.mjs",
+    "test:holon-two-user": "node scripts/test-electron-holon-two-user.mjs",
+    "test:artifact-side-panel-runtime": "node scripts/test-electron-artifact-side-panel.mjs",
+    "test:composer-runtime": "node scripts/test-electron-composer-layout.mjs",
+    "test:approval-runtime": "node scripts/test-electron-approval-flow.mjs",
+    "test:media-workspace-runtime": "node scripts/test-electron-media-workspace.mjs",
+    "test:game-workspace-runtime": "node scripts/test-electron-game-workspace.mjs",
+    "test:game-level-editor-runtime": "node scripts/test-electron-game-level-editor.mjs",
+    "test:workspace-section-restart-runtime": "node scripts/test-electron-workspace-section-restart.mjs",
+    "test:flow-workspace-runtime": "node scripts/test-electron-flow-workspace.mjs",
+    "test:data-workspace-runtime": "node scripts/test-electron-data-workspace.mjs",
+    "test:quant-workspace-runtime": "node scripts/test-electron-quant-workspace.mjs",
+    "test:document-revision-runtime": "node scripts/test-electron-brain-document-revision.mjs",
+    "test:pdf-annotation-runtime": "node scripts/test-electron-brain-pdf-annotation.mjs",
+    "test:seven-workspace-l2": "node scripts/test-electron-seven-workspace-l2.mjs",
+    "test:game-template-runtime": "node scripts/test-electron-game-template.mjs",
+    "test:engine-auto-install-runtime": "node scripts/test-electron-engine-auto-install.mjs",
+    "test:openclaw-media-gateway": "node --experimental-strip-types scripts/test-openclaw-media-gateway-e2e.mjs",
+    "test:writing-format-matrix": "node --experimental-strip-types scripts/test-writing-format-matrix.mjs",
+    "test:government-runtime": "node scripts/test-electron-government-flow.mjs",
+    "test:government-multiturn-runtime": "node scripts/test-electron-government-multiturn.mjs",
+    "test:government-attachments-runtime": "node scripts/test-electron-government-attachments.mjs",
+    "test:thread-recovery-runtime": "node scripts/test-electron-thread-recovery.mjs",
+    "test:ui-links": "node --experimental-strip-types --test src/renderer/app/local-file-link.test.ts src/renderer/app/model-attachment-policy.test.ts src/renderer/app/new-chat-target.test.ts src/renderer/app/thread-activity-policy.test.ts src/renderer/app/workspace-visibility.test.ts",
+    "test:markdown": "node --experimental-strip-types --test src/renderer/app/streaming-markdown.test.mjs src/renderer/app/markdown-table.test.ts src/renderer/app/markdown-renderer.test.mjs",
+    "test:research-writing": "node --experimental-strip-types --test src/renderer/app/research-writing.test.mjs",
+    "test:security": "node --experimental-strip-types --test src/main/security-regressions.test.mjs src/main/mobile-pairing-guard.test.ts src/main/mobile-bridge-service.test.ts src/main/research-writing-ipc.test.ts src/main/composer-ipc.test.ts src/main/collaboration-ipc.test.ts src/main/workspace-lifecycle-ipc.test.ts src/main/mcp-call-ipc.test.ts src/main/core-session-ipc.test.ts src/main/app-menu-ipc.test.ts src/main/runtime-control-ipc.test.ts src/main/model-chat-ipc.test.ts src/main/model-gateway-protocol.test.ts src/main/mcp-server-config.test.ts src/main/desktop-preferences-config.test.ts src/main/feature-config-normalization.test.ts src/main/repository-plugin-feature-sync.test.ts src/main/thread-context-policy.test.ts src/main/skill-scaffold-policy.test.ts src/main/workspace-catalog-policy.test.ts src/main/desktop-billing-policy.test.ts src/main/desktop-auth-policy.test.ts src/main/model-config-policy.test.ts src/main/root-config-policy.test.ts src/main/thread-state-factory.test.ts src/main/thread-event-policy.test.ts src/main/terminal-session-service.test.ts src/main/system-tool-policy.test.ts src/main/desktop-device-policy.test.ts src/main/bootstrap-config-policy.test.ts",
+    "test:storage": "node --experimental-strip-types --test src/main/codex-storage.test.ts src/main/rollout-store.test.ts src/main/openai-wire.test.ts src/main/mcp-framing.test.ts src/main/desktop-control-plane.test.ts src/main/desktop-device.test.ts src/main/government-goal-workflow.test.ts src/main/government-writing-output.test.ts src/main/government-outline-decision.test.ts src/main/government-writing-finalization.test.ts src/main/thread-message-reconciliation.test.ts src/main/path-security.test.ts src/main/output-summary.test.ts src/main/skill-selection.test.ts src/main/agent-collaboration.test.ts src/main/attachment-security.test.ts src/main/git-command.test.ts src/main/application-skill-policy.test.ts src/main/bounded-extractor.test.ts src/main/research-intake.test.ts src/main/research-intake-service.test.ts src/main/central-skills.test.ts src/main/growth-control-plane-service.test.ts src/main/growth-host-service.test.ts src/main/growth-ipc.test.ts src/main/personal-memory-store.test.ts",
+    "test:growth-g1-local": "node --experimental-strip-types scripts/test-growth-g1-local.mjs",
+    "test:growth-g2-local": "node --experimental-strip-types scripts/test-growth-g2-local.mjs",
+    "test:growth-g3-local": "node --experimental-strip-types scripts/test-growth-g3-local.mjs",
+    "test:growth-g4-local": "node --experimental-strip-types scripts/test-growth-g4-local.mjs",
+    "package:win-ulit": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/package-win-ulit-patch.ps1"
+  },
+  "dependencies": {
+    "yaml": "2.8.1",
+    "@aiden0z/pptx-renderer": "1.2.4",
+    "@napi-rs/canvas": "0.1.80",
+    "@uzen/kokoro-js": "1.2.4",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.1",
+    "katex": "^0.18.0",
+    "mammoth": "^1.12.0",
+    "mermaid": "^11.16.0",
+    "parse5": "7.3.0",
+    "@pdf-lib/fontkit": "1.1.1",
+    "pdf-lib": "1.17.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "5.4.296",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "saxes": "5.0.1"
+  },
+  "devDependencies": {
+    "@codex-forge/protocol": "workspace:*",
+    "@codex-forge/ui": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.0.0"
+  },
+  "main": "out/main/index.js",
+  "build": {
+    "appId": "cn.newbrain.desktop",
+    "executableName": "newbrain",
+    "productName": "NewBrain",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "node_modules/jszip/**",
+      "node_modules/exceljs/**",
+      "node_modules/pdf-parse/**",
+      "node_modules/pdfjs-dist/**",
+      "node_modules/@uzen/kokoro-js/**",
+      "node_modules/@huggingface/transformers/**",
+      "node_modules/phonemizer/**",
+      "node_modules/pinyin-pro/**"
+    ],
+    "asarUnpack": [
+      "**/novel-tts-kokoro-worker.js",
+      "node_modules/@uzen/kokoro-js/**",
+      "node_modules/@huggingface/transformers/**",
+      "node_modules/@huggingface/jinja/**",
+      "node_modules/@huggingface/tokenizers/**",
+      "node_modules/onnxruntime-node/**",
+      "node_modules/phonemizer/**",
+      "node_modules/pinyin-pro/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/garden",
+        "to": "garden"
+      },
+      {
+        "from": "build/package-resources/newbrain.config.json",
+        "to": "newbrain.config.json"
+      },
+      {
+        "from": "build/package-resources/newbrain.features.json",
+        "to": "newbrain.features.json"
+      },
+      {
+        "from": "../../newbrain.bootstrap.json",
+        "to": "newbrain.bootstrap.json"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "newbrain.ico"
+      },
+      {
+        "from": "build/tray.ico",
+        "to": "newbrain-tray.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "newbrain.png"
+      },
+      {
+        "from": "build/plugins",
+        "to": "plugins"
+      },
+      {
+        "from": "../../../../shared/apps/desktop/resources/experts",
+        "to": "experts"
+      },
+      {
+        "from": "resources/novel-tts",
+        "to": "novel-tts"
+      },
+      {
+        "from": "document-worker.js",
+        "to": "document-worker.js"
+      },
+      {
+        "from": "scripts/windows-installed-ui-driver.ps1",
+        "to": "windows-ui-driver/windows-installed-ui-driver.ps1"
+      },
+      {
+        "from": "scripts/native-ui-scenario.mjs",
+        "to": "windows-ui-driver/native-ui-scenario.mjs"
+      },
+      {
+        "from": "build/rust-core/brain-core.exe",
+        "to": "brain-core/brain-core.exe"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
+      }
+    ],
+    "msiProjectCreated": "build/msi-project-created.cjs",
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true,
+      "target": [
+        {
+          "target": "nsis"
+        },
+        {
+          "target": "msi"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "include": "installer.nsh",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NewBrain",
+      "menuCategory": false,
+      "artifactName": "${productName} ${version}-setup.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "displayLanguageSelector": false
+    },
+    "msi": {
+      "upgradeCode": "2D97097C-03A2-54F7-B1D4-7E34233F7A65",
+      "oneClick": false,
+      "additionalLightArgs": [
+        "-loc",
+        "newbrain-localization.wxl",
+        "-sval",
+        "-ct",
+        "1"
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

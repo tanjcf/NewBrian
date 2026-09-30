@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NewBrain Product Mock</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="frame">
+    <aside class="rail">
+      <div class="rail-top">
+        <div class="logo">CN</div>
+        <button class="rail-icon active">工作台</button>
+        <button class="rail-icon">任务</button>
+        <button class="rail-icon">历史</button>
+        <button class="rail-icon">自动化</button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-icon">设置</button>
+      </div>
+    </aside>
+
+    <section class="sidebar">
+      <div class="sidebar-head">
+        <div>
+          <span class="eyebrow">Workspace</span>
+          <h1>NewBrain</h1>
+        </div>
+        <button class="ghost compact">切换仓库</button>
+      </div>
+
+      <div class="workspace-card">
+        <strong>/Users/jctanking/workerpases/测试/NewBrain</strong>
+        <p>macOS Phase 1 本地工程，当前已挂载单工作区。</p>
+        <div class="stat-row">
+          <span><b>01</b> Active session</span>
+          <span><b>12</b> Files indexed</span>
+        </div>
+      </div>
+
+      <div class="section-head">
+        <h2>会话</h2>
+        <span>最近</span>
+      </div>
+      <div class="session-list">
+        <button class="session-card active">
+          <strong>Phase 1: Local Agent</strong>
+          <p>审批中的 shell 扫描与 patch 预览</p>
+          <span>进行中</span>
+        </button>
+        <button class="session-card">
+          <strong>UI Product Mock</strong>
+          <p>产品界面稿与布局推演</p>
+          <span>草稿</span>
+        </button>
+        <button class="session-card">
+          <strong>Runtime Contract</strong>
+          <p>协议层和 agentd 状态机设计</p>
+          <span>已保存</span>
+        </button>
+      </div>
+
+      <div class="section-head">
+        <h2>目录</h2>
+        <span>附加上下文</span>
+      </div>
+      <ul class="tree">
+        <li>apps</li>
+        <li class="depth-1">desktop</li>
+        <li class="depth-2">prototype</li>
+        <li class="depth-3 active">index.html</li>
+        <li class="depth-3">styles.css</li>
+        <li class="depth-1">agentd</li>
+        <li>packages</li>
+        <li class="depth-1">protocol</li>
+      </ul>
+    </section>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Product View</span>
+          <h2>本地 coding agent 桌面工作台</h2>
+        </div>
+        <div class="topbar-actions">
+          <button class="ghost">查看 diff</button>
+          <button class="ghost">运行测试</button>
+          <button class="primary">启动任务</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <h3>像 Codex 一样工作，但先从单机闭环开始</h3>
+          <p>
+            中央是任务与对话主画布，右侧是审批、patch 和执行日志检查器。用户始终能看到 agent 在读什么、准备执行什么、修改了什么。
+          </p>
+        </div>
+        <div class="hero-metrics">
+          <div class="metric">
+            <span>Session</span>
+            <strong>Awaiting approval</strong>
+          </div>
+          <div class="metric">
+            <span>Runtime</span>
+            <strong>agentd-local</strong>
+          </div>
+          <div class="metric">
+            <span>Shell</span>
+            <strong>zsh</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="canvas">
+        <div class="center-column">
+          <nav class="tabs">
+            <button class="tab active" data-panel="task">任务</button>
+            <button class="tab" data-panel="plan">计划</button>
+            <button class="tab" data-panel="diff">改动</button>
+            <button class="tab" data-panel="terminal">终端</button>
+          </nav>
+
+          <section class="panel active" data-panel="task">
+            <article class="card composer-card">
+              <div class="card-head">
+                <h3>任务输入</h3>
+                <span>本地单机模式</span>
+              </div>
+              <div class="prompt-box">
+                <p>帮我把第一阶段的 mac 客户端做成可运行 Electron 工程，并保留审批式执行链路。</p>
+              </div>
+              <div class="chip-row">
+                <span class="chip">读取文件</span>
+                <span class="chip">shell 扫描</span>
+                <span class="chip">patch 预览</span>
+                <span class="chip danger">写入需批准</span>
+              </div>
+            </article>
+
+            <article class="card conversation-card">
+              <div class="card-head">
+                <h3>对话与执行轨迹</h3>
+                <span>3 steps</span>
+              </div>
+              <div class="timeline">
+                <div class="bubble user">
+                  <span class="role">User</span>
+                  <p>先尝试第一个阶段，并把产品界面画出来。</p>
+                </div>
+                <div class="bubble assistant">
+                  <span class="role">Assistant</span>
+                  <p>我先把第一阶段的工程骨架搭起来，再把它从技术原型推进成产品工作台界面。</p>
+                </div>
+                <div class="bubble tool">
+                  <span class="role">Approval</span>
+                  <p>允许只读扫描当前 workspace 吗？命令为 <code>rg --files</code>。</p>
+                </div>
+              </div>
+              <div class="composer">
+                <input type="text" value="下一步：补齐 shell runner、patch apply 和 approval drawer" readonly />
+                <button class="primary">加入队列</button>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="plan">
+            <article class="card plan-card">
+              <div class="card-head">
+                <h3>阶段 1 执行计划</h3>
+                <span>4 milestones</span>
+              </div>
+              <ol class="plan-list">
+                <li>完成 Electron main/preload/renderer 启动链路</li>
+                <li>定义会话、审批、patch、run log 协议</li>
+                <li>接入本地 shell 执行与只读扫描</li>
+                <li>接入 patch review 与手工 apply</li>
+              </ol>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="diff">
+            <article class="card diff-card">
+              <div class="card-head">
+                <h3>Patch Preview</h3>
+                <span>1 file changed</span>
+              </div>
+              <p class="diff-summary">将 prototype 升级为更像产品的桌面工作台，补充多栏布局与状态检查器。</p>
+              <pre>@@ prototype/index.html
++ add app rail
++ add session sidebar
++ add task canvas and inspector
++ add tabbed work area</pre>
+            </article>
+          </section>
+
+          <section class="panel" data-panel="terminal">
+            <article class="card terminal-card">
+              <div class="card-head">
+                <h3>命令输出</h3>
+                <span>read only</span>
+              </div>
+              <pre>$ rg --files
+apps/desktop/prototype/index.html
+apps/desktop/prototype/styles.css
+apps/desktop/prototype/main.js
+packages/protocol/src/index.ts</pre>
+            </article>
+          </section>
+        </div>
+
+        <aside class="inspector">
+          <article class="card approval-card">
+            <div class="card-head">
+              <h3>审批卡片</h3>
+              <span class="badge medium">Medium risk</span>
+            </div>
+            <p class="muted">Allow a read-only workspace scan on macOS?</p>
+            <dl class="detail-list">
+              <div><dt>Tool</dt><dd>shell</dd></div>
+              <div><dt>Command</dt><dd><code>rg --files</code></dd></div>
+              <div><dt>Scope</dt><dd>当前挂载仓库</dd></div>
+            </dl>
+            <div class="actions">
+              <button class="ghost">拒绝</button>
+              <button class="primary" id="approveButton">批准</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h3>运行状态</h3>
+              <span class="badge success" id="runStatus">Queued</span>
+            </div>
+            <div class="run-stack">
+              <div class="run-item">
+                <strong>Workspace scan</strong>
+                <p><code>rg --files</code></p>
+              </div>
+              <div class="run-item">
+                <strong>Patch synthesis</strong>
+                <p>等待 shell 扫描完成后生成</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h3>上下文检查器</h3>
+              <span>active</span>
+            </div>
+            <ul class="inspector-list">
+              <li>当前模型：本地占位 runtime</li>
+              <li>路径边界：仅限 NewBrain 工作区</li>
+              <li>写入策略：apply patch 前必须确认</li>
+              <li>后续阶段：引入 worktree 与多 agent</li>
+            </ul>
+          </article>
+        </aside>
+      </section>
+    </main>
+  </div>
+  <script src="./main.js"></script>
+</body>
+</html>
