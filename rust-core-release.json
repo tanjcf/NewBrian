@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.0",
+  "version": "2.1",
   "windows": {
     "fileName": "brain-core.exe",
-    "url": "",
-    "sha256": "",
+    "url": "https://github.com/tanjcf/NewBrian/releases/download/release_1.4.32/brain-core.exe",
+    "sha256": "933dd029f8ac5d1328a5056fb998d6b37110bf7e5e7e8453b4b787e4191c9300",
     "signer": ""
   },
   "unix": {
