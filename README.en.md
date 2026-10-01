@@ -29,7 +29,7 @@
 </p>
 
 <p align="center">
-  <sub>When you are logged in, an official model is handled by spring-app.</sub>
+  <sub>When you are logged in, an official model is handled by sinnauze.</sub>
 </p>
 
 ---
@@ -43,8 +43,8 @@
       The desktop is free to use. Open it, write, and send. The installer is not a separate purchase.
     </td>
     <td width="50%" valign="top">
-      <h3>Official models use spring-app</h3>
-      After login, an official model is handled by spring-app.
+      <h3>Official models use sinnauze</h3>
+      After login, an official model is handled by sinnauze.
     </td>
   </tr>
   <tr>
@@ -68,7 +68,7 @@ One desktop does these things. Switching the scene at the top left also switches
 | Send | Type in the composer and send. That send is one operation. |
 | Project | One ongoing goal, with files, conversations, outputs, and tasks under it. |
 | Right panel | Files, outputs, and tasks stay put. A scene adds its own tools. |
-| Official model | After login, spring-app receives the operation and completes it. |
+| Official model | After login, sinnauze receives the operation and completes it. |
 | Your own model | Text chat calls the address you entered. The key stays on this computer. Image, video, and voice stay on official models. |
 
 Before you enter a specialty scene, NewBrian stays in scene exploration: the right side keeps only files, outputs, and tasks.
@@ -87,7 +87,7 @@ Before you enter a specialty scene, NewBrian stays in scene exploration: the rig
 
 ## Set an API key
 
-A spring-app user can set an API key and use that same key in these tools:
+A sinnauze user can set an API key and use that same key in these tools:
 
 <p align="center">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-111827?style=for-the-badge">
