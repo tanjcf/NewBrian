@@ -41,7 +41,14 @@ function includeManagedSource(source) {
   return true;
 }
 
-for (const required of [shared, rust, ...overlayPaths]) {
+let rustPresent = false;
+try {
+  rustPresent = (await stat(rust)).isDirectory();
+} catch {
+  rustPresent = false;
+}
+
+for (const required of [shared, ...overlayPaths]) {
   try {
     if (!(await stat(required)).isDirectory()) throw new Error();
   } catch {
@@ -49,11 +56,16 @@ for (const required of [shared, rust, ...overlayPaths]) {
     process.exit(1);
   }
 }
+if (!rustPresent) {
+  console.log("Rust source layer absent; packaging uses the published brain-core binary.");
+}
 
 await mkdir(outputRoot, { recursive: true });
 await rm(temporary, { recursive: true, force: true });
 await cp(shared, temporary, { recursive: true, force: true, filter: includeManagedSource });
-await cp(rust, path.join(temporary, "rust"), { recursive: true, force: true, filter: includeManagedSource });
+if (rustPresent) {
+  await cp(rust, path.join(temporary, "rust"), { recursive: true, force: true, filter: includeManagedSource });
+}
 for (const configName of ["newbrain.bootstrap.json", "newbrain.config.json", "newbrain.features.json", "newbrain.workspaces.json"]) {
   const candidates = [path.join(root, configName), path.join(shared, configName)];
   const source = candidates.find((candidate) => existsSync(candidate));

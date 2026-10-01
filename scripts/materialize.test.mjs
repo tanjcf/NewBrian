@@ -22,3 +22,17 @@ test("Windows materialization copies Rust source but preserves destination Cargo
   assert.equal(await readFile(path.join(root, ".materialized/windows/rust/brain-core/src/main.rs"), "utf8"), "fn main() {}\n");
   await assert.rejects(access(path.join(root, ".materialized/windows/rust/brain-core/target/debug/cache")));
 });
+
+test("Windows materialization continues when the Rust source layer is absent", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "brain-materialize-public-"));
+  for (const dir of ["scripts", "shared", "platforms/windows"]) {
+    await mkdir(path.join(root, dir), { recursive: true });
+  }
+  await copyFile(new URL("./materialize.mjs", import.meta.url), path.join(root, "scripts/materialize.mjs"));
+  await writeFile(path.join(root, "shared/package.json"), "{}\n");
+  const result = spawnSync(process.execPath, [path.join(root, "scripts/materialize.mjs"), "windows"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /published brain-core binary/);
+  assert.equal(await readFile(path.join(root, ".materialized/windows/package.json"), "utf8"), "{}\n");
+  await assert.rejects(access(path.join(root, ".materialized/windows/rust")));
+});

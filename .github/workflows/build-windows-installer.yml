@@ -2,27 +2,48 @@ name: Build Windows Installer
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "shared/**"
+      - "platforms/windows/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "rust-core-release.json"
+      - "newbrain.bootstrap.json"
+      - "newbrain.config.json"
+      - "newbrain.features.json"
+      - "newbrain.workspaces.json"
+      - ".github/workflows/build-windows-installer.yml"
 
 jobs:
   build-windows-installer:
     runs-on: windows-latest
+    timeout-minutes: 90
     env:
-      CODECN_REQUIRE_SIGNATURE: "true"
-      WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-      WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      NEWBRAIN_ALLOW_UNSIGNED: "true"
+      NEWBRAIN_SOURCE_ROOT: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm package:windows
+          cache-dependency-path: platforms/windows/pnpm-lock.yaml
+      - name: Materialize Windows workspace
+        run: node scripts/materialize.mjs windows
+      - name: Install dependencies
+        working-directory: .materialized/windows
+        run: pnpm install --frozen-lockfile
+      - name: Package unsigned production installer
+        working-directory: .materialized/windows
+        run: pnpm run package:win-msi:production
       - uses: actions/upload-artifact@v4
         with:
-          name: brain-windows-msi
-          path: release/**/*.msi
+          name: newbrian-windows-x64
           if-no-files-found: error
+          path: |
+            .materialized/windows/apps/desktop/release/production/*.msi
+            .materialized/windows/apps/desktop/release/production/*setup*.exe
