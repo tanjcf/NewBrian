@@ -8,6 +8,7 @@ import {
   type DesktopAuthSendCodeInput,
   type DesktopAuthStatus
 } from "@codex-forge/protocol";
+import type { RememberedLogin } from "../shared/remembered-login.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -28,6 +29,9 @@ interface AuthIpcServices {
   claimNationalDayGift: () => MaybePromise<unknown>;
   sendLoginCode: (input: DesktopAuthSendCodeInput) => MaybePromise<unknown>;
   login: (input: DesktopAuthLoginInput) => MaybePromise<DesktopAuthStatus>;
+  loadRememberedLogin: () => MaybePromise<RememberedLogin | null>;
+  saveRememberedLogin: (input: unknown) => MaybePromise<{ ok: true }>;
+  clearRememberedLogin: () => MaybePromise<{ ok: true }>;
   loginWithAlipayQr: (input: DesktopAuthAlipayQrLoginInput) => MaybePromise<DesktopAuthStatus>;
   changePassword: (input: DesktopAuthChangePasswordInput) => MaybePromise<unknown>;
   changeEmail: (input: DesktopAuthChangeEmailInput) => MaybePromise<unknown>;
@@ -61,6 +65,9 @@ export function registerAuthIpcHandlers(services: AuthIpcServices) {
   ipcMain.handle(desktopIpcChannels.auth.claimNationalDayGift, () => services.claimNationalDayGift());
   ipcMain.handle(desktopIpcChannels.auth.sendLoginCode, (_event, input: DesktopAuthSendCodeInput) => services.sendLoginCode(input));
   ipcMain.handle(desktopIpcChannels.auth.login, (_event, input: DesktopAuthLoginInput) => services.login(input));
+  ipcMain.handle(desktopIpcChannels.auth.loadRememberedLogin, () => services.loadRememberedLogin());
+  ipcMain.handle(desktopIpcChannels.auth.saveRememberedLogin, (_event, input: unknown) => services.saveRememberedLogin(input));
+  ipcMain.handle(desktopIpcChannels.auth.clearRememberedLogin, () => services.clearRememberedLogin());
   ipcMain.handle(desktopIpcChannels.auth.loginWithAlipayQr, (_event, input: DesktopAuthAlipayQrLoginInput) => {
     if (!input || typeof input.agreement_accepted !== "boolean") {
       throw new Error("支付宝扫码登录参数无效。");

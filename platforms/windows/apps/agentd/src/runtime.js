@@ -415,8 +415,14 @@ export class LocalAgentRuntime {
     return decision;
   }
 
+  setAgentLoopPermissionMode(mode) {
+    if (mode === "full" || mode === "agent" || mode === "approval") {
+      this.agentLoopPermissionMode = mode;
+    }
+  }
+
   startAgentLoop(messages, options = {}) {
-    const permissionMode = options.permissionMode ?? "approval";
+    this.agentLoopPermissionMode = options.permissionMode ?? "approval";
     const activeToolCalls = new Map();
     this.abortController = options.abortController ?? new AbortController();
     this.agentLoop = new AgentLoop({
@@ -425,7 +431,7 @@ export class LocalAgentRuntime {
       abortSignal: this.abortController.signal,
       maxSteps: options.maxSteps,
       allowedToolNames: options.allowedToolNames,
-      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, permissionMode),
+      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, this.agentLoopPermissionMode),
       onEvent: (event) => {
         const classification = classifyAgentEvent(event.type);
         this.sessionMachine.events.push(createAgentActivityEvent({

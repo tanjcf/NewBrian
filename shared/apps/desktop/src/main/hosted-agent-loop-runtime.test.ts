@@ -115,3 +115,39 @@ test("restores approval checkpoints without repeating completed side effects", a
   assert.equal(completed.finalContent, "recovered");
   assert.equal(toolCalls.length, 1);
 });
+
+test("switching to full access during a paused loop skips the next approval", async () => {
+  const modes: string[] = [];
+  let modelCalls = 0;
+  const runtime = runtimeModule.createHostedAgentLoopRuntime({
+    runtimeId: "runtime_1",
+    requestModel: async () => {
+      modelCalls += 1;
+      if (modelCalls === 1) {
+        return { toolCalls: [{ id: "call_1", name: "echo", arguments: { text: "one" } }] };
+      }
+      if (modelCalls === 2) {
+        return { toolCalls: [{ id: "call_2", name: "echo", arguments: { text: "two" } }] };
+      }
+      return { content: "done", toolCalls: [] };
+    },
+    requestPolicy: async (input: { permissionMode: string }) => {
+      modes.push(input.permissionMode);
+      return input.permissionMode === "full"
+        ? { decision: "allow", source: "permission", reason: "full" }
+        : { decision: "ask", source: "desktop-policy", reason: "approval required" };
+    },
+    requestTool: async () => ({ ok: true, output: "ok" })
+  });
+  runtime.startAgentLoop([{ role: "user", content: "go" }], {
+    permissionMode: "agent",
+    maxSteps: 8,
+    toolDescriptors: [echoTool]
+  });
+  const paused = await runtime.advanceAgentLoop();
+  assert.equal(paused.status, "awaiting-approval");
+  runtime.setPermissionMode("full");
+  const completed = await runtime.resumeAgentApproval(true);
+  assert.equal(completed.status, "completed");
+  assert.deepEqual(modes, ["agent", "full"]);
+});

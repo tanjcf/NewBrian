@@ -6,6 +6,7 @@ import {
   type OpenClawSkillInstallPathInput,
   type OpenClawSkillInspectPathInput,
   type OpenClawSkillSearchInput,
+  type OpenClawSkillImportZipToProjectInput,
   type OpenClawSkillSelectInstallInput,
   type UninstallWritingSkillsInput
 } from "@codex-forge/protocol";
@@ -15,6 +16,7 @@ interface OpenClawSkillIpcServices {
   installClawHub: (input: OpenClawSkillInstallClawHubInput) => unknown;
   installPath: (input: OpenClawSkillInstallPathInput) => unknown;
   selectAndInstall: (input: OpenClawSkillSelectInstallInput) => unknown;
+  importZipToProject: (input: OpenClawSkillImportZipToProjectInput) => unknown;
   inspectPath: (path: string) => unknown;
   exportZip: (input: OpenClawSkillExportZipInput) => unknown;
   uninstallWritingSkills: (input: UninstallWritingSkillsInput) => unknown;
@@ -50,6 +52,17 @@ function parsePathInstall(input: unknown): OpenClawSkillInstallPathInput {
   }
   return {
     path: input.path.trim(),
+    force: input.force === true,
+    acknowledgeRisk: input.acknowledgeRisk === true
+  };
+}
+
+function parseImportZipToProject(input: unknown): OpenClawSkillImportZipToProjectInput {
+  if (!isRecord(input) || typeof input.workspaceId !== "string" || !input.workspaceId.trim()) {
+    throw new TypeError("Project skill zip import requires workspaceId.");
+  }
+  return {
+    workspaceId: input.workspaceId.trim(),
     force: input.force === true,
     acknowledgeRisk: input.acknowledgeRisk === true
   };
@@ -117,6 +130,9 @@ export function registerOpenClawSkillIpcHandlers(services: OpenClawSkillIpcServi
   });
   ipcMain.handle(channels.selectAndInstall, (_event, input: unknown) => {
     return services.selectAndInstall(parseSelectInstall(input));
+  });
+  ipcMain.handle(channels.importZipToProject, (_event, input: unknown) => {
+    return services.importZipToProject(parseImportZipToProject(input));
   });
   ipcMain.handle(channels.inspectPath, (_event, input: unknown) => {
     return services.inspectPath(parseInspect(input).path);

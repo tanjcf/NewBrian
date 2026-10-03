@@ -45,6 +45,18 @@ test("project off overrides global auto; unknown task cannot inherit another tas
   await assert.rejects(f.service.authorize("review"), /CONFIRMATION_REQUIRED/);
   assert.equal((await f.service.propose("审查", f.choice)).status, "excluded_by_preference");
 });
+test("marketplace use records consent and then authorizes that expert", async () => {
+  const f = fixture();
+  f.deps.answer = (_goalId: string, questionId: string, answer: string) => {
+    const question = f.questions.find((item) => item.questionId === questionId);
+    question.status = "answered";
+    question.answer = answer;
+  };
+  await f.service.acceptExplicitChoice("review");
+  await f.service.authorize("review");
+  assert.equal(f.questions[0].answer, EXPERT_ACCEPT);
+  await assert.rejects(f.service.acceptExplicitChoice("missing"), /UNAVAILABLE/);
+});
 test("saving preferences requires separate scope confirmation and is not inferred from activation", async () => {
   const f = fixture();
   assert.equal((await f.service.preference("review", "auto")).status, "waiting_user");

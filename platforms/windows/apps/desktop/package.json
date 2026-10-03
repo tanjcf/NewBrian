@@ -1,6 +1,6 @@
 {
   "name": "@codex-forge/desktop",
-  "version": "1.4.23",
+  "version": "1.4.28",
   "private": true,
   "description": "Desktop shell for the NewBrain local-first coding agent workbench.",
   "author": "NewBrain",

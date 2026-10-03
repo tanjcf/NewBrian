@@ -404,6 +404,7 @@ export const brainWorkspaceIpcChannels = {
   quantSnapshot: "brain:quant:snapshot",
   quantActivity: "brain:quant:activity",
   quantSkillPerformance: "brain:quant:skill-performance",
+  quantSkillList: "brain:quant:skill-list",
   quantSkillRunSimulation: "brain:quant:skill-run-simulation",
   quantSkillActivity: "brain:quant:skill-activity",
   quantScheduleList: "brain:quant:schedule-list",

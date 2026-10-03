@@ -143,7 +143,8 @@ export function registerDesktopSessionRuntimeComposition(deps: DesktopSessionRun
   registerRuntimeControlIpcHandlers({
     cancelModelRequest: (input) => runtimeCommandService.cancelModelRequest(input),
     queueShellCommand: (command) => runtimeCommandService.queueShellCommand(command),
-    respondApproval: (sender, input) => approvalResumeService.respond(sender, input)
+    respondApproval: (sender, input) => approvalResumeService.respond(sender, input),
+    setLivePermissionMode: (input) => approvalResumeService.applyLivePermissionMode(input)
   });
   registerCoreSessionIpcHandlers({
     bootstrap: () => coreSessionService.bootstrap(),

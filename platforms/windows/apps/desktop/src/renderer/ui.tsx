@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { LoginScreen } from "./app/LoginScreen";
 import { WorkspaceModules } from "./app/WorkspaceModules";
 import { FeaturePanel } from "./app/FeaturePanel";
@@ -34,6 +34,7 @@ import {
   shouldCreateChatThreadBeforeSend,
   shouldCreateStandaloneChatThreadBeforeSend
 } from "./app/new-chat-target";
+import { composerSkillContextAfterReset } from "./app/composer-skill-context-reset";
 import {
   readThreadComposerSkills,
   skillForThread,
@@ -488,7 +489,14 @@ export function App() {
   const [showMcpToolPicker, setShowMcpToolPicker] = useState(false);
   const [selectedComposerTools, setSelectedComposerTools] = useState<ComposerToolChip[]>([]);
   const [selectedComposerSkill, setSelectedComposerSkill] = useState<SkillSpec | null>(null);
-  const [composerSkillContext, setComposerSkillContext] = useState("");
+  const [composerSkillContext, setComposerSkillContextState] = useState("");
+  // Same-turn creator entries set this before the new-chat reset effect runs.
+  // Null means the upcoming reset should blank leftover context.
+  const pendingComposerSkillContextRef = useRef<string | null>(null);
+  const setComposerSkillContext = useCallback((value: string) => {
+    pendingComposerSkillContextRef.current = value;
+    setComposerSkillContextState(value);
+  }, []);
   const [threadComposerSkills, setThreadComposerSkills] = useState<Record<string, ThreadComposerSkill>>(() => readThreadComposerSkills());
   const [composerModes, setComposerModes] = useState<Array<"goal" | "plan">>([]);
   const [authStatus, setAuthStatus] = useState<DesktopAuthStatusState>(initialDesktopAuthStatus);
@@ -1286,25 +1294,34 @@ export function App() {
     return () => window.removeEventListener("newbrain:app-command", handleAppCommand);
   }, [addExistingProject, api]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isComposingNewThread) return;
+    const pendingWrite = pendingComposerSkillContextRef.current;
     setSelectedComposerSkill(null);
-    setComposerSkillContext("");
     setSelectedComposerTools([]);
     setComposerModes([]);
+    setComposerSkillContextState(composerSkillContextAfterReset(pendingWrite));
   }, [isComposingNewThread]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isComposingNewThread) return;
+    const nextContext = composerSkillContextAfterReset(pendingComposerSkillContextRef.current);
     if (!selectedThreadId) {
       setSelectedComposerSkill(null);
-      setComposerSkillContext("");
+      setComposerSkillContextState(nextContext);
       return;
     }
     const bound = skillForThread(threadComposerSkills, selectedThreadId);
     setSelectedComposerSkill(bound ? { ...bound } as SkillSpec : null);
-    setComposerSkillContext("");
+    setComposerSkillContextState(nextContext);
   }, [selectedThreadId, isComposingNewThread]);
+
+  // Consume the same-turn creator write after layout effects have read it.
+  // A microtask clear can run before React 19 flushes the new-chat reset and
+  // drop "Automation Creator" before the user sends.
+  useEffect(() => {
+    pendingComposerSkillContextRef.current = null;
+  });
 
   function bindThreadComposerSkill(threadId: string | null | undefined, skill: SkillSpec | ThreadComposerSkill | null) {
     if (!threadId) {
@@ -1528,8 +1545,10 @@ export function App() {
       }));
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
+      return nextAuthStatus.authenticated === true;
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
+      return false;
     } finally {
       setIsSubmittingLogin(false);
     }
@@ -1603,14 +1622,17 @@ export function App() {
     forceStandaloneChat?: boolean;
     forceProjectThread?: boolean;
     targetWorkspaceId?: string;
+    targetThreadId?: string;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
+    keepComposer?: boolean;
   }) {
-    const draftQuestion = draftOverride?.question ?? question;
-    const draftImages = draftOverride?.images ?? composerImages;
-    const draftTools = draftOverride?.tools ?? selectedComposerTools;
-    const draftSkill = draftOverride?.skill ?? selectedComposerSkill;
-    const draftSkillContext = draftOverride?.skillContext ?? composerSkillContext;
-    const draftModes = draftOverride?.modes ?? composerModes;
+    const keepComposer = Boolean(draftOverride?.keepComposer);
+    const draftQuestion = draftOverride?.question ?? (keepComposer ? "" : question);
+    const draftImages = draftOverride?.images ?? (keepComposer ? [] : composerImages);
+    const draftTools = keepComposer ? (draftOverride?.tools ?? []) : (draftOverride?.tools ?? selectedComposerTools);
+    const draftSkill = keepComposer ? (draftOverride?.skill ?? null) : (draftOverride?.skill ?? selectedComposerSkill);
+    const draftSkillContext = draftOverride?.skillContext ?? (keepComposer ? "" : composerSkillContext);
+    const draftModes = draftOverride?.modes ?? (keepComposer ? [] : composerModes);
     const forceStandaloneChat = Boolean(draftOverride?.forceStandaloneChat);
     const forceProjectThread = Boolean(draftOverride?.forceProjectThread);
     const recoveryDraft = cloneNewChatComposerDraft({
@@ -1637,11 +1659,17 @@ export function App() {
     // Fresh composer sends often pass a draft override (question/images/tools).
     // Only queued-draft replays carry createdAt; those must not clear or re-queue.
     const isQueuedDraftReplay = Boolean(draftOverride?.createdAt);
-    const currentWorkspaceId = selectedWorkspaceIdRef.current || selectedWorkspaceId;
+    const pinnedWorkspaceId = String(draftOverride?.targetWorkspaceId || "").trim();
+    const pinnedThreadId = String(draftOverride?.targetThreadId || "").trim();
+    const currentWorkspaceId = (pinnedWorkspaceId && pinnedThreadId)
+      ? pinnedWorkspaceId
+      : (selectedWorkspaceIdRef.current || selectedWorkspaceId);
     const currentWorkspace =
       safeWorkspaceCatalog.find((workspace) => workspace.id === currentWorkspaceId) ??
       selectedWorkspace;
-    const currentThreadId = selectedThreadIdRef.current || selectedThreadId;
+    const currentThreadId = (pinnedWorkspaceId && pinnedThreadId)
+      ? pinnedThreadId
+      : (selectedThreadIdRef.current || selectedThreadId);
     const currentThread =
       currentWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
       selectedThread;
@@ -1668,16 +1696,18 @@ export function App() {
       };
       const nextQueue = enqueueComposerDraft(queuedComposerDraftsRef.current, nextDraft);
       setComposerQueue(nextQueue);
-      setQuestion("");
-      setComposerImages([]);
-      setSelectedComposerTools([]);
-      setComposerSkillContext("");
-      setComposerModes([]);
+      if (!keepComposer) {
+        setQuestion("");
+        setComposerImages([]);
+        setSelectedComposerTools([]);
+        setComposerSkillContext("");
+        setComposerModes([]);
+      }
       const position = nextQueue.filter((item) => item.threadId === nextDraft.threadId).length;
       setChatStatus(`已加入排队（第 ${position} 条），当前轮结束后按顺序发送。`);
-      return;
+      return "queued";
     }
-    if (!isQueuedDraftReplay) {
+    if (!isQueuedDraftReplay && !keepComposer) {
       setQuestion("");
       setComposerImages([]);
       setSelectedComposerTools([]);
@@ -1724,6 +1754,20 @@ export function App() {
       (targetWorkspaceId === currentWorkspaceId ? currentWorkspace : undefined);
     let targetThread = targetWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
       (targetWorkspaceId === currentWorkspaceId ? currentThread : undefined);
+    if (pinnedWorkspaceId && pinnedThreadId) {
+      targetWorkspaceId = pinnedWorkspaceId;
+      composingNewThread = false;
+      targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId);
+      if (!targetThread?.id) {
+        setErrorMessage("自动化绑定的对话线程不存在。");
+        setChatStatus("没有找到任务对应的对话。");
+        return "missing-thread";
+      }
+      setSelectedWorkspaceId(targetWorkspaceId);
+      setSelectedThreadId(targetThread.id);
+      setIsComposingNewThread(false);
+    }
     // A selected-thread object can be stale after switching from a project to the
     // internal chat workspace. Validate against the resolved target workspace.
     if (!targetThread?.id) composingNewThread = true;
@@ -2042,6 +2086,7 @@ export function App() {
       if (!awaitingApproval && !requestFailed) {
         dispatchNextQueuedDraft(targetThreadId);
       }
+      return requestFailed ? "failed" : "sent";
     }
   }
 
@@ -3186,7 +3231,7 @@ export function App() {
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
         onLoginSubmit={(agreementChecked, emailAuthMode) =>
-          void handleLoginSubmit(agreementChecked, emailAuthMode)
+          handleLoginSubmit(agreementChecked, emailAuthMode)
         }
         onAlipayQrLogin={() => void handleAlipayQrLogin()}
         onSendLoginCode={() => void handleSendLoginCode()}

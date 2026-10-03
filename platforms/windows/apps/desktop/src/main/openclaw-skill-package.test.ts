@@ -1,9 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { registerHooks } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL) {
+      const tsPath = fileURLToPath(new URL(specifier.replace(/\.js$/, ".ts"), context.parentURL));
+      if (existsSync(tsPath)) return { url: new URL(specifier.replace(/\.js$/, ".ts"), context.parentURL).href, shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  }
+});
 
 const {
   detectOpenClawSkillPackage,
@@ -204,6 +217,53 @@ test("clawhub client parses search and install resolution with mock fetch", asyn
     assert.equal(resolved.installKind, "archive");
     assert.equal(resolved.version, "1.0.0");
   }
+});
+
+test("imports a skill zip into the project .newbrain/skills directory", async () => {
+  await withTempDir(async (root) => {
+    const zip = new JSZip();
+    zip.file(
+      "operations-engineer/SKILL.md",
+      "---\nname: operations-engineer\ndescription: 运维巡检\n---\n\n# 运维工程师\n"
+    );
+    const zipPath = path.join(root, "operations-engineer.zip");
+    await fs.writeFile(zipPath, await zip.generateAsync({ type: "nodebuffer" }));
+    const project = path.join(root, "spring-app");
+    await fs.mkdir(project);
+    const globalRoot = path.join(root, "global-skills");
+    let saved: { skills: Array<{ name?: string; scope?: string; path?: string }> } | null = null;
+    const added: string[][] = [];
+    const { OpenClawSkillService } = await import(new URL("./openclaw-skill-service.ts", import.meta.url).href);
+    const service = new OpenClawSkillService({
+      userSkillRoot: globalRoot,
+      readFeatureConfig: async () => ({ skills: [], plugins: [], automations: [] }),
+      writeFeatureConfig: async (config) => {
+        saved = config;
+        return config;
+      },
+      addSkillRoots: async (roots) => {
+        added.push(roots);
+      }
+    });
+    const result = await service.installZipIntoProject({
+      workspacePath: project,
+      zipPath,
+      acknowledgeRisk: true,
+      force: true
+    });
+    const installed = path.join(project, ".newbrain", "skills", "operations-engineer", "SKILL.md");
+    assert.equal(result.targetDir, path.join(project, ".newbrain", "skills", "operations-engineer"));
+    assert.equal(result.skill.scope, "project");
+    assert.match(await fs.readFile(installed, "utf8"), /运维工程师/);
+    assert.equal(saved?.skills[0]?.name, "operations-engineer");
+    assert.equal(saved?.skills[0]?.scope, "project");
+    assert.deepEqual(added, [[path.join(project, ".newbrain", "skills")]]);
+    await assert.rejects(fs.access(path.join(globalRoot, "operations-engineer")), /ENOENT/);
+    await assert.rejects(
+      service.installZipIntoProject({ workspacePath: path.join(root, "missing"), zipPath, acknowledgeRisk: true }),
+      /本地项目/
+    );
+  });
 });
 
 test("frontmatter parser accepts AgentSkills fields", () => {
