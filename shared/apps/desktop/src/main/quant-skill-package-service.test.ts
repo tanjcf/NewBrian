@@ -21,7 +21,8 @@ test("creates and removes a project-scoped managed quantitative Skill package", 
     const asset = JSON.parse(await readFile(join(workspacePath, ".newbrain", "skills", "sany-trend-verify", "asset.json"), "utf8"));
     assert.equal(asset.managedBy, "newbrain.quant");
     assert.equal(asset.title, "三一重工趋势验证");
-    assert.match(await readFile(join(workspacePath, ".newbrain", "skills", "sany-trend-verify", "skill", "SKILL.md"), "utf8"), /600031/);
+    assert.match(await readFile(join(workspacePath, ".newbrain", "skills", "sany-trend-verify", "SKILL.md"), "utf8"), /600031/);
+    assert.match(await readFile(join(workspacePath, ".newbrain", "skills", "sany-trend-verify", "references", "usage.md"), "utf8"), /600031/);
 
     assert.equal((await service.remove("sany-trend-verify")).removed, true);
     assert.equal((await service.remove("sany-trend-verify")).removed, false);
@@ -44,6 +45,23 @@ test("rejects path traversal and refuses to remove an unmanaged Skill directory"
     await mkdir(legacy, { recursive: true });
     await writeFile(join(legacy, "asset.json"), JSON.stringify({ name: "legacy-quant", type: "quant", simulationOnly: true }), "utf8");
     assert.equal((await service.remove("legacy-quant")).removed, true);
+  } finally {
+    await rm(workspacePath, { recursive: true, force: true });
+  }
+});
+
+test("refuses to replace a rules pack already stored under .newbrain/skills", async () => {
+  const workspacePath = await mkdtemp(join(tmpdir(), "newbrain-quant-skill-"));
+  try {
+    const service = new QuantSkillPackageService(workspacePath);
+    const target = join(workspacePath, ".newbrain", "skills", "nuclear-uranium-ai-team");
+    await mkdir(target, { recursive: true });
+    await writeFile(join(target, "SKILL.md"), "# 团队规则\n", "utf8");
+    await assert.rejects(
+      () => service.create({ skillId: "nuclear-uranium-ai-team", title: "覆盖", symbol: "600519", strategyId: "trend-following" }),
+      /unmanaged/i
+    );
+    assert.match(await readFile(join(target, "SKILL.md"), "utf8"), /团队规则/);
   } finally {
     await rm(workspacePath, { recursive: true, force: true });
   }

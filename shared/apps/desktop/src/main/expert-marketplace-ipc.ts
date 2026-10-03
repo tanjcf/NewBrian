@@ -15,7 +15,7 @@ export interface ExpertMarketplaceIpcServices {
   list: () => unknown;
   install: (expertId: string) => unknown;
   setEnabled: (expertId: string, enabled: boolean) => unknown;
-  summon: (threadId: string, expertId: string) => unknown;
+  summon: (threadId: string, expertId: string, userConfirmed?: boolean) => unknown;
   clearSummon: (threadId: string) => unknown;
   getSummon: (threadId: string) => unknown;
   resolveFromSkill?: (skillName: string, skillNames?: string[]) => unknown;
@@ -46,7 +46,11 @@ export function registerExpertMarketplaceIpcHandlers(
     return services.setEnabled(requireId(input, "expertId"), input.enabled);
   });
   ipcMain.handle(channels.summon, (_event, input: unknown) =>
-    services.summon(requireId(input, "threadId"), requireId(input, "expertId")));
+    services.summon(
+      requireId(input, "threadId"),
+      requireId(input, "expertId"),
+      isRecord(input) && input.userConfirmed === true
+    ));
   ipcMain.handle(channels.clearSummon, (_event, input: unknown) =>
     services.clearSummon(requireId(input, "threadId")));
   ipcMain.handle(channels.getSummon, (_event, input: unknown) =>

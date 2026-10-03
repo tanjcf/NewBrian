@@ -12,6 +12,12 @@ test("normalizes runtime control request identifiers", () => {
   assert.deepEqual(parseRespondApprovalInput({ approved: false, requestId: " request-1 ", approvalId: " approval-1 " }), {
     approved: false, requestId: "request-1", approvalId: "approval-1"
   });
+  assert.deepEqual(parseRespondApprovalInput({ approved: true, permissionMode: "full" }), {
+    approved: true, requestId: undefined, approvalId: undefined, permissionMode: "full"
+  });
+  assert.deepEqual(parseRespondApprovalInput({ approved: true, permissionMode: "agent" }), {
+    approved: true, requestId: undefined, approvalId: undefined
+  });
   assert.equal(parseShellCommand("  git status  "), "  git status  ");
 });
 
@@ -487,4 +493,26 @@ test("terminal no_progress failures clear the task and mark the thread failed", 
   assert.ok(fixture.events.includes("metadata:failed"));
   assert.ok(fixture.events.includes("activity:本轮已结束"));
   assert.equal(snapshot.approval, null);
+});
+
+test("full access selected during a run updates the loop before any later approval", async () => {
+  const order: string[] = [];
+  const tasks = new Map([["req", {
+    abortController: new AbortController(),
+    workspaceId: "workspace",
+    threadId: "thread",
+    scope: { workspaceId: "workspace", threadId: "thread", requestId: "req", turnId: "turn" },
+    runtime: {
+      sessionMachine: { events: [] },
+      setAgentLoopPermissionMode: async (mode: string) => {
+        order.push(`mode:${mode}`);
+      },
+      getAgentLoopSnapshot: () => ({ status: "running" }),
+      getSnapshot: () => ({ approval: null, runs: [], messages: [] })
+    }
+  }]]);
+  const fixture = createApprovalFixture({ tasks, runtime: tasks.get("req").runtime });
+  const applied = await fixture.service.applyLivePermissionMode({ requestId: "req", permissionMode: "full" });
+  assert.deepEqual(applied, { applied: true, permissionMode: "full" });
+  assert.deepEqual(order, ["mode:full"]);
 });

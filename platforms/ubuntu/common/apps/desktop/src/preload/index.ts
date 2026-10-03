@@ -331,9 +331,12 @@ contextBridge.exposeInMainWorld("newbrain", {
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),
   getQuantSkillPerformance: (input: { projectId: string; skillId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillPerformance, input),
+  listQuantProjectSkills: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillList, input),
   runQuantSkillSimulation: (input: {
     projectId: string;
     skillId: string;
+    title?: string;
+    strategyId?: string;
     symbol: string;
     quantity: number;
     query: unknown;
@@ -362,6 +365,15 @@ contextBridge.exposeInMainWorld("newbrain", {
     agreement_accepted: boolean;
     captcha?: string;
   }): Promise<DesktopAuthStatus> => ipcRenderer.invoke("phase1:login-auth", input),
+  loadRememberedLogin: () => ipcRenderer.invoke("phase1:load-remembered-login"),
+  saveRememberedLogin: (input: {
+    version: 1;
+    channel: "email" | "phone";
+    email: string;
+    phone: string;
+    password: string;
+  }) => ipcRenderer.invoke("phase1:save-remembered-login", input),
+  clearRememberedLogin: () => ipcRenderer.invoke("phase1:clear-remembered-login"),
   logoutAuth: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke("phase1:logout-auth"),
   queueWorkspaceScan: () => ipcRenderer.invoke("phase1:queue-workspace-scan"),
   queueGitStatus: () => ipcRenderer.invoke("phase1:queue-git-status"),

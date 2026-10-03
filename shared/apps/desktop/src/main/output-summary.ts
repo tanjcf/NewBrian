@@ -12,7 +12,7 @@ export function collectWrittenArtifacts(events: readonly unknown[]): WrittenArti
     const event = candidate as { type?: string; payload?: any };
     const payload = event?.payload;
     const artifact = payload?.result?.artifact;
-    const recordsArtifact = payload?.name === "workspace.write_file" || payload?.name === "artifact.create" || payload?.name === "document.create_pdf" || payload?.name === "document.create_docx" || payload?.name === "artifact.inspect";
+    const recordsArtifact = payload?.name === "workspace.write_file" || payload?.name === "artifact.create" || payload?.name === "document.create_pdf" || payload?.name === "document.create_docx" || payload?.name === "office.convert" || payload?.name === "artifact.inspect";
     if (event?.type !== "tool_result" || !recordsArtifact || payload?.result?.ok !== true) continue;
     if (!artifact || typeof artifact.path !== "string" || typeof artifact.size !== "number") continue;
     if (payload.name === "artifact.inspect" && artifact.size <= 0) continue;

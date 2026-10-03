@@ -111,7 +111,7 @@ export function projectPersistedActivities(events: PersistedEvent[] = []): Persi
         callId,
         artifactPath: String(artifact.path),
         artifactSize: Number(artifact.size) || 0,
-        artifactVerified: name === "artifact.inspect" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx",
+        artifactVerified: name === "artifact.inspect" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx" || name === "office.convert",
         turnId: event.turnId ?? prior?.turnId,
         createdAt: event.createdAt
       });

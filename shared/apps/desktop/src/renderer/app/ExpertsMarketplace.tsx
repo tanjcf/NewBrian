@@ -31,8 +31,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   "12-IndustryConsultant": "行业顾问"
 };
 
-/** Catalog / install only. Summoning is exclusively via global/project Skill → expert.summon. */
-export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?: string }) {
+/** Catalog, install, and an explicit "使用" handoff. Model-side expert.summon still requires a confirmed plan. */
+export function ExpertsMarketplace({
+  workspaceKey = "explore",
+  onUseExpert
+}: {
+  workspaceKey?: string;
+  onUseExpert?: (expert: ExpertCatalogCard) => Promise<void> | void;
+}) {
   const [experts, setExperts] = useState<ExpertCatalogCard[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -92,6 +98,22 @@ export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?
     try {
       await window.newbrain.installExpert({ expertId: expert.id });
       await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const useExpert = async (expert: ExpertCatalogCard) => {
+    if (!onUseExpert) {
+      setError("当前桌面版本还不能在对话中使用专家。");
+      return;
+    }
+    setBusyId(expert.id);
+    try {
+      await onUseExpert(expert);
+      setSelectedId("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -169,6 +191,17 @@ export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?
                 <span className="experts-source">{source(expert)}</span>
                 <button
                   type="button"
+                  className="experts-use"
+                  disabled={busyId === expert.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void useExpert(expert);
+                  }}
+                >
+                  {busyId === expert.id ? "请稍候…" : "使用"}
+                </button>
+                <button
+                  type="button"
                   disabled={busyId === expert.id || expert.installed}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -220,7 +253,10 @@ export function ExpertsMarketplace({ workspaceKey = "explore" }: { workspaceKey?
                 </div>
               </>
             ) : null}
-            <button disabled={busyId === selected.id} onClick={() => void (selected.installed ? toggleEnabled(selected) : install(selected))}>{selected.installed ? selected.enabled === false ? "启用专家" : "停用专家" : "安装专家"}</button>
+            <div className="experts-detail-actions">
+              <button type="button" className="experts-use" disabled={busyId === selected.id} onClick={() => void useExpert(selected)}>{busyId === selected.id ? "请稍候…" : "使用此专家"}</button>
+              <button type="button" disabled={busyId === selected.id} onClick={() => void (selected.installed ? toggleEnabled(selected) : install(selected))}>{selected.installed ? selected.enabled === false ? "启用专家" : "停用专家" : "安装专家"}</button>
+            </div>
           </div> : null}
         </dialog>
       </div>

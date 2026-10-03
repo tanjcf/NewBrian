@@ -260,6 +260,7 @@ export interface AutomationSpec {
   nextRunAt?: string;
   failureCount?: number;
   lastError?: string;
+  permissionMode?: "full" | "agent";
 }
 
 export interface SearchResultSpec {
@@ -888,6 +889,9 @@ export const desktopIpcChannels = {
     claimNationalDayGift: "phase1:claim-national-day-gift",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
+    loadRememberedLogin: "phase1:load-remembered-login",
+    saveRememberedLogin: "phase1:save-remembered-login",
+    clearRememberedLogin: "phase1:clear-remembered-login",
     loginWithAlipayQr: "phase1:login-with-alipay-qr",
     changePassword: "phase1:change-auth-password",
     changeEmail: "phase1:change-auth-email",
@@ -940,6 +944,7 @@ export const desktopIpcChannels = {
     installClawHub: "phase1:install-openclaw-skill-clawhub",
     installPath: "phase1:install-openclaw-skill-path",
     selectAndInstall: "phase1:select-install-openclaw-skill",
+    importZipToProject: "phase1:import-openclaw-skill-zip-to-project",
     inspectPath: "phase1:inspect-openclaw-skill-path",
     exportZip: "phase1:export-openclaw-skill-zip",
     uninstallWritingSkills: "phase1:uninstall-writing-skills"
@@ -1097,6 +1102,7 @@ export const desktopIpcChannels = {
     queueGitStatus: "phase1:queue-git-status",
     queueShellCommand: "phase1:queue-shell-command",
     respondApproval: "phase1:respond-approval",
+    setLivePermissionMode: "phase1:set-live-permission-mode",
     generatePatch: "phase1:generate-patch",
     applyPatch: "phase1:apply-patch"
   },
@@ -1718,6 +1724,7 @@ export interface FeatureItemInput {
   model?: string;
   reasoning?: string;
   rrule?: string;
+  permissionMode?: string;
 }
 
 export interface FeatureConfigPayload {
@@ -1764,6 +1771,12 @@ export interface OpenClawSkillInstallPathInput {
 }
 
 export interface OpenClawSkillSelectInstallInput {
+  force?: boolean;
+  acknowledgeRisk?: boolean;
+}
+
+export interface OpenClawSkillImportZipToProjectInput {
+  workspaceId: string;
   force?: boolean;
   acknowledgeRisk?: boolean;
 }

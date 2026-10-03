@@ -421,6 +421,17 @@ export class AgentHostLoopBridge {
           .then((value) => updateSnapshot(value, generation));
         return entry.lastSnapshot;
       },
+      setAgentLoopPermissionMode: (mode: string) => {
+        const permissionMode = mode === "full" ? "full" : mode === "approval" ? "approval" : "agent";
+        const localRuntime = entry.localRuntime as {
+          setAgentLoopPermissionMode?(nextMode: string): unknown;
+        };
+        localRuntime.setAgentLoopPermissionMode?.(permissionMode);
+        return this.client.request("agent.loop.set-permission-mode", {
+          runtimeId,
+          permissionMode
+        });
+      },
       cancelAgentLoop: (reason?: string) => {
         entry.cancelledGeneration = entry.loopGeneration;
         entry.activeLoopOperation = undefined;

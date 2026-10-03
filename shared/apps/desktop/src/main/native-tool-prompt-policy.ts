@@ -81,6 +81,7 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
     "For Chinese body text in PDF/DOCX/PPTX/HTML/XLSX, use Chinese curly double quotes “…” (U+201C/U+201D), never ASCII straight quotes \"...\". The office generator also normalizes leftover ASCII/fullwidth quotes in Chinese prose.",
     "For presentations: prefer structured slides[{title,body,bullets,layout}]. layout may be title|section|bullets|columns|cards|stat|chart|timeline|process|image|closing. Every deck should include at least one chart slide (chart with categories+values), one timeline/process slide (phases array), and one image slide (imagePath from image_generate or imagePlaceholder). format=pptx also writes companion *.slides.html; format=html is web-first.",
     "document.create_pdf / document.create_docx / artifact.create write under outputs/ (example: outputs/宣讲稿-第一版.pdf). Pass plain Chinese text or Markdown only.",
+    "To open an existing DOCX, XLSX, or PPTX in a local Office suite, call office.open with a workspace-relative path. office.status reports LibreOffice first, then WPS, then Microsoft Office. office.convert uses LibreOffice and writes the result under outputs/.",
     "Use artifact.inspect to verify generated files instead of merely asserting that they exist.",
     ...artifactContract,
     ...pdfContract,

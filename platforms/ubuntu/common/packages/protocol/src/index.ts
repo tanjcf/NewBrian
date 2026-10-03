@@ -364,6 +364,7 @@ export type RespondApprovalInput = boolean | {
   approved: boolean;
   requestId?: string;
   approvalId?: string;
+  permissionMode?: "full";
 };
 
 export interface ModelChatMessageInput {
@@ -851,6 +852,9 @@ export const desktopIpcChannels = {
     claimNationalDayGift: "phase1:claim-national-day-gift",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
+    loadRememberedLogin: "phase1:load-remembered-login",
+    saveRememberedLogin: "phase1:save-remembered-login",
+    clearRememberedLogin: "phase1:clear-remembered-login",
     changePassword: "phase1:change-auth-password",
     changeEmail: "phase1:change-auth-email",
     logout: "phase1:logout-auth"

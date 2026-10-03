@@ -20,7 +20,7 @@ interface FeaturesIpcServices {
 const optionalStringFields = [
   "id", "name", "summary", "version", "source", "manifestPath", "path", "icon", "scope",
   "publisher", "title", "trigger", "status", "workspaceId", "threadId", "action", "intervalMinutes", "dailyTime",
-  "prompt", "schedule", "runtime", "model", "reasoning", "rrule"
+  "prompt", "schedule", "runtime", "model", "reasoning", "rrule", "permissionMode"
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

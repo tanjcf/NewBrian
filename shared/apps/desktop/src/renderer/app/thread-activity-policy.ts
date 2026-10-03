@@ -1,3 +1,5 @@
+import { isApprovalWaitNotice, stripApprovalWaitNotice } from "../../shared/approval-wait-notice.ts";
+
 export function isComposerThreadRunning(input: {
   isComposingNewThread: boolean;
   selectedThreadId?: string;
@@ -142,6 +144,19 @@ function preferLongerText(left: string | undefined, right: string | undefined) {
   return a.length >= b.length ? a : b;
 }
 
+/** A finished answer replaces the approval-wait notice even when the notice is longer. */
+function preferAnswerOverApprovalNotice(left: string | undefined, right: string | undefined) {
+  const a = String(left ?? "");
+  const b = String(right ?? "");
+  const aBody = stripApprovalWaitNotice(a);
+  const bBody = stripApprovalWaitNotice(b);
+  const aIsOnlyNotice = isApprovalWaitNotice(a) && !aBody;
+  const bIsOnlyNotice = isApprovalWaitNotice(b) && !bBody;
+  if (aIsOnlyNotice && bBody) return b;
+  if (bIsOnlyNotice && aBody) return a;
+  return preferLongerText(a, b);
+}
+
 /** Resolve the assistant row owned by one user turn — never scan by timestamp. */
 export function resolveTurnAssistantMessageId<T extends DisplayMessage>(
   messages: T[],
@@ -205,7 +220,7 @@ export function mergeDisplayMessageProgress<T extends DisplayMessageWithProgress
   local: T,
   canonical: T
 ): T {
-  const content = preferLongerText(local.content, canonical.content);
+  const content = preferAnswerOverApprovalNotice(local.content, canonical.content);
   const reasoningSummary = preferLongerText(local.reasoningSummary, canonical.reasoningSummary);
   const excludeFromModelContext = Boolean(local.excludeFromModelContext || canonical.excludeFromModelContext);
   const next = { ...canonical, content };

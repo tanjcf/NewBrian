@@ -10,6 +10,7 @@ import {
   shouldHandleFontZoomWheel
 } from "./font-zoom-policy";
 import { isMissingWorkspaceSelectionError } from "../../shared/workspace-selection-errors";
+import { copyTextToClipboard } from "./clipboard-text";
 
 export function useDesktopCore(ctx: any) {
 const setPreviewMode = ctx.setPreviewMode;
@@ -20,12 +21,7 @@ const document = window?.document ?? globalThis.document;
 const navigator = window?.navigator ?? globalThis.navigator;
 
 function writeClipboard(text: string) {
-  if (!navigator.clipboard) {
-    setErrorMessage("当前环境不支持剪贴板 API。");
-    return;
-  }
-
-  navigator.clipboard.writeText(text).catch((error) => {
+  void copyTextToClipboard(text).catch((error) => {
     setErrorMessage(error instanceof Error ? error.message : String(error));
   });
 }

@@ -495,6 +495,21 @@ declare global {
         agreement_accepted: boolean;
         captcha?: string;
       }) => Promise<DesktopAuthStatusState>;
+      loadRememberedLogin?: () => Promise<{
+        version: 1;
+        channel: "email" | "phone";
+        email: string;
+        phone: string;
+        password: string;
+      } | null>;
+      saveRememberedLogin?: (input: {
+        version: 1;
+        channel: "email" | "phone";
+        email: string;
+        phone: string;
+        password: string;
+      }) => Promise<{ ok: true }>;
+      clearRememberedLogin?: () => Promise<{ ok: true }>;
       logoutAuth: () => Promise<DesktopAuthStatusState>;
       queueWorkspaceScan: () => Promise<PhaseOneSnapshot>;
       queueGitStatus: () => Promise<PhaseOneSnapshot>;

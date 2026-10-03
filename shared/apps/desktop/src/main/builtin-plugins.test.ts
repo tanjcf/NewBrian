@@ -6,7 +6,7 @@ import test from "node:test";
 const { builtinPluginCatalog, builtinPluginUri } = await import(new URL("../shared/builtin-plugins.ts", import.meta.url).href) as typeof import("../shared/builtin-plugins.js");
 
 test("ships every advertised builtin plugin with a valid manifest and executable skill", async () => {
-  assert.equal(builtinPluginCatalog.length, 11);
+  assert.equal(builtinPluginCatalog.length, 12);
   assert.equal(new Set(builtinPluginCatalog.map((plugin) => plugin.id)).size, builtinPluginCatalog.length);
   for (const plugin of builtinPluginCatalog) {
     const root = resolve("build", "plugins", plugin.packageName);
@@ -38,6 +38,17 @@ test("figma builtin ships router skill plus specialized figma-* skills", async (
       new RegExp(`name:\\s*${name}`)
     );
   }
+});
+
+test("sites skill routes new landing pages through the expansion reference", async () => {
+  const root = resolve("build", "plugins", "sites", "skills", "sites");
+  const skill = await readFile(resolve(root, "SKILL.md"), "utf8");
+  const reference = await readFile(resolve(root, "references", "presentation-site-expansion.md"), "utf8");
+  assert.match(skill, /references\/presentation-site-expansion\.md/);
+  assert.match(skill, /existing application/);
+  assert.match(reference, /落地页/);
+  assert.match(reference, /远程发布必须等用户明确授权/);
+  assert.match(reference, /static-site\.html/);
 });
 
 test("default templates and local web plugins include real reusable assets", async () => {

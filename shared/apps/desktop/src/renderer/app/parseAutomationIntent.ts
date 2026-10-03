@@ -38,6 +38,40 @@ export function automationIntentExamples(): readonly string[] {
   return EXAMPLE_INTENTS;
 }
 
+const AUTOMATION_CREATE_REQUEST = /(?:请帮我)?创建(?:一个)?自动化(?:任务|计划)?|新建(?:一个)?自动化(?:任务|计划)?|create an automation/i;
+
+/**
+ * True when the user is asking this turn to create an automation, including a short
+ * follow-up such as "你来创建自动化任务". Edit requests stay on the update path.
+ */
+export function isAutomationCreationRequest(raw: string): boolean {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!text || /修改自动化/.test(text)) return false;
+  return AUTOMATION_CREATE_REQUEST.test(text);
+}
+
+function automationRequestHasSchedule(text: string): boolean {
+  return /每天|每日|每周|每小时|每\s*\d+\s*(?:分钟|小时)|[:：]\d{2}|早上|上午|下午|晚上|工作日/.test(text);
+}
+
+/**
+ * Text that should be stored as the automation. A short "please create it" nudge
+ * keeps the earlier user message that actually describes the schedule and work.
+ */
+export function resolveAutomationCreationText(
+  message: string,
+  previousUserMessages: readonly string[] = []
+): string | null {
+  const text = String(message || "").trim();
+  if (!isAutomationCreationRequest(text)) return null;
+  if (automationRequestHasSchedule(text) || text.length >= 48) return text;
+  const previous = [...previousUserMessages]
+    .reverse()
+    .map((item) => String(item || "").trim())
+    .find((item) => item && item !== text);
+  return previous ? `${text}\n${previous}` : text;
+}
+
 /**
  * Parse a free-form Chinese/English schedule description into automation draft fields.
  */
@@ -103,10 +137,11 @@ export function parseAutomationIntent(raw: string): ParsedAutomationIntent {
   }
 
   const title = deriveTitle(text, schedule, action);
+  const taskPrompt = isAutomationCreationRequest(text) ? automationTaskPrompt(text) : text;
   return {
     title,
-    prompt: text,
-    trigger: text,
+    prompt: taskPrompt || text,
+    trigger: taskPrompt || text,
     schedule,
     intervalMinutes,
     ...(dailyTime ? { dailyTime } : {}),
@@ -146,12 +181,40 @@ function parseDailyTime(text: string): string | undefined {
   return undefined;
 }
 
+const CREATION_PREFIX = /^(?:请帮我|请|帮我)?(?:创建|新建)(?:一个)?自动化(?:任务|计划)?\s*[：:]\s*/i;
+const ENGLISH_CREATION_PREFIX = /^(?:please\s+)?create\s+an\s+automation(?:\s+task)?\s*[:：]\s*/i;
+const ATTACHED_PATH = /(?:^|\s)(?:[A-Za-z]:\\(?:\\?\S)+|\/(?:\S+\/)+\S+\.(?:zip|tar|gz|tgz|skill))\b/gi;
+const LEADING_SCHEDULE = /^(?:每天|每日|每个工作日|每周[一二三四五六日天]?|每小时|every\s+day|daily)\s*(?:早上|上午|下午|晚上|中午)?\s*(?:(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|\d{1,2}\s*(?:点|时)(?:\s*\d{1,2}\s*分?)?)(?:\s*[（(][^）)]{0,20}[）)])?\s*/i;
+
+/**
+ * Instruction the scheduled run should execute. Drops the "please create an
+ * automation" wrapper, the schedule already stored on the task, and attached
+ * zip paths that are not part of the work.
+ */
+export function automationTaskPrompt(raw: string): string {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const stripped = text
+    .replace(CREATION_PREFIX, "")
+    .replace(ENGLISH_CREATION_PREFIX, "")
+    .replace(ATTACHED_PATH, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutSchedule = stripped.replace(LEADING_SCHEDULE, "").trim();
+  return withoutSchedule || stripped || text;
+}
+
 function deriveTitle(
   text: string,
   schedule: ParsedAutomationIntent["schedule"],
   action: ParsedAutomationIntent["action"]
 ): string {
   const clipped = text.length > 24 ? `${text.slice(0, 24)}…` : text;
+  if (/巡检|运维/.test(text)) {
+    if (schedule === "hourly") return "每小时巡检";
+    if (schedule === "weekly") return "每周运维巡检";
+    return "每日运维巡检";
+  }
   if (/进度|汇总|整理/.test(text)) return "每日项目进度整理";
   if (action === "git_status") return "Git 状态巡检";
   if (action === "thread_follow_up") return "线程跟进提醒";

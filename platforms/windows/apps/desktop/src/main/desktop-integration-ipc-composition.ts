@@ -10,6 +10,7 @@ import { ModelConfigService } from "./model-config-service.js";
 import { registerBrowserIpcHandlers } from "./browser-ipc.js";
 import { BrowserPreviewService } from "./browser-preview-service.js";
 import { registerPolicyIpcHandlers } from "./policy-ipc.js";
+import { isInternalChatWorkspace } from "./internal-chat-workspace.js";
 
 interface DesktopIntegrationIpcCompositionDeps {
   getActiveWorkspaceId: () => string;
@@ -37,6 +38,7 @@ interface DesktopIntegrationIpcCompositionDeps {
     installFromClawHub: (input: any) => unknown;
     installFromPath: (input: any) => unknown;
     selectAndInstall: (input?: any) => unknown;
+    selectAndInstallIntoProject: (input: { workspacePath: string; force?: boolean; acknowledgeRisk?: boolean }) => Promise<{ skill: any; targetDir: string; origin: any } | null>;
     inspectLocal: (path: string) => unknown;
     exportAsZip: (input: any) => unknown;
     uninstallWritingSkills: (input?: any) => unknown;
@@ -144,6 +146,26 @@ export function registerDesktopIntegrationIpcComposition(deps: DesktopIntegratio
       },
       selectAndInstall: async (input) => {
         const result = await deps.openClawSkillService!.selectAndInstall(input);
+        if (!result) return null;
+        return {
+          skill: result.skill,
+          targetDir: result.targetDir,
+          warnings: result.origin.warnings,
+          source: result.origin.source,
+          acknowledgedRisk: result.origin.acknowledgedRisk
+        };
+      },
+      importZipToProject: async (input) => {
+        const catalog = await deps.readWorkspaceCatalog();
+        const workspace = catalog.workspaces?.find((item: { id?: string }) => item.id === input.workspaceId);
+        if (!workspace?.path || isInternalChatWorkspace(workspace)) {
+          throw new Error("请先在左侧打开一个本地项目，再导入技能压缩包。");
+        }
+        const result = await deps.openClawSkillService!.selectAndInstallIntoProject({
+          workspacePath: workspace.path,
+          force: input.force,
+          acknowledgeRisk: input.acknowledgeRisk
+        });
         if (!result) return null;
         return {
           skill: result.skill,

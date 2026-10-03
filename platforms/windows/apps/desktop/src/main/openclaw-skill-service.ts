@@ -140,6 +140,56 @@ export class OpenClawSkillService {
     });
   }
 
+  async selectAndInstallIntoProject(input: {
+    workspacePath: string;
+    force?: boolean;
+    acknowledgeRisk?: boolean;
+  }) {
+    if (!this.deps.selectPackagePath) throw new Error("Package file picker is unavailable.");
+    const selected = await this.deps.selectPackagePath();
+    if (!selected) return null;
+    return this.installZipIntoProject({
+      workspacePath: input.workspacePath,
+      zipPath: selected,
+      force: input.force,
+      acknowledgeRisk: input.acknowledgeRisk
+    });
+  }
+
+  /**
+   * Install a skill zip into the selected project's `.newbrain/skills` directory.
+   * The package stays with that project and is not written to the global skill root.
+   */
+  async installZipIntoProject(input: {
+    workspacePath: string;
+    zipPath: string;
+    force?: boolean;
+    acknowledgeRisk?: boolean;
+  }): Promise<OpenClawSkillInstallResult> {
+    const workspacePath = resolve(String(input.workspacePath || ""));
+    const directory = await fs.stat(workspacePath).catch(() => null);
+    if (!directory?.isDirectory()) throw new Error("请先打开一个本地项目，再导入技能压缩包。");
+    const zipPath = String(input.zipPath || "").trim();
+    if (!zipPath.toLowerCase().endsWith(".zip")) throw new Error("请选择 .zip 技能压缩包。");
+    const skillRoot = join(workspacePath, ".newbrain", "skills");
+    const result = await installOpenClawSkillPackage({
+      userSkillRoot: skillRoot,
+      zipPath,
+      force: input.force,
+      acknowledgeRisk: input.acknowledgeRisk,
+      origin: { source: "zip" }
+    });
+    const skill = { ...result.skill, scope: "project", path: result.targetDir };
+    await this.deps.addSkillRoots([skillRoot]);
+    const config = await this.deps.readFeatureConfig();
+    const skills = [
+      skill,
+      ...config.skills.filter((item) => item.name !== skill.name && item.id !== skill.id)
+    ];
+    await this.deps.writeFeatureConfig({ ...config, skills });
+    return { ...result, skill };
+  }
+
   /**
    * Export an installed managed skill as a portable `.zip` (SKILL.md package).
    * Prefer this over copying loose skill folders for backup/reinstall.

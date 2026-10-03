@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import brandIcon from "../assets/newbrain-icon-256.png";
 import { LoginCeremonyOverlay, openLoginCeremonyFromHotspot } from "./LoginCeremonyOverlay";
 import {
@@ -10,6 +10,7 @@ import {
   type LoginEmailAuthMode,
   type LoginFormState
 } from "./login-form";
+import { applyRememberedLogin, mergeRememberedLogin, type RememberedLogin } from "../../shared/remembered-login";
 
 export type { LoginAuthStatusView, LoginEmailAuthMode, LoginFormState } from "./login-form";
 export {
@@ -32,7 +33,10 @@ export interface LoginScreenProps {
   loginForm: LoginFormState;
   /** Windows-only Alipay OAuth; omit on platforms without Alipay. */
   onAlipayQrLogin?: () => void;
-  onLoginSubmit: (agreementChecked?: boolean, emailAuthMode?: LoginEmailAuthMode) => void;
+  onLoginSubmit: (
+    agreementChecked?: boolean,
+    emailAuthMode?: LoginEmailAuthMode
+  ) => void | boolean | Promise<void | boolean>;
   onSendLoginCode: () => void;
   setAgreementDialog: Dispatch<SetStateAction<null | "tos" | "policy">>;
   setLoginForm: Dispatch<SetStateAction<LoginFormState>>;
@@ -59,6 +63,8 @@ export function LoginScreen({
   const [emailAuthMode, setEmailAuthMode] = useState<LoginEmailAuthMode>(
     passwordLoginEnabled ? "password" : "code"
   );
+  const [rememberLogin, setRememberLogin] = useState(true);
+  const rememberedLoginRef = useRef<RememberedLogin | null>(null);
   const [panelView, setPanelView] = useState<PanelView>("form");
   const agreementEnabled = Boolean(authStatus.agreement?.enabled);
   const agreementTitle =
@@ -78,6 +84,23 @@ export function LoginScreen({
       setPanelView("form");
     }
   }, [isSubmittingLogin, panelView]);
+
+  useEffect(() => {
+    const load = window.newbrain?.loadRememberedLogin;
+    if (!load) return;
+    let active = true;
+    void load()
+      .then((remembered) => {
+        if (!active || !remembered) return;
+        rememberedLoginRef.current = remembered;
+        setRememberLogin(true);
+        setLoginForm((current) => applyRememberedLogin(current, remembered));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [setLoginForm]);
 
   useEffect(() => {
     if (!passwordLoginEnabled) {
@@ -103,10 +126,27 @@ export function LoginScreen({
     setLoginForm((current) => ({
       ...current,
       channel: next,
-      password: "",
       captcha: ""
     }));
     if (next === "email") setEmailAuthMode(passwordLoginEnabled ? "password" : "code");
+  }
+
+  async function persistRememberedLogin(snapshot: LoginFormState, mode: LoginEmailAuthMode) {
+    const api = window.newbrain;
+    if (!api?.saveRememberedLogin || !api.clearRememberedLogin) return;
+    if (!rememberLogin) {
+      rememberedLoginRef.current = null;
+      await api.clearRememberedLogin();
+      return;
+    }
+    const next = mergeRememberedLogin(
+      rememberedLoginRef.current,
+      snapshot,
+      snapshot.channel !== "phone" && mode === "password"
+    );
+    if (!next) return;
+    await api.saveRememberedLogin(next);
+    rememberedLoginRef.current = next;
   }
 
   function startAlipay() {
@@ -210,7 +250,6 @@ export function LoginScreen({
                           className="login-alt-link"
                           onClick={() => {
                             setEmailAuthMode("code");
-                            setLoginForm((current) => ({ ...current, password: "" }));
                           }}
                         >
                           改用邮箱验证码登录
@@ -316,6 +355,22 @@ export function LoginScreen({
 
               <label className="login-agreement-row">
                 <input
+                  checked={rememberLogin}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setRememberLogin(checked);
+                    if (!checked) {
+                      rememberedLoginRef.current = null;
+                      void window.newbrain?.clearRememberedLogin?.().catch(() => undefined);
+                    }
+                  }}
+                  type="checkbox"
+                />
+                <span>记住邮箱、密码和手机号</span>
+              </label>
+
+              <label className="login-agreement-row">
+                <input
                   data-login-agreement
                   checked={agreementEnabled ? loginForm.agreementAccepted : true}
                   onChange={(event) =>
@@ -345,15 +400,20 @@ export function LoginScreen({
                 className="login-submit-btn"
                 disabled={!canSubmit}
                 type="button"
-                onClick={() =>
-                  onLoginSubmit(
-                    agreementEnabled
-                      ? ((document.querySelector("[data-login-agreement]") as HTMLInputElement | null)
-                          ?.checked ?? loginForm.agreementAccepted)
-                      : true,
-                    effectiveEmailAuthMode
-                  )
-                }
+                onClick={() => {
+                  const snapshot = loginForm;
+                  const mode = effectiveEmailAuthMode;
+                  const agreement = agreementEnabled
+                    ? ((document.querySelector("[data-login-agreement]") as HTMLInputElement | null)?.checked ??
+                      loginForm.agreementAccepted)
+                    : true;
+                  void Promise.resolve(onLoginSubmit(agreement, mode))
+                    .then((succeeded) => {
+                      if (succeeded !== true) return;
+                      return persistRememberedLogin(snapshot, mode);
+                    })
+                    .catch(() => undefined);
+                }}
               >
                 {isSubmittingLogin && panelView === "form" ? "登录中..." : "继续"}
               </button>

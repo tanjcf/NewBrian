@@ -1086,8 +1086,10 @@ export function App() {
       }));
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
+      return nextAuthStatus.authenticated === true;
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
+      return false;
     } finally {
       setIsSubmittingLogin(false);
     }
@@ -2492,7 +2494,7 @@ export function App() {
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
         onLoginSubmit={(agreementChecked, emailAuthMode) =>
-          void handleLoginSubmit(agreementChecked, emailAuthMode)
+          handleLoginSubmit(agreementChecked, emailAuthMode)
         }
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}
