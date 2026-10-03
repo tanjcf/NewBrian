@@ -1,6 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWorkspaceSceneState } from "./useWorkspaceSceneState";
 import { QuantMarketChart, type QuantChartDrillTarget } from "./QuantMarketChart";
+import { evaluateStockWatchRule, type StockWatchRule } from "./stock-watch-rules";
+
+type StockWatchSubscription = {
+  id: string;
+  symbol: string;
+  label: string;
+  rule: StockWatchRule;
+  intervalMinutes: number;
+  cooldownMinutes: number;
+  channels: { inApp: boolean; email: boolean; sms: boolean };
+  enabled: boolean;
+  lastCheckedAt?: string;
+  lastBarAt?: string;
+  lastCondition?: boolean;
+  lastAlertAt?: string;
+  lastPrice?: number;
+  status: string;
+};
+
+type StockWatchAlert = {
+  id: string;
+  symbol: string;
+  ruleLabel: string;
+  price: number;
+  createdAt: string;
+  channels: { inApp: boolean; email: boolean; sms: boolean };
+  deliveryStatus: string;
+};
 
 const BUILTIN_QUANT_SKILLS = [
   { id: "trend-following", label: "趋势跟踪", detail: "5 日均线上穿 20 日均线买入，下穿卖出" },
@@ -19,6 +47,8 @@ type QuantUiState = {
   notes: Array<{ id: string; title: string; content: string; symbol?: string; createdAt: string }>;
   watchlistGroups: Array<{ id: string; name: string; symbols: string[] }>;
   activeWatchlistGroupId: string;
+  stockWatchSubscriptions?: StockWatchSubscription[];
+  stockWatchAlerts?: StockWatchAlert[];
 };
 
 const DATE_RANGE_PRESET = "end-today-start-12m";
@@ -41,6 +71,8 @@ const defaultQuantUi: QuantUiState = {
   notes: [],
   watchlistGroups: [{ id: "default", name: "默认自选", symbols: ["600519"] }],
   activeWatchlistGroupId: "default",
+  stockWatchSubscriptions: [],
+  stockWatchAlerts: [],
   dateRangePreset: DATE_RANGE_PRESET
 };
 
@@ -115,6 +147,13 @@ export function QuantWorkspace({
   const [drillHint, setDrillHint] = useState("");
   const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
   const [watchlistStatus, setWatchlistStatus] = useState("");
+  const [watchSetupOpen, setWatchSetupOpen] = useState(false);
+  const [watchRuleType, setWatchRuleType] = useState<StockWatchRule["type"]>("ma_cross_up");
+  const [watchThreshold, setWatchThreshold] = useState("4.00");
+  const [watchInterval, setWatchInterval] = useState(15);
+  const [watchCooldown, setWatchCooldown] = useState(60);
+  const [watchChannels, setWatchChannels] = useState({ inApp: true, email: false, sms: false });
+  const [watchFormError, setWatchFormError] = useState("");
   const [creatingWatchlistGroup, setCreatingWatchlistGroup] = useState(false);
   const [newWatchlistGroupName, setNewWatchlistGroupName] = useState("新分组");
   const [marketOverview, setMarketOverview] = useState<Record<string, any> | null>(null);
@@ -126,6 +165,8 @@ export function QuantWorkspace({
   const [screenerStatus, setScreenerStatus] = useState("尚未运行选股");
   const [screenerBusy, setScreenerBusy] = useState(false);
   const latest = bars.at(-1);
+  const stockWatchSubscriptions = Array.isArray(ui.stockWatchSubscriptions) ? ui.stockWatchSubscriptions : [];
+  const stockWatchAlerts = Array.isArray(ui.stockWatchAlerts) ? ui.stockWatchAlerts : [];
   const watchlistGroups = Array.isArray(ui.watchlistGroups) && ui.watchlistGroups.length
     ? ui.watchlistGroups
     : defaultQuantUi.watchlistGroups;
@@ -238,6 +279,59 @@ export function QuantWorkspace({
     updateWatchlistGroups((groups) => groups.map((group) => group.id === activeWatchlistGroup.id
       ? { ...group, symbols: group.symbols.filter((item) => item !== symbol) }
       : group));
+  };
+
+  const watchRuleLabel = (rule: StockWatchRule) => rule.type === "ma_cross_up" ? "MA5 上穿 MA20 · 买入参考"
+    : rule.type === "ma_cross_down" ? "MA5 下穿 MA20 · 卖出参考"
+      : rule.type === "price_above" ? `价格达到 ¥${rule.value} · 买入参考`
+        : `价格低于 ¥${rule.value} · 卖出参考`;
+
+  const saveStockWatch = async () => {
+    const normalized = symbol.trim();
+    if (!/^\d{6}$/u.test(normalized)) { setWatchFormError("请输入 6 位 A 股或 ETF 代码。"); return; }
+    if (!watchChannels.inApp && !watchChannels.email && !watchChannels.sms) { setWatchFormError("至少选择一个提醒渠道。"); return; }
+    let rule: StockWatchRule;
+    if (watchRuleType === "price_above" || watchRuleType === "price_below") {
+      const threshold = Number(watchThreshold);
+      if (!Number.isFinite(threshold) || threshold <= 0) { setWatchFormError("价格阈值必须大于 0。"); return; }
+      rule = { type: watchRuleType, value: threshold };
+    } else {
+      rule = { type: watchRuleType };
+    }
+    if (watchChannels.inApp && typeof Notification !== "undefined" && Notification.permission === "default") {
+      await Notification.requestPermission().catch(() => "denied");
+    }
+    const subscription: StockWatchSubscription = {
+      id: `stock-watch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      symbol: normalized,
+      label: normalized,
+      rule,
+      intervalMinutes: watchInterval,
+      cooldownMinutes: watchCooldown,
+      channels: { ...watchChannels },
+      enabled: true,
+      status: "等待首次真实行情检查"
+    };
+    setUi((current) => ({
+      ...current,
+      stockWatchSubscriptions: [subscription, ...(Array.isArray(current.stockWatchSubscriptions) ? current.stockWatchSubscriptions : [])]
+    }));
+    setWatchFormError("");
+    setWatchSetupOpen(false);
+  };
+
+  const updateStockWatch = (id: string, update: Partial<StockWatchSubscription>) => {
+    setUi((current) => ({
+      ...current,
+      stockWatchSubscriptions: (Array.isArray(current.stockWatchSubscriptions) ? current.stockWatchSubscriptions : []).map((item) => item.id === id ? { ...item, ...update } : item)
+    }));
+  };
+
+  const removeStockWatch = (id: string) => {
+    setUi((current) => ({
+      ...current,
+      stockWatchSubscriptions: (Array.isArray(current.stockWatchSubscriptions) ? current.stockWatchSubscriptions : []).filter((item) => item.id !== id)
+    }));
   };
 
   const createWatchlistGroup = () => {
@@ -394,6 +488,87 @@ export function QuantWorkspace({
       });
     return () => { active = false; };
   }, [projectId, workspaceId, symbol, interval, adjustment, startDate, endDate, queryVersion, hydrated]);
+
+  useEffect(() => {
+    const queryQuantBars = (window.newbrain as any)?.queryQuantBars as ((input: { query: Record<string, string> }) => Promise<any[]>) | undefined;
+    if (!hydrated || activeView !== "market" || !queryQuantBars) return;
+    let active = true;
+    let checking = false;
+    const checkDueSubscriptions = async () => {
+      if (checking || !active) return;
+      checking = true;
+      try {
+        const dueAt = Date.now();
+        const due = stockWatchSubscriptions.filter((subscription) => subscription.enabled
+          && dueAt - (Date.parse(subscription.lastCheckedAt || "") || 0) >= subscription.intervalMinutes * 60_000);
+        for (const subscription of due) {
+          if (!active) break;
+          const checkedAt = new Date().toISOString();
+          try {
+            const rangeEnd = new Date();
+            const rangeStart = new Date(rangeEnd);
+            rangeStart.setDate(rangeStart.getDate() - 120);
+            const result = await queryQuantBars({ query: {
+              symbol: subscription.symbol, interval: "1d", adjustment: "forward",
+              startDate: formatLocalIsoDate(rangeStart), endDate: formatLocalIsoDate(rangeEnd)
+            } });
+            const evaluation = evaluateStockWatchRule(subscription.rule, Array.isArray(result) ? result : []);
+            const newClosedBar = evaluation.timestamp !== subscription.lastBarAt;
+            const firstBaseline = typeof subscription.lastCondition !== "boolean";
+            const cooldownReady = !subscription.lastAlertAt
+              || Date.now() - Date.parse(subscription.lastAlertAt) >= subscription.cooldownMinutes * 60_000;
+            const triggered = newClosedBar && !firstBaseline && subscription.lastCondition === false
+              && evaluation.active && cooldownReady;
+            const ruleLabel = subscription.rule.type === "ma_cross_up" ? "MA5 上穿 MA20（买入参考）"
+              : subscription.rule.type === "ma_cross_down" ? "MA5 下穿 MA20（卖出参考）"
+                : subscription.rule.type === "price_above" ? `价格达到 ¥${subscription.rule.value}（买入参考）`
+                  : `价格低于 ¥${subscription.rule.value}（卖出参考）`;
+            const alert: StockWatchAlert | null = triggered ? {
+              id: `watch-alert-${Date.now()}-${subscription.id}`,
+              symbol: subscription.symbol,
+              ruleLabel,
+              price: evaluation.price,
+              createdAt: checkedAt,
+              channels: subscription.channels,
+              deliveryStatus: subscription.channels.email || subscription.channels.sms
+                ? "邮件/短信渠道未接入；仅记录桌面提醒"
+                : "桌面提醒"
+            } : null;
+            setUi((current) => ({
+              ...current,
+              stockWatchSubscriptions: (Array.isArray(current.stockWatchSubscriptions) ? current.stockWatchSubscriptions : []).map((item) => item.id === subscription.id ? {
+                ...item, lastCheckedAt: checkedAt, lastBarAt: evaluation.timestamp,
+                lastCondition: evaluation.active, lastPrice: evaluation.price,
+                lastAlertAt: alert ? checkedAt : item.lastAlertAt, status: "监控中 · 真实行情"
+              } : item),
+              stockWatchAlerts: alert
+                ? [alert, ...(Array.isArray(current.stockWatchAlerts) ? current.stockWatchAlerts : [])].slice(0, 100)
+                : current.stockWatchAlerts
+            }));
+            if (alert?.channels.inApp && typeof Notification !== "undefined" && Notification.permission === "granted") {
+              new Notification(`${subscription.symbol} 监控提醒`, {
+                body: `${ruleLabel}，参考价 ¥${evaluation.price.toFixed(3)}。仅供参考，不执行交易。`
+              });
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "行情请求失败";
+            if (!active) break;
+            setUi((current) => ({
+              ...current,
+              stockWatchSubscriptions: (Array.isArray(current.stockWatchSubscriptions) ? current.stockWatchSubscriptions : []).map((item) => item.id === subscription.id
+                ? { ...item, lastCheckedAt: checkedAt, status: `行情检查失败：${message}` }
+                : item)
+            }));
+          }
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    void checkDueSubscriptions();
+    const timer = window.setInterval(() => void checkDueSubscriptions(), 60_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [hydrated, activeView, stockWatchSubscriptions, setUi]);
 
   useEffect(() => {
     if (!projectId || !window.newbrain?.getQuantActivity) return;
@@ -579,7 +754,59 @@ export function QuantWorkspace({
       <label>开始日期<input type="date" value={startDate} onChange={(event) => setUi((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label>结束日期<input type="date" value={endDate} onChange={(event) => setUi((current) => ({ ...current, endDate: event.target.value }))} /></label>
       <button type="button" onClick={() => setQueryVersion((value) => value + 1)}>查询行情</button>
+      <button type="button" className="brain-quant-subscribe-button" onClick={() => { setWatchFormError(""); setWatchSetupOpen(true); }}>订阅监控</button>
     </section>
+    <section className="brain-quant-stock-watch" data-testid="brain-quant-stock-watch">
+      <div className="brain-quant-section-title">
+        <div><h3>订阅监控</h3><small>桌面端打开行情面板时，按订阅频率读取真实日线；仅作参考，不会自动交易。</small></div>
+        <span className="brain-quant-watch-count">{stockWatchSubscriptions.filter((item) => item.enabled).length} 项运行中</span>
+      </div>
+      {stockWatchSubscriptions.length ? <div className="brain-quant-watch-list">
+        {stockWatchSubscriptions.map((subscription) => (
+          <article key={subscription.id} className="brain-quant-watch-card" data-testid={`stock-watch-${subscription.symbol}`}>
+            <div className="brain-quant-watch-card-main">
+              <strong>{subscription.label} <small>{subscription.symbol}</small></strong>
+              <span>{watchRuleLabel(subscription.rule)}</span>
+              <small>{subscription.status}{subscription.lastCheckedAt ? ` · 检查 ${new Date(subscription.lastCheckedAt).toLocaleString()}` : ""}{typeof subscription.lastPrice === "number" ? ` · 现价 ¥${subscription.lastPrice.toFixed(3)}` : ""}</small>
+              <small>每 {subscription.intervalMinutes} 分钟 · 冷却 {subscription.cooldownMinutes} 分钟 · {[
+                subscription.channels.inApp ? "桌面" : "", subscription.channels.email ? "邮件（未接通）" : "", subscription.channels.sms ? "短信（未接通）" : ""
+              ].filter(Boolean).join(" / ") || "无提醒渠道"}</small>
+            </div>
+            <div className="brain-quant-watch-actions">
+              <button type="button" onClick={() => updateStockWatch(subscription.id, { enabled: !subscription.enabled, status: subscription.enabled ? "已暂停" : "等待检查" })}>{subscription.enabled ? "暂停" : "恢复"}</button>
+              <button type="button" className="danger" onClick={() => removeStockWatch(subscription.id)}>退订</button>
+            </div>
+          </article>
+        ))}
+      </div> : <p className="brain-quant-watch-empty">查询到股票后点“订阅监控”，添加价格或均线提醒。</p>}
+      {stockWatchAlerts.length ? <div className="brain-quant-watch-alerts">
+        <strong>最近提醒</strong>
+        {stockWatchAlerts.slice(0, 5).map((alert) => <div key={alert.id}><span><b>{alert.symbol}</b> · {alert.ruleLabel}</span><small>¥{alert.price.toFixed(3)} · {new Date(alert.createdAt).toLocaleString()} · {alert.deliveryStatus}</small></div>)}
+      </div> : null}
+      {stockWatchSubscriptions.some((item) => item.channels.email || item.channels.sms) ? <p className="brain-quant-watch-channel-note">邮件与短信服务尚未连接：当前只保存渠道偏好和提醒记录，不会尝试外发。请勿把订阅视为已启用邮件/短信通知。</p> : null}
+    </section>
+    {watchSetupOpen ? <div className="brain-quant-watch-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWatchSetupOpen(false); }}>
+      <section className="brain-quant-watch-dialog" role="dialog" aria-modal="true" aria-labelledby="brain-quant-watch-title" data-testid="stock-watch-setup">
+        <header><div><h3 id="brain-quant-watch-title">订阅 {symbol} 监控</h3><p>使用真实日线检查规则，先建立基线，不回放历史提醒。</p></div><button type="button" aria-label="关闭" onClick={() => setWatchSetupOpen(false)}>×</button></header>
+        <label>提醒规则<select value={watchRuleType} onChange={(event) => setWatchRuleType(event.target.value as StockWatchRule["type"])}>
+          <option value="ma_cross_up">MA5 上穿 MA20 · 买入参考</option><option value="ma_cross_down">MA5 下穿 MA20 · 卖出参考</option>
+          <option value="price_above">价格达到阈值 · 买入参考</option><option value="price_below">价格低于阈值 · 卖出参考</option>
+        </select></label>
+        {watchRuleType === "price_above" || watchRuleType === "price_below" ? <label>价格阈值（元）<input type="number" min="0.001" step="0.01" value={watchThreshold} onChange={(event) => setWatchThreshold(event.target.value)} /></label> : null}
+        <div className="brain-quant-watch-dialog-grid">
+          <label>检查频率<select value={watchInterval} onChange={(event) => setWatchInterval(Number(event.target.value))}><option value={15}>每 15 分钟</option><option value={30}>每 30 分钟</option><option value={60}>每 60 分钟</option></select></label>
+          <label>提醒冷却<select value={watchCooldown} onChange={(event) => setWatchCooldown(Number(event.target.value))}><option value={60}>60 分钟</option><option value={120}>2 小时</option><option value={240}>4 小时</option><option value={1440}>24 小时</option></select></label>
+        </div>
+        <fieldset><legend>通知渠道</legend>
+          <label><input type="checkbox" checked={watchChannels.inApp} onChange={(event) => setWatchChannels((current) => ({ ...current, inApp: event.target.checked }))} /> 桌面通知</label>
+          <label><input type="checkbox" checked={watchChannels.email} onChange={(event) => setWatchChannels((current) => ({ ...current, email: event.target.checked }))} /> 邮件</label>
+          <label><input type="checkbox" checked={watchChannels.sms} onChange={(event) => setWatchChannels((current) => ({ ...current, sms: event.target.checked }))} /> 短信</label>
+        </fieldset>
+        <p className="brain-quant-watch-dialog-note">邮件/短信目前只记录偏好，不会真实发送。监控只生成买入/卖出参考提示，不会连接券商或自动下单。</p>
+        {watchFormError ? <p className="brain-quant-watch-form-error" role="alert">{watchFormError}</p> : null}
+        <footer><button type="button" onClick={() => setWatchSetupOpen(false)}>取消</button><button type="button" className="primary" onClick={() => void saveStockWatch()}>保存并开始监控</button></footer>
+      </section>
+    </div> : null}
     <section className="brain-quant-watchlist" data-testid="brain-quant-watchlist">
       <div className="brain-quant-section-title">
         <h3>自选股</h3>
