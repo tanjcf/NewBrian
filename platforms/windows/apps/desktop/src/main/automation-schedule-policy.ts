@@ -62,7 +62,7 @@ const nextRunAt = (
 
 const CREATION_PREFIX = /^(?:请帮我|请|帮我)?(?:创建|新建)(?:一个)?自动化(?:任务|计划)?\s*[：:]\s*/i;
 const ENGLISH_CREATION_PREFIX = /^(?:please\s+)?create\s+an\s+automation(?:\s+task)?\s*[:：]\s*/i;
-const ATTACHED_PATH = /(?:^|\s)(?:[A-Za-z]:\\(?:\\?\S)+|\/(?:\S+\/)+\S+\.(?:zip|tar|gz|tgz|skill))\b/gi;
+const ATTACHED_PATH = /(?:^|\s)(?:[A-Za-z]:(?:\\[^\\\s]+)+|\/(?:\S+\/)+\S+\.(?:zip|tar|gz|tgz|skill))\b/gi;
 const LEADING_SCHEDULE = /^(?:每天|每日|每个工作日|每周[一二三四五六日天]?|每小时|every\s+day|daily)\s*(?:早上|上午|下午|晚上|中午)?\s*(?:(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|\d{1,2}\s*(?:点|时)(?:\s*\d{1,2}\s*分?)?)(?:\s*[（(][^）)]{0,20}[）)])?\s*/i;
 
 /** Same distillation as the renderer parser, so an already-saved raw prompt still runs as the task. */
