@@ -293,8 +293,14 @@ export class LocalAgentRuntime {
     return decision;
   }
 
+  setAgentLoopPermissionMode(mode) {
+    if (mode === "full" || mode === "agent" || mode === "approval") {
+      this.agentLoopPermissionMode = mode;
+    }
+  }
+
   startAgentLoop(messages, options = {}) {
-    const permissionMode = options.permissionMode ?? "approval";
+    this.agentLoopPermissionMode = options.permissionMode ?? "approval";
     this.agentLoop = new AgentLoop({
       toolRegistry: this.toolRegistry,
       toolContext: {
@@ -307,7 +313,7 @@ export class LocalAgentRuntime {
         }
       },
       maxSteps: options.maxSteps,
-      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, permissionMode),
+      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, this.agentLoopPermissionMode),
       onEvent: (event) => {
         this.sessionMachine.events.push({
           id: makeId("agent-event"),

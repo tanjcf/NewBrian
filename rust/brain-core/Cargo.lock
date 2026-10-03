@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "brain-core"
-version = "0.1.0"
+version = "2.1.0"
 dependencies = [
  "base64",
  "libc",

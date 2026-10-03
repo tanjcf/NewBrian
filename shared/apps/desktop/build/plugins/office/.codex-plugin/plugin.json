@@ -1,0 +1,18 @@
+{
+  "name": "office",
+  "version": "0.1.0",
+  "description": "Open and convert Word, Excel, and PowerPoint files with the local Office suite. Prefer free LibreOffice.",
+  "author": {
+    "name": "NewBrain"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Office",
+    "shortDescription": "Open and convert Word, Excel, and PowerPoint files.",
+    "longDescription": "Uses LibreOffice when it is installed, then WPS, then Microsoft Office.",
+    "developerName": "NewBrain",
+    "category": "Productivity",
+    "capabilities": ["docx", "xlsx", "pptx"],
+    "defaultPrompt": "Use the Office plugin to open or convert the workspace document."
+  }
+}

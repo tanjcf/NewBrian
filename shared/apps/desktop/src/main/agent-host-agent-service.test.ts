@@ -40,6 +40,9 @@ function createFixture() {
       calls.push(`cancel:${reason}`);
       return { status: "failed", messages: [], pending: null, steps: 1, finalContent: reason };
     },
+    setPermissionMode(mode: string) {
+      calls.push(`permission:${mode}`);
+    },
     async shutdown() {
       calls.push("shutdown");
     }
@@ -211,4 +214,20 @@ test("delegates model callback resolution and callback shutdown", async () => {
     error: undefined
   }]);
   assert.equal(callbacksStopped, 1);
+});
+
+test("applies a mid-run permission mode to the hosted runtime", async () => {
+  const fixture = createFixture();
+  const service = new serviceModule.AgentHostAgentService({
+    createRuntime: async () => fixture.runtime,
+    requestModel: async () => ({ content: "done", toolCalls: [] })
+  });
+  await service.create({
+    runtimeId: "runtime_1",
+    workspacePath: "C:/workspace",
+    platformLabel: "Windows",
+    shellLabel: "PowerShell"
+  });
+  assert.deepEqual(service.setPermissionMode("runtime_1", "full"), { permissionMode: "full" });
+  assert.equal(fixture.calls.at(-1), "permission:full");
 });

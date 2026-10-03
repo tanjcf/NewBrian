@@ -8,7 +8,8 @@ test("resolves only the bundled Rust Core binary in packaged mode", () => {
     isPackaged: true,
     resourcesPath: "C:/Program Files/BRAIN/resources",
     appDirectory: "C:/Program Files/BRAIN/resources/app.asar/out/main",
-    exists: (path) => { checked.push(path); return true; }
+    exists: (path) => { checked.push(path); return true; },
+    verifyRelease: () => undefined
   });
   assert.match(resolved, /resources[\\/]brain-core[\\/]brain-core\.exe$/u);
   assert.equal(checked.length, 1);

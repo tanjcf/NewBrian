@@ -257,9 +257,12 @@ contextBridge.exposeInMainWorld("newbrain", {
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),
   getQuantSkillPerformance: (input: { projectId: string; skillId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillPerformance, input),
+  listQuantProjectSkills: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillList, input),
   runQuantSkillSimulation: (input: {
     projectId: string;
     skillId: string;
+    title?: string;
+    strategyId?: string;
     symbol: string;
     quantity: number;
     query: unknown;
@@ -334,6 +337,15 @@ contextBridge.exposeInMainWorld("newbrain", {
   getBillingSubscription: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.getBillingSubscription),
   sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
   loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
+  loadRememberedLogin: () => ipcRenderer.invoke(desktopIpcChannels.auth.loadRememberedLogin),
+  saveRememberedLogin: (input: {
+    version: 1;
+    channel: "email" | "phone";
+    email: string;
+    phone: string;
+    password: string;
+  }) => ipcRenderer.invoke(desktopIpcChannels.auth.saveRememberedLogin, input),
+  clearRememberedLogin: () => ipcRenderer.invoke(desktopIpcChannels.auth.clearRememberedLogin),
   changeAuthPassword: (input: DesktopAuthChangePasswordInput): Promise<{ ok: boolean; detail: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),
   changeAuthEmail: (input: DesktopAuthChangeEmailInput): Promise<{ ok: boolean; detail: string; email: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changeEmail, input),
   logoutAuth: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.logout),

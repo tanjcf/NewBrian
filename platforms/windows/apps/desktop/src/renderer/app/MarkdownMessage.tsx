@@ -7,6 +7,7 @@ import "katex/dist/katex.min.css";
 import { isArtifactFilePath, isLocalFileLink, parseLocalFileReference, resolveLocalFileLinkTarget, type LocalFileReference } from "./local-file-link";
 import { normalizeStreamingMarkdown, safeMarkdownUrl } from "./streaming-markdown";
 import { LocalFileContextMenu, positionLocalFileMenu, type LocalFileMenuState } from "./LocalFileContextMenu";
+import { copyTextToClipboard } from "./clipboard-text";
 
 type OpenLocalFile = (filePath: string, location?: Omit<LocalFileReference, "filePath">) => void;
 
@@ -80,7 +81,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
     <div className="markdown-code-toolbar"><span>{language}</span><div>
       {canCollapse ? <button type="button" onClick={() => setCollapsed((value) => !value)}>{collapsed ? "展开" : "折叠"}</button> : null}
       <button type="button" aria-pressed={wrap} onClick={() => setWrap((value) => !value)}>{wrap ? "取消换行" : "自动换行"}</button>
-      <button type="button" onClick={() => { void navigator.clipboard.writeText(source).then(() => { setCopied(true); if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current); copiedTimer.current = window.setTimeout(() => setCopied(false), 1400); }); }}>{copied ? "已复制" : "复制"}</button>
+      <button type="button" onClick={() => { void copyTextToClipboard(source).then(() => { setCopied(true); if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current); copiedTimer.current = window.setTimeout(() => setCopied(false), 1400); }); }}>{copied ? "已复制" : "复制"}</button>
     </div></div>
     <pre className={`markdown-code-block${collapsed ? " is-collapsed" : ""}${wrap ? " is-wrapped" : ""}`}>{codeContent}</pre>
   </div>;

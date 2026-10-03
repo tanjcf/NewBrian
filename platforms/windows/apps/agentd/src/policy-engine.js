@@ -232,7 +232,7 @@ export class PolicyEngine {
         };
       }
       const explicit = this.rules.find((rule) => matchesRule(rule, "shell.exec", command));
-      if (explicit) {
+      if (explicit && (explicit.decision === "deny" || permissionMode !== "full")) {
         // Remembered / custom allow rules must never weaken hard denies above.
         return {
           decision: explicit.decision,
@@ -304,7 +304,7 @@ export class PolicyEngine {
     }
 
     const pathArg = input.arguments?.targetPath ?? input.arguments?.path;
-    if (pathArg) {
+    if (pathArg && permissionMode !== "full") {
       const targetPath = path.resolve(workspacePath, String(pathArg));
       if (!isWithinWorkspace(workspacePath, targetPath)) {
         return {
@@ -344,7 +344,7 @@ export class PolicyEngine {
     }
 
     const explicit = this.rules.find((rule) => matchesRule(rule, toolName, command));
-    if (explicit) {
+    if (explicit && (explicit.decision === "deny" || permissionMode !== "full")) {
       return {
         decision: explicit.decision,
         source: "rule",

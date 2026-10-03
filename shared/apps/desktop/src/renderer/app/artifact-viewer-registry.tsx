@@ -27,10 +27,6 @@ export type SlidesMarkingProps = {
   pendingMark: { rect: DocumentRect; tool: AnnotationMarkingTool; color: string } | null;
   onMarkComplete: (input: { rect: DocumentRect; viewport: DocumentViewport; slide: number; captureTarget: HTMLElement }) => void;
   onToggleAnnotation?: () => void;
-  instruction?: string;
-  onInstructionChange?: (value: string) => void;
-  onSubmitInstruction?: () => void;
-  onClearPending?: () => void;
   onToggleChat?: () => void;
   chatCollapsed?: boolean;
 };
@@ -339,18 +335,6 @@ function BuiltinSlidesFileViewer({ resource, marking }: { resource: SlidesResour
                 marking.onMarkComplete({ rect, viewport, slide: currentSlideNumber, captureTarget: hostRef.current || host });
               }}
             />
-          ) : null}
-          {marking?.pendingMark && annotationOn ? (
-            <form
-              className="pptx-mark-prompt"
-              style={{ left: marking.pendingMark.rect.x, top: marking.pendingMark.rect.y + marking.pendingMark.rect.height + 10, width: Math.max(marking.pendingMark.rect.width, 240) }}
-              onSubmit={(event) => { event.preventDefault(); marking.onSubmitInstruction?.(); }}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <input placeholder="描述你想要的修改" value={marking.instruction || ""} onChange={(event) => marking.onInstructionChange?.(event.target.value)} />
-              <button className="send" type="submit" aria-label="发送修改" title="发送修改">{slideIcon("M12 19V6|m6 11 6-6 6 6")}</button>
-              <button type="button" aria-label="删除标记" title="删除标记" onClick={() => marking.onClearPending?.()}>{slideIcon("M3 6h18|M8 6V4h8v2|M19 6l-1 14H6L5 6")}</button>
-            </form>
           ) : null}
         </div>
       </div>

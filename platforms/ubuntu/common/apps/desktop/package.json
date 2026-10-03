@@ -83,7 +83,8 @@
       { "from": "../../newbrain.bootstrap.json", "to": "newbrain.bootstrap.json" },
       { "from": "src/renderer/icon.ico", "to": "newbrain.ico" },
       { "from": "document-worker.js", "to": "document-worker.js" },
-      { "from": "build/rust-core/brain-core", "to": "brain-core/brain-core" }
+      { "from": "build/rust-core/brain-core", "to": "brain-core/brain-core" },
+      { "from": "build/rust-core/brain-core-release.json", "to": "brain-core/brain-core-release.json" }
     ],
     "linux": {
       "maintainer": "NewBrain <opensource@newbrain.local>",

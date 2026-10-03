@@ -13,12 +13,12 @@ export function classifyToolActivity(toolName) {
   const name = toolName.trim().toLowerCase();
   if (name === "shell.exec") return semantics.shell;
   if (name === "workspace.write_file" || name === "artifact.create" || name === "artifact.inspect"
-    || name === "document.create_pdf" || name === "document.create_docx") return semantics.file;
+    || name === "document.create_pdf" || name === "document.create_docx" || name === "office.convert") return semantics.file;
   if (name === "goal.update_plan" || name === "goal.create" || name === "goal.complete" || name === "goal.get") return semantics.plan;
   if (name === "goal.request_user_input") return semantics.interaction;
   if (name.startsWith("mcp.") || name.startsWith("mcp__") || name.includes("mcp")) return semantics.mcp;
   if (name.startsWith("browser.") || name.includes("browser") || name === "web.search") return semantics.browser;
-  if (/artifact\.(render|export)|document|pdf|spreadsheet|presentation/.test(name)) return semantics.document;
+  if (/artifact\.(render|export)|document|pdf|spreadsheet|presentation|^office\./.test(name)) return semantics.document;
   return semantics.tool;
 }
 

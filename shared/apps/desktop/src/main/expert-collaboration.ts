@@ -23,6 +23,7 @@ export class ExpertCollaboration {
     preferences: () => Promise<ExpertPreference[]>;
     savePreference: (preference: ExpertPreference) => Promise<unknown>;
     applied: (goalId: string, questionId: string) => void;
+    answer?: (goalId: string, questionId: string, answer: string) => void;
     scope: string; scene: string;
   };
   constructor(deps: ExpertCollaboration["deps"]) { this.deps = deps; }
@@ -62,6 +63,31 @@ export class ExpertCollaboration {
     ] };
     this.deps.ask(goal.goalId, question);
     return { status: "waiting_user", question, instruction: "Stop expert execution and wait for the user's decision." };
+  }
+
+  /** Marketplace "使用" is an explicit choice for this thread, not a model guess. */
+  async acceptExplicitChoice(expertId: string) {
+    if (!/^[a-z0-9-]{1,64}$/.test(expertId)) throw new Error("EXPERT_UNAVAILABLE");
+    const catalog = await this.deps.catalog();
+    const expert = catalog.find((item) => item.id === expertId);
+    if (!expert || (expert.installed && expert.enabled === false)) throw new Error("EXPERT_UNAVAILABLE");
+    let goal = this.deps.goal();
+    if (!goal || goal.status !== "active") goal = this.deps.createGoal(`使用专家 ${expert.displayName || expertId}`);
+    const questionId = expertQuestionId([expertId], "marketplace-use");
+    const current = this.deps.questions(goal.goalId).find((question) => question.questionId === questionId);
+    if (!(current?.status === "answered" && current.answer === EXPERT_ACCEPT)) {
+      if (!this.deps.answer) throw new Error("EXPERT_CONFIRMATION_REQUIRED");
+      this.deps.ask(goal.goalId, {
+        questionId,
+        prompt: `已在专家市场选择「${expert.displayName || expertId}」。`,
+        options: [
+          { label: EXPERT_ACCEPT, description: "仅本次对话使用该专家。", recommended: true },
+          { label: EXPERT_SKIP, description: "不使用专家。" }
+        ]
+      });
+      this.deps.answer(goal.goalId, questionId, EXPERT_ACCEPT);
+    }
+    await this.authorize(expertId);
   }
 
   async authorize(expertId: string) {

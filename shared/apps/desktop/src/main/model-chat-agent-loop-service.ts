@@ -7,6 +7,7 @@ import {
 } from "./model-chat-step-service.ts";
 import type { PersistedGoalSnapshot } from "./codex-storage.js";
 import { requestedArtifactFormats, requestedArtifactSatisfied, requestedArtifactTargetPath } from "./artifact-request-policy.js";
+import { agentLoopAllowedToolNames } from "./automation-creation-loop-policy.ts";
 import { isGovernmentRevisionPreviewRequest } from "./government-skill-routing.js";
 import { isGovernmentResearchWritingSkill } from "./central-skills.ts";
 import { buildGovernmentRevisionPreview } from "./government-revision-preview.js";
@@ -1054,7 +1055,11 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       // exploratory material-reading loop bounded so a model cannot burn dozens of steps
       // updating the plan without ever presenting the required outline decision.
       maxSteps: agentLoopStepLimit({ governmentWorkflowEnabled, nativeArtifactRequested }),
-      allowedToolNames: governmentRevisionPreview ? [] : remoteAllowedToolNames,
+      allowedToolNames: agentLoopAllowedToolNames({
+        latestUserRequest: input.latestUserRequest,
+        governmentRevisionPreview,
+        remoteAllowedToolNames
+      }),
       abortController: input.abortController,
       onEvent: (event) => {
         this.dependencies.projectEvent({

@@ -401,6 +401,21 @@ declare global {
         agreement_accepted: boolean;
         captcha?: string;
       }) => Promise<DesktopAuthStatusState>;
+      loadRememberedLogin?: () => Promise<{
+        version: 1;
+        channel: "email" | "phone";
+        email: string;
+        phone: string;
+        password: string;
+      } | null>;
+      saveRememberedLogin?: (input: {
+        version: 1;
+        channel: "email" | "phone";
+        email: string;
+        phone: string;
+        password: string;
+      }) => Promise<{ ok: true }>;
+      clearRememberedLogin?: () => Promise<{ ok: true }>;
       loginWithAlipayQr: (input: { agreement_accepted: boolean }) => Promise<DesktopAuthStatusState>;
       changeAuthPassword: (input: {
         currentPassword: string;
@@ -435,7 +450,8 @@ declare global {
       queueWorkspaceScan: () => Promise<PhaseOneSnapshot>;
       queueGitStatus: () => Promise<PhaseOneSnapshot>;
       queueShellCommand: (command: string) => Promise<PhaseOneSnapshot>;
-      respondApproval: (input: boolean | { approved: boolean; requestId?: string; approvalId?: string }) => Promise<PhaseOneSnapshot>;
+      respondApproval: (input: boolean | { approved: boolean; requestId?: string; approvalId?: string; permissionMode?: "full" }) => Promise<PhaseOneSnapshot>;
+      applyLivePermissionMode?: (input: { requestId: string; permissionMode: "full" }) => Promise<{ applied: boolean; permissionMode?: "full" }>;
       generatePatch: (input: PatchFormState) => Promise<PhaseOneSnapshot>;
       applyPatch: () => Promise<PhaseOneSnapshot>;
       getModelConfig: () => Promise<ModelConfigState>;
@@ -642,7 +658,7 @@ declare global {
       listExperts?: () => Promise<Array<Record<string, unknown>>>;
       installExpert?: (input: { expertId: string }) => Promise<Record<string, unknown>>;
       setExpertEnabled?: (input: { expertId: string; enabled: boolean }) => Promise<Array<Record<string, unknown>>>;
-      summonExpert?: (input: { threadId: string; expertId: string }) => Promise<Record<string, unknown>>;
+      summonExpert?: (input: { threadId: string; expertId: string; userConfirmed?: boolean }) => Promise<Record<string, unknown>>;
       clearExpertSummon?: (input: { threadId: string }) => Promise<{ ok: boolean }>;
       getExpertSummon?: (input: { threadId: string }) => Promise<Record<string, unknown> | null>;
       resolveExpertFromSkill?: (input: { skillName: string; skillNames?: string[] }) => Promise<{ expertId: string; skillName: string } | null>;

@@ -3,6 +3,7 @@ interface ApprovalSender {
 }
 
 import { sanitizeVisibleModelContent } from "../shared/model-content-visibility.js";
+import { isApprovalWaitNotice, stripApprovalWaitNotice } from "../shared/approval-wait-notice.ts";
 import {
   buildEmptyTurnFallbackContent,
   ensureApprovalSnapshotForPendingLoop
@@ -71,7 +72,17 @@ export class ApprovalResumeService {
     this.options = options;
   }
 
-  async respond(sender: ApprovalSender, input: boolean | { approved: boolean; requestId?: string; approvalId?: string }) {
+  async applyLivePermissionMode(input: { requestId?: string; permissionMode?: "full" }) {
+    if (input.permissionMode !== "full") return { applied: false };
+    const requestId = input.requestId?.trim() || "";
+    if (!requestId) return { applied: false };
+    const runtime = this.options.getTasks().get(requestId)?.runtime;
+    if (!runtime || typeof runtime.setAgentLoopPermissionMode !== "function") return { applied: false };
+    await Promise.resolve(runtime.setAgentLoopPermissionMode("full"));
+    return { applied: true, permissionMode: "full" as const };
+  }
+
+  async respond(sender: ApprovalSender, input: boolean | { approved: boolean; requestId?: string; approvalId?: string; permissionMode?: "full" }) {
     const approved = typeof input === "boolean" ? input : Boolean(input.approved);
     const requestId = typeof input === "object" ? input.requestId?.trim() || "" : "";
     const approvalId = typeof input === "object" ? input.approvalId?.trim() || "" : "";
@@ -101,6 +112,9 @@ export class ApprovalResumeService {
     const targetRuntime = pendingTask?.runtime ?? (matchedDefaultApproval ? defaultRuntime : undefined);
     if (!targetRuntime) {
       throw new Error("当前审批请求已失效：运行时尚未就绪。请重新发送这条任务。");
+    }
+    if (approved && typeof input === "object" && input.permissionMode === "full" && typeof targetRuntime.setAgentLoopPermissionMode === "function") {
+      await Promise.resolve(targetRuntime.setAgentLoopPermissionMode("full"));
     }
     const targetWorkspaceId = pendingTask?.scope?.workspaceId ?? pendingTask?.workspaceId;
     const targetThreadId = pendingTask?.scope?.threadId ?? pendingTask?.threadId;
@@ -240,7 +254,7 @@ export class ApprovalResumeService {
       this.options.publishActivity(activity, effectiveRequestId);
     }
     if (resumedAgentLoop?.status === "completed") {
-      if (!String(resumedAgentLoop.finalContent || "").trim()) {
+      if (!stripApprovalWaitNotice(resumedAgentLoop.finalContent)) {
         const failedRuns = (nextSnapshot.runs ?? [])
           .filter((run: any) => run?.status === "failed")
           .map((run: any) => ({
@@ -253,6 +267,8 @@ export class ApprovalResumeService {
             .find((message: any) => message?.role === "user")?.content,
           failedCommands: failedRuns
         });
+      } else if (isApprovalWaitNotice(resumedAgentLoop.finalContent)) {
+        resumedAgentLoop.finalContent = stripApprovalWaitNotice(resumedAgentLoop.finalContent);
       }
       nextSnapshot = await this.finalizeAssistantContent(
         sender, pendingTask, targetRuntime, resolvedWorkspaceId, effectiveRequestId, resumedAgentLoop, nextSnapshot

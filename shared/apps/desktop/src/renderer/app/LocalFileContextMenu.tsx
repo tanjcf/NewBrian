@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SystemToolState } from "./desktop-model";
 import type { LocalFileReference } from "./local-file-link";
+import { copyTextToClipboard } from "./clipboard-text";
 
 export type LocalFileMenuState = {
   x: number;
@@ -50,7 +51,7 @@ export function LocalFileContextMenu({ menu, workspaceId, onClose }: {
     if (!window.newbrain) return;
     try {
       const result = await window.newbrain.performWorkspaceFileAction({ workspaceId, filePath: menu.reference.filePath, action });
-      if (action === "copy-contents" && result.ok && typeof result.content === "string") await navigator.clipboard.writeText(result.content);
+      if (action === "copy-contents" && result.ok && typeof result.content === "string") await copyTextToClipboard(result.content);
     } catch {
       // Soft-fail: missing files must not crash the renderer ErrorBoundary.
     } finally {
@@ -84,7 +85,7 @@ export function LocalFileContextMenu({ menu, workspaceId, onClose }: {
       </div>
     </div>
     <div className="markdown-file-context-divider" />
-    <button type="button" role="menuitem" onClick={() => { void navigator.clipboard.writeText(menu.reference.filePath); onClose(); }}>复制路径</button>
+    <button type="button" role="menuitem" onClick={() => { void copyTextToClipboard(menu.reference.filePath); onClose(); }}>复制路径</button>
     <button type="button" role="menuitem" onClick={() => void performFileAction("copy-contents")}>复制文件内容</button>
     <button type="button" role="menuitem" onClick={() => void performFileAction("reveal")}>在资源管理器中打开</button>
   </div>;

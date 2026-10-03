@@ -11,16 +11,12 @@ export function DocumentAnnotationLayer(props: {
   preview: BrainChangeSetPreviewResult | null;
   active: boolean;
   candidate: DocumentAnchor | null;
-  candidateSnapshotUrl?: string;
-  instruction: string;
   busy: boolean;
   markingTool: AnnotationMarkingTool;
   markingColor: string;
   onToggle: () => void;
   onMarkingToolChange: (tool: AnnotationMarkingTool) => void;
   onMarkingColorChange: (color: string) => void;
-  onInstructionChange: (value: string) => void;
-  onSave: () => void;
   onSendToChat: (annotation: BrainAnnotationDto) => void;
   onPreviewChangeSet: (changeSet: BrainChangeSetDto) => void;
   onReviewChangeSet: (changeSet: BrainChangeSetDto, status: "ACCEPTED" | "REJECTED") => void;
@@ -29,7 +25,7 @@ export function DocumentAnnotationLayer(props: {
   if (!props.file) return null;
   const current = currentDocumentAnnotations(props.annotations.filter((item) => item.fileId === props.file?.id));
   const statusHint = props.candidate
-    ? "已标记区域，请描述修改要求"
+    ? "已标记区域，请在标记下方填写并发送"
     : props.active
       ? "在文档上拖动标记笔，框选需要修改的内容"
       : `${current.length} 条标注 · 改表格/排版请用系统应用打开`;
@@ -48,18 +44,6 @@ export function DocumentAnnotationLayer(props: {
         />
         <span>{statusHint}</span>
       </div>
-      {props.active && props.candidate ? (
-        <form className="document-annotation-editor" onSubmit={(event) => { event.preventDefault(); props.onSave(); }}>
-          {props.candidateSnapshotUrl ? (
-            <div className="document-annotation-snapshot-preview" aria-label="标记区域截图">
-              <img src={props.candidateSnapshotUrl} alt="标记区域预览" />
-              <span>已捕获标记区域截图</span>
-            </div>
-          ) : null}
-          <label>描述修改要求<input value={props.instruction} autoFocus onChange={(event) => props.onInstructionChange(event.target.value)} placeholder="例如：改得更简洁，并保留关键数字" /></label>
-          <button type="submit" disabled={props.busy || !props.instruction.trim()}>{props.busy ? "保存中…" : "保存标注"}</button>
-        </form>
-      ) : null}
       {current.length ? (
         <div className="document-annotation-list">
           {current.map((annotation, index) => {

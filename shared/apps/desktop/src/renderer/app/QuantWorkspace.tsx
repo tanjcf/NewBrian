@@ -107,6 +107,7 @@ export function QuantWorkspace({
   const [skillPortfolios, setSkillPortfolios] = useState<Record<string, any>>({});
   const [skillActivities, setSkillActivities] = useState<Record<string, any>>({});
   const [skillTitles, setSkillTitles] = useState<Record<string, string>>({});
+  const [projectSkills, setProjectSkills] = useState<Array<{ id: string; label: string; detail: string; strategyId?: string }>>([]);
   const [strategyTasks, setStrategyTasks] = useState<any[]>([]);
   const [strategyRuns, setStrategyRuns] = useState<any[]>([]);
   const [expandedRadarId, setExpandedRadarId] = useState("");
@@ -462,6 +463,33 @@ export function QuantWorkspace({
     return () => { active = false; window.clearInterval(timer); };
   }, [projectId, schedules, symbol, latest?.close]);
 
+  useEffect(() => {
+    if (!projectId || !window.newbrain?.listQuantProjectSkills) {
+      setProjectSkills([]);
+      return;
+    }
+    let active = true;
+    void window.newbrain.listQuantProjectSkills({ projectId }).then((items: Array<{ id: string; label: string; detail: string; strategyId?: string }>) => {
+      if (!active) return;
+      const next = Array.isArray(items) ? items.filter((item) => item?.id) : [];
+      setProjectSkills(next);
+      setSkillTitles((current) => {
+        const titles = { ...current };
+        for (const item of next) titles[item.id] = item.label || item.id;
+        return titles;
+      });
+    }).catch(() => {
+      if (active) setProjectSkills([]);
+    });
+    return () => { active = false; };
+  }, [projectId]);
+
+  const skillOptions = useMemo(() => {
+    const builtin = BUILTIN_QUANT_SKILLS.map((skill) => ({ id: skill.id, label: skill.label, detail: skill.detail, strategyId: skill.id }));
+    const extra = projectSkills.filter((skill) => !builtin.some((item) => item.id === skill.id));
+    return [...builtin, ...extra];
+  }, [projectSkills]);
+
   const returnPercent = useMemo(() => bars.length && latest ? ((latest.close - bars[0].close) / bars[0].close * 100).toFixed(2) : "0.00", [bars, latest]);
 
   const applyDrill = (target: QuantChartDrillTarget) => {
@@ -527,11 +555,19 @@ export function QuantWorkspace({
       setSkillRunStatus("请选择量化 Skill");
       return;
     }
+    const selectedSkill = skillOptions.find((item) => item.id === skillId);
+    const builtinSignal = BUILTIN_QUANT_SKILLS.some((item) => item.id === skillId);
+    if (selectedSkill && !builtinSignal && !selectedSkill.strategyId) {
+      setSkillRunStatus(`「${selectedSkill.label}」是项目规则包，没有买卖信号，不能直接自动模拟。请改选趋势跟踪、均值回归，或带策略的组合 Skill。`);
+      return;
+    }
     setSkillRunBusy(true);
-    setSkillRunStatus(`正在用 Skill「${skillId}」按真实行情自动模拟买卖…`);
+    setSkillRunStatus(`正在用 Skill「${selectedSkill?.label || skillId}」按真实行情自动模拟买卖…`);
     void window.newbrain.runQuantSkillSimulation({
       projectId,
       skillId,
+      title: selectedSkill?.label || skillId,
+      strategyId: builtinSignal ? skillId : selectedSkill?.strategyId,
       symbol,
       quantity,
       query: marketQuery,
@@ -547,13 +583,19 @@ export function QuantWorkspace({
         });
         if (activity) setSkillActivities((current) => ({ ...current, [skillId]: activity }));
       } catch { /* performance already set */ }
-      setSkillRunStatus(`Skill「${skillId}」完成：${result.tradeCount} 笔自动成交 · 收益 ${Number(result.performance.totalReturnPercent).toFixed(2)}% · 基于 ${result.barCount} 根真 K 线`);
+      setSkillRunStatus(`Skill「${skillId}」完成：${result.tradeCount} 笔自动成交 · 收益 ${Number(result.performance.totalReturnPercent).toFixed(2)}% · 基于 ${result.barCount} 根真 K 线 · 已写入 .newbrain/skills/${skillId}/`);
+      try {
+        const listed = await window.newbrain.listQuantProjectSkills?.({ projectId });
+        if (Array.isArray(listed)) {
+          setProjectSkills(listed.filter((item: { id?: string }) => item?.id));
+        }
+      } catch { /* dropdown refresh is best-effort */ }
     }).catch((error: unknown) => {
       setSkillRunStatus(error instanceof Error ? error.message : "Skill 模拟失败");
     }).finally(() => setSkillRunBusy(false));
   };
 
-  const skillLabel = (id: string) => BUILTIN_QUANT_SKILLS.find((item) => item.id === id)?.label || id;
+  const skillLabel = (id: string) => skillOptions.find((item) => item.id === id)?.label || skillTitles[id] || id;
 
   const portfolioPanel = <aside className="brain-quant-side"><h3>手动对照盘</h3><p className="brain-quant-side-note">仅用于人工试单对照。正式量化请用 Skill 自动模拟。</p><div className="brain-quant-total"><small>总资产</small><strong>¥{portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong><em>{portfolio.totalReturnPercent >= 0 ? "+" : ""}{portfolio.totalReturnPercent.toFixed(2)}%</em></div>
     <dl><div><dt>可用现金</dt><dd>¥{portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>持仓市值</dt><dd>¥{portfolio.marketValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div><div><dt>累计收益</dt><dd className={portfolio.totalValue >= 100_000 ? "positive" : "negative"}>{portfolio.totalValue >= 100_000 ? "+" : ""}¥{(portfolio.totalValue - 100_000).toLocaleString(undefined, { minimumFractionDigits: 2 })}</dd></div></dl>
@@ -565,9 +607,9 @@ export function QuantWorkspace({
   const skillPicker = (
     <label className="brain-quant-skill-picker">Skill
       <select data-testid="brain-quant-skill-select" value={skillId} onChange={(event) => setSkillId(event.target.value)}>
-        {BUILTIN_QUANT_SKILLS.map((skill) => <option key={skill.id} value={skill.id}>{skill.label}（{skill.id}）</option>)}
+        {skillOptions.map((skill) => <option key={skill.id} value={skill.id}>{skill.label}（{skill.id}）</option>)}
       </select>
-      <small>{BUILTIN_QUANT_SKILLS.find((item) => item.id === skillId)?.detail}</small>
+      <small>{skillOptions.find((item) => item.id === skillId)?.detail}</small>
     </label>
   );
 

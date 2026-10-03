@@ -83,9 +83,11 @@ import { createAgentHostQuitCoordinator } from "./agent-host-quit-coordinator.js
 import { AgentTurnControlPlaneService } from "./agent-turn-control-plane.js";
 import { composeAndRegisterModelChat } from "./compose-model-chat.js";
 import { registerDesktopAppUpdateComposition, isDesktopUpdateExitPending } from "./desktop-app-update-composition.js";
+import { fetchGithubDesktopRelease } from "./github-desktop-release.js";
 import { DesktopErrorCollector } from "./desktop-error-collector.js";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
+import { createRememberedLoginStore } from "./remembered-login-store.js";
 import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
 import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
 import { isCustomModelSelection } from "../shared/custom-model-endpoint.js";
@@ -233,6 +235,10 @@ const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".newbrain");
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
+const rememberedLoginStore = createRememberedLoginStore(
+  join(workspaceStateRoot, "credentials", "remembered-login.credential"),
+  safeStorage
+);
 const customModelEndpointStore = new CustomModelEndpointStore(
   join(workspaceStateRoot, "credentials", "custom-model-endpoints"),
   safeStorage
@@ -10502,6 +10508,10 @@ function registerIpc() {
     return loginDesktopAuth(input);
   });
 
+  ipcMain.handle("phase1:load-remembered-login", () => rememberedLoginStore.load());
+  ipcMain.handle("phase1:save-remembered-login", (_event, input: unknown) => rememberedLoginStore.save(input));
+  ipcMain.handle("phase1:clear-remembered-login", () => rememberedLoginStore.clear());
+
   ipcMain.handle("phase1:logout-auth", async () => {
     return logoutDesktopAuth();
   });
@@ -10983,34 +10993,7 @@ function registerIpc() {
       }
     },
     syncControlPlane: () => syncAuthenticatedDesktopControlPlane(),
-    fetchAppUpdate: async () => {
-      const gatewayOrigin = await readGatewayOrigin();
-      const device = collectDesktopDeviceFingerprint();
-      const authState = await readDesktopAuthState();
-      const token = authState?.access_token?.trim() || "";
-      const headers = createDesktopAuthHeaders({
-        accessToken: token || undefined,
-        device
-      });
-      if (authState?.session_cookie?.trim()) {
-        headers.Cookie = authState.session_cookie.trim();
-      }
-      headers["X-Desktop-Package-Preference"] = "zip";
-      const response = await fetch(`${gatewayOrigin}/api/desktop/v1/app-update`, {
-        method: "GET",
-        headers,
-        signal: AbortSignal.timeout(15_000)
-      });
-      const payload = await readJsonResponse(response);
-      if (!response.ok) {
-        const message =
-          payload && typeof payload === "object"
-            ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "")
-            : "";
-        throw new Error(message || `app-update failed: HTTP ${response.status}`);
-      }
-      return payload;
-    },
+    fetchAppUpdate: () => fetchGithubDesktopRelease(),
     verifyAppUpdate: async ({ releaseId, ok, appVersion }) => {
       const authState = await readDesktopAuthState();
       if (!authState) throw new Error("desktop session required");

@@ -106,6 +106,10 @@
       {
         "from": "build/rust-core/brain-core",
         "to": "brain-core/brain-core"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
       }
     ],
     "mac": {

@@ -1,7 +1,26 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { AnnotationGeometry, AnnotationMarkingTool, BrainAnnotationDto } from "@codex-forge/protocol";
 import type { DocumentCoordinateTransform, DocumentRect, DocumentViewport } from "@codex-forge/protocol/document-anchor";
 import { projectDocumentRect } from "@codex-forge/protocol/document-anchor";
+
+export type DocumentMarkPrompt = {
+  instruction: string;
+  busy: boolean;
+  page?: number;
+  onInstructionChange: (value: string) => void;
+  onSubmit: () => void;
+  onClear: () => void;
+};
+
+const DocumentMarkPromptContext = createContext<DocumentMarkPrompt | null>(null);
+
+export function DocumentMarkPromptProvider(props: { value: DocumentMarkPrompt | null; children: ReactNode }) {
+  return <DocumentMarkPromptContext.Provider value={props.value}>{props.children}</DocumentMarkPromptContext.Provider>;
+}
+
+function markPromptIcon(paths: string) {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths.split("|").map((d) => <path key={d} d={d} />)}</svg>;
+}
 
 export type DocumentMarkingLayerProps = {
   active: boolean;
@@ -53,6 +72,7 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
   }, []);
 
   const draftRect = drag ? normalizeDragRect(drag) : null;
+  const markPrompt = useContext(DocumentMarkPromptContext);
   const savedMarks = (props.savedAnnotations || []).filter((annotation) => {
     if (!projectable(annotation)) return false;
     if (props.pageFilter != null && "page" in annotation.anchor && typeof annotation.anchor.page === "number") {
@@ -157,6 +177,24 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
             ["--mark-color" as string]: props.pendingMark.color
           }}
         />
+      ) : null}
+      {!draftRect && props.pendingMark && markPrompt && (markPrompt.page == null || props.pageFilter == null || markPrompt.page === props.pageFilter) ? (
+        <form
+          className="pptx-mark-prompt"
+          data-testid="document-mark-prompt"
+          style={{ left: props.pendingMark.rect.x, top: props.pendingMark.rect.y + props.pendingMark.rect.height + 10, width: Math.max(props.pendingMark.rect.width, 240) }}
+          onSubmit={(event) => { event.preventDefault(); markPrompt.onSubmit(); }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <input
+            placeholder="描述你想要的修改"
+            autoFocus
+            value={markPrompt.instruction}
+            onChange={(event) => markPrompt.onInstructionChange(event.target.value)}
+          />
+          <button className="send" type="submit" aria-label="发送修改" title="发送到对话" disabled={markPrompt.busy || !markPrompt.instruction.trim()}>{markPromptIcon("M12 19V6|m6 11 6-6 6 6")}</button>
+          <button type="button" aria-label="删除标记" title="删除标记" onClick={() => markPrompt.onClear()}>{markPromptIcon("M3 6h18|M8 6V4h8v2|M19 6l-1 14H6L5 6")}</button>
+        </form>
       ) : null}
     </div>
   );

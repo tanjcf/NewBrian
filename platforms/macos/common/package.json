@@ -9,6 +9,8 @@
     "dev:agentd": "pnpm --dir apps/agentd dev",
     "build:desktop": "pnpm --dir apps/desktop build",
     "package:mac": "pnpm --dir apps/desktop package:mac",
+    "package:mac:arm64": "pnpm --dir apps/desktop package:mac:arm64",
+    "package:mac:intel": "pnpm --dir apps/desktop package:mac:intel",
     "package:mac:arm64:test": "pnpm --dir apps/desktop package:mac:arm64:test",
     "build": "pnpm -r build",
     "check": "pnpm -r check",

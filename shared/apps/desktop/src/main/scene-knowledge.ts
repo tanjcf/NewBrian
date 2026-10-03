@@ -8,7 +8,7 @@ const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[
   ] },
   quant: { title: "量化交易", sections: [
     { title: "能力", keywords: ["行情", "股票", "K线", "量柱", "组合", "策略"], content: "查询真实行情、查看K线与成交量、组合持仓、策略回测和风险分析。默认不连接真实券商，不执行真实下单。" },
-    { title: "工具接口", keywords: ["quant.market.query", "quant.portfolio.create", "quant.portfolio.delete", "quant.radar.create", "quant.note.add", "bars", "行情", "组合", "雷达", "笔记"], content: "quant.market.query：查询股票/指数行情。quant.portfolio.create：用户要求创建组合或组合 Skill 时必须调用，必须传 skillId、title、symbol、strategyId；工具会原子创建当前项目 .newbrain/skills Skill 包、独立模拟账本和右侧同名组合卡片，只生成文字不算完成。quant.strategy.run：用同一个 skillId 承载成交，用 strategyId 选择 trend-following 或 mean-reversion，运行后同步同一张右侧组合卡片。quant.portfolio.delete：同时删除该工具管理的 Skill 包、组合账本和右侧卡片。quant.radar.create：创建交易日自动执行计划，并立即基于最近 12 个月真实行情模拟一次，同步右侧雷达和组合。quant.note.add：用户要求总结并添加研究笔记时必须调用，把总结真实写入右侧研究笔记；只回复文字不算完成。行情参数包括 symbol、startDate、endDate、interval、adjustment。必须使用工具返回的数据，不编造实时价格。" }
+    { title: "工具接口", keywords: ["quant.market.query", "quant.portfolio.create", "quant.portfolio.delete", "quant.radar.create", "quant.note.add", "bars", "行情", "组合", "雷达", "笔记"], content: "quant.market.query：查询股票/指数行情。quant.portfolio.create：用户要求创建组合或组合 Skill 时必须调用，必须传 skillId、title、symbol、strategyId；工具会在当前项目 .newbrain/skills/<skillId>/ 创建目录并写入 SKILL.md，同时创建独立模拟账本和右侧同名组合卡片，只生成文字不算完成。quant.strategy.run：用同一个 skillId 承载成交，用 strategyId 选择 trend-following 或 mean-reversion，运行后同步同一张右侧组合卡片。quant.portfolio.delete：同时删除该工具管理的 Skill 包、组合账本和右侧卡片。quant.radar.create：创建交易日自动执行计划，并立即基于最近 12 个月真实行情模拟一次，同步右侧雷达和组合。quant.note.add：用户要求总结并添加研究笔记时必须调用，把总结真实写入右侧研究笔记；只回复文字不算完成。行情参数包括 symbol、startDate、endDate、interval、adjustment。必须使用工具返回的数据，不编造实时价格。" }
   ] },
   game: { title: "游戏制作", sections: [
     { title: "能力", keywords: ["关卡", "角色", "世界观", "战斗", "资产", "测试"], content: "管理关卡、角色与世界观、战斗设计、资产和试玩测试。先读取项目状态，再通过右侧工具保存可追踪的设计结果。" },
@@ -32,7 +32,7 @@ const scenes: Record<BrainWorkspaceKey, { title: string; sections: SceneSection[
   ] },
   document: { title: "文档创作", sections: [
     { title: "能力", keywords: ["文稿", "审校", "项目", "文件", "政务", "写作"], content: "创建和编辑文稿、审校批注、管理项目文件、生成政务写作规格和导出文档。保持当前线程上下文，避免混入其他项目对话。" },
-    { title: "工具接口", keywords: ["document", "review", "export", "annotation"], content: "通过文档工作台、批注、审校、变更集和导出工具操作右侧 tools；文件变更先预览，用户确认后再导出。" }
+    { title: "工具接口", keywords: ["document", "review", "export", "annotation", "office", "libreoffice", "docx", "xlsx", "pptx"], content: "通过文档工作台、批注、审校、变更集和导出工具操作右侧 tools；文件变更先预览，用户确认后再导出。Office 插件：office.status 检查本机 LibreOffice、WPS、Microsoft Office；office.open 打开项目内 docx/xlsx/pptx，优先 LibreOffice；office.convert 用 LibreOffice 转换到 outputs/。新建仍用 document.create_docx、document.create_pdf 和 artifact.create。" }
   ] }
 };
 

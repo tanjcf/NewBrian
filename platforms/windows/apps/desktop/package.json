@@ -1,6 +1,6 @@
 {
   "name": "@codex-forge/desktop",
-  "version": "1.4.23",
+  "version": "1.4.28",
   "private": true,
   "description": "Desktop shell for the NewBrain local-first coding agent workbench.",
   "author": "NewBrain",
@@ -178,6 +178,10 @@
       {
         "from": "build/rust-core/brain-core.exe",
         "to": "brain-core/brain-core.exe"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
       }
     ],
     "msiProjectCreated": "build/msi-project-created.cjs",

@@ -115,7 +115,8 @@ import { registerVideoAgentTools } from "./video-agent-tools.js";
 import { registerMusicAgentTools } from "./music-agent-tools.js";
 import { registerAutoMediaAgentTools, resolveAutoMediaReferenceImage } from "./auto-media-agent-tools.js";
 import { registerDataAgentTools } from "./data-agent-tools.js";
-import { registerDocumentAgentTools } from "./document-agent-tools.js";
+import { persistDocumentOutput, registerDocumentAgentTools } from "./document-agent-tools.js";
+import { registerOfficeAgentTools } from "./office-agent-tools.js";
 import { registerExploreAgentTools } from "./explore-agent-tools.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { MusicMediaService } from "./music-media-service.js";
@@ -138,6 +139,7 @@ import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
+import { createRememberedLoginStore } from "./remembered-login-store.js";
 import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
 import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
 import { isCustomModelSelection } from "../shared/custom-model-endpoint.js";
@@ -455,6 +457,7 @@ import { normalizeBrowserPreviewUrl } from "./browser-preview-service.js";
 import { registerSystemIpcHandlers } from "./system-ipc.js";
 import { registerUsageExceptionFeedbackComposition } from "./user-usage-exception-feedback-composition.js";
 import { registerDesktopAppUpdateComposition, isDesktopUpdateExitPending } from "./desktop-app-update-composition.js";
+import { fetchGithubDesktopRelease } from "./github-desktop-release.js";
 import { registerGrowthComposition } from "./growth-composition.js";
 import { registerWorkspaceGitIpcHandlers } from "./workspace-git-ipc.js";
 import { registerWindowIpcHandlers } from "./window-ipc.js";
@@ -483,6 +486,7 @@ import { NovelTtsService } from "./novel-tts-service.js";
 import { DesktopControlPlaneHeartbeat } from "./desktop-control-plane-heartbeat.js";
 import { buildErrorRemediationRequest } from "./error-remediation-policy.js";
 import {
+  automationTaskPrompt,
   computeNextDailyRunAt,
   createAutomationSpec,
   markAutomationFailed,
@@ -627,6 +631,10 @@ async function expertSceneForThread(threadId: string) {
   const thread = workspace?.threads.find(item => item.id === threadId);
   return thread?.brainWorkspaceKey || workspace?.brainWorkspaceKey || "unknown";
 }
+async function summonExpertChosenByUser(input: Parameters<typeof summonExpertToThreadCore>[0]) {
+  await (await expertCollaborationForThread(input.threadId)).acceptExplicitChoice(input.expertId);
+  return summonExpertToThread(input);
+}
 async function summonExpertToThread(input: Parameters<typeof summonExpertToThreadCore>[0]) {
   await (await expertCollaborationForThread(input.threadId)).authorize(input.expertId);
   const context = await summonExpertToThreadCore({ ...input, workspaceKey: await expertSceneForThread(input.threadId) });
@@ -652,6 +660,7 @@ async function expertCollaborationForThread(threadId: string) {
       return questions;
     },
     applied: (goalId, questionId) => codexStorage.markExpertPreferenceApplied(threadId, goalId, questionId),
+    answer: (goalId, questionId, answer) => codexStorage.answerGoalQuestion(threadId, goalId, questionId, answer),
     ask: (goalId, question) => codexStorage.createGoalQuestion(threadId, goalId, question),
     catalog: async () => (await listExpertsForRuntime()).filter(item => isExpertAvailableInWorkspace(item, scene)),
     preferences: async () => {
@@ -732,6 +741,10 @@ const desktopWindowControl = new DesktopWindowControl({
 });
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
+const rememberedLoginStore = createRememberedLoginStore(
+  join(workspaceStateRoot, "credentials", "remembered-login.credential"),
+  safeStorage
+);
 const customModelEndpointStore = new CustomModelEndpointStore(
   join(workspaceStateRoot, "credentials", "custom-model-endpoints"),
   safeStorage
@@ -4553,7 +4566,7 @@ function registerQuantRuntimeTools(
   targetRuntime.registerExternalTool({
     name: "quant.portfolio.create",
     title: "创建量化 Skill 与模拟组合",
-    description: "在当前项目 .newbrain/skills 中真实创建量化 Skill 包，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
+    description: "在当前项目 .newbrain/skills/<skillId>/ 创建目录并写入 SKILL.md，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
     namespace: "quant", kind: "write", risk: "low", requiresApproval: false,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "Skill 的稳定英文标识" },
@@ -5218,11 +5231,15 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
     });
   }
   const runNow = input.status === "run_now";
+  const recordRun = input.status === "record_run";
   const nextConfig = await writeFeatureConfig({
     ...config,
     automations: config.automations.map((item) => {
       if (item.id !== id) {
         return item;
+      }
+      if (recordRun) {
+        return markAutomationSucceeded([item], item.id, nowIso())[0];
       }
       if (runNow) {
         return {
@@ -8722,7 +8739,19 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     : workspace?.threads.find((item) => item.id === automation.threadId);
   if (!workspace || !thread) throw new Error("Automation target workspace/thread was not found.");
   const threadState = await readThreadState(workspace, thread);
-  const automationPrompt = String(automation.prompt || "").trim();
+  const storedPrompt = String(automation.prompt || automation.trigger || "").trim();
+  const automationPrompt = automation.action === "error_remediation"
+    ? storedPrompt
+    : automationTaskPrompt(storedPrompt);
+  if (automationPrompt && automationPrompt !== String(automation.prompt || "").trim()) {
+    const promptConfig = await readFeatureConfig();
+    await writeFeatureConfig({
+      ...promptConfig,
+      automations: promptConfig.automations.map((item) => item.id === automation.id
+        ? { ...item, prompt: automationPrompt, trigger: automationPrompt }
+        : item)
+    });
+  }
   if (automation.action === "error_remediation" || automationPrompt) {
     if (!automationModelChatService || !mainWindowRef || mainWindowRef.isDestroyed()) {
       throw new Error("Automation model runtime is not available.");
@@ -8731,7 +8760,11 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     const request = automation.action === "error_remediation"
       ? buildErrorRemediationRequest()
       : automationPrompt || String(automation.trigger || automation.title);
-    await automationModelChatService.chat(mainWindowRef.webContents, {
+    const permissionMode = automation.permissionMode === "agent" ? "agent" : "full";
+    const taskRequest = automation.action === "error_remediation"
+      ? request
+      : `这是已保存的定时任务，请直接执行下面的指令，不要再创建自动化任务，也不要处理压缩包路径。\n\n${request}`;
+    const chatResult = await automationModelChatService.chat(mainWindowRef.webContents, {
       requestId: makeId("automation-run"),
       workspaceId: workspace.id,
       threadId: thread.id,
@@ -8743,7 +8776,7 @@ async function runScheduledAutomation(automation: AutomationSpec) {
       reviewModel: config.llm.reviewModel,
       reasoningEffort: automation.reasoning || config.llm.reasoningEffort,
       disableResponseStorage: config.llm.disableResponseStorage,
-      permissionMode: "agent",
+      permissionMode,
       systemPrompt: config.llm.systemPrompt,
       selectedSkillNames: automation.action === "error_remediation" ? ["error-auto-remediation"] : [],
       composerModes: ["goal"],
@@ -8752,9 +8785,12 @@ async function runScheduledAutomation(automation: AutomationSpec) {
           id: message.id, role: message.role as "system" | "user" | "assistant",
           content: message.content, createdAt: message.createdAt
         })),
-        { id: makeId("msg"), role: "user", content: request, createdAt: nowIso() }
+        { id: makeId("msg"), role: "user", content: taskRequest, createdAt: nowIso() }
       ]
     });
+    if (chatResult?.awaitingApproval) {
+      throw new Error("定时任务停在工具批准，没有完成执行。");
+    }
   } else {
   const shellEnv = await buildWorkspaceShellEnvWithPreferences(workspace);
   const automationRuntime = await createLocalRuntime({
@@ -8801,8 +8837,12 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     automations: markAutomationSucceeded(latestConfig.automations, automation.id, startedAt)
   });
 }
+let automationTickQueued = false;
 async function tickAutomations() {
-  if (automationTickRunning) return;
+  if (automationTickRunning) {
+    automationTickQueued = true;
+    return;
+  }
   automationTickRunning = true;
   try {
   const config = await readFeatureConfig();
@@ -8821,6 +8861,10 @@ async function tickAutomations() {
   }
   } finally {
     automationTickRunning = false;
+    if (automationTickQueued) {
+      automationTickQueued = false;
+      void tickAutomations();
+    }
   }
 }
 const automationTimerService = new AutomationTimerService({
@@ -9919,6 +9963,9 @@ function registerIpc() {
     claimNationalDayGift,
     sendLoginCode: sendDesktopLoginCode,
     login: loginDesktopAuth,
+    loadRememberedLogin: () => rememberedLoginStore.load(),
+    saveRememberedLogin: (input) => rememberedLoginStore.save(input),
+    clearRememberedLogin: () => rememberedLoginStore.clear(),
     loginWithAlipayQr: loginDesktopWithAlipayQr,
     changePassword: changeDesktopAuthPassword,
     changeEmail: changeDesktopAuthEmail,
@@ -10075,7 +10122,7 @@ function registerIpc() {
       builtinRoot: expertBuiltinRoot,
       installedRoot: expertInstalledRoot
     }).then(async () => { await applyApplicationSkillPolicy(runtime); return listExpertsForRuntime(); }),
-    summon: (threadId, expertId) => summonExpertToThread({
+    summon: (threadId, expertId, userConfirmed) => (userConfirmed ? summonExpertChosenByUser : summonExpertToThread)({
       threadId,
       expertId,
       registryPath: expertRegistryPath,
@@ -10373,35 +10420,7 @@ function registerIpc() {
       }
     },
     syncControlPlane: () => syncAuthenticatedDesktopControlPlane(),
-    fetchAppUpdate: async () => {
-      // Public endpoint: works without login. Attach bearer when present so fingerprint
-      // canary targeting still works for signed-in users.
-      const gatewayOrigin = await readGatewayOrigin();
-      const device = collectDesktopDeviceFingerprint();
-      const authState = await readDesktopAuthState();
-      const token = authState?.access_token?.trim() || "";
-      const headers = createDesktopAuthHeaders({
-        accessToken: token || undefined,
-        device
-      });
-      if (authState?.session_cookie?.trim()) {
-        headers.Cookie = authState.session_cookie.trim();
-      }
-      const response = await fetch(`${gatewayOrigin}/api/desktop/v1/app-update`, {
-        method: "GET",
-        headers,
-        signal: AbortSignal.timeout(15_000)
-      });
-      const payload = await readJsonResponse(response);
-      if (!response.ok) {
-        const message =
-          payload && typeof payload === "object"
-            ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "")
-            : "";
-        throw new Error(message || `app-update failed: HTTP ${response.status}`);
-      }
-      return payload;
-    },
+    fetchAppUpdate: () => fetchGithubDesktopRelease(),
     verifyAppUpdate: async ({ releaseId, ok, appVersion }) => {
       const authState = await readDesktopAuthState();
       if (!authState) throw new Error("desktop session required");
@@ -10954,16 +10973,30 @@ function registerIpc() {
           ownerId,
           workspaceKey: "document"
         }).find((project) => project.localWorkspaceId === workspace.id);
+        const notifyDocumentUi = (payload: { projectId: string; reason: string }) => {
+          mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
+        };
+        registerOfficeAgentTools(targetRuntime, {
+          projectRoot: workspace.path,
+          projectId: documentProject?.id || workspace.id,
+          notifyUi: notifyDocumentUi,
+          persistOutput: documentProject
+            ? (relativePath) => persistDocumentOutput({
+              ownerId: resolveBrainLocalOwnerId,
+              projectId: documentProject.id,
+              projectRoot: workspace.path,
+              storage: brainWorkspaceStorage,
+              notifyUi: notifyDocumentUi
+            }, relativePath)
+            : undefined
+        });
         if (documentProject) {
           registerDocumentAgentTools(targetRuntime, {
             ownerId: resolveBrainLocalOwnerId,
             projectId: documentProject.id,
             projectRoot: workspace.path,
             storage: brainWorkspaceStorage,
-            notifyUi: (payload) => {
-              // Reuse the resource-panel refresh channel so 文件/产物 counts update live.
-              mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
-            }
+            notifyUi: notifyDocumentUi
           });
         }
       }

@@ -362,3 +362,22 @@ test("an already decided approval does not keep the sidebar waiting badge", () =
     snapshotApprovalId: "approval-2"
   }), true);
 });
+
+test("a finished answer replaces the longer approval-wait notice", () => {
+  const notice = [
+    "已请求执行工具，等待你批准后继续。",
+    "待确认工具：shell.exec",
+    "批准后会继续生成可见结果；拒绝则本轮停止。"
+  ].join("\n\n");
+  const reconciled = reconcileThreadDisplayMessages(
+    [
+      { id: "user-1", role: "user", content: "检索进展", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "assistant-turn-1", role: "assistant", content: notice, createdAt: "2026-01-01T00:00:05.000Z" }
+    ],
+    [
+      { id: "user-1", role: "user", content: "检索进展", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "assistant-turn-1", role: "assistant", content: "命令已执行。", createdAt: "2026-01-01T00:00:05.000Z" }
+    ]
+  );
+  assert.equal(reconciled.find((message) => message.id === "assistant-turn-1")?.content, "命令已执行。");
+});

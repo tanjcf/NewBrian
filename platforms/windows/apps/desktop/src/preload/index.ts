@@ -101,6 +101,7 @@ import type {
   MobilePairingState,
   ModelConfig,
   ModelChatInput,
+  OpenClawSkillImportZipToProjectInput,
   OpenClawSkillInstallClawHubInput,
   OpenClawSkillInstallPathInput,
   OpenClawSkillInstallResultPayload,
@@ -277,9 +278,12 @@ contextBridge.exposeInMainWorld("newbrain", {
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),
   getQuantSkillPerformance: (input: { projectId: string; skillId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillPerformance, input),
+  listQuantProjectSkills: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillList, input),
   runQuantSkillSimulation: (input: {
     projectId: string;
     skillId: string;
+    title?: string;
+    strategyId?: string;
     symbol: string;
     quantity: number;
     query: unknown;
@@ -369,6 +373,15 @@ contextBridge.exposeInMainWorld("newbrain", {
   claimNationalDayGift: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.claimNationalDayGift),
   sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
   loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
+  loadRememberedLogin: () => ipcRenderer.invoke(desktopIpcChannels.auth.loadRememberedLogin),
+  saveRememberedLogin: (input: {
+    version: 1;
+    channel: "email" | "phone";
+    email: string;
+    phone: string;
+    password: string;
+  }) => ipcRenderer.invoke(desktopIpcChannels.auth.saveRememberedLogin, input),
+  clearRememberedLogin: () => ipcRenderer.invoke(desktopIpcChannels.auth.clearRememberedLogin),
   loginWithAlipayQr: (input: DesktopAuthAlipayQrLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.loginWithAlipayQr, input),
   changeAuthPassword: (input: DesktopAuthChangePasswordInput): Promise<{ ok: boolean; detail: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),
   changeAuthEmail: (input: DesktopAuthChangeEmailInput): Promise<{ ok: boolean; detail: string; email: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changeEmail, input),
@@ -393,6 +406,8 @@ contextBridge.exposeInMainWorld("newbrain", {
   queueShellCommand: (command: string) => ipcRenderer.invoke(desktopIpcChannels.core.queueShellCommand, command),
   openSystemTerminal: (cwd: string) => ipcRenderer.invoke(desktopIpcChannels.terminal.openSystem, cwd),
   respondApproval: (input: RespondApprovalInput) => ipcRenderer.invoke(desktopIpcChannels.core.respondApproval, input),
+  applyLivePermissionMode: (input: { requestId: string; permissionMode: "full" }) =>
+    ipcRenderer.invoke(desktopIpcChannels.core.setLivePermissionMode, input),
   generatePatch: (input: GeneratePatchInput) =>
     ipcRenderer.invoke(desktopIpcChannels.core.generatePatch, input),
   applyPatch: () => ipcRenderer.invoke(desktopIpcChannels.core.applyPatch),
@@ -433,6 +448,8 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.installPath, input),
   selectAndInstallOpenClawSkill: (input: OpenClawSkillSelectInstallInput = {}): Promise<OpenClawSkillInstallResultPayload | null> =>
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.selectAndInstall, input),
+  importSkillZipToProject: (input: OpenClawSkillImportZipToProjectInput): Promise<OpenClawSkillInstallResultPayload | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.importZipToProject, input),
   inspectOpenClawSkillPath: (input: OpenClawSkillInspectPathInput): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.inspectPath, input),
   exportOpenClawSkillZip: (input: OpenClawSkillExportZipInput): Promise<OpenClawSkillExportZipResult> =>
@@ -445,7 +462,7 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.experts.install, input),
   setExpertEnabled: (input: { expertId: string; enabled: boolean }): Promise<Array<Record<string, unknown>>> =>
     ipcRenderer.invoke(desktopIpcChannels.experts.setEnabled, input),
-  summonExpert: (input: { threadId: string; expertId: string }): Promise<Record<string, unknown>> =>
+  summonExpert: (input: { threadId: string; expertId: string; userConfirmed?: boolean }): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke(desktopIpcChannels.experts.summon, input),
   clearExpertSummon: (input: { threadId: string }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(desktopIpcChannels.experts.clearSummon, input),
@@ -549,6 +566,7 @@ contextBridge.exposeInMainWorld("newbrain", {
     return () => ipcRenderer.removeListener(desktopIpcChannels.appUpdate.progress, handler);
   },
   openLogLocation: (): Promise<OpenLogLocationResult> => ipcRenderer.invoke(desktopIpcChannels.system.openLogLocation),
+  writeClipboardText: (text: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("phase1:write-clipboard-text", text),
   getWorkspaceHeaderStatus: (workspaceId: string): Promise<WorkspaceHeaderStatus> =>
     ipcRenderer.invoke(desktopIpcChannels.workspaceGit.getHeaderStatus, workspaceId),
   getReviewChanges: (input: WorkspaceReviewInput): Promise<WorkspaceReviewChanges> => ipcRenderer.invoke(desktopIpcChannels.workspaceGit.getReviewChanges, input),

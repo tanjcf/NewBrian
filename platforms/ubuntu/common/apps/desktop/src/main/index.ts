@@ -85,6 +85,7 @@ import { composeAndRegisterModelChat } from "./compose-model-chat.js";
 import { DesktopErrorCollector } from "./desktop-error-collector.js";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
+import { createRememberedLoginStore } from "./remembered-login-store.js";
 import { createLinuxSecretProtector } from "./linux-secret-protector.js";
 import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
 import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
@@ -227,6 +228,10 @@ const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "priv
 const linuxSecretProtector = createLinuxSecretProtector(safeStorage);
 const privateModelCredentialVault = new DesktopSecretVault(
   privateModelCredentialPath,
+  linuxSecretProtector
+);
+const rememberedLoginStore = createRememberedLoginStore(
+  join(workspaceStateRoot, "credentials", "remembered-login.credential"),
   linuxSecretProtector
 );
 const customModelEndpointStore = new CustomModelEndpointStore(
@@ -10586,6 +10591,10 @@ function registerIpc() {
   ipcMain.handle("phase1:login-auth", async (_event, input: DesktopAuthLoginInput) => {
     return loginDesktopAuth(input);
   });
+
+  ipcMain.handle("phase1:load-remembered-login", () => rememberedLoginStore.load());
+  ipcMain.handle("phase1:save-remembered-login", (_event, input: unknown) => rememberedLoginStore.save(input));
+  ipcMain.handle("phase1:clear-remembered-login", () => rememberedLoginStore.clear());
 
   ipcMain.handle("phase1:logout-auth", async () => {
     return logoutDesktopAuth();

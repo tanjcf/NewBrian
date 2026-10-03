@@ -240,6 +240,56 @@ test("requires approval for common Windows exfiltration commands", () => {
   }
 });
 
+test("full access allows shell commands even when a custom rule would ask", () => {
+  const engine = new PolicyEngine({ rules: [
+    { id: "ask-listing", toolName: "shell.exec", commandPrefix: "Get-ChildItem", decision: "ask" },
+    { id: "deny-custom", toolName: "shell.exec", commandPrefix: "custom-deny-marker", decision: "deny" }
+  ] });
+  const asked = engine.evaluate({
+    toolName: "shell.exec",
+    arguments: { command: "Get-ChildItem -Force -Recurse -Depth 2 -LiteralPath ." },
+    descriptor,
+    workspacePath: workspace,
+    permissionMode: "full"
+  });
+  assert.equal(asked.decision, "allow");
+  assert.equal(asked.ruleId, ":danger-full-access");
+  const denied = engine.evaluate({
+    toolName: "shell.exec",
+    arguments: { command: "custom-deny-marker --now" },
+    descriptor,
+    workspacePath: workspace,
+    permissionMode: "full"
+  });
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.source, "rule");
+});
+
+test("full access allows file tools to target paths outside the workspace", () => {
+  const outside = process.platform === "win32"
+    ? "I:\\G盘迁移备份\\workrpase\\spring-app\\operations-engineer.zip"
+    : "/tmp/operations-engineer.zip";
+  const engine = new PolicyEngine();
+  const allowed = engine.evaluate({
+    toolName: "workspace.read",
+    arguments: { path: outside },
+    descriptor,
+    workspacePath: workspace,
+    permissionMode: "full"
+  });
+  assert.equal(allowed.decision, "allow");
+  assert.equal(allowed.ruleId, ":danger-full-access");
+  const denied = engine.evaluate({
+    toolName: "workspace.read",
+    arguments: { path: outside },
+    descriptor,
+    workspacePath: workspace,
+    permissionMode: "agent"
+  });
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.ruleId, "workspace-boundary");
+});
+
 test("full access permits non-critical mutating absolute paths outside the workspace", () => {
   const outside = process.platform === "win32" ? "C:\\Windows\\Temp\\x" : "/tmp/x";
   const command = process.platform === "win32"

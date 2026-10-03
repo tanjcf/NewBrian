@@ -49,6 +49,7 @@ interface HostAgentService {
   resumeApproval(runtimeId: string, approved: boolean): Promise<unknown>;
   steer(runtimeId: string, message: string): unknown;
   cancel(runtimeId: string, reason?: string): unknown;
+  setPermissionMode(runtimeId: string, mode: "full" | "approval" | "agent"): unknown;
   snapshot(runtimeId: string): unknown;
   resolveModel?(callbackId: string, result: unknown, error?: { code: string; message: string }): unknown;
   progressModel?(callbackId: string): unknown;
@@ -260,6 +261,16 @@ export class AgentHostRuntime {
           stringField(payload, "runtimeId"),
           booleanField(payload, "approved")
         );
+      case "agent.loop.set-permission-mode": {
+        const permissionMode = payload.permissionMode;
+        if (permissionMode !== "full" && permissionMode !== "agent" && permissionMode !== "approval") {
+          throw new AgentHostRequestError("invalid_payload", "Permission mode is invalid.");
+        }
+        return this.requireAgent().setPermissionMode(
+          stringField(payload, "runtimeId"),
+          permissionMode
+        );
+      }
       case "agent.loop.steer": {
         const runtimeId = stringField(payload, "runtimeId");
         if (Array.isArray(payload.attachments)) {
