@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QuantStrategyScheduler, type QuantStrategySchedule, type QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
+import { QuantStrategyScheduler, type QuantStrategyExecution, type QuantStrategySchedule, type QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
 
 function schedule(overrides: Partial<QuantStrategySchedule> = {}): QuantStrategySchedule {
   return {
@@ -29,7 +29,7 @@ function memoryStore(items: QuantStrategySchedule[]): QuantStrategyScheduleStore
 
 test("runs a due strategy once with a stable trading-date idempotency key", async () => {
   const store = memoryStore([schedule()]);
-  const calls: Array<Record<string, string>> = [];
+  const calls: QuantStrategyExecution[] = [];
   const scheduler = new QuantStrategyScheduler({ store, resolveOwnerId: () => "owner-a", execute: async (input) => { calls.push(input); } });
   const now = new Date("2026-08-20T07:11:00.000Z"); // Thursday 15:11 Asia/Shanghai
   await scheduler.tick(now);

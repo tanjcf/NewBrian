@@ -1,5 +1,6 @@
 import type { MarketDataQuery, PortfolioActivity, PortfolioSnapshot, QuantBar, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
 import { QuantSkillSignalError, quantSkillSignal } from "./quant-skill-signal.ts";
+import type { QuantStrategyRules } from "./quant-strategy-rules.ts";
 import { MarketDataService, type MarketBarsRemoteQuery } from "./market-data-service.ts";
 import { SimulationLedger, type SimulationLedgerState } from "./simulation-ledger.ts";
 
@@ -147,6 +148,7 @@ export class QuantSimulationService {
   async runSkillSimulation(projectId: string, input: {
     skillId: string;
     strategyId?: string;
+    rules?: QuantStrategyRules;
     symbol: string;
     quantity: number;
     query: MarketDataQuery;
@@ -169,7 +171,7 @@ export class QuantSimulationService {
     for (let index = 19; index < bars.length; index += 1) {
       const window = bars.slice(0, index + 1);
       const bar = bars[index]!;
-      const signal = quantSkillSignal(input.strategyId?.trim() || skillId, window);
+      const signal = quantSkillSignal(input.strategyId?.trim() || skillId, window, input.rules);
       const prices = { [symbol]: bar.close };
       const before = this.skillSnapshot(projectId, skillId, prices);
       const position = before.positions.find((item) => item.symbol === symbol);

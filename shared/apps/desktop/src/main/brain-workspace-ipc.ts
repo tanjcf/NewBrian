@@ -27,6 +27,7 @@ import {
 import type { BrainFlowDefinition } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import type { QuantStrategyRules } from "./quant-strategy-rules.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
 import { createDocumentRevisionProposal, syncDocumentRevisionTask } from "./document-revision-task.js";
 import { inspectGameProject } from "./game-project-inspector.js";
@@ -1756,6 +1757,8 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       const query = requireRecord(input.query, "Quant skill simulation query");
       return dependencies.quant!.runSkillSimulation(projectId, {
         skillId: requireString(input.skillId, "skillId"),
+        strategyId: typeof input.strategyId === "string" ? input.strategyId : undefined,
+        rules: input.rules as QuantStrategyRules | undefined,
         symbol: requireString(input.symbol, "symbol"),
         quantity,
         query: query as any,
@@ -1782,7 +1785,9 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       if (!Number.isInteger(quantity) || quantity <= 0) throw new TypeError("quantity must be a positive integer");
       return dependencies.storage.createQuantStrategySchedule({
         ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"),
-        skillId: requireString(input.skillId, "skillId"), exchange, runAt: requireString(input.runAt, "runAt"),
+        skillId: requireString(input.skillId, "skillId"), strategyId: typeof input.strategyId === "string" ? input.strategyId : undefined,
+        rules: input.rules as import("./quant-strategy-rules.ts").QuantStrategyRules | undefined,
+        exchange, runAt: requireString(input.runAt, "runAt"),
         symbol: requireString(input.symbol, "symbol"), quantity
       });
     });
