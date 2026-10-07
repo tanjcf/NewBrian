@@ -130,6 +130,8 @@ import { DataRuntimeService } from "./data-runtime-service.js";
 import { registerDataImportIpc } from "./data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantSkillPackageService } from "./quant-skill-package-service.js";
+import { QuantRadarService } from "./quant-radar-service.js";
+import { quantStrategyRulesInputSchema, type QuantStrategyRules } from "./quant-strategy-rules.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
@@ -4099,6 +4101,38 @@ function registerQuantRuntimeTools(
     return { ok: true, output: JSON.stringify(result) };
   });
   targetRuntime.registerExternalTool({
+    name: "quant.radar.scan", title: "运行量化雷达扫描",
+    description: "使用真实市场快照筛出最多 100 只股票，再按已保存 Skill 的策略规则查询日线并推送买入信号。雷达只扫描和通知，不创建订单、不修改模拟组合。",
+    namespace: "quant", kind: "read", risk: "low", requiresApproval: false,
+    inputSchema: { type: "object", properties: {
+      skillId: { type: "string", description: "可选已保存量化 Skill；提供后自动读取其策略规则" },
+      strategyId: { type: "string", description: "未提供 skillId 时使用的内置信号策略" },
+      rules: { ...quantStrategyRulesInputSchema, description: "自定义买入、卖出及跟踪条件" },
+      criteria: { type: "object", description: "真实行情快照筛选条件，例如涨跌幅、成交量或市值" }
+    }, required: ["criteria"], additionalProperties: false }
+  }, async (input) => {
+    const skillId = typeof input.skillId === "string" ? input.skillId.trim() : "";
+    const savedSkill = skillId ? await quantSkillPackages.read(skillId) : null;
+    const strategyId = String(input.strategyId || savedSkill?.strategyId || "trend-following");
+    const rules = (input.rules as QuantStrategyRules | undefined) || savedSkill?.rules;
+    const screened = await desktopMarketOverviewClient.queryScreener({ ...(input.criteria as Record<string, unknown>), limit: 100 });
+    const radar = new QuantRadarService({
+      queryScreener: async () => screened,
+      queryBars: (query) => desktopMarketBarsClient.queryBars(query)
+    });
+    const result = { ...await radar.scan({ strategyId, rules, criteria: input.criteria as Record<string, unknown> }), skillId: skillId || undefined, dataset: screened.dataset, fetchedAt: screened.fetchedAt };
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantScreenerUpdated, { projectId: workspaceId, result: { ...screened, radar: result } });
+    }
+    return { ok: true, output: JSON.stringify(result) };
+  });
+  targetRuntime.registerExternalTool({
+    name: "quant.skill.list", title: "列出已保存量化 Skill",
+    description: "列出当前项目已保存的量化策略 Skill 标识、标的、规则和模拟属性。运行或绑定自动化前先用它查找可复用的 Skill。",
+    namespace: "quant", kind: "read", risk: "low", requiresApproval: false,
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => ({ ok: true, output: JSON.stringify(await quantSkillPackages.list()) }));
+  targetRuntime.registerExternalTool({
     name: "quant.portfolio.summary",
     title: "读取模拟组合",
     description: "读取当前量化模拟组合，不执行真实交易。",
@@ -4117,7 +4151,8 @@ function registerQuantRuntimeTools(
       skillId: { type: "string", description: "Skill 的稳定英文标识" },
       title: { type: "string", description: "Skill 名称和右侧组合卡片显示名称" },
       symbol: { type: "string", description: "Skill 主要模拟标的代码" },
-      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "Skill 使用的内置信号策略" }
+      strategyId: { type: "string", description: "内置信号 ID，或自定义策略稳定标识" },
+      rules: { ...quantStrategyRulesInputSchema, description: "条件组 all 表示全部成立、any 表示任一成立；指标包括 close、volume、turnover、changePercent、sma（必须指定 2 至 250 日），支持 above、below、crosses_above、crosses_below" }
     }, required: ["skillId", "title", "symbol", "strategyId"], additionalProperties: false }
   }, async (input) => {
     const skillId = String(input.skillId || "").trim();
@@ -4127,7 +4162,8 @@ function registerQuantRuntimeTools(
       skillId,
       title,
       symbol: String(input.symbol || "").trim(),
-      strategyId: String(input.strategyId || "") as "trend-following" | "mean-reversion"
+      strategyId: String(input.strategyId || ""),
+      rules: input.rules as QuantStrategyRules | undefined
     });
     quantSimulationService.createSession(workspaceId);
     quantSimulationService.resetSkillLedger(workspaceId, skillId);
@@ -4179,17 +4215,23 @@ function registerQuantRuntimeTools(
     namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "承载模拟成交的组合 Skill 标识" },
-      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "运行的内置信号策略" },
-      symbol: { type: "string" },
+      strategyId: { type: "string", description: "可选策略标识；默认读取已保存 Skill 的策略" },
+      rules: { ...quantStrategyRulesInputSchema, description: "可选声明式规则；默认读取已保存 Skill 的规则" },
+      symbol: { type: "string", description: "可选标的；默认使用已保存 Skill 的标的" },
       quantity: { type: "integer", minimum: 1 }, startDate: { type: "string" }, endDate: { type: "string" }
-    }, required: ["skillId", "symbol", "quantity"], additionalProperties: false }
+    }, required: ["skillId", "quantity"], additionalProperties: false }
   }, async (input) => {
+    const skillId = String(input.skillId);
+    const savedSkill = await quantSkillPackages.read(skillId);
+    const symbol = String(input.symbol || savedSkill?.symbol || "").trim();
+    if (!symbol) throw new TypeError("symbol is required when the Skill has no saved symbol");
     const result = await quantSimulationService.runSkillSimulation(workspaceId, {
-      skillId: String(input.skillId), strategyId: input.strategyId ? String(input.strategyId) : undefined, symbol: String(input.symbol), quantity: Number(input.quantity),
-      query: { symbol: String(input.symbol), interval: "1d", adjustment: "forward", startDate: input.startDate ? String(input.startDate) : undefined, endDate: input.endDate ? String(input.endDate) : undefined }
+      skillId, strategyId: input.strategyId ? String(input.strategyId) : savedSkill?.strategyId, rules: (input.rules as QuantStrategyRules | undefined) || savedSkill?.rules,
+      symbol, quantity: Number(input.quantity),
+      query: { symbol, interval: "1d", adjustment: "forward", startDate: input.startDate ? String(input.startDate) : undefined, endDate: input.endDate ? String(input.endDate) : undefined }
     });
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      const activity = quantSimulationService.skillActivity(workspaceId, String(input.skillId), { [String(input.symbol)]: result.snapshot.positions.find((item) => item.symbol === String(input.symbol))?.currentPrice || 0 });
+      const activity = quantSimulationService.skillActivity(workspaceId, skillId, { [symbol]: result.snapshot.positions.find((item) => item.symbol === symbol)?.currentPrice || 0 });
       mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId: String(input.skillId), activity });
     }
     return { ok: true, output: JSON.stringify({ simulationOnly: true, result }) };
@@ -4204,37 +4246,34 @@ function registerQuantRuntimeTools(
     return { ok: true, output: JSON.stringify(quantSimulationService.performance(workspaceId, String(input.skillId))) };
   });
   targetRuntime.registerExternalTool({
-    name: "quant.radar.create", title: "创建 Skill 雷达并立即模拟",
-    description: "创建交易日自动运行的 Skill 雷达计划，并立即用最近 12 个月真实历史行情执行一次模拟以同步右侧雷达和组合。不连接真实券商。",
+    name: "quant.automation.create", title: "创建策略模拟自动化",
+    description: "创建交易日自动执行的模拟策略任务，按已保存 Skill 的规则处理指定标的并写入独立模拟组合。不连接真实券商。",
     namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "承载雷达模拟成交的自定义组合 Skill 标识" },
-      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "雷达自动运行的内置信号策略" },
-      symbol: { type: "string" }, quantity: { type: "integer", minimum: 1 },
+      strategyId: { type: "string", description: "可选内置信号策略标识；默认使用已保存 Skill 的规则" },
+      rules: { ...quantStrategyRulesInputSchema, description: "可选声明式买入、卖出和跟踪规则" },
+      symbol: { type: "string", description: "可选标的；默认使用已保存 Skill 的标的" }, quantity: { type: "integer", minimum: 1 },
       exchange: { type: "string", enum: ["SSE", "SZSE", "BSE"] },
       runAt: { type: "string", description: "交易日执行时间，HH:mm" }
-    }, required: ["skillId", "strategyId", "symbol", "quantity", "exchange", "runAt"], additionalProperties: false }
+    }, required: ["skillId", "quantity", "exchange", "runAt"], additionalProperties: false }
   }, async (input) => {
     const skillId = String(input.skillId || "").trim();
-    const strategyId = String(input.strategyId || "") as "trend-following" | "mean-reversion";
-    const symbol = String(input.symbol || "").trim();
+    const savedSkill = await quantSkillPackages.read(skillId);
+    const strategyId = String(input.strategyId || savedSkill?.strategyId || "trend-following");
+    const rules = (input.rules as QuantStrategyRules | undefined) || savedSkill?.rules;
+    if (strategyId !== "trend-following" && strategyId !== "mean-reversion" && !rules) throw new TypeError("custom strategy automation requires a saved Skill with rules");
+    const symbol = String(input.symbol || savedSkill?.symbol || "").trim();
+    if (!symbol) throw new TypeError("symbol is required when the Skill has no saved symbol");
     const quantity = Number(input.quantity);
     const exchange = String(input.exchange || "") as "SSE" | "SZSE" | "BSE";
     const runAt = String(input.runAt || "").trim();
     const ownerId = await resolveBrainLocalOwnerId();
-    const schedule = brainWorkspaceStorage.createQuantStrategySchedule({ ownerId, projectId: workspaceId, skillId, strategyId, exchange, runAt, symbol, quantity });
-    const end = new Date();
-    const start = new Date(end);
-    start.setUTCFullYear(start.getUTCFullYear() - 1);
-    const result = await quantSimulationService.runSkillSimulation(workspaceId, {
-      skillId, strategyId, symbol, quantity,
-      query: { symbol, interval: "1d", adjustment: "forward", startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) }
-    });
-    const activity = quantSimulationService.skillActivity(workspaceId, skillId, { [symbol]: result.snapshot.positions.find((item) => item.symbol === symbol)?.currentPrice || 0 });
+    const schedule = brainWorkspaceStorage.createQuantStrategySchedule({ ownerId, projectId: workspaceId, skillId, strategyId, rules, exchange, runAt, symbol, quantity });
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, schedule, activity });
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, schedule });
     }
-    return { ok: true, output: JSON.stringify({ simulationOnly: true, schedule, result }) };
+    return { ok: true, output: JSON.stringify({ simulationOnly: true, schedule, ordersPlacedAtCreation: 0 }) };
   });
   targetRuntime.registerExternalTool({
     name: "quant.note.add", title: "添加量化研究笔记",

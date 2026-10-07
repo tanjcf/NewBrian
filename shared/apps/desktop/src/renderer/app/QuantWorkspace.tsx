@@ -249,7 +249,13 @@ export function QuantWorkspace({
   };
   useEffect(() => {
     if (!window.newbrain?.onQuantScreenerUpdated) return;
-    return window.newbrain.onQuantScreenerUpdated((payload: any) => { if (!payload?.result) return; setScreenerResult(payload.result); setScreenerStatus(`AI 已筛选 ${Array.isArray(payload.result.items) ? payload.result.items.length : 0} 只真实股票`); });
+    return window.newbrain.onQuantScreenerUpdated((payload: any) => {
+      if (!payload?.result) return;
+      setScreenerResult(payload.result);
+      setScreenerStatus(payload.result.radar
+        ? `雷达扫描 ${payload.result.radar.scannedCount} 只真实股票，发现 ${payload.result.radar.matches?.length || 0} 个候选/跟踪信号`
+        : `AI 已筛选 ${Array.isArray(payload.result.items) ? payload.result.items.length : 0} 只真实股票`);
+    });
   }, [projectId, workspaceId]);
 
   useEffect(() => {
@@ -950,14 +956,15 @@ export function QuantWorkspace({
       {Object.keys(skillPerformance).length ? <div className="brain-quant-schedule-list">{Object.values(skillPerformance).sort((a: any, b: any) => Number(b.totalReturnPercent) - Number(a.totalReturnPercent)).map((item: any, index) => <article key={`performance-${item.skillId}`}><b className="brain-quant-rank">{index + 1}</b><strong>{skillLabel(item.skillId)}</strong><span>累计收益 {Number(item.totalReturnPercent).toFixed(2)}% · 最大回撤 {Number(item.maxDrawdownPercent).toFixed(2)}% · 波动率 {Number(item.volatilityPercent).toFixed(2)}%</span><em>{item.tradeCount} 笔 · 胜率 {Number(item.winRatePercent).toFixed(1)}%</em></article>)}</div> : <div className="brain-quant-empty">尚无 Skill 模拟收益。选择 Skill 后点击「立即用 Skill 自动模拟」，系统会按已加载真实行情自动买卖。</div>}
       {strategyTasks.slice(0, 5).map((task) => <small key={task.id} className="brain-quant-order-status">{String(task.taskType).replace("quant.strategy.", "")} · {task.status}{task.errorCode ? ` · ${task.errorCode}` : ""}</small>)}
     </section> : null}
-    {activeView === "radar" ? <section className="brain-quant-skills"><header><h3>股市雷达</h3><span>把 Skill 挂到交易日定时自动模拟</span></header>
+    {activeView === "radar" ? <section className="brain-quant-skills"><header><h3>股市雷达与自动化</h3><span>雷达扫描并通知；模拟自动化按计划调用策略</span></header>
       <div className="brain-quant-schedule-form">
         {skillPicker}
         <label>交易所<select value={scheduleExchange} onChange={(event) => setScheduleExchange(event.target.value as "SSE" | "SZSE" | "BSE")}><option value="SSE">上交所</option><option value="SZSE">深交所</option><option value="BSE">北交所</option></select></label>
         <label>交易日执行时间<input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} /></label>
-        <button type="button" disabled={!skillId.trim()} onClick={createSchedule}>创建 Skill 雷达计划</button>
-        <button type="button" className="primary" disabled={skillRunBusy || !projectId} onClick={runSkillNow}>立即跑一轮 Skill</button>
+        <button type="button" disabled={!skillId.trim()} onClick={createSchedule}>创建策略模拟自动化</button>
+        <button type="button" className="primary" disabled={skillRunBusy || !projectId} onClick={runSkillNow}>立即模拟当前标的</button>
       </div>
+      {Array.isArray(screenerResult?.radar?.matches) && screenerResult.radar.matches.length ? <div className="brain-quant-schedule-list"><strong>最近雷达通知 · {screenerResult.radar.scannedCount} 只已扫描</strong>{screenerResult.radar.matches.map((item: any) => <article key={`${item.symbol}-${item.signal}`}><strong>{item.symbol}</strong><span>{item.signal === "buy_candidate" ? "买入条件满足" : "跟踪条件满足"} · ¥{formatMarketNumber(item.latest?.close)}</span><em>仅通知，没有订单</em></article>)}</div> : <div className="brain-quant-empty">尚无雷达扫描结果。可在对话中要求“用某策略 Skill 扫描股票并通知我”；扫描只发信号，不会交易。</div>}
       {schedules.length ? <div className="brain-quant-schedule-list">{schedules.map((item) => { const runs = strategyRuns.filter((run) => run.scheduleId === item.id); return <article key={item.id}><strong>{skillLabel(item.skillId)}</strong><span>{item.symbol} · {item.quantity} 股 · {item.exchange} · 交易日 {item.runAt}</span><em>{item.enabled ? "运行中" : "已暂停"}</em><div className="brain-quant-radar-actions"><button type="button" onClick={() => setExpandedRadarId(expandedRadarId === item.id ? "" : item.id)}>{expandedRadarId === item.id ? "收起记录" : "查看记录"}</button><button type="button" onClick={() => setScheduleEnabled(item.id, !item.enabled)}>{item.enabled ? "暂停" : "启用"}</button></div>{expandedRadarId === item.id ? <div className="brain-quant-run-list">{runs.length ? runs.map((run) => <small key={run.idempotencyKey}>{run.tradingDate} · {run.status}{run.errorCode ? ` · ${run.errorCode}` : ""}</small>) : <small>尚无运行记录</small>}</div> : null}</article>; })}</div> : <div className="brain-quant-empty">尚未创建 Skill 雷达计划。计划只会生成模拟任务，不会连接真实券商。</div>}
       {scheduleStatus ? <small className="brain-quant-order-status">{scheduleStatus}</small> : null}
       {skillRunStatus ? <small className="brain-quant-order-status">{skillRunStatus}</small> : null}

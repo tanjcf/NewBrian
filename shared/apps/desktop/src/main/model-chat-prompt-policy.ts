@@ -164,7 +164,7 @@ export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
         ? "- Video: use `video.pipeline.save` / `video.shot.generate` / `video.timeline.*` / `video.render.*`. Prefer these over bare `video_generate`."
         : "",
       input.brainWorkspaceKey === "quant"
-        ? "- Quant: use `quant.market.query` / `quant.portfolio.*` / `quant.strategy.run` / `quant.radar.create` / `quant.note.add` so 右侧行情/组合/策略/雷达/笔记 updates."
+        ? "- Quant: find reusable strategies with `quant.skill.list`, create them through `quant.portfolio.create`, run them with `quant.strategy.run`, scan and notify with `quant.radar.scan` (never place orders from radar), and schedule paper execution with `quant.automation.create`. All fills are simulation only."
         : "",
       input.brainWorkspaceKey === "data"
         ? "- Data: use `data.file.import_local` / `data.analysis.*` / `data.dataset.*`; do not bypass with ad-hoc shell pandas scripts."

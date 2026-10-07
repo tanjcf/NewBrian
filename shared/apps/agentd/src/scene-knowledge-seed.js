@@ -39,9 +39,9 @@ export const SCENE_KNOWLEDGE_MARKDOWN = {
 
 **右侧 Tools 子架构（必走）：** 行情 / 组合 / 策略 / 雷达 / 研究笔记。
 
-工具：\`quant.market.query\` 查询 OHLCV；\`quant.portfolio.create\` 创建 Skill 模拟组合并同步右侧组合面板；\`quant.strategy.run\` 运行策略并同步组合结果；\`quant.radar.create\` / \`quant.note.add\` 同步雷达与研究笔记。用户要求创建组合时，只生成 Skill 文档不算完成，必须调用组合工具。
+工具：\`quant.market.query\` 查询真实 OHLCV；\`quant.skill.list\` 查找已保存策略；\`quant.portfolio.create\` 创建项目级策略 Skill 和独立模拟组合，支持 trend-following、mean-reversion 或声明式 buy/sell/tracking 规则；\`quant.strategy.run\` 默认读取已保存 Skill 并模拟买卖；\`quant.radar.scan\` 按真实市场快照和日线扫描候选，只通知、不下单；\`quant.automation.create\` 创建交易日模拟策略自动化；\`quant.note.add\` 写入研究笔记。所有成交仅模拟，不连接真实券商。
 
-约束：默认模拟交易，不连接真实券商；不得编造价格；真正行情和组合结果必须由右侧 tools 写入并刷新。
+约束：永远只做模拟交易，不连接真实券商；不得编造价格；雷达只通知，自动化才调用策略模拟买卖。
 `,
   game: `# 游戏制作场景
 
