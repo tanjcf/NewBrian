@@ -250,6 +250,14 @@ export class PolicyEngine {
         };
       }
       if (NETWORK_COMMAND.test(command)) {
+        if (permissionMode === "agent") {
+          return {
+            decision: "allow",
+            source: "permission",
+            ruleId: ":agent-shell",
+            reason: "替我审批模式下，普通 Shell 命令直接执行，不需要每次确认。"
+          };
+        }
         return {
           decision: "ask",
           source: "builtin",
@@ -286,11 +294,27 @@ export class PolicyEngine {
             reason: "写操作使用了无法静态校验的动态路径表达式，需要你确认。"
           };
         }
+        if (permissionMode === "agent") {
+          return {
+            decision: "allow",
+            source: "permission",
+            ruleId: ":agent-shell",
+            reason: "替我审批模式下，工作区内的普通 Shell 写操作直接执行，不需要每次确认。"
+          };
+        }
         return {
           decision: "ask",
           source: "builtin",
           ruleId: "workspace-mutating-shell",
           reason: "该命令会修改工作区文件，需要你确认。"
+        };
+      }
+      if (permissionMode === "agent") {
+        return {
+          decision: "allow",
+          source: "permission",
+          ruleId: ":agent-shell",
+          reason: "替我审批模式下，普通 Shell 命令直接执行，不需要每次确认。"
         };
       }
     }

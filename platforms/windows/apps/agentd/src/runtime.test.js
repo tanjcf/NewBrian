@@ -286,10 +286,13 @@ test("runtime creates and loads the project manager skill for user shadow update
     const loadedSkill = await runtime.loadSkill(projectSkill.name);
     assert.deepEqual(loadedSkill.resources.references, [
       "backend-technical-design-framework.md",
+      "delivery-preferences.json",
       "java-javadoc-rules.md",
       "learning-open-questions.md",
       "programming-guardrails.md",
       "project-knowledge.md",
+      "scene-knowledge.md",
+      "scene-tools-routing.md",
       "session-digest.md",
       "user-output-rules.md"
     ]);

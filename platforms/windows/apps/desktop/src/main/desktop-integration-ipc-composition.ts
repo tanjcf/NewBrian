@@ -39,6 +39,7 @@ interface DesktopIntegrationIpcCompositionDeps {
     installFromPath: (input: any) => unknown;
     selectAndInstall: (input?: any) => unknown;
     selectAndInstallIntoProject: (input: { workspacePath: string; force?: boolean; acknowledgeRisk?: boolean }) => Promise<{ skill: any; targetDir: string; origin: any } | null>;
+    installZipIntoProject: (input: { workspacePath: string; zipPath: string; force?: boolean; acknowledgeRisk?: boolean }) => Promise<{ skill: any; targetDir: string; origin: any }>;
     inspectLocal: (path: string) => unknown;
     exportAsZip: (input: any) => unknown;
     uninstallWritingSkills: (input?: any) => unknown;
@@ -161,11 +162,18 @@ export function registerDesktopIntegrationIpcComposition(deps: DesktopIntegratio
         if (!workspace?.path || isInternalChatWorkspace(workspace)) {
           throw new Error("请先在左侧打开一个本地项目，再导入技能压缩包。");
         }
-        const result = await deps.openClawSkillService!.selectAndInstallIntoProject({
-          workspacePath: workspace.path,
-          force: input.force,
-          acknowledgeRisk: input.acknowledgeRisk
-        });
+        const result = input.zipPath
+          ? await deps.openClawSkillService!.installZipIntoProject({
+            workspacePath: workspace.path,
+            zipPath: input.zipPath,
+            force: input.force,
+            acknowledgeRisk: input.acknowledgeRisk
+          })
+          : await deps.openClawSkillService!.selectAndInstallIntoProject({
+            workspacePath: workspace.path,
+            force: input.force,
+            acknowledgeRisk: input.acknowledgeRisk
+          });
         if (!result) return null;
         return {
           skill: result.skill,

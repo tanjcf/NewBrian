@@ -17,6 +17,9 @@ on:
       - "newbrain.workspaces.json"
       - ".github/workflows/build-windows-installer.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build-windows-installer:
     runs-on: windows-latest

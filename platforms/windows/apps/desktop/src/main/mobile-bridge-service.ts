@@ -9,6 +9,12 @@ export interface MobilePairingCredentials {
   expiresAt: string;
 }
 
+function mobileBridgeClientDetail(error: unknown) {
+  if (error instanceof Error && error.message === "Mobile action payload is too large.") return "Mobile action payload is too large.";
+  if (error instanceof Error && error.message === "Invalid action payload.") return "Invalid action payload.";
+  return "Request failed.";
+}
+
 /** Validates pairing credentials and binds a pairing session to its first client address. */
 export class MobilePairingGuard {
   private credentials: MobilePairingCredentials | null = null;
@@ -195,7 +201,7 @@ export class MobileBridgeService {
         response.end(JSON.stringify({ ok: false, detail: "Not found." }));
       } catch (error) {
         response.writeHead(400, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-        response.end(JSON.stringify({ ok: false, detail: error instanceof Error ? error.message : String(error) }));
+        response.end(JSON.stringify({ ok: false, detail: mobileBridgeClientDetail(error) }));
       }
     });
     const host = this.options.getLocalAddress?.() ?? getLocalIpv4Address();

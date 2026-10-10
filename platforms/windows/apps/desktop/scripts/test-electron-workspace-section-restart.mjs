@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9348);
 
@@ -88,8 +89,8 @@ async function seedProjects(evaluate) {
 
 async function assertSceneCatalog(evaluate, waitFor, scene) {
   await selectCatalog(evaluate, waitFor, scene.workspaceKey, scene.projectId, scene.conversationId);
-  await waitFor(`${scene.name} project`, `Boolean([...document.querySelectorAll('.brain-project-list button')].find((button) => button.textContent?.includes(${JSON.stringify(scene.name)})))`);
-  await waitFor(`${scene.title} conversation`, `Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${JSON.stringify(scene.title)})))`);
+  await waitFor(`${scene.name} project`, `Boolean([...document.querySelectorAll('.brain-project-list button')].find((button) => button.textContent?.includes(${embedJsValue(scene.name)})))`);
+  await waitFor(`${scene.title} conversation`, `Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${embedJsValue(scene.title)})))`);
   const visibleCatalog = await evaluate(`({
     projects: [...document.querySelectorAll('.brain-project-list button')].map((button) => button.textContent || ''),
     conversations: [...document.querySelectorAll('.brain-conversation-list button')].map((button) => button.textContent || '')
@@ -107,8 +108,8 @@ async function selectCatalog(evaluate, waitFor, workspaceKey, projectId, convers
   await evaluate(`(() => {
     const current = JSON.parse(localStorage.getItem("brain.workspaceSelection.v2") || '{"version":2,"catalogs":{}}');
     current.version = 2;
-    current.selectedWorkspaceKey = ${JSON.stringify(workspaceKey)};
-    current.catalogs = { ...(current.catalogs || {}), [${JSON.stringify(workspaceKey)}]: { projectId: ${JSON.stringify(projectId)}, conversationId: ${JSON.stringify(conversationId)} } };
+    current.selectedWorkspaceKey = ${embedJsValue(workspaceKey)};
+    current.catalogs = { ...(current.catalogs || {}), [${embedJsValue(workspaceKey)}]: { projectId: ${embedJsValue(projectId)}, conversationId: ${embedJsValue(conversationId)} } };
     localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify(current));
     location.reload();
     return true;
@@ -117,12 +118,12 @@ async function selectCatalog(evaluate, waitFor, workspaceKey, projectId, convers
 }
 
 async function openProjectAndSection(evaluate, waitFor, projectName, conversationTitle, tabLabel, sectionKey) {
-  await waitFor(`${projectName} project`, `Boolean([...document.querySelectorAll('.brain-project-list button')].find((button) => button.textContent?.includes(${JSON.stringify(projectName)})))`);
-  await evaluate(`(() => { const button = [...document.querySelectorAll('.brain-project-list button')].find((item) => item.textContent?.includes(${JSON.stringify(projectName)})); button?.click(); return Boolean(button); })()`);
-  await waitFor(`${conversationTitle} conversation`, `Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${JSON.stringify(conversationTitle)})))`);
-  await evaluate(`(() => { const button = [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes(${JSON.stringify(conversationTitle)})); button?.click(); return Boolean(button); })()`);
-  await waitFor(`${tabLabel} tab`, `Boolean([...document.querySelectorAll('.brain-resource-scene-nav button')].find((button) => button.textContent?.trim() === ${JSON.stringify(tabLabel)}))`);
-  await evaluate(`(() => { const button = [...document.querySelectorAll('.brain-resource-scene-nav button')].find((item) => item.textContent?.trim() === ${JSON.stringify(tabLabel)}); button?.click(); return Boolean(button); })()`);
+  await waitFor(`${projectName} project`, `Boolean([...document.querySelectorAll('.brain-project-list button')].find((button) => button.textContent?.includes(${embedJsValue(projectName)})))`);
+  await evaluate(`(() => { const button = [...document.querySelectorAll('.brain-project-list button')].find((item) => item.textContent?.includes(${embedJsValue(projectName)})); button?.click(); return Boolean(button); })()`);
+  await waitFor(`${conversationTitle} conversation`, `Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${embedJsValue(conversationTitle)})))`);
+  await evaluate(`(() => { const button = [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes(${embedJsValue(conversationTitle)})); button?.click(); return Boolean(button); })()`);
+  await waitFor(`${tabLabel} tab`, `Boolean([...document.querySelectorAll('.brain-resource-scene-nav button')].find((button) => button.textContent?.trim() === ${embedJsValue(tabLabel)}))`);
+  await evaluate(`(() => { const button = [...document.querySelectorAll('.brain-resource-scene-nav button')].find((item) => item.textContent?.trim() === ${embedJsValue(tabLabel)}); button?.click(); return Boolean(button); })()`);
   await waitFor(`${sectionKey} editor`, `Boolean(document.querySelector('[data-testid="brain-section-${sectionKey}"] textarea'))`);
 }
 
@@ -131,7 +132,7 @@ async function replaceAndSave(evaluate, waitFor, sectionKey, content) {
     const textarea = document.querySelector('[data-testid="brain-section-${sectionKey}"] textarea');
     if (!(textarea instanceof HTMLTextAreaElement)) return false;
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(textarea, ${JSON.stringify(content)});
+    setter?.call(textarea, ${embedJsValue(content)});
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
     textarea.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
@@ -142,7 +143,7 @@ async function replaceAndSave(evaluate, waitFor, sectionKey, content) {
 }
 
 async function assertEditorValue(evaluate, waitFor, sectionKey, expected) {
-  await waitFor(`${sectionKey} content`, `document.querySelector('[data-testid="brain-section-${sectionKey}"] textarea')?.value === ${JSON.stringify(expected)}`);
+  await waitFor(`${sectionKey} content`, `document.querySelector('[data-testid="brain-section-${sectionKey}"] textarea')?.value === ${embedJsValue(expected)}`);
   assert.equal(await evaluate(`document.querySelector('[data-testid="brain-section-${sectionKey}"] textarea')?.value`), expected);
 }
 
@@ -170,7 +171,7 @@ for (const scene of sceneCatalogs) await assertSceneCatalog(client.evaluate, cli
 const software = sceneCatalogs.find((scene) => scene.workspaceKey === "software");
 await selectCatalog(client.evaluate, client.waitFor, "software", software.projectId, software.conversationId);
 await client.evaluate(`(() => {
-  const project = [...document.querySelectorAll('.brain-project-list button')].find((item) => item.textContent?.includes(${JSON.stringify("场景编辑验收 软件")}));
+  const project = [...document.querySelectorAll('.brain-project-list button')].find((item) => item.textContent?.includes(${embedJsValue("场景编辑验收 软件")}));
   project?.click();
   return Boolean(project);
 })()`);
@@ -249,10 +250,10 @@ await openProjectAndSection(client.evaluate, client.waitFor, "场景编辑验收
 await assertEditorValue(client.evaluate, client.waitFor, "design", "游戏 A：狐火潜行与首领战策划");
 
 const durable = await client.evaluate(`(async () => ({
-  gameA: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(gameA.projectId)}, workspaceKey: "game", sectionKey: "design" }),
-  gameB: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(gameB.projectId)}, workspaceKey: "game", sectionKey: "design" }),
-  video: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(video.projectId)}, workspaceKey: "video", sectionKey: "script" }),
-  music: await window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(music.projectId)}, workspaceKey: "music", sectionKey: "lyrics" })
+  gameA: await window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(gameA.projectId)}, workspaceKey: "game", sectionKey: "design" }),
+  gameB: await window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(gameB.projectId)}, workspaceKey: "game", sectionKey: "design" }),
+  video: await window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(video.projectId)}, workspaceKey: "video", sectionKey: "script" }),
+  music: await window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(music.projectId)}, workspaceKey: "music", sectionKey: "lyrics" })
 }))()`);
 assert.equal(durable.gameA.content, "游戏 A：狐火潜行与首领战策划");
 assert.equal(durable.gameB.content, "游戏 B：城镇经营与昼夜循环策划");

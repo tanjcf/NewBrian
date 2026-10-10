@@ -17839,10 +17839,10 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
     grid-template-columns: clamp(220px, 27vw, 280px) minmax(0, 1fr) !important;
   }
 
-  .workspace-frame.preview-hidden,
-  .workspace-frame.preview-centered,
-  .codex-shell.sidebar-collapsed .workspace-frame.preview-hidden,
-  .codex-shell.sidebar-collapsed .workspace-frame.preview-centered {
+  .workspace-frame.preview-hidden:not(.brain-tools-expanded),
+  .workspace-frame.preview-centered:not(.brain-tools-expanded),
+  .codex-shell.sidebar-collapsed .workspace-frame.preview-hidden:not(.brain-tools-expanded),
+  .codex-shell.sidebar-collapsed .workspace-frame.preview-centered:not(.brain-tools-expanded) {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
@@ -19161,6 +19161,22 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
   background: #e8eefc;
   color: #1f4fd6;
   font-weight: 600;
+}
+
+.workspace-artifact-html-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-artifact-html-stage > .document-marking-canvas {
+  z-index: 4;
+}
+
+.workspace-artifact-html-stage:has(.document-marking-canvas.active) > .workspace-artifact-html-frame,
+.workspace-artifact-html-stage:has(.document-marking-canvas.active) > .workspace-artifact-html-source {
+  pointer-events: none;
 }
 
 .workspace-artifact-html-frame {
@@ -23036,4 +23052,34 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
 .capability-catalog .plugin-discovery-grid .empty-state,
 .capability-catalog .skill-discovery-grid .empty-state {
   grid-column: 1 / -1;
+}
+
+/* Expanded project preview: hide the left nav and give the right panel the remaining width.
+   Must beat the side-panel 3-column rule and the narrow-window single-column rule. */
+.codex-shell .workspace-frame.brain-tools-expanded,
+.codex-shell.sidebar-collapsed .workspace-frame.brain-tools-expanded,
+.codex-shell .workspace-frame.preview-hidden.brain-tools-expanded,
+.codex-shell .workspace-frame.preview-centered.brain-tools-expanded {
+  grid-template-columns: clamp(340px, 31vw, 460px) minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+
+.codex-shell .workspace-frame.brain-tools-expanded > .codex-sidebar {
+  display: none !important;
+}
+
+.codex-shell .workspace-frame.brain-tools-expanded > .task-column,
+.codex-shell .workspace-frame.brain-tools-expanded > .brain-chat-module {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+}
+
+.codex-shell .workspace-frame.brain-tools-expanded > .brain-resource-panel,
+.codex-shell .workspace-frame.brain-tools-expanded > .brain-resource-panel.center {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
 }

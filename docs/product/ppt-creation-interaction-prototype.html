@@ -300,10 +300,43 @@ function currentFile() {
   return state.accepted ? "一期鮨招商-v2.pptx" : "一期鮨招商.pptx";
 }
 
+function appendPrototypeText(parent, value) {
+  const source = String(value ?? "");
+  const pattern = /<br\s*\/?>|<\/?b>/gi;
+  let bold = false;
+  let cursor = 0;
+  for (const match of source.matchAll(pattern)) {
+    const text = source.slice(cursor, match.index);
+    if (text) {
+      if (bold) {
+        const strong = document.createElement("b");
+        strong.textContent = text;
+        parent.appendChild(strong);
+      } else {
+        parent.appendChild(document.createTextNode(text));
+      }
+    }
+    const token = match[0].toLowerCase();
+    if (token.startsWith("<br")) parent.appendChild(document.createElement("br"));
+    else if (token === "<b>") bold = true;
+    else if (token === "</b>") bold = false;
+    cursor = match.index + match[0].length;
+  }
+  const rest = source.slice(cursor);
+  if (!rest) return;
+  if (bold) {
+    const strong = document.createElement("b");
+    strong.textContent = rest;
+    parent.appendChild(strong);
+  } else {
+    parent.appendChild(document.createTextNode(rest));
+  }
+}
+
 function addBubble(role, html) {
   const el = document.createElement("div");
   el.className = "bubble " + role;
-  el.innerHTML = html;
+  appendPrototypeText(el, html);
   thread.appendChild(el);
   thread.scrollTop = thread.scrollHeight;
 }

@@ -1,0 +1,70 @@
+name: Build Ubuntu Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "shared/**"
+      - "platforms/ubuntu/**"
+      - "rust/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "rust-core-release.json"
+      - "newbrain.bootstrap.json"
+      - "newbrain.config.json"
+      - "newbrain.features.json"
+      - "newbrain.workspaces.json"
+      - ".github/workflows/build-ubuntu-installer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-ubuntu-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-x64
+            runner: ubuntu-latest
+            script: package:linux:x64
+            artifact: newbrian-ubuntu-x64
+          - target: ubuntu-arm64
+            runner: ubuntu-24.04-arm
+            script: package:linux:arm64
+            artifact: newbrian-ubuntu-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      NEWBRAIN_ALLOW_UNSIGNED: "true"
+      NEWBRAIN_SOURCE_ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: platforms/ubuntu/common/pnpm-lock.yaml
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fakeroot binutils
+      - name: Install Rust when brain-core source is present
+        if: hashFiles('rust/brain-core/Cargo.toml') != ''
+        uses: dtolnay/rust-toolchain@stable
+      - name: Materialize Ubuntu workspace
+        run: node scripts/materialize.mjs ${{ matrix.target }}
+      - name: Install dependencies
+        working-directory: .materialized/${{ matrix.target }}
+        run: pnpm install --frozen-lockfile
+      - name: Package unsigned installer
+        working-directory: .materialized/${{ matrix.target }}
+        run: pnpm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            .materialized/${{ matrix.target }}/apps/desktop/release/*.AppImage
+            .materialized/${{ matrix.target }}/apps/desktop/release/*.deb

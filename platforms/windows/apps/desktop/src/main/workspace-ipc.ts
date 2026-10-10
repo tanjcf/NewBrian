@@ -18,6 +18,7 @@ import {
   type WorkspaceIdInput,
   type WorkspaceThreadInput
 } from "@codex-forge/protocol";
+import { optionalBrainWorkspaceKey } from "../shared/expert-workspace-policy.js";
 import { parseWorkspaceThreadInput } from "./workspace-lifecycle-contract.js";
 import { parseWorkspaceFileAction } from "./workspace-file-action-contract.js";
 
@@ -102,7 +103,14 @@ function parseOpenLocation(input: unknown): OpenWorkspaceLocationInput {
 function parseAddThread(input: unknown): AddWorkspaceThreadInput {
   const record = requireRecord(input, "Add workspace thread");
   if (record.scope !== undefined && record.scope !== "project" && record.scope !== "chat") throw new TypeError("Add workspace thread input is invalid.");
-  return { workspaceId: requireString(record, "workspaceId", "Add workspace thread"), title: requireString(record, "title", "Add workspace thread"), summary: requireString(record, "summary", "Add workspace thread"), scope: record.scope };
+  const brainWorkspaceKey = optionalBrainWorkspaceKey(record.brainWorkspaceKey);
+  return {
+    workspaceId: requireString(record, "workspaceId", "Add workspace thread"),
+    title: requireString(record, "title", "Add workspace thread"),
+    summary: requireString(record, "summary", "Add workspace thread"),
+    scope: record.scope,
+    ...(brainWorkspaceKey ? { brainWorkspaceKey: brainWorkspaceKey as AddWorkspaceThreadInput["brainWorkspaceKey"] } : {})
+  };
 }
 
 function parseRewindThread(input: unknown): RewindWorkspaceThreadInput {

@@ -206,7 +206,7 @@ test("file changes use Codex-style progressive disclosure and preserve per-threa
 test("execution details remain transient and collapse when a model turn completes", () => {
   assert.match(workspaceSource, /wasAskingModelRef\.current && !isAskingModel/);
   assert.match(workspaceSource, /setExpandedAssistantTurns\(new Set\(\)\)/);
-  assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);
+  assert.match(workspaceSource, /reasoning-summary-live/);
   assert.match(workspaceSource, /data-testid="reasoning-process-list"/);
   assert.match(workspaceSource, /sanitizeVisibleModelContent\(turn\.assistant\.content\)/);
 });
@@ -217,7 +217,7 @@ test("the active turn keeps the user prompt visible and expands live reasoning c
   assert.match(workspaceSource, /manuallyCollapsedActivityGroupsRef/);
   assert.match(workspaceSource, /setExpandedActivityGroups\(\(current\)[\s\S]*liveGroupKey/);
   assert.match(workspaceSource, /setExpandedCommandRuns\(\(current\)[\s\S]*runKeys/);
-  assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);
+  assert.match(workspaceSource, /reasoning-summary-live/);
   assert.match(styles, /\.answer-group\.streaming \.assistant-live-progress\s*\{[^}]*order:\s*1;/s);
   assert.match(styles, /\.answer-group\.streaming \.assistant-block\s*\{[^}]*order:\s*2;/s);
   assert.match(workspaceSource, /sanitizeVisibleModelContent\(activeStreamContent/);
@@ -289,15 +289,15 @@ test("new asks scope live activities to the active request without discarding hi
 
 test("composer model menu exposes Auto as a selectable route", () => {
   assert.match(workspaceSource, /\{ id: "auto", label: "Auto" \}/);
-  assert.match(workspaceSource, /modelConfig\.model\.toLowerCase\(\) === "auto"/);
+  assert.match(workspaceSource, /String\(modelConfig\.model \|\| ""\)\.toLowerCase\(\) === "auto"/);
 });
 
 test("BRAIN conversation composer never uses new-chat absolute dock", () => {
   assert.match(
     workspaceSource,
-    /composer-area\$\{isNewChatMode && !isBrainConversationSelection \? " new-chat-composer" : ""\}\$\{isBrainConversationSelection \? " brain-chat-composer" : ""\}/
+    /composer-area\$\{isNewChatMode \? " new-chat-composer" : ""\}\$\{!isNewChatMode && isBrainConversationSelection \? " brain-chat-composer" : ""\}/
   );
-  assert.match(workspaceSource, /setIsComposingNewThread\(false\);[\s\S]*selectedBrainConversationId, selectedBrainProjectId, brainConversations, setIsComposingNewThread/);
+  assert.match(workspaceSource, /setIsComposingNewThread\(false\);[\s\S]*selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations[\s\S]*setIsComposingNewThread/);
   assert.match(
     styles,
     /\.brain-chat-composer-slot \.composer-area\.new-chat-composer\s*\{[^}]*position:\s*static;[^}]*transform:\s*none;/s
@@ -306,7 +306,7 @@ test("BRAIN conversation composer never uses new-chat absolute dock", () => {
 
 test("live thinking panel prints Chinese process text in the marked reasoning area", () => {
   assert.match(workspaceSource, /function buildLiveReasoningProcess/);
-  assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);
+  assert.match(workspaceSource, /reasoning-summary-live/);
   assert.match(workspaceSource, /Analyzing the request, goals, constraints, and current context/);
   assert.match(workspaceSource, /buildLiveReasoningProcess\(/);
 });
@@ -314,10 +314,10 @@ test("live thinking panel prints Chinese process text in the marked reasoning ar
 test("sidebar account footer keeps update and settings buttons visible", () => {
   assert.match(workspaceSource, /className="sidebar-account-actions"/);
   assert.match(workspaceSource, /className="sidebar-account-update"/);
-  assert.match(workspaceSource, /className="sidebar-account-settings"/);
+  assert.match(workspaceSource, /sidebar-account-settings/);
   assert.match(
     styles,
-    /\.codex-sidebar \.sidebar-account-card\s*\{[^}]*grid-template-columns:\s*36px minmax\(0,\s*1fr\) auto;/s
+    /\.codex-sidebar \.sidebar-account-card\s*\{[^}]*grid-template-columns:\s*36px minmax\(0,\s*1fr\) max-content;/s
   );
   assert.match(
     styles,

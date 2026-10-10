@@ -1652,7 +1652,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         .filter((event: { type?: string }) => event?.type === "tool_result")
         .map((event: { payload?: { result?: unknown; name?: string } }) => {
           const name = String(event.payload?.name || "");
-          if (!name.includes("search") && !name.includes("news_search")) return "";
+          if (!name.includes("search")) return "";
           const result = event.payload?.result as { content?: Array<{ text?: string }>; details?: unknown; output?: string } | undefined;
           if (result?.details) return JSON.stringify(result.details);
           if (Array.isArray(result?.content) && result.content[0]?.text) return String(result.content[0].text);

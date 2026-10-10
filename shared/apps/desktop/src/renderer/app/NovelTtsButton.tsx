@@ -21,6 +21,8 @@ type NovelTtsButtonProps = {
   text: string;
   /** Original source used for line follow-along (defaults to text). */
   sourceText?: string;
+  /** Preview files (PPTX/DOCX/XLSX) resolve speakable text at click time. */
+  resolveText?: () => Promise<string> | string;
   disabled?: boolean;
   className?: string;
   synthesizer?: NovelSpeechSynthesizer;
@@ -32,6 +34,7 @@ type NovelTtsButtonProps = {
 export function NovelTtsButton({
   text,
   sourceText,
+  resolveText,
   disabled = false,
   className = "",
   synthesizer,
@@ -65,8 +68,25 @@ export function NovelTtsButton({
   };
 
   const startReading = async () => {
-    const prepared = prepareNovelSpeechText(text);
+    const token = playTokenRef.current + 1;
+    playTokenRef.current = token;
+    setPlaying(true);
+    onStatus?.("正在准备朗读…");
+    let source = text;
+    if (resolveText) {
+      try {
+        source = await resolveText();
+      } catch (error) {
+        if (playTokenRef.current !== token) return;
+        setPlaying(false);
+        onStatus?.(error instanceof Error ? error.message : "朗读内容读取失败。");
+        return;
+      }
+    }
+    if (playTokenRef.current !== token) return;
+    const prepared = prepareNovelSpeechText(source);
     if (!prepared.ok) {
+      setPlaying(false);
       onStatus?.("没有可朗读的内容。");
       return;
     }
@@ -74,10 +94,7 @@ export function NovelTtsButton({
       onStatus?.("离线朗读通道未连接，将尝试系统朗读（可能无声）。");
     }
     const voice = selected;
-    const token = playTokenRef.current + 1;
-    playTokenRef.current = token;
     storeNovelTtsVoiceId(voice.id);
-    setPlaying(true);
     onStatus?.(prepared.truncated ? `正在朗读（已截取前段）· ${voice.label}` : `正在朗读 · ${voice.label}`);
     try {
       const result = await playNovelSpeech({
@@ -133,7 +150,12 @@ export function NovelTtsButton({
         aria-label={playing ? "停止朗读" : `智能朗读（${selected.label}）`}
         aria-pressed={playing}
         disabled={disabled}
-        onClick={toggleMain}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleMain();
+        }}
       >
         <SidebarIcon name={playing ? "stop" : "speaker"} />
       </button>

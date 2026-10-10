@@ -1,11 +1,16 @@
 import {
   isModelAutoSelection,
   isVisionCapableModel,
+  modelSupportsImageInput,
   type AuthorizedModelOption
 } from "./model-auto-router.ts";
 
-/** OpenClaw-style: keep the user's main chat model; describe images via a side vision path. */
-export type ImageHandleMode = "native" | "describe_bridge";
+/**
+ * Codex: keep image bytes on the message that contained them.
+ * The selected model receives them when it supports image input.
+ * Otherwise the image is omitted. A later turn does not call a vision model.
+ */
+export type ImageHandleMode = "native" | "omit";
 
 export type NativeResolvedImage = {
   kind: "native";
@@ -22,7 +27,17 @@ export type BridgedResolvedImage = {
   source: "remote" | "local";
 };
 
-export type ResolvedTurnImage = NativeResolvedImage | BridgedResolvedImage;
+export type OmittedResolvedImage = {
+  kind: "omitted";
+  header: string;
+  text: string;
+};
+
+export type ResolvedTurnImage = NativeResolvedImage | BridgedResolvedImage | OmittedResolvedImage;
+
+/** Codex `UnsupportedMedia::IMAGE` placeholder. */
+export const IMAGE_OMITTED_UNSUPPORTED =
+  "image content omitted because you do not support image input";
 
 /** Shown when the main model cannot take images and no remote/local describe bridge works. */
 export const NO_IMAGE_BRIDGE_MESSAGE =
@@ -32,13 +47,9 @@ export const IMAGE_DESCRIBE_PROMPT_ZH =
   "请用中文准确描述这张图片中可见的主体、颜色、场景、布局以及所有可读文字。不要推断图片中未直接显示的内容。";
 
 /**
- * Native multimodal path when the selected main model itself supports vision.
- * DeepSeek text models are never treated as vision-capable.
- * Kimi K2.6 officially supports image input — keep native multimodal parts.
- *
- * When the composer requests {@code auto}, outbound stays model=auto (parent selects).
- * Image parts must still be native if the subscription has a vision pool — otherwise
- * capability is judged against the literal string "auto" and every turn wrongly bridges.
+ * Native image parts when the model that will receive this turn supports image input.
+ * Auto follows the parent-selected model. A vision model elsewhere in the catalog
+ * does not keep image bytes, and does not start a side vision call.
  */
 export function resolveImageHandleMode(
   mainModel: Pick<AuthorizedModelOption, "model" | "provider" | "capabilities" | "label" | "routing">,
@@ -51,20 +62,14 @@ export function resolveImageHandleMode(
   const requested = String(options?.requestedModel || mainModel.model || "").trim();
   if (isModelAutoSelection(requested)) {
     const parentSelected = String(options?.parentSelectedModel || "").trim();
+    if (!parentSelected) return "omit";
     const pool = options?.availableModels ?? [];
-    // Parent Auto owns the call: only keep native image_url when the parent-selected
-    // (or sole vision pool) child can accept multimodal. Never send image_url to a
-    // text parent just because some other vision model exists in the subscription.
-    if (parentSelected) {
-      const selected =
-        pool.find((item) => item.model.trim().toLowerCase() === parentSelected.toLowerCase())
-        ?? { model: parentSelected, provider: "", label: parentSelected };
-      return isVisionCapableModel(selected) ? "native" : "describe_bridge";
-    }
-    if (pool.some((item) => isVisionCapableModel(item))) return "native";
-    return "describe_bridge";
+    const selected =
+      pool.find((item) => item.model.trim().toLowerCase() === parentSelected.toLowerCase())
+      ?? { model: parentSelected, provider: "", label: parentSelected };
+    return modelSupportsImageInput(selected) ? "native" : "omit";
   }
-  return isVisionCapableModel(mainModel) ? "native" : "describe_bridge";
+  return modelSupportsImageInput(mainModel) ? "native" : "omit";
 }
 
 /**
@@ -148,38 +153,11 @@ export async function resolveTurnImages(input: {
     return { mode, images };
   }
 
-  const bridgeModel = pickBridgeVisionModel(
-    input.availableModels ?? [],
-    input.preferredBridgeModel
-  );
-  const images: BridgedResolvedImage[] = [];
-  for (const image of input.images) {
-    const bytes = await image.readBytes();
-    const dataUrl = `data:${image.mimeType};base64,${bytes.toString("base64")}`;
-    let described: { description: string; visionModel: string; source: "remote" | "local" };
-    try {
-      described = await input.describeImage({
-        filePath: image.path,
-        mimeType: image.mimeType,
-        dataUrl,
-        bridgeModel
-      });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`${NO_IMAGE_BRIDGE_MESSAGE}（${detail}）`);
-    }
-    const description = String(described.description || "").trim();
-    if (!description) {
-      throw new Error(NO_IMAGE_BRIDGE_MESSAGE);
-    }
-    images.push({
-      kind: "bridged",
-      header: image.header,
-      description,
-      visionModel: described.visionModel,
-      source: described.source
-    });
-  }
+  const images: OmittedResolvedImage[] = input.images.map((image) => ({
+    kind: "omitted",
+    header: image.header,
+    text: IMAGE_OMITTED_UNSUPPORTED
+  }));
   return { mode, images };
 }
 

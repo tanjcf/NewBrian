@@ -88,6 +88,10 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
       data-testid="document-marking-layer"
       aria-hidden={!props.active}
       onPointerDown={(event) => {
+        if (event.target instanceof Element && event.target.closest(".pptx-mark-prompt, button, input, textarea")) {
+          event.stopPropagation();
+          return;
+        }
         if (!props.active || event.button !== 0) return;
         const host = hostRef.current;
         if (!host) return;
@@ -192,7 +196,20 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
             value={markPrompt.instruction}
             onChange={(event) => markPrompt.onInstructionChange(event.target.value)}
           />
-          <button className="send" type="submit" aria-label="发送修改" title="发送到对话" disabled={markPrompt.busy || !markPrompt.instruction.trim()}>{markPromptIcon("M12 19V6|m6 11 6-6 6 6")}</button>
+          <button
+            className="send"
+            type="button"
+            aria-label="发送修改"
+            title="发送到对话"
+            disabled={markPrompt.busy || !markPrompt.instruction.trim()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (markPrompt.busy || !markPrompt.instruction.trim()) return;
+              markPrompt.onSubmit();
+            }}
+          >{markPromptIcon("M12 19V6|m6 11 6-6 6 6")}</button>
           <button type="button" aria-label="删除标记" title="删除标记" onClick={() => markPrompt.onClear()}>{markPromptIcon("M3 6h18|M8 6V4h8v2|M19 6l-1 14H6L5 6")}</button>
         </form>
       ) : null}

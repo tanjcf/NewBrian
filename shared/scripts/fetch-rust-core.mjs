@@ -15,15 +15,30 @@ export async function writeRustCoreReleaseManifest(binaryPath, signer = "") {
   return manifest;
 }
 
+export function rustCoreCatalogKey(platform, arch) {
+  if (platform === "win32") return arch === "arm64" ? "windows-arm64" : "windows";
+  if (platform === "darwin") return arch === "arm64" ? "macos-arm64" : "macos-x64";
+  if (platform === "linux") return arch === "arm64" ? "ubuntu-arm64" : "ubuntu-x64";
+  return "";
+}
+
+export function selectRustCoreCatalogEntry(catalog, platform, arch) {
+  const key = rustCoreCatalogKey(platform, arch);
+  const specific = key && catalog?.[key] && String(catalog[key].url || "").trim() ? catalog[key] : null;
+  if (specific) return specific;
+  if (platform === "win32") return catalog?.windows || null;
+  return catalog?.unix || null;
+}
+
 export async function fetchOfficialRustCore(options) {
   const sourceRoot = options.sourceRoot;
   const outputPath = options.outputPath;
   const catalog = JSON.parse(await readFile(join(sourceRoot, "rust-core-release.json"), "utf8"));
-  const platform = process.platform === "win32" ? catalog.windows : catalog.unix;
+  const platform = selectRustCoreCatalogEntry(catalog, process.platform, process.arch);
   const url = String(platform?.url || "").trim();
   const sha256 = String(platform?.sha256 || "").trim().toLowerCase();
   if (!url || !/^[a-f0-9]{64}$/u.test(sha256)) {
-    throw new Error("官方 brain-core 尚未发布。请在 rust-core-release.json 写入对应平台的 url 和 sha256 后再打包。公开仓库不包含 Rust 源码。");
+    throw new Error(`官方 brain-core 尚未发布（${process.platform}/${process.arch}）。请在 rust-core-release.json 写入对应平台的 url 和 sha256 后再打包。公开仓库不包含 Rust 源码。`);
   }
   const response = await fetch(url);
   if (!response.ok) throw new Error(`官方 brain-core 下载失败：${response.status} ${url}`);

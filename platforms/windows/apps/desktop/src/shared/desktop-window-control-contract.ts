@@ -10,6 +10,7 @@ export interface DesktopWindowTarget {
   processId?: number;
   processName?: string;
   windowTitle?: string;
+  handle?: number;
 }
 
 export interface DesktopWindowInfo {

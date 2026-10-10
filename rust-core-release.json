@@ -7,6 +7,30 @@
     "sha256": "933dd029f8ac5d1328a5056fb998d6b37110bf7e5e7e8453b4b787e4191c9300",
     "signer": ""
   },
+  "macos-arm64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
+  "macos-x64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
+  "ubuntu-x64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
+  "ubuntu-arm64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
   "unix": {
     "fileName": "brain-core",
     "url": "",

@@ -52,7 +52,7 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
     "If workspace.edit fails once because oldText does not match exactly, immediately workspace.read that file (or a nearby offset), then retry edit with exact text or replace the whole file via workspace.write_file. Do not keep guessing the same stale oldText.",
     "If workspace.write_file fails, fix the relative path and retry write_file—never fall back to shell.exec for whole-file writes.",
     "Do not narrate long plans between every file. Call tools immediately; keep user-visible text short.",
-    "For long-running commands, use shell.exec with background=true or yieldMs, then shell.process (alias: process) to poll/log/kill."
+    "A foreground shell.exec waits until the command exits. Pass background or yieldMs only for a live shell.process session. Pass tty=true only when the command must read input; otherwise stdin is closed and a password prompt cannot be answered."
   ];
   const bootstrapContract = [
     "When starting or running a project: detect package.json → local npm/pnpm/node; detect pyproject.toml / requirements.txt / manage.py → local py/python/uvicorn.",
@@ -79,7 +79,7 @@ export function buildNativeToolSystemInstruction(latestUserRequest: string, plat
     "For PDF or DOCX government/writing output, prefer document.create_pdf or document.create_docx with structured { title, sections:[{heading,body,bullets}] }. Never pass HTML/XML.",
     "For PPTX/HTML decks or XLSX, call artifact.create. Do not generate temporary scripts or write fake text files with office extensions.",
     "For Chinese body text in PDF/DOCX/PPTX/HTML/XLSX, use Chinese curly double quotes “…” (U+201C/U+201D), never ASCII straight quotes \"...\". The office generator also normalizes leftover ASCII/fullwidth quotes in Chinese prose.",
-    "For presentations: prefer structured slides[{title,body,bullets,layout}]. layout may be title|section|bullets|columns|cards|stat|chart|timeline|process|image|closing. Every deck should include at least one chart slide (chart with categories+values), one timeline/process slide (phases array), and one image slide (imagePath from image_generate or imagePlaceholder). format=pptx also writes companion *.slides.html; format=html is web-first.",
+    "For presentations: prefer structured slides[{title,body,bullets,layout}]. layout may be title|section|bullets|columns|cards|stat|chart|timeline|process|image|closing. Every deck should include at least one chart slide (chart with categories+values), one timeline/process slide (phases array), and one image slide (imagePath from image_generate or imagePlaceholder). format=pptx also writes companion *.slides.html; format=html is web-first. Design theme from the deck subject and pass theme {name,mood,accent,ink,surface} with hex colors. Do not reuse one fixed palette. When the presentation team has selected a shared theme, also pass theme.id as magazine, swiss, or workplace.",
     "document.create_pdf / document.create_docx / artifact.create write under outputs/ (example: outputs/宣讲稿-第一版.pdf). Pass plain Chinese text or Markdown only.",
     "To open an existing DOCX, XLSX, or PPTX in a local Office suite, call office.open with a workspace-relative path. office.status reports LibreOffice first, then WPS, then Microsoft Office. office.convert uses LibreOffice and writes the result under outputs/.",
     "Use artifact.inspect to verify generated files instead of merely asserting that they exist.",

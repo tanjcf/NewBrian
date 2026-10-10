@@ -63,6 +63,7 @@ function parseImportZipToProject(input: unknown): OpenClawSkillImportZipToProjec
   }
   return {
     workspaceId: input.workspaceId.trim(),
+    zipPath: typeof input.zipPath === "string" ? input.zipPath.trim() : undefined,
     force: input.force === true,
     acknowledgeRisk: input.acknowledgeRisk === true
   };

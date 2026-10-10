@@ -253,7 +253,8 @@ test("expanding the right Tools panel hides the left sidebar like open-file arti
   const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
 
   // Shared expand toggle for every scene (center ↔ side).
-  assert.match(resourcePanel, /current === "center"[\s\S]*?return "side"/);
+  assert.match(resourcePanel, /nextBrainToolsPlacement\(isCenter \? "center" : "side"\)/);
+  assert.match(resourcePanel, /setBrainResourcePlacement\(next\)/);
   assert.match(resourcePanel, /title=\{isCenter \? "还原布局" : "展开预览"\}/);
   assert.match(resourcePanel, /aria-pressed=\{isCenter\}/);
   assert.match(resourcePanel, /expand-sidebar/);

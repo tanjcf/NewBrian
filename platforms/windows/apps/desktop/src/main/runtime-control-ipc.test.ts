@@ -485,7 +485,7 @@ test("terminal no_progress failures clear the task and mark the thread failed", 
   const fixture = createApprovalFixture({ tasks: new Map([["request", task]]), runtime, catalog });
   await assert.rejects(
     () => fixture.service.respond(fixture.sender, { approved: true, requestId: "request" }),
-    /没有成功进展/
+    /no tool progress/
   );
   assert.equal(fixture.tasks.has("request"), false);
   assert.ok(fixture.events.includes("dispose-runtime"));

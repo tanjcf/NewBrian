@@ -163,6 +163,63 @@ if (-not (Test-Path -LiteralPath $documentWorkerSourcePath -PathType Leaf)) {
   throw "Missing document worker source: $documentWorkerSourcePath"
 }
 
+$prePackageSmokes = @(
+  @{
+    Id = "SPRING-WEB-SEARCH-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\spring-web-search-smoke.test.ts"
+  },
+  @{
+    Id = "PPT-CONTENT-THEME-SMOKE-001"
+    Path = Join-Path $repoRoot "apps\agentd\src\ppt-content-theme-smoke.test.js"
+  },
+  @{
+    Id = "PPT-MARK-SEND-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\ppt-mark-send-smoke.test.ts"
+  },
+  @{
+    Id = "PPT-SMART-READ-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\ppt-smart-read-smoke.test.ts"
+  },
+  @{
+    Id = "PREVIEW-OPEN-FOLDER-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\preview-open-folder-smoke.test.ts"
+  },
+  @{
+    Id = "PREVIEW-FILE-MENU-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\preview-file-menu-smoke.test.ts"
+  },
+  @{
+    Id = "PREVIEW-EXPAND-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\preview-expand-smoke.test.ts"
+  },
+  @{
+    Id = "SOFTWARE-LINK-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\software-link-smoke.test.ts"
+  },
+  @{
+    Id = "AUTOMATION-RUN-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\automation-run-smoke.test.ts"
+  },
+  @{
+    Id = "EXPERT-USE-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\expert-use-smoke.test.ts"
+  },
+  @{
+    Id = "AUTOMATION-MISSING-THREAD-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\automation-missing-thread-smoke.test.ts"
+  }
+)
+foreach ($smoke in $prePackageSmokes) {
+  if (-not (Test-Path -LiteralPath $smoke.Path -PathType Leaf)) {
+    throw "Missing pre-package smoke case $($smoke.Id): $($smoke.Path)"
+  }
+  Write-Host "Pre-package smoke: $($smoke.Id)" -ForegroundColor Cyan
+  & node --test $smoke.Path
+  if ($LASTEXITCODE -ne 0) {
+    throw "Pre-package smoke $($smoke.Id) failed. Packaging stopped."
+  }
+}
+
 Write-Host "Repo root: $repoRoot" -ForegroundColor Cyan
 Write-Host "Desktop root: $desktopRoot" -ForegroundColor Cyan
 Write-Host "Release channel: $Channel" -ForegroundColor Cyan

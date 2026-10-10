@@ -992,7 +992,7 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
     diffMarks: "color"
   },
   configuration: {
-    requireApprovalForShell: true,
+    requireApprovalForShell: false,
     saveResponses: false,
     telemetryEnabled: false
   },

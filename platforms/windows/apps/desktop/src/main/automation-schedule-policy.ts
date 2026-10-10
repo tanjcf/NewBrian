@@ -60,9 +60,34 @@ const nextRunAt = (
   return computeNextAutomationRunAt(item.intervalMinutes, nowMs);
 };
 
+const SCHEDULED_TASK_PREFIX = "这是已保存的定时任务。请直接执行下面的指令，并使用已安装的技能。不要新建任务，也不要处理压缩包路径。";
+
+/** User text for a scheduled run. Must not look like a request to create an automation. */
+export function scheduledAutomationRequest(instruction: string) {
+  const body = String(instruction || "").trim();
+  return body ? `${SCHEDULED_TASK_PREFIX}\n\n${body}` : SCHEDULED_TASK_PREFIX;
+}
+
+export function resolveAutomationSkillNames(
+  prompt: string,
+  skills: Array<{ name?: string; summary?: string; description?: string; status?: string }>
+) {
+  const text = String(prompt || "");
+  const enabled = skills.filter((skill) => skill.status !== "disabled" && String(skill.name || "").trim());
+  const picked = enabled.filter((skill) => {
+    const name = String(skill.name || "");
+    const summary = `${skill.summary || ""} ${skill.description || ""}`;
+    const blob = `${name} ${summary}`.toLowerCase();
+    if (text.toLowerCase().includes(name.toLowerCase())) return true;
+    if (/运维工程师|operations-engineer/i.test(text) && /operations-engineer|运维/i.test(blob)) return true;
+    return false;
+  });
+  return [...new Set(picked.map((skill) => String(skill.name)))].slice(0, 4);
+}
+
 const CREATION_PREFIX = /^(?:请帮我|请|帮我)?(?:创建|新建)(?:一个)?自动化(?:任务|计划)?\s*[：:]\s*/i;
 const ENGLISH_CREATION_PREFIX = /^(?:please\s+)?create\s+an\s+automation(?:\s+task)?\s*[:：]\s*/i;
-const ATTACHED_PATH = /(?:^|\s)(?:[A-Za-z]:(?:\\[^\\\s]+)+|\/(?:\S+\/)+\S+\.(?:zip|tar|gz|tgz|skill))\b/gi;
+const ATTACHED_PATH = /(?:^|\s)(?:[A-Za-z]:\\(?:\\?\S)+|\/(?:\S+\/)+\S+\.(?:zip|tar|gz|tgz|skill))\b/gi;
 const LEADING_SCHEDULE = /^(?:每天|每日|每个工作日|每周[一二三四五六日天]?|每小时|every\s+day|daily)\s*(?:早上|上午|下午|晚上|中午)?\s*(?:(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|\d{1,2}\s*(?:点|时)(?:\s*\d{1,2}\s*分?)?)(?:\s*[（(][^）)]{0,20}[）)])?\s*/i;
 
 /** Same distillation as the renderer parser, so an already-saved raw prompt still runs as the task. */

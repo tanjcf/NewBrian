@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createSceneTestCdpClient } from "./scene-test-cdp-client.mjs";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const client = await createSceneTestCdpClient(Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9555));
 const cases = [
@@ -28,8 +29,8 @@ try {
     await client.command("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
     await client.command("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
     actions.push({ type: "ui-click", target: label });
-    await client.waitFor(`(() => { const active = document.querySelector('.brain-resource-scene-nav button.active'); return active?.textContent?.trim() === ${JSON.stringify(label)}; })()`, 15_000);
-    await client.waitFor(`document.body?.innerText?.includes(${JSON.stringify(expected)})`, 20_000);
+    await client.waitFor(`(() => { const active = document.querySelector('.brain-resource-scene-nav button.active'); return active?.textContent?.trim() === ${embedJsValue(label)}; })()`, 15_000);
+    await client.waitFor(`document.body?.innerText?.includes(${embedJsValue(expected)})`, 20_000);
     const visibleText = await client.evaluate("document.body?.innerText?.slice(-1800) || ''");
     assert.match(visibleText, new RegExp(expected.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
     results.push({ tab: label, expected, passed: true });

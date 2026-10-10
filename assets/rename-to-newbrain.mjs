@@ -136,21 +136,11 @@ function mask(text) {
   for (const [re, token] of MASKS) {
     next = next.replace(re, token);
   }
-  // Protect remaining standalone "Codex" (OpenAI product) when not already masked
-  next = next.replace(/\bCodex\b/g, "Codex");
-  next = next.replace(/\bcodex\b/g, "codex");
   return next;
 }
 
 function unmask(text) {
-  return text
-    .replace(/@codex-forge//g, "@codex-forge/")
-    .replace(/.codex-plugin/g, ".codex-plugin")
-    .replace(/.codex/g, ".codex")
-    .replace(/codex-storage/g, "codex-storage")
-    .replace(/openai-wire/g, "openai-wire")
-    .replace(/Codex/g, "Codex")
-    .replace(/codex/g, "codex");
+  return text;
 }
 
 function transformContent(text) {
@@ -158,9 +148,6 @@ function transformContent(text) {
   for (const [re, to] of REPLACEMENTS) {
     next = next.replace(re, to);
   }
-  // Fix Window interface patterns that may not have matched
-  next = next.replace(/newbrain\?:/g, "newbrain?:");
-  next = next.replace(/Window\["newbrain"\]/g, 'Window["newbrain"]');
   next = unmask(next);
   return next;
 }
@@ -196,12 +183,8 @@ function renameFiles() {
     const base = path.basename(file);
     let nextBase = base;
     for (const [from, to] of FILE_RENAMES) {
-      if (nextBase === from) nextBase = to;
+      if (from !== to && nextBase === from) nextBase = to;
     }
-    nextBase = nextBase
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/newbrain/g, "newbrain");
     if (nextBase === base) continue;
     const dest = path.join(path.dirname(file), nextBase);
     if (fs.existsSync(dest)) {
@@ -211,47 +194,6 @@ function renameFiles() {
     fs.renameSync(file, dest);
     renamed += 1;
     console.log("rename", path.relative(root, file), "->", path.relative(root, dest));
-  }
-
-  // Rename directories named .newbrain / newbrain / *newbrain*
-  const dirs = [];
-  function walkDirs(dir) {
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const ent of entries) {
-      if (!ent.isDirectory()) continue;
-      if (shouldSkipDir(ent.name)) continue;
-      const full = path.join(dir, ent.name);
-      walkDirs(full);
-      if (/newbrain|NewBrain|NewBrain/i.test(ent.name)) {
-        dirs.push(full);
-      }
-    }
-  }
-  for (const top of ["shared", "platforms", "docs", "assets", ".cursor", "scripts"]) {
-    const p = path.join(root, top);
-    if (fs.existsSync(p)) walkDirs(p);
-  }
-  dirs.sort((a, b) => b.length - a.length);
-  for (const dir of dirs) {
-    const base = path.basename(dir);
-    const nextName = base
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/newbrain/g, "newbrain");
-    if (nextName === base) continue;
-    const dest = path.join(path.dirname(dir), nextName);
-    if (fs.existsSync(dest)) {
-      console.warn("skip dir rename, dest exists:", dest);
-      continue;
-    }
-    fs.renameSync(dir, dest);
-    renamed += 1;
-    console.log("rename-dir", path.relative(root, dir), "->", path.relative(root, dest));
   }
   return renamed;
 }

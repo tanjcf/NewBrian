@@ -77,13 +77,29 @@
       function setHashPage(file){
         location.hash = `page=${encodeURIComponent(file)}`;
       }
+      function allowlistedPage(file) {
+        switch (file) {
+          case "start.html": return "start.html";
+          case "新对话.html": return "新对话.html";
+          case "自动化.html": return "自动化.html";
+          case "扩展.html": return "扩展.html";
+          case "插件.html": return "插件.html";
+          case "技能.html": return "技能.html";
+          case "mcp服务器.html": return "mcp服务器.html";
+          case "设置.html": return "设置.html";
+          case "计费与订阅.html": return "计费与订阅.html";
+          default: return "";
+        }
+      }
       function select(file){
-        const p = PAGES.find(x => x.file === file) || { name: file, file };
+        const safe = allowlistedPage(file);
+        const p = PAGES.find(x => x.file === safe);
+        if (!safe || !p) return;
         els.cur.textContent = p.name;
-        els.path.textContent = p.file;
-        els.frame.src = p.file;
+        els.path.textContent = safe;
+        els.frame.src = safe;
         [...els.pages.querySelectorAll("button")].forEach(b => {
-          b.dataset.active = b.dataset.file === file ? "1" : "0";
+          b.dataset.active = b.dataset.file === safe ? "1" : "0";
           b.style.borderColor = b.dataset.active === "1" ? "rgba(122,168,255,.55)" : "rgba(255,255,255,.12)";
           b.style.background = b.dataset.active === "1" ? "rgba(122,168,255,.10)" : "rgba(0,0,0,.25)";
         });
