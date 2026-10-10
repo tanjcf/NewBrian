@@ -1777,6 +1777,7 @@ export interface OpenClawSkillSelectInstallInput {
 
 export interface OpenClawSkillImportZipToProjectInput {
   workspaceId: string;
+  zipPath?: string;
   force?: boolean;
   acknowledgeRisk?: boolean;
 }

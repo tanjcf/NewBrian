@@ -14,7 +14,14 @@ interface SystemToolPolicyContext {
   platform: NodeJS.Platform;
   env: Record<string, string | undefined>;
   fileExists: (path: string) => boolean;
-  runCommand: (command: string, args: string[]) => { status: number | null };
+  runCommand: (command: string, args: string[]) => { status: number | null; stdout?: string };
+}
+
+function whereFirst(context: SystemToolPolicyContext, name: string) {
+  const lookup = context.platform === "win32" ? "where.exe" : "which";
+  const result = context.runCommand(lookup, [name]);
+  if (result.status !== 0) return "";
+  return String(result.stdout || "").split(/\r?\n/u).map((line) => line.trim()).find(Boolean) || "";
 }
 
 export function resolveSystemToolCommand(tool: SystemToolEntry, context: SystemToolPolicyContext) {
@@ -27,6 +34,13 @@ export function resolveSystemToolCommand(tool: SystemToolEntry, context: SystemT
     ];
     const installed = candidates.find((candidate) => isAbsolute(candidate) && context.fileExists(candidate));
     if (installed) return installed;
+    const located = whereFirst(context, "code");
+    if (!located) return "";
+    if (/[\\/]bin[\\/]code(?:\.cmd|\.bat)?$/i.test(located)) {
+      const executable = join(located, "..", "..", "Code.exe");
+      if (context.fileExists(executable)) return executable;
+    }
+    return located;
   }
   const lookupCommand = context.platform === "win32" ? "where.exe" : "which";
   return tool.commands.find((command) => context.runCommand(lookupCommand, [command]).status === 0) ?? "";

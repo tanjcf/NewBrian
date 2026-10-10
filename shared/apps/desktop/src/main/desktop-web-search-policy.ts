@@ -23,8 +23,8 @@ const WEB_SEARCH_FAILURE_HINTS: Record<string, string> = {
   WEB_SEARCH_AUTH_REQUIRED: "需要登录账号后才能使用联网搜索。",
   WEB_SEARCH_CHARGE_CONFLICT: "联网搜索计费未能完成，请稍后重试。",
   WEB_SEARCH_DISABLED: "管理员已关闭联网搜索。",
-  WEB_SEARCH_NOT_CONFIGURED: "联网搜索暂未配置，请联系管理员。",
-  WEB_SEARCH_PROVIDER_NOT_CONFIGURED: "联网搜索暂未配置，请联系管理员。"
+  WEB_SEARCH_NOT_CONFIGURED: "已调用 Spring 搜索接口，服务端没有返回可用来源。不要编造新闻。",
+  WEB_SEARCH_PROVIDER_NOT_CONFIGURED: "已调用 Spring 搜索接口，服务端没有可用的搜索密钥。不要编造新闻。"
 };
 
 /**

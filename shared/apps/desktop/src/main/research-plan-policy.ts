@@ -67,7 +67,7 @@ export function buildResearchPlan(input: {
           title: "角度 A 检索",
           role: "researcher",
           objective: "Search→Fetch 覆盖角度 A，产出带 URL 的证据摘录",
-          tools: ["news_search_free", "web.search_paid", "web.fetch_page"],
+          tools: ["web.search", "web.fetch_page"],
           status: "pending"
         },
         {
@@ -75,7 +75,7 @@ export function buildResearchPlan(input: {
           title: "角度 B 检索",
           role: "researcher",
           objective: "Search→Fetch 覆盖角度 B，产出带 URL 的证据摘录",
-          tools: ["news_search_free", "web.search_paid", "web.fetch_page"],
+          tools: ["web.search", "web.fetch_page"],
           status: "pending"
         },
         {
@@ -110,8 +110,8 @@ export function buildResearchPlan(input: {
           id: "research",
           title: "检索与全文抓取",
           role: "researcher",
-          objective: "news_search_free →（必要时）web.search_paid → web.fetch_page TopK；写出 References",
-          tools: ["news_search_free", "web.search_paid", "web.fetch_page"],
+          objective: "调用一次 web.search（Spring /api/desktop/v1/web-search），再 web.fetch_page TopK；写出 References。",
+          tools: ["web.search", "web.fetch_page"],
           status: "pending"
         },
         {
@@ -138,7 +138,7 @@ export function buildResearchPlan(input: {
         title: "检索并抓取",
         role: "researcher",
         objective: "用最少工具拿到可引用正文，附 searchedAt 与 URL",
-        tools: ["news_search_free", "web.fetch_page"],
+        tools: ["web.search", "web.fetch_page"],
         status: "pending"
       }
     ]
@@ -154,8 +154,8 @@ export function buildResearchLeadInstruction(plan: ResearchPlan): string {
     `Research plan (${plan.shape}): ${plan.title}.`,
     plan.leadRule,
     `Max children=${plan.maxChildren}. Search budget: searches≤${plan.searchBudget.maxSearches}, fetches≤${plan.searchBudget.maxFetches}.`,
-    "SOP: discovery search snippets are not full evidence; call web.fetch_page (or use orchestrator fetches) before factual claims.",
-    "Always cite URLs and searchedAt. Prefer news_search_free before web.search_paid.",
+    "SOP: discovery search snippets are not full evidence; call web.fetch_page before factual claims.",
+    "Always cite URLs and searchedAt. News and web questions call web.search once. That tool is Spring POST /api/desktop/v1/web-search.",
     `Steps: ${steps}`
   ].join(" ");
 }

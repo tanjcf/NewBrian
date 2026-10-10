@@ -4,8 +4,15 @@ import { createPortal } from "react-dom";
 import type { PreviewPlacement } from "./desktop-model";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { NovelTtsButton } from "./NovelTtsButton";
+import { speechTextForPreview } from "./preview-speech-text";
+import { previewFolderOpenRequest } from "./preview-folder-open";
+import { absoluteWorkspaceFilePath, planPreviewSystemOpen, planPreviewVsCodeOpen } from "./preview-file-menu";
+import { nextBrainToolsPlacement } from "./brain-tools-expand";
+import { planSoftwareLinkActivate } from "./software-link-window";
+import { planAutomationThreadTarget } from "../../shared/automation-thread-recovery";
+import { PPT_WRITING_TEAM_SKILL_LABEL, PPT_WRITING_TEAM_SKILL_NAME } from "../../shared/ppt-writing-team-skill.js";
 import { AssistantThinkingPanel } from "./AssistantThinkingPanel";
-import { automationIntentExamples, isAutomationCreationRequest, parseAutomationIntent, resolveAutomationCreationText } from "./parseAutomationIntent";
+import { automationIntentExamples, automationSkillZipPaths, automationTaskPrompt, isAutomationCreationRequest, parseAutomationIntent, resolveAutomationCreationText } from "./parseAutomationIntent";
 import { copyTextToClipboard } from "./clipboard-text";
 import {
   artifactPathsReferToSameFile,
@@ -101,6 +108,7 @@ import { ExpertsMarketplace } from "./ExpertsMarketplace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
 import { annotationPageNumber, attachMarkOverlay, buildAnnotationChatReference, bindDocxPreviewParagraphs, buildMarkingAnchor, documentAnchorsNeedChunkRefresh, isValidDocumentMarkRect, linesFromPreviewRect, resolveDocxAnchorFromMark, resolveMarkdownAnchorFromMark, resolvePdfAnchorFromMark, resolvePptxAnchorFromMark, resolveTxtAnchorFromMark, resolveXlsxAnchorFromMark } from "./document-annotation-policy";
+import { planDocumentMarkSend } from "./document-mark-send-policy";
 import { captureAnnotationSnapshot, dataUrlToArrayBuffer, resolveAnnotationSnapshotPreview } from "./document-annotation-snapshot";
 import { DocumentMarkingLayer, DocumentMarkPromptProvider, renderTextLineMarks } from "./DocumentMarkingLayer";
 import { WorkspaceSpreadsheetViewer } from "./WorkspaceSpreadsheetViewer";
@@ -515,9 +523,11 @@ function artifactExtension(filePath: string) {
   return filePath.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE";
 }
 
-function composerSkillLabel(skill: { name?: string }) {
-  if (skill.name === RESEARCH_WRITING_SKILL) return "政务写作";
-  return String(skill.name || "技能").replace(/-skill$/i, "");
+function composerSkillLabel(skill: { name?: string } | string) {
+  const name = typeof skill === "string" ? skill : skill?.name;
+  if (name === RESEARCH_WRITING_SKILL) return "政务写作";
+  if (name === PPT_WRITING_TEAM_SKILL_NAME) return PPT_WRITING_TEAM_SKILL_LABEL;
+  return String(name || "技能").replace(/-skill$/i, "");
 }
 
 /** Keep the marked thinking panel filled with Chinese process text, never English placeholders. */
@@ -821,11 +831,17 @@ export function WorkspaceModules(ctx: any) {
     try { localStorage.setItem("brain.resource-panel-width", String(brainResourceWidth)); } catch { /* local preferences may be unavailable */ }
     return () => frame.style.removeProperty("--brain-resource-panel-width");
   }, [brainResourceWidth]);
-  // Center file preview shares the main row with chat; keep Tools on the side to avoid a 3-way grid fight.
+  // Expanded Tools own the right column. A centered file preview must yield instead of snapping Tools back to the side.
+  useLayoutEffect(() => {
+    const frame = document.querySelector<HTMLElement>(".workspace-frame");
+    if (!frame) return;
+    frame.classList.toggle("brain-tools-expanded", brainResourcePlacement === "center");
+    return () => frame.classList.remove("brain-tools-expanded");
+  }, [brainResourcePlacement]);
   useEffect(() => {
-    if (previewPlacement !== "center" || previewMode === "empty" || brainResourcePlacement !== "center") return;
-    setBrainResourcePlacement("side");
-  }, [previewPlacement, previewMode, brainResourcePlacement]);
+    if (brainResourcePlacement !== "center" || previewPlacement !== "center" || previewMode === "empty") return;
+    setPreviewPlacement("hidden");
+  }, [brainResourcePlacement, previewMode, previewPlacement, setPreviewPlacement]);
   const attachBrainResourcePanel = useCallback((node: HTMLElement | null) => {
     brainResourcePanelRef.current = node;
     node?.closest<HTMLElement>(".workspace-frame")?.style.setProperty("--brain-resource-panel-width", `${brainResourceWidth}px`);
@@ -2291,7 +2307,7 @@ export function WorkspaceModules(ctx: any) {
     setResearchIntakeError("");
     setResearchIntakeAnalysis("");
     researchIntakeDraftRef.current = null;
-    setChatStatus(`已启用技能：${skill.name}`);
+    setChatStatus(`已启用技能：${composerSkillLabel(skill)}`);
     setComposerMenu(null);
   }
 
@@ -5716,6 +5732,17 @@ function renderSidebarModule() {
         });
         syncSnapshot(threadSnapshot, executionThreadId);
       }
+      const activeSkillNames = draft?.skill?.name
+        ? [draft.skill.name]
+        : selectedComposerSkill?.name
+          ? [selectedComposerSkill.name]
+          : [];
+      if (activeSkillNames.includes(PPT_WRITING_TEAM_SKILL_NAME) && api.summonExpertFromSkill) {
+        await api.summonExpertFromSkill({
+          threadId: executionThreadId,
+          skillName: PPT_WRITING_TEAM_SKILL_NAME
+        }).catch(() => undefined);
+      }
       setChatStatus("BRAIN 正在处理…");
       const requestId = `brain-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
       const rustConversation = (window.newbrain as any)?.rustConversation as undefined | ((input: any) => Promise<any>);
@@ -5743,11 +5770,7 @@ function renderSidebarModule() {
           `当前本地项目：${selectedBrainProject?.name || "未命名项目"}`,
           "回答应服务于当前工作台与项目；不得声称执行了尚未执行的工具或文件操作。"
         ].filter(Boolean).join("\n\n"),
-        selectedSkillNames: draft?.skill?.name
-          ? [draft.skill.name]
-          : selectedComposerSkill?.name
-            ? [selectedComposerSkill.name]
-            : [],
+        selectedSkillNames: activeSkillNames,
         composerModes: draft?.modes ?? [...composerModes],
         // The active NewBrain Thread already owns prior turns. Send only the
         // new turn here; replaying BRAIN history caused duplicate messages.
@@ -5815,6 +5838,15 @@ function renderSidebarModule() {
           return null;
         }
         const parsed = parseAutomationIntent(text);
+        for (const zipPath of automationSkillZipPaths(text)) {
+          if (!api.importSkillZipToProject || !selectedWorkspace?.id) break;
+          await api.importSkillZipToProject({
+            workspaceId: selectedWorkspace.id,
+            zipPath,
+            acknowledgeRisk: true,
+            force: true
+          });
+        }
         const item = {
           title: parsed.title || "新自动化任务",
           trigger: parsed.trigger || text,
@@ -6048,17 +6080,13 @@ function renderSidebarModule() {
       setBrainResourceTab("scene");
     };
     const isCenter = placement === "center";
-    // Toggle: center = focus Tools (hide left nav via CSS, keep chat); side = restore full layout.
+    // Toggle: center = expanded preview (hide left nav, keep chat); side = restore full layout.
     const toggleBrainExpanded = () => {
-      setBrainResourcePlacement((current) => {
-        if (current === "center") {
-          // Second click: restore nav + chat + side Tools. Force left nav visible even if
-          // Ctrl+B had collapsed it before/during expand (CSS hide does not sync that flag).
-          window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "expand-sidebar" } }));
-          return "side";
-        }
-        return "center";
-      });
+      const next = nextBrainToolsPlacement(isCenter ? "center" : "side");
+      if (next === "side") {
+        window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "expand-sidebar" } }));
+      }
+      setBrainResourcePlacement(next);
     };
     const collapseBrainPanel = () => {
       setBrainResourcePlacement("hidden");
@@ -6477,7 +6505,7 @@ function renderChatModule() {
           <div className="conversation-history">
             {goalExecution?.runtime?.selectedSkillNames?.length ? (
               <div className="goal-skill-record" data-testid="goal-skill-record">
-                本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => name === RESEARCH_WRITING_SKILL ? "政务写作" : name).join("、")}
+                本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => composerSkillLabel(name)).join("、")}
               </div>
             ) : null}
             {goalExecution?.goal?.status === "complete" && goalExecution?.plan?.length ? (
@@ -6906,7 +6934,7 @@ function renderChatModule() {
                 ) : null}
           {goalOwnerTurnId === turn.id && goalExecution?.runtime?.selectedSkillNames?.length ? (
             <div className="goal-skill-record" data-testid="goal-skill-record">
-              本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => name === RESEARCH_WRITING_SKILL ? "政务写作" : name).join("、")}
+              本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => composerSkillLabel(name)).join("、")}
             </div>
           ) : null}
           {showGovernmentSpecification && index === conversationTurns.length - 1 ? (
@@ -8126,8 +8154,39 @@ function renderChatModule() {
     setDocumentAnnotationSnapshot(null);
   };
   const sendPendingDocumentMark = async () => {
-    if (!activeBrainFile || !selectedBrainProjectId || !documentAnnotationCandidate || !documentAnnotationInstruction.trim()) return;
-    if (!window.newbrain?.createBrainAnnotation) return;
+    const instruction = documentAnnotationInstruction.trim();
+    const plan = planDocumentMarkSend({
+      instruction,
+      hasBrainFile: Boolean(activeBrainFile),
+      hasProject: Boolean(selectedBrainProjectId),
+      hasCandidate: Boolean(documentAnnotationCandidate),
+      hasAnnotationApi: Boolean(window.newbrain?.createBrainAnnotation)
+    });
+    if (plan.action === "ignore") {
+      setChatStatus("请先填写修改要求，再点击发送。");
+      return;
+    }
+    const sendInstructionToChat = (images: Array<{ name: string; path: string; url?: string }> = []) => {
+      submitComposerRequest({
+        question: instruction,
+        images,
+        keepComposer: true
+      });
+      clearPendingDocumentMark();
+      setChatStatus("修改要求已发送到对话。");
+    };
+    if (plan.action === "chat") {
+      sendInstructionToChat();
+      return;
+    }
+    const file = activeBrainFile;
+    const projectId = selectedBrainProjectId;
+    const candidate = documentAnnotationCandidate;
+    const createAnnotation = window.newbrain?.createBrainAnnotation;
+    if (!file || !projectId || !candidate || !createAnnotation) {
+      sendInstructionToChat();
+      return;
+    }
     setDocumentAnnotationBusy(true);
     try {
       let snapshotGeometry: { snapshotPath?: string; snapshotUrl?: string } = {};
@@ -8139,12 +8198,12 @@ function renderChatModule() {
         });
         snapshotGeometry = { snapshotPath: saved.path, snapshotUrl: saved.url };
       }
-      const annotation = await window.newbrain.createBrainAnnotation({
-        projectId: selectedBrainProjectId,
-        fileId: activeBrainFile.id,
-        fileVersion: activeBrainFile.versionNo,
-        anchor: documentAnnotationCandidate,
-        instruction: documentAnnotationInstruction.trim(),
+      const annotation = await createAnnotation({
+        projectId,
+        fileId: file.id,
+        fileVersion: file.versionNo,
+        anchor: candidate,
+        instruction,
         geometry: {
           ...(documentAnnotationGeometry ? { style: documentAnnotationGeometry } : { style: { tool: documentMarkingTool, color: documentMarkingColor } }),
           ...snapshotGeometry
@@ -8153,7 +8212,7 @@ function renderChatModule() {
       setBrainAnnotations((current) => [annotation, ...current]);
       clearPendingDocumentMark();
       setDocumentAnnotationActive(true);
-      const fileName = activeBrainFile.logicalName;
+      const fileName = file.logicalName;
       const snapshotPath = String(annotation.geometry?.snapshotPath || snapshotGeometry.snapshotPath || "").trim();
       const snapshotUrl = resolveAnnotationSnapshotPreview(annotation.geometry) || snapshotGeometry.snapshotUrl || "";
       const reference = buildAnnotationChatReference(annotation, {
@@ -8173,6 +8232,7 @@ function renderChatModule() {
       setChatStatus(`标注 ${markLabel} 的修改要求已发送到对话。`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
+      sendInstructionToChat();
     } finally {
       setDocumentAnnotationBusy(false);
     }
@@ -8428,8 +8488,9 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 {!searchFilePreview.loading && !searchFilePreview.error && !searchFilePreview.binary ? (
                   <NovelTtsButton
                     className="artifact-tts"
-                    text={String(searchFilePreview.content || "")}
-                    sourceText={String(searchFilePreview.content || "")}
+                    text={String(searchFilePreview.content || searchFilePreview.html || "")}
+                    resolveText={() => speechTextForPreview(searchFilePreview)}
+                    sourceText={String(searchFilePreview.content || searchFilePreview.html || "")}
                     synthesizer={api?.synthesizeNovelSpeech}
                     canceller={api?.cancelNovelSpeech}
                     onStatus={setChatStatus}
@@ -8446,27 +8507,51 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 }}>
                   <SidebarIcon name="refresh" />
                 </button>
-                <button type="button" className="artifact-icon-button" title="下载副本" aria-label="下载副本" onClick={async () => {
+                <button type="button" className="artifact-icon-button" title="打开文件夹" aria-label="打开文件夹" onClick={async () => {
                   setPreviewFileMenu(false);
+                  const request = previewFolderOpenRequest({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                  if (!request.ok) {
+                    setChatStatus(request.detail);
+                    return;
+                  }
                   try {
-                    if (!selectedWorkspace?.id) throw new Error("当前工作区不可用。");
-                    const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace.id, filePath: searchFilePreview.path, action: "save-as" });
+                    if (!api?.performWorkspaceFileAction) {
+                      setChatStatus("无法打开文件夹");
+                      return;
+                    }
+                    const result = await api.performWorkspaceFileAction({
+                      workspaceId: request.workspaceId,
+                      filePath: request.filePath,
+                      action: request.action
+                    });
                     if (result?.detail) setChatStatus(result.detail);
+                    else if (!result?.ok) setChatStatus("无法打开文件夹");
+                    else setChatStatus("已打开文件所在文件夹。");
                   } catch (error) {
-                    setChatStatus(error instanceof Error ? error.message : "文件另存为失败。");
+                    setChatStatus(error instanceof Error ? error.message : "无法打开文件夹");
                   }
                 }}>
-                  <SidebarIcon name="download" />
+                  <SidebarIcon name="folder-open" />
                 </button>
                 {/\.(?:docx|xlsx|pptx)$/i.test(String(searchFilePreview.name || searchFilePreview.path || "")) ? (
                   <button type="button" className="artifact-icon-button" title="用 Word / WPS 打开编辑" aria-label="用系统应用打开" onClick={async () => {
                     setPreviewFileMenu(false);
+                    const request = planPreviewSystemOpen({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                    if (!request.ok) {
+                      setChatStatus(request.detail);
+                      return;
+                    }
                     try {
-                      const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
-                      if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
-                      else setChatStatus("已在系统应用中打开，可直接编辑表格与排版。");
+                      if (!api?.performWorkspaceFileAction) {
+                        setChatStatus("无法用系统应用打开");
+                        return;
+                      }
+                      const result = await api.performWorkspaceFileAction(request);
+                      if (result?.detail) setChatStatus(result.detail);
+                      else if (!result?.ok) setChatStatus("无法用系统应用打开");
+                      else setChatStatus("已用系统应用打开。");
                     } catch (error) {
-                      setChatStatus(error instanceof Error ? error.message : "文件无法打开");
+                      setChatStatus(error instanceof Error ? error.message : "无法用系统应用打开");
                     }
                   }}>
                     <SidebarIcon name="external-link" />
@@ -8480,11 +8565,22 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     <div className="artifact-more-menu" role="menu">
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
+                        const request = planPreviewSystemOpen({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                        if (!request.ok) {
+                          setChatStatus(request.detail);
+                          return;
+                        }
                         try {
-                          const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
-                          if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
+                          if (!api?.performWorkspaceFileAction) {
+                            setChatStatus("无法用系统应用打开");
+                            return;
+                          }
+                          const result = await api.performWorkspaceFileAction(request);
+                          if (result?.detail) setChatStatus(result.detail);
+                          else if (!result?.ok) setChatStatus("无法用系统应用打开");
+                          else setChatStatus("已用系统应用打开。");
                         } catch (error) {
-                          setChatStatus(error instanceof Error ? error.message : "文件无法打开");
+                          setChatStatus(error instanceof Error ? error.message : "无法用系统应用打开");
                         }
                       }}>用系统应用打开</button>
                       <button type="button" onClick={async () => {
@@ -8500,19 +8596,33 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                       }}>在文件夹中显示</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
+                        const copied = absoluteWorkspaceFilePath(String(selectedWorkspace?.path || ""), searchFilePreview.path);
+                        if (!copied.ok) {
+                          setChatStatus(copied.detail);
+                          return;
+                        }
                         try {
-                          await copyTextToClipboard(searchFilePreview.path);
-                          setChatStatus("已复制文件路径。");
+                          await copyTextToClipboard(copied.path);
+                          setChatStatus("已复制完整路径。");
                         } catch {
                           setChatStatus("复制路径失败。");
                         }
                       }}>复制路径</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
+                        const request = planPreviewVsCodeOpen({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                        if (!request.ok) {
+                          setChatStatus(request.detail);
+                          return;
+                        }
                         try {
-                          if (!selectedWorkspace?.id) throw new Error("当前工作区不可用。");
-                          const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace.id, filePath: searchFilePreview.path, action: "open-vscode" });
-                          if (result && !result.ok) setChatStatus(result.detail || "无法用 VS Code 打开");
+                          if (!api?.performWorkspaceFileAction) {
+                            setChatStatus("无法用 VS Code 打开");
+                            return;
+                          }
+                          const result = await api.performWorkspaceFileAction(request);
+                          if (!result?.ok) setChatStatus(result.detail || "无法用 VS Code 打开");
+                          else setChatStatus(result.detail || "已用 VS Code 打开。");
                         } catch (error) {
                           setChatStatus(error instanceof Error ? error.message : "无法用 VS Code 打开");
                         }
@@ -8644,6 +8754,20 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 content={String(searchFilePreview.content || "")}
                 previewUrl={String(searchFilePreview.previewUrl || "")}
                 refreshToken={htmlPreviewRefreshToken}
+                marking={{
+                  active: documentAnnotationActive,
+                  tool: documentMarkingTool,
+                  color: documentMarkingColor,
+                  savedAnnotations: savedFileAnnotations,
+                  pendingMark: documentAnnotationPendingMark,
+                  onComplete: ({ rect, viewport, host }) => handlePreviewMark({
+                    format: "image",
+                    rect,
+                    viewport,
+                    transform: { coordinateSpace: "pixels", basisWidth: viewport.width, basisHeight: viewport.height, scale: 1 },
+                    captureTarget: host
+                  })
+                }}
               />
             ) : searchFilePreview.kind === "image" ? (
               <div className="workspace-artifact-image">
@@ -9265,7 +9389,7 @@ function renderSkillsModule() {
                   <article className="skill-row" key={skill.id ?? `${skill.name}-${index}`}>
                     {renderCapabilityVisual(skill.name)}
                     <span className="skill-copy">
-                      <strong>{skill.name}</strong>
+                      <strong>{composerSkillLabel(skill)}</strong>
                       <p>{skill.summary || "暂无描述"}</p>
                       <small>工作区技能 · 可在对话中调用</small>
                     </span>
@@ -9306,7 +9430,7 @@ function renderSkillsModule() {
                 <div className="skill-detail-head">
                   {renderCapabilityVisual(selectedSkill.name, true)}
                   <div>
-                    <h2>{selectedSkill.name} <span>Skill</span></h2>
+                    <h2>{composerSkillLabel(selectedSkill)} <span>Skill</span></h2>
                     <p>{selectedSkill.summary || "暂无描述"}</p>
                   </div>
                   <div className="skill-actions">
@@ -9315,7 +9439,7 @@ function renderSkillsModule() {
                   </div>
                 </div>
                 <div className="skill-instructions">
-                  <h3>{selectedSkill.name} 使用说明</h3>
+                  <h3>{composerSkillLabel(selectedSkill)} 使用说明</h3>
                   <p>来源：{selectedSkill.source || "local"} · 作用域：{selectedSkill.scope || "global"} · 路径：{selectedSkill.path || "未配置"}</p>
                   <ol>
                     <li>读取当前对话及用户明确提供的文件。</li>
@@ -9674,16 +9798,21 @@ function renderMcpModule() {
       }
     }
 
-    async function activateSelectedWindow() {
-      if (!selectedWindow || !api?.windowControl?.activate) return;
+    async function focusDesktopWindow(windowItem: any) {
+      const plan = planSoftwareLinkActivate(windowItem);
+      if (!plan.ok) {
+        setWindowControlMessage(plan.message);
+        return;
+      }
+      setSelectedDesktopWindowKey(plan.selectKey);
+      if (!api?.windowControl?.activate) {
+        setWindowControlMessage("当前系统不支持本机窗口开箱操控（仅 Windows）。");
+        return;
+      }
       setWindowControlBusy(true);
       try {
-        await api.windowControl.activate({
-          processId: selectedWindow.processId,
-          processName: selectedWindow.processName,
-          windowTitle: selectedWindow.title
-        });
-        setWindowControlMessage(`已聚焦：${selectedWindow.title || selectedWindow.processName}`);
+        await api.windowControl.activate(plan.activate);
+        setWindowControlMessage(plan.message);
       } catch (error) {
         setWindowControlMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -9726,7 +9855,7 @@ function renderMcpModule() {
                         type="button"
                         role="listitem"
                         className={`software-window-item${key === selectedDesktopWindowKey ? " active" : ""}`}
-                        onClick={() => setSelectedDesktopWindowKey(key)}
+                        onClick={() => void focusDesktopWindow(windowItem)}
                       >
                         <strong>{windowItem.title || windowItem.processName || "未命名窗口"}</strong>
                         <em>{windowItem.processName} · PID {windowItem.processId}</em>
@@ -9735,7 +9864,7 @@ function renderMcpModule() {
                   })}
                 </div>
                 <div className="software-link-actions">
-                  <button type="button" className="primary" disabled={!selectedWindow || windowControlBusy} onClick={() => void activateSelectedWindow()}>
+                  <button type="button" className="primary" disabled={!selectedWindow || windowControlBusy} onClick={() => void focusDesktopWindow(selectedWindow)}>
                     测试聚焦
                   </button>
                   <span>{windowControlMessage}</span>
@@ -10118,14 +10247,58 @@ function renderAutomationPrototypeModule() {
 
     async function runAutomationNow(item: any) {
       if (!item?.id || automationRunPendingId === item.id) return;
-      const prompt = String(item.prompt || item.trigger || "").trim();
-      if (!item.workspaceId || !item.threadId) {
-        setErrorMessage("这个任务还没有绑定对话线程，无法在会话里执行。");
-        return;
-      }
+      const prompt = automationTaskPrompt(String(item.prompt || item.trigger || "").trim());
       if (!prompt) {
         setErrorMessage("这个任务没有可执行的指令。");
         return;
+      }
+      const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
+      const boundWorkspace = catalog.find((entry) => entry.id === item.workspaceId);
+      const boundThread = boundWorkspace?.threads?.find((thread) => thread.id === item.threadId);
+      const threadPlan = planAutomationThreadTarget({
+        boundWorkspaceId: item.workspaceId,
+        boundThreadId: item.threadId,
+        workspaceExists: Boolean(boundWorkspace),
+        threadExists: Boolean(boundThread),
+        fallbackWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID
+      });
+      let workspaceId = String(item.workspaceId || threadPlan.workspaceId);
+      let threadId = String(item.threadId || "");
+      if (threadPlan.createThread) {
+        if (!api?.addWorkspaceThread || !api.activateWorkspaceThread) {
+          setErrorMessage("绑定的对话不存在，且当前版本不能新建线程。");
+          return;
+        }
+        try {
+          const scope = threadPlan.workspaceId === INTERNAL_CHAT_WORKSPACE_ID ? "chat" : "project";
+          const existingIds = new Set(
+            (catalog.find((entry) => entry.id === threadPlan.workspaceId)?.threads || []).map((thread) => thread.id)
+          );
+          const nextCatalog = normalizeWorkspaceCatalog(await api.addWorkspaceThread({
+            workspaceId: threadPlan.workspaceId,
+            title: String(item.title || "自动化任务").slice(0, 36),
+            summary: "绑定的对话不存在，已新建线程执行。",
+            scope,
+            ...(threadPlan.workspaceId === INTERNAL_CHAT_WORKSPACE_ID && selectedBrainWorkspaceKey
+              ? { brainWorkspaceKey: selectedBrainWorkspaceKey }
+              : {})
+          }));
+          setWorkspaceCatalog(nextCatalog);
+          const created = nextCatalog.find((entry) => entry.id === threadPlan.workspaceId)?.threads?.find((thread) =>
+            thread.scope === scope && !existingIds.has(thread.id)
+          );
+          if (!created?.id) {
+            setErrorMessage("绑定的对话不存在，新建线程失败。");
+            return;
+          }
+          await api.activateWorkspaceThread({ workspaceId: threadPlan.workspaceId, threadId: created.id });
+          workspaceId = threadPlan.workspaceId;
+          threadId = created.id;
+          await persistAutomation(item, { workspaceId, threadId });
+        } catch (error) {
+          setErrorMessage(error instanceof Error ? error.message : String(error));
+          return;
+        }
       }
       setAutomationRunPendingId(item.id);
       setAutomationMenuId("");
@@ -10133,9 +10306,9 @@ function renderAutomationPrototypeModule() {
       setErrorMessage("");
       setIsComposingNewThread(false);
       setActiveFeature("new-chat");
-      setSelectedSidebarRow(`chat:${item.workspaceId}:${item.threadId}`);
+      setSelectedSidebarRow(`chat:${workspaceId}:${threadId}`);
       if (typeof selectWorkspaceThread === "function") {
-        selectWorkspaceThread(item.workspaceId, item.threadId, { force: true });
+        selectWorkspaceThread(workspaceId, threadId, { force: true });
       }
       if (typeof setChatStatus === "function") setChatStatus(`“${item.title || "自动化任务"}”正在对话中执行`);
       try {
@@ -10147,11 +10320,11 @@ function renderAutomationPrototypeModule() {
           skillContext: "",
           modes: [],
           keepComposer: true,
-          targetWorkspaceId: item.workspaceId,
-          targetThreadId: item.threadId
+          targetWorkspaceId: workspaceId,
+          targetThreadId: threadId
         });
         if (outcome === "sent") {
-          await persistAutomation(item, { status: "record_run" });
+          await persistAutomation(item, { status: "record_run", workspaceId, threadId });
           if (api?.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
         }
       } catch (error) {

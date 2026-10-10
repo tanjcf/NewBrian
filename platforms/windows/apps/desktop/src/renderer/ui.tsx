@@ -25,6 +25,7 @@ import {
   isSubscriptionInactiveError,
   mapSubscriptionInactiveUserMessage
 } from "../shared/model-user-facing-error.ts";
+import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.ts";
 import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, userVisibleThreads } from "./app/workspace-visibility";
 import {
   cloneNewChatComposerDraft,
@@ -1730,7 +1731,7 @@ export function App() {
       isComposingNewThread,
       currentThreadId: currentThread?.id || currentThreadId
     });
-    const composingThreadScope = effectiveNewThreadScope === "chat" && effectiveChatUsesProject ? "project" : effectiveNewThreadScope;
+    let composingThreadScope = effectiveNewThreadScope === "chat" && effectiveChatUsesProject ? "project" : effectiveNewThreadScope;
     let targetWorkspaceId = composingNewThread
       ? resolveNewChatWorkspaceId({
           scope: effectiveNewThreadScope,
@@ -1756,17 +1757,29 @@ export function App() {
       (targetWorkspaceId === currentWorkspaceId ? currentThread : undefined);
     if (pinnedWorkspaceId && pinnedThreadId) {
       targetWorkspaceId = pinnedWorkspaceId;
-      composingNewThread = false;
       targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
       targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId);
-      if (!targetThread?.id) {
-        setErrorMessage("自动化绑定的对话线程不存在。");
-        setChatStatus("没有找到任务对应的对话。");
-        return "missing-thread";
+      const threadPlan = planAutomationThreadTarget({
+        boundWorkspaceId: pinnedWorkspaceId,
+        boundThreadId: pinnedThreadId,
+        workspaceExists: Boolean(targetWorkspace?.id),
+        threadExists: Boolean(targetThread?.id),
+        fallbackWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID
+      });
+      if (threadPlan.createThread) {
+        targetWorkspaceId = threadPlan.workspaceId;
+        targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
+        composingNewThread = true;
+        composingThreadScope = targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID ? "chat" : "project";
+        targetThread = undefined;
+        setErrorMessage("");
+        setChatStatus("绑定的对话不存在，正在新建线程并执行任务。");
+      } else {
+        composingNewThread = false;
+        setSelectedWorkspaceId(targetWorkspaceId);
+        setSelectedThreadId(targetThread?.id || pinnedThreadId);
+        setIsComposingNewThread(false);
       }
-      setSelectedWorkspaceId(targetWorkspaceId);
-      setSelectedThreadId(targetThread.id);
-      setIsComposingNewThread(false);
     }
     // A selected-thread object can be stale after switching from a project to the
     // internal chat workspace. Validate against the resolved target workspace.

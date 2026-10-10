@@ -5,8 +5,13 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   _resetShellProcessRegistryForTests,
+  clampYieldTimeMs,
   handleShellProcessAction,
-  killAllShellProcesses
+  killAllShellProcesses,
+  MAX_YIELD_TIME_MS,
+  MIN_YIELD_TIME_MS,
+  STDIN_CLOSED_MESSAGE,
+  WINDOWS_INITIAL_EXEC_YIELD_TIME_FLOOR_MS
 } from "./shell-process-registry.js";
 import { createBuiltinToolRegistry } from "./tool-registry.js";
 
@@ -66,14 +71,24 @@ test("shell.exec background + shell.process poll/log/kill lifecycle", async () =
   }
 });
 
-test("shell.exec yieldMs backgrounds a still-running command", async () => {
+test("yield time follows the Codex window and does not exceed 30s", () => {
+  assert.equal(clampYieldTimeMs(undefined), process.platform === "win32" ? WINDOWS_INITIAL_EXEC_YIELD_TIME_FLOOR_MS : MIN_YIELD_TIME_MS);
+  assert.equal(clampYieldTimeMs(60_000), MAX_YIELD_TIME_MS);
+  if (process.platform === "win32") {
+    assert.equal(clampYieldTimeMs(400), WINDOWS_INITIAL_EXEC_YIELD_TIME_FLOOR_MS);
+  } else {
+    assert.equal(clampYieldTimeMs(100), MIN_YIELD_TIME_MS);
+  }
+});
+
+test("shell.exec yieldMs backgrounds a still-running command without killing it", async () => {
   _resetShellProcessRegistryForTests();
   const root = mkdtempSync(join(tmpdir(), "newbrain-shell-yield-"));
   try {
     const registry = createBuiltinToolRegistry();
     const command = process.platform === "win32"
-      ? "Start-Sleep -Seconds 5; Write-Output 'done'"
-      : "sleep 5; printf 'done\\n'";
+      ? "Start-Sleep -Seconds 45; Write-Output 'done'"
+      : "sleep 45; printf 'done\\n'";
     const result = await registry.invoke("shell.exec", {
       command,
       yieldMs: 400
@@ -81,7 +96,12 @@ test("shell.exec yieldMs backgrounds a still-running command", async () => {
     assert.equal(result.ok, true);
     assert.equal(result.background, true);
     assert.equal(result.yielded, true);
-    assert.ok(result.sessionId);
+    assert.equal(result.status, "running");
+    assert.match(result.output, new RegExp(STDIN_CLOSED_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    await assert.rejects(
+      () => handleShellProcessAction({ action: "write", sessionId: result.sessionId, data: "password\n" }),
+      new RegExp(STDIN_CLOSED_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    );
     await registry.invoke("shell.process", {
       action: "kill",
       sessionId: result.sessionId

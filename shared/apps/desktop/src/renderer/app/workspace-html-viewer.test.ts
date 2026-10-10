@@ -10,8 +10,10 @@ test("HTML artifact viewer defaults to sandboxed preview with source toggle", ()
   assert.match(viewer, /源码/);
   assert.match(viewer, /setMode\("preview"\)/);
   assert.match(viewer, /referrerPolicy="no-referrer"/);
-  assert.match(workspace, /\\\.\(pdf\|docx\|pptx\|html\?\)\$\/i/);
   assert.match(workspace, /searchFilePreview\.kind === "html"/);
   assert.match(workspace, /WorkspaceHtmlViewer/);
   assert.match(workspace, /setHtmlPreviewRefreshToken/);
+  assert.match(viewer, /workspace-artifact-html-stage/);
+  assert.match(viewer, /DocumentMarkingLayer/);
+  assert.match(workspace, /kind === "html"[\s\S]{0,700}marking=\{\{/);
 });

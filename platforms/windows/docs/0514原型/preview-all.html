@@ -273,12 +273,35 @@
         location.hash = `page=${encodeURIComponent(file)}`;
       }
 
+      function allowlistedPage(file) {
+        switch (file) {
+          case "start.html": return "start.html";
+          case "index.html": return "index.html";
+          case "新对话.html": return "新对话.html";
+          case "自动化.html": return "自动化.html";
+          case "扩展.html": return "扩展.html";
+          case "插件.html": return "插件.html";
+          case "技能.html": return "技能.html";
+          case "mcp服务器.html": return "mcp服务器.html";
+          case "设置.html": return "设置.html";
+          case "计费与订阅.html": return "计费与订阅.html";
+          default: return "";
+        }
+      }
+
+      function knownPage(file) {
+        const safe = allowlistedPage(file);
+        return safe ? PAGES.find(p => p.file === safe) || null : null;
+      }
+
       function selectPage(file) {
-        const page = PAGES.find(p => p.file === file) || { name: file, file };
-        els.frame.src = page.file;
+        const safe = allowlistedPage(file);
+        const page = knownPage(file);
+        if (!safe || !page) return;
+        els.frame.src = safe;
         els.currentName.textContent = `${page.name}（${page.file}）`;
         [...els.list.querySelectorAll(".item")].forEach(node => {
-          node.setAttribute("aria-current", node.dataset.file === file ? "true" : "false");
+          node.setAttribute("aria-current", node.dataset.file === safe ? "true" : "false");
         });
       }
 
@@ -325,12 +348,12 @@
       });
 
       els.openNew.addEventListener("click", () => {
-        const file = getHashPage() || "start.html";
-        window.open(file, "_blank", "noreferrer");
+        const safe = allowlistedPage(getHashPage() || "start.html");
+        if (safe) window.open(safe, "_blank", "noreferrer");
       });
       els.reload.addEventListener("click", () => {
-        const file = getHashPage() || "start.html";
-        els.frame.src = file;
+        const safe = allowlistedPage(getHashPage() || "start.html");
+        if (safe) els.frame.src = safe;
       });
       els.copyLink.addEventListener("click", async () => {
         const file = getHashPage() || "start.html";

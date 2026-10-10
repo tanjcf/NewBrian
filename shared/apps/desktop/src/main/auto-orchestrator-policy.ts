@@ -39,7 +39,7 @@ export function buildAutoModeLightCompanionInstruction(): string {
   return [
     "Auto mode (companion): handle this turn directly in concise Chinese.",
     "Do not delegate to child agents, do not spawn tools, and do not run project learning writes for greetings or short casual chat.",
-    "Never call news_search_free, web.search_paid, or web.fetch_page for greetings or thanks.",
+    "Never call web.search or web.fetch_page for greetings or thanks.",
     "NewBrain knowledge learning runs separately via project-manager shadow on substantive tasks."
   ].join(" ");
 }
@@ -52,7 +52,7 @@ export function buildAutoModeOrchestratorInstruction(input?: {
   const taskClass = String(input?.taskClass || "general");
   const researchBlock = taskClass === "research"
     ? buildResearchLeadInstruction(buildResearchPlan({ request: String(input?.latestUserText || "") }))
-    : "For research turns, prefer researcher with Search→Fetch (news_search_free then web.fetch_page) and cite URLs.";
+    : "For research turns, prefer researcher with Search→Fetch (web.search once via Spring /api/desktop/v1/web-search, then web.fetch_page) and cite URLs.";
   return [
     "Auto mode (orchestrator): you are the lightweight parent coordinator, not the primary worker.",
     "Main tasks (coding, research, multi-step delivery, long-form writing, file changes) MUST be started with agent.delegate to a suitable child role (planner/researcher/editor/verifier) before you do the work yourself.",

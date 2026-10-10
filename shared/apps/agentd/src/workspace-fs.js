@@ -30,6 +30,24 @@ function toRelativeWorkspacePath(workspacePath, targetPath) {
   return path.relative(workspacePath, targetPath).split(path.sep).join("/");
 }
 
+/** Rejoin a not-yet-created suffix onto the realpath of its existing ancestor. */
+async function canonicalizeMissingSuffix(target) {
+  const missing = [];
+  let cursor = target;
+  while (true) {
+    try {
+      const realAncestor = await fs.realpath(cursor);
+      return missing.length === 0 ? realAncestor : path.join(realAncestor, ...missing);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return target;
+      missing.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
 /**
  * Resolve a tool path that must stay inside the attached workspace.
  * Absolute paths are allowed only when they resolve under the workspace root.
@@ -42,11 +60,7 @@ export async function resolveSafeWorkspacePath(workspacePath, targetPath, option
   let target = path.isAbsolute(requested)
     ? path.resolve(requested)
     : path.resolve(workspace, requested);
-  try {
-    target = await fs.realpath(target);
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
+  target = await canonicalizeMissingSuffix(target);
   if (target !== workspace && !target.startsWith(`${workspace}${path.sep}`)) {
     throw new Error("Tool target must stay inside the attached workspace.");
   }

@@ -2,14 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const {
-  NO_IMAGE_BRIDGE_MESSAGE,
-  formatBridgedImageText,
+  IMAGE_OMITTED_UNSUPPORTED,
   pickBridgeVisionModel,
   resolveImageHandleMode,
   resolvePreferredBridgeVisionModelFromEnv,
   resolveTurnImages
 } = await import(new URL("./turn-image-resolution.ts", import.meta.url).href);
-const { isVisionCapableModel } = await import(new URL("./model-auto-router.ts", import.meta.url).href);
+const { isVisionCapableModel, modelSupportsImageInput } = await import(new URL("./model-auto-router.ts", import.meta.url).href);
 
 const deepseek = {
   id: "1",
@@ -59,9 +58,9 @@ test("vision-capable main model uses native image parts", async () => {
   }
 });
 
-test("Auto outbound model=auto with vision pool uses native image parts", async () => {
+test("Auto outbound model=auto keeps images only for the selected model", async () => {
   const autoLiteral = { model: "auto", provider: "gateway", label: "Auto" };
-  assert.equal(resolveImageHandleMode(autoLiteral), "describe_bridge");
+  assert.equal(resolveImageHandleMode(autoLiteral), "omit");
   assert.equal(
     resolveImageHandleMode(autoLiteral, {
       requestedModel: "auto",
@@ -70,14 +69,13 @@ test("Auto outbound model=auto with vision pool uses native image parts", async 
     }),
     "native"
   );
-  // Parent Auto picked text → do not emit image_url (child must be vision to keep native).
   assert.equal(
     resolveImageHandleMode(autoLiteral, {
       requestedModel: "auto",
       availableModels: [deepseek, qwenVl],
       parentSelectedModel: "deepseek-v4-pro"
     }),
-    "describe_bridge"
+    "native"
   );
   const resolved = await resolveTurnImages({
     mainModel: autoLiteral,
@@ -131,12 +129,37 @@ test("kimi-k2.6-BD uses native image input (official chat.completions multimodal
   assert.match((resolved.images[0] as { dataUrl: string }).dataUrl, /^data:image\/png;base64,/);
 });
 
-test("text-only main model uses describe-bridge and injects Chinese description", async () => {
-  assert.equal(resolveImageHandleMode(deepseek), "describe_bridge");
+test("DeepSeek V4 keeps native image parts and does not call a vision model", async () => {
+  assert.equal(isVisionCapableModel(deepseek), false);
+  assert.equal(modelSupportsImageInput(deepseek), true);
+  assert.equal(resolveImageHandleMode(deepseek), "native");
 
   const resolved = await resolveTurnImages({
     mainModel: deepseek,
     availableModels: [deepseek, qwenVl],
+    images: [{
+      name: "photo.jpg",
+      path: "C:/tmp/photo.jpg",
+      mimeType: "image/jpeg",
+      header: "Attachment 1: photo.jpg",
+      readBytes: async () => Buffer.from("jpeg-bytes")
+    }],
+    describeImage: async () => {
+      throw new Error("DeepSeek V4 must not start a side vision call");
+    }
+  });
+
+  assert.equal(resolved.mode, "native");
+  assert.equal(resolved.images[0]?.kind, "native");
+});
+
+test("a model without image input omits the image instead of calling vision", async () => {
+  const ernie = { id: "9", provider: "百度", model: "ernie-5.1", label: "ernie-5.1" };
+  assert.equal(modelSupportsImageInput(ernie), false);
+  assert.equal(resolveImageHandleMode(ernie), "omit");
+  const resolved = await resolveTurnImages({
+    mainModel: ernie,
+    availableModels: [ernie, qwenVl],
     preferredBridgeModel: "qwen3-vl-plus",
     images: [{
       name: "photo.jpg",
@@ -145,28 +168,18 @@ test("text-only main model uses describe-bridge and injects Chinese description"
       header: "Attachment 1: photo.jpg",
       readBytes: async () => Buffer.from("jpeg-bytes")
     }],
-    describeImage: async (input) => {
-      assert.equal(input.bridgeModel?.model, "qwen3-vl-plus");
-      return {
-        description: "图中是一只橙色的猫坐在窗台上。",
-        visionModel: "qwen3-vl-plus",
-        source: "remote"
-      };
+    describeImage: async () => {
+      throw new Error("omitted images must not call a vision model");
     }
   });
-
-  assert.equal(resolved.mode, "describe_bridge");
-  assert.equal(resolved.images[0]?.kind, "bridged");
-  if (resolved.images[0]?.kind === "bridged") {
-    assert.equal(resolved.images[0].source, "remote");
-    assert.match(formatBridgedImageText(resolved.images[0]), /远程识图桥接/);
-    assert.match(formatBridgedImageText(resolved.images[0]), /橙色的猫/);
+  assert.equal(resolved.mode, "omit");
+  assert.equal(resolved.images[0]?.kind, "omitted");
+  if (resolved.images[0]?.kind === "omitted") {
+    assert.equal(resolved.images[0].text, IMAGE_OMITTED_UNSUPPORTED);
   }
 });
 
-test("DeepSeek is never treated as native vision; bridge picks a VL catalog model", () => {
-  assert.equal(isVisionCapableModel(deepseek), false);
-  assert.equal(resolveImageHandleMode(deepseek), "describe_bridge");
+test("bridge catalog helper still prefers an explicit VL model", () => {
   assert.equal(
     pickBridgeVisionModel([deepseek, gpt4o, qwenVl], "qwen3-vl-plus")?.model,
     "qwen3-vl-plus"
@@ -176,28 +189,6 @@ test("DeepSeek is never treated as native vision; bridge picks a VL catalog mode
     "gpt-4o"
   );
   assert.equal(pickBridgeVisionModel([deepseek], undefined), undefined);
-});
-
-test("no vision bridge available yields a clear Chinese error", async () => {
-  await assert.rejects(
-    () => resolveTurnImages({
-      mainModel: deepseek,
-      availableModels: [deepseek],
-      images: [{
-        name: "a.png",
-        path: "C:/a.png",
-        mimeType: "image/png",
-        header: "Attachment 1: a.png",
-        readBytes: async () => Buffer.from("x")
-      }],
-      describeImage: async () => {
-        throw new Error("授权模型目录中没有可用的远程视觉模型。；本地识图服务不可用。");
-      }
-    }),
-    (error: unknown) =>
-      error instanceof Error
-      && error.message.startsWith(NO_IMAGE_BRIDGE_MESSAGE)
-  );
 });
 
 test("preferred bridge vision model can be read from env", () => {

@@ -111,46 +111,34 @@ test("paid search client maps Spring edition/cacheHit and payment error bodies",
   );
 });
 
-test("registers web.search_paid tool and returns unavailable payload on empty results", async () => {
-  const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
+test("registers only the Spring web.search tool and returns unavailable payload on empty results", async () => {
+  const tools = new Map<string, { description: string; execute: (input: Record<string, unknown>) => Promise<unknown> }>();
   registerDesktopWebSearchTools({
     unregisterExternalTools: () => undefined,
     registerExternalTool: (definition, execute) => {
-      tools.set(String(definition.name), execute);
+      tools.set(String(definition.name), { description: String(definition.description || ""), execute });
     }
   }, {
     search: async () => ({
       query: "q",
-      provider: "bocha",
+      provider: "spring",
       searchedAt: "2026-08-20T00:00:00.000Z",
       edition: "",
       cacheHit: false,
       items: []
     }),
-    searchMarketNews: async () => ({
-      query: "q",
-      searchedAt: "2026-08-20T00:00:00.000Z",
-      decision: "NONE",
-      status: "unavailable",
-      message: "",
-      complete: false,
-      paidAttempted: false,
-      paidSucceeded: false,
-      sourceTypesUsed: [],
-      items: [],
-      fetches: [],
-      fetchAttempted: false
-    }),
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
-  assert.ok(tools.has("web.fetch_page"));
-  const result = await tools.get("web.search_paid")!({ query: "q" }) as { details: { status: string; code: string }; isError?: boolean };
+  assert.deepEqual([...tools.keys()].sort(), ["web.fetch_page", "web.search"]);
+  assert.match(tools.get("web.search")!.description, /\/api\/desktop\/v1\/web-search/);
+  assert.doesNotMatch(tools.get("web.search")!.description, /news_search_free|web\.search_paid|market-news-search|Baidu|Bocha|Zhipu|Quark/);
+  const result = await tools.get("web.search")!.execute({ query: "q" }) as { details: { status: string; code: string }; isError?: boolean };
   assert.equal(result.details.status, "unavailable");
   assert.equal(result.details.code, "WEB_SEARCH_EMPTY");
   assert.equal(result.isError, true);
 });
 
-test("web.search_paid surfaces baidu edition and treats provider none as unavailable", async () => {
+test("web.search surfaces the Spring result and treats provider none as unavailable", async () => {
   const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
   registerDesktopWebSearchTools({
     unregisterExternalTools: () => undefined,
@@ -173,23 +161,9 @@ test("web.search_paid surfaces baidu edition and treats provider none as unavail
         publishedAt: "2026-09-24"
       }]
     }),
-    searchMarketNews: async () => ({
-      query: "q",
-      searchedAt: "2026-09-25T00:00:00.000Z",
-      decision: "NONE",
-      status: "unavailable",
-      message: "",
-      complete: false,
-      paidAttempted: false,
-      paidSucceeded: false,
-      sourceTypesUsed: [],
-      items: [],
-      fetches: [],
-      fetchAttempted: false
-    }),
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
-  const ok = await tools.get("web.search_paid")!({ query: "q" }) as {
+  const ok = await tools.get("web.search")!({ query: "q" }) as {
     ok: boolean;
     output: string;
     details: { status: string; provider: string; edition: string; cacheHit: boolean };
@@ -217,23 +191,9 @@ test("web.search_paid surfaces baidu edition and treats provider none as unavail
       cacheHit: false,
       items: []
     }),
-    searchMarketNews: async () => ({
-      query: "q",
-      searchedAt: "2026-09-25T00:00:00.000Z",
-      decision: "NONE",
-      status: "unavailable",
-      message: "",
-      complete: false,
-      paidAttempted: false,
-      paidSucceeded: false,
-      sourceTypesUsed: [],
-      items: [],
-      fetches: [],
-      fetchAttempted: false
-    }),
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
-  const empty = await tools.get("web.search_paid")!({ query: "q" }) as {
+  const empty = await tools.get("web.search")!({ query: "q" }) as {
     ok: boolean;
     output: string;
     details: { status: string; code: string };
@@ -246,7 +206,7 @@ test("web.search_paid surfaces baidu edition and treats provider none as unavail
   assert.equal(empty.isError, true);
 });
 
-test("web.search_paid tells the user when the orchestrator reports insufficient balance", async () => {
+test("web.search tells the user when Spring reports insufficient balance", async () => {
   const client = new DesktopWebSearchClient({
     readGatewayOrigin: async () => "https://gateway.example",
     readAccessToken: async () => "token",
@@ -277,10 +237,9 @@ test("web.search_paid tells the user when the orchestrator reports insufficient 
     }
   }, {
     search: (input) => client.search(input),
-    searchMarketNews: async () => { throw new Error("unused"); },
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
-  const result = await tools.get("web.search_paid")!({ query: "贵州茅台" }) as {
+  const result = await tools.get("web.search")!({ query: "贵州茅台" }) as {
     details: { code: string; message: string };
     isError?: boolean;
   };
@@ -297,18 +256,17 @@ test("a thrown budget error keeps its code and Chinese hint", async () => {
       tools.set(String(definition.name), execute);
     }
   }, {
-    search: async () => { throw new DesktopWebSearchError("WEB_SEARCH_BUDGET_EXCEEDED", "daily paid search budget exhausted"); },
-    searchMarketNews: async () => { throw new DesktopWebSearchError("WEB_SEARCH_BUDGET_EXCEEDED", "daily paid search budget exhausted"); },
+    search: async () => { throw new DesktopWebSearchError("WEB_SEARCH_BUDGET_EXCEEDED", "daily search budget exhausted"); },
     fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
   });
-  for (const name of ["web.search_paid", "news_search_free"]) {
-    const result = await tools.get(name)!({ query: "q" }) as { details: { code: string; message: string } };
-    assert.equal(result.details.code, "WEB_SEARCH_BUDGET_EXCEEDED");
-    assert.match(result.details.message, /今日联网搜索额度已用完/);
-  }
+  const result = await tools.get("web.search")!({ query: "q" }) as { details: { code: string; message: string } };
+  assert.equal(result.details.code, "WEB_SEARCH_BUDGET_EXCEEDED");
+  assert.match(result.details.message, /今日联网搜索额度已用完/);
+  assert.equal(tools.has("news_search_free"), false);
+  assert.equal(tools.has("web.search_paid"), false);
 });
 
-test("market news client maps orchestrator evidence pack and never logs tokens", async () => {
+test("web.search posts only to the Spring web-search API", async () => {
   const calls: Array<{ url: string; headers: Record<string, string> }> = [];
   const client = new DesktopWebSearchClient({
     readGatewayOrigin: async () => "https://gateway.example/",
@@ -322,92 +280,28 @@ test("market news client maps orchestrator evidence pack and never logs tokens",
       return new Response(JSON.stringify({
         ok: true,
         data: {
-          query: "贵州茅台最新公告",
+          query: "今天有哪些新闻",
+          provider: "spring",
           searchedAt: "2026-08-20T12:00:00.000Z",
-          decision: "FREE_ONLY",
-          status: "ok",
-          message: "",
-          complete: true,
-          paidAttempted: false,
-          paidSucceeded: false,
-          sourceTypesUsed: ["akshare"],
           items: [{
-            evidenceId: "e1",
-            title: "扩产公告",
+            title: "今日要闻",
             url: "https://example.com/news/1",
-            source: "财联社",
-            publishedAt: "2026-08-19",
-            snippet: "公司宣布扩产",
-            sourceType: "akshare"
-          }],
-          fetches: [{
-            url: "https://example.com/news/1",
-            title: "扩产公告",
-            text: "公司宣布扩产全文",
-            status: "ok",
-            statusCode: 200
-          }],
-          fetchAttempted: true
+            siteName: "示例",
+            snippet: "摘要",
+            summary: "摘要",
+            publishedAt: "2026-08-20"
+          }]
         }
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }) as typeof fetch
   });
 
-  const result = await client.searchMarketNews({ query: "贵州茅台最新公告" });
-  assert.equal(calls[0]?.url, "https://gateway.example/api/desktop/v1/market-news-search");
+  const result = await client.search({ query: "今天有哪些新闻" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.url, "https://gateway.example/api/desktop/v1/web-search");
   assert.equal(calls[0]?.headers.Authorization, "Bearer secret-token");
-  assert.equal(result.decision, "FREE_ONLY");
   assert.equal(result.items[0]?.url, "https://example.com/news/1");
-  assert.equal(result.items[0]?.siteName, "财联社");
-  assert.equal(result.sourceTypesUsed[0], "akshare");
-  assert.equal(result.fetchAttempted, true);
-  assert.equal(result.fetches[0]?.text, "公司宣布扩产全文");
-});
-
-test("news_search_free prefers free-first pack and surfaces unavailable guidance", async () => {
-  const tools = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
-  registerDesktopWebSearchTools({
-    unregisterExternalTools: () => undefined,
-    registerExternalTool: (definition, execute) => {
-      tools.set(String(definition.name), execute);
-    }
-  }, {
-    search: async () => ({
-      query: "q",
-      provider: "bocha",
-      searchedAt: "2026-08-20T00:00:00.000Z",
-      edition: "",
-      cacheHit: false,
-      items: []
-    }),
-    searchMarketNews: async () => ({
-      query: "最新利率",
-      searchedAt: "2026-08-20T12:00:00.000Z",
-      decision: "NONE",
-      status: "unavailable",
-      message: "WEB_SEARCH_DISABLED: administrator disabled web search",
-      complete: false,
-      paidAttempted: false,
-      paidSucceeded: false,
-      sourceTypesUsed: [],
-      items: [],
-      fetches: [],
-      fetchAttempted: false
-    }),
-    fetchPage: async () => ({ url: "https://example.com", title: "", text: "", status: "empty", statusCode: 0 })
-  });
-  assert.ok(tools.has("news_search_free"));
-  assert.ok(tools.has("web.fetch_page"));
-  const result = await tools.get("news_search_free")!({ query: "最新利率" }) as {
-    details: { status: string; code: string; message: string; searchedAt: string };
-    isError?: boolean;
-  };
-  assert.equal(result.details.status, "unavailable");
-  assert.equal(result.details.code, "WEB_SEARCH_DISABLED");
-  assert.match(result.details.message, /WEB_SEARCH_DISABLED/);
-  assert.match(result.details.message, /管理员已关闭联网搜索/);
-  assert.equal(result.details.searchedAt, "2026-08-20T12:00:00.000Z");
-  assert.equal(result.isError, true);
+  assert.equal("searchMarketNews" in client, false);
 });
 
 test("finalizes assistant answers by attaching citations only; never rewrites into WEB_SEARCH prompts", async () => {

@@ -10,6 +10,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import * as os from "node:os";
 import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { ensurePptWritingTeamSkill } from "../../../../../../../shared/apps/desktop/src/main/ppt-writing-team-skill.js";
 import type {
   AutomationSpec,
   ChatMessage,
@@ -4724,6 +4725,7 @@ async function discoverWorkspaceSkillSpecs() {
 }
 
 async function syncDiscoveredSkills(config: FeatureConfigFile) {
+  await ensurePptWritingTeamSkill(userSkillRoot);
   const discoveredSkills = await discoverWorkspaceSkillSpecs();
   if (!discoveredSkills.length) return config;
   const existingKeys = new Set(config.skills.map((skill) => skill.name || skill.id));

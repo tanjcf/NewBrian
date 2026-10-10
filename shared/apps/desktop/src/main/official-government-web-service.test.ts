@@ -4,6 +4,14 @@ import test from "node:test";
 // @ts-expect-error Node's strip-types runner loads this source file directly.
 import { OfficialGovernmentWebService, isOfficialGovernmentUrl } from "./official-government-web-service.ts";
 
+function requestHostname(value: unknown) {
+  try {
+    return new URL(String(value)).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return "";
+  }
+}
+
 test("accepts only HTTP government domains without credentials", () => {
   assert.equal(isOfficialGovernmentUrl("https://www.gov.cn/x"), true);
   assert.equal(isOfficialGovernmentUrl("https://beijing.gov.cn/x"), true);
@@ -73,7 +81,7 @@ test("search falls back to Bing RSS when the official API returns no gov.cn hits
   const requested: string[] = [];
   const fetchImpl: typeof fetch = async (input) => {
     requested.push(String(input));
-    if (String(input).includes("sousuo.www.gov.cn")) {
+    if (requestHostname(input) === "sousuo.www.gov.cn") {
       return new Response(JSON.stringify({ code: 200, searchVO: { catMap: {} } }), {
         headers: { "content-type": "application/json" },
       });
@@ -107,12 +115,15 @@ test("search falls back to Chinese HTML results when Bing RSS ignores the offici
   const requested: string[] = [];
   const fetchImpl: typeof fetch = async (input) => {
     requested.push(String(input));
-    if (String(input).includes("sousuo.www.gov.cn")) {
+    if (requestHostname(input) === "sousuo.www.gov.cn") {
       return new Response(JSON.stringify({ code: 200, searchVO: { catMap: {} } }), {
         headers: { "content-type": "application/json" },
       });
     }
-    if (requested.filter((url) => url.includes("bing.com")).length === 1) {
+    if (requested.filter((url) => {
+      const hostname = requestHostname(url);
+      return hostname === "bing.com" || hostname.endsWith(".bing.com");
+    }).length === 1) {
       return new Response(
         `<?xml version="1.0"?><rss><channel>
           <item><title>Unrelated result</title><link>https://example.com/marketing</link><description>ignored</description></item>
@@ -148,7 +159,7 @@ test("search falls back to Chinese HTML results when the RSS request times out",
   const service = new OfficialGovernmentWebService({
     fetchImpl: async (input) => {
       attempts += 1;
-      if (String(input).includes("sousuo.www.gov.cn")) {
+      if (requestHostname(input) === "sousuo.www.gov.cn") {
         return new Response(JSON.stringify({ code: 200, searchVO: { catMap: {} } }), {
           headers: { "content-type": "application/json" },
         });
@@ -172,7 +183,7 @@ test("search falls back to Chinese HTML results when the RSS request times out",
 test("search reports malformed RSS", async () => {
   const service = new OfficialGovernmentWebService({
     fetchImpl: async (input) => {
-      if (String(input).includes("sousuo.www.gov.cn")) {
+      if (requestHostname(input) === "sousuo.www.gov.cn") {
         return new Response(JSON.stringify({ code: 200, searchVO: { catMap: {} } }), {
           headers: { "content-type": "application/json" },
         });

@@ -1,9 +1,7 @@
 import {
   DesktopWebSearchClient,
   DesktopWebSearchError,
-  type DesktopMarketNewsItem,
   type DesktopWebSearchFreshness,
-  type DesktopWebSearchItem,
   type DesktopWebSearchResult
 } from "./desktop-web-search-client.ts";
 import {
@@ -39,21 +37,10 @@ function toolResult(payload: Record<string, unknown>, isError = false) {
   };
 }
 
-function toCitationItems(items: DesktopMarketNewsItem[]): DesktopWebSearchItem[] {
-  return items.map((item) => ({
-    title: item.title,
-    url: item.url,
-    siteName: item.siteName || item.sourceType || "",
-    snippet: item.snippet,
-    summary: item.summary || item.snippet,
-    publishedAt: item.publishedAt
-  }));
-}
-
-/** Registers free-first market news search, paid fallback, and Search→Fetch page tool. */
+/** Registers the Spring web-search tool and the Search→Fetch page tool. */
 export function registerDesktopWebSearchTools(
   runtime: ExternalToolRuntime,
-  client: Pick<DesktopWebSearchClient, "search" | "searchMarketNews" | "fetchPage">
+  client: Pick<DesktopWebSearchClient, "search" | "fetchPage">
 ): void {
   runtime.unregisterExternalTools(namespace);
   runtime.unregisterExternalTools("web-paid");
@@ -64,93 +51,9 @@ export function registerDesktopWebSearchTools(
 
   runtime.registerExternalTool(
     {
-      name: "news_search_free",
-      title: "市场新闻搜索",
-      description: "Stock and finance news only: prices, announcements, earnings, indexes, and listed-company news. Free finance news first, then one finance search engine. Do not call for marketing plans, campaigns, copywriting, short-video cases, or general web questions. Never call for greetings.",
-      kind: "read",
-      risk: "medium",
-      requiresApproval: false,
-      namespace,
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string", minLength: 1, maxLength: 200 },
-          freshness: { type: "string", enum: ["noLimit", "oneDay", "oneWeek", "oneMonth", "oneYear"] },
-          count: { type: "integer", minimum: 1, maximum: 10 }
-        },
-        required: ["query"],
-        additionalProperties: false
-      }
-    },
-    async (input) => {
-      try {
-        const result = await client.searchMarketNews({
-          query: String(input.query || ""),
-          freshness: input.freshness as DesktopWebSearchFreshness | undefined,
-          count: typeof input.count === "number" ? input.count : undefined
-        });
-        if (result.status === "unavailable" || !result.items.length) {
-          const failure = describeDesktopWebSearchFailure(result.message);
-          return toolResult({
-            status: "unavailable",
-            code: failure.code,
-            message: formatDesktopWebSearchUnavailable(result.message || "No usable news sources were returned."),
-            searchedAt: result.searchedAt,
-            decision: result.decision,
-            query: result.query,
-            items: [],
-            fetches: [],
-            fetchAttempted: result.fetchAttempted
-          }, true);
-        }
-        searchCallsWithoutFetch += 1;
-        const citationPreview = attachDesktopWebSearchCitations({
-          answer: "",
-          searchedAt: result.searchedAt,
-          items: toCitationItems(result.items)
-        }).trim();
-        const guidanceParts = [
-          "Cite returned URLs and searchedAt. Do not invent fresher facts than these sources support.",
-          "If status is degraded, say free news was used after paid search failed.",
-          result.fetches.length
-            ? "Orchestrator already attached TopK fetches; prefer those bodies before calling web.fetch_page again."
-            : "If snippets are thin, call web.fetch_page on the most relevant URLs (budget-limited)."
-        ];
-        return toolResult({
-          status: result.status,
-          query: result.query,
-          searchedAt: result.searchedAt,
-          decision: result.decision,
-          complete: result.complete,
-          paidAttempted: result.paidAttempted,
-          paidSucceeded: result.paidSucceeded,
-          sourceTypesUsed: result.sourceTypesUsed,
-          message: result.message,
-          items: result.items,
-          fetches: result.fetches,
-          fetchAttempted: result.fetchAttempted,
-          citationBlock: citationPreview,
-          guidance: guidanceParts.join(" ")
-        }, result.status !== "ok" && result.status !== "degraded");
-      } catch (error) {
-        const code = error instanceof DesktopWebSearchError ? error.code : "WEB_SEARCH_UNAVAILABLE";
-        const message = error instanceof Error ? error.message : String(error);
-        return toolResult({
-          status: "unavailable",
-          code,
-          message: formatDesktopWebSearchUnavailable(message, code),
-          items: [],
-          fetches: []
-        }, true);
-      }
-    }
-  );
-
-  runtime.registerExternalTool(
-    {
-      name: "web.search_paid",
-      title: "全网付费搜索",
-      description: "Scene web search. Marketing plans, cases, copy, Xiaohongshu, Douyin, and campaigns use Baidu standard, then Quark only if Baidu returns fewer than two links. Policy uses Baidu then Zhipu search_pro. Open questions use Baidu then Bocha. Do not call news_search_free for these. Call this tool once. Never call for greetings.",
+      name: "web.search",
+      title: "联网搜索",
+      description: "Search the web and today's news. Always call Spring POST /api/desktop/v1/web-search once. Spring chooses the engine. This is the only web search tool. Never call for greetings.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,
@@ -184,7 +87,7 @@ export function registerDesktopWebSearchTools(
             message: formatDesktopWebSearchUnavailable(
               result.message || (result.provider === "none"
                 ? "Web search returned no usable sources."
-                : "Paid web search returned no source URLs."),
+                : "Web search returned no source URLs."),
               failure.code
             ),
             searchedAt: result.searchedAt,
@@ -229,7 +132,7 @@ export function registerDesktopWebSearchTools(
     {
       name: "web.fetch_page",
       title: "抓取网页正文",
-      description: "Fetch visible page text for a search result URL via company Spring web-fetch. Does not consume paid search quota. Use after news_search_free/web.search_paid when snippets are insufficient. Never call for greetings.",
+      description: "Fetch visible page text for a search result URL via Spring web-fetch. Use after web.search when snippets are insufficient. Never call for greetings.",
       kind: "read",
       risk: "medium",
       requiresApproval: false,

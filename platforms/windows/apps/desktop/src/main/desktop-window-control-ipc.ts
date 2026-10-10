@@ -19,7 +19,8 @@ function parseTarget(input: unknown, operation: string): DesktopWindowTarget {
   return {
     processId: value.processId === undefined ? undefined : Number(value.processId),
     processName: value.processName === undefined ? undefined : String(value.processName),
-    windowTitle: value.windowTitle === undefined ? undefined : String(value.windowTitle)
+    windowTitle: value.windowTitle === undefined ? undefined : String(value.windowTitle),
+    handle: value.handle === undefined ? undefined : Number(value.handle)
   };
 }
 

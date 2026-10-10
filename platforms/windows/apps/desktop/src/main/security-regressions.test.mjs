@@ -31,6 +31,7 @@ const modelChatFailureServiceSource = await readFile(new URL("./model-chat-failu
 const modelChatSuccessServiceSource = await readFile(new URL("./model-chat-success-service.ts", import.meta.url), "utf8");
 const modelChatGoalServiceSource = await readFile(new URL("./model-chat-goal-service.ts", import.meta.url), "utf8");
 const modelChatAgentLoopServiceSource = await readFile(new URL("./model-chat-agent-loop-service.ts", import.meta.url), "utf8");
+const automationLoopPolicySource = await readFile(new URL("./automation-creation-loop-policy.ts", import.meta.url), "utf8");
 const modelChatServiceSource = await readFile(new URL("./model-chat-service.ts", import.meta.url), "utf8");
 const skillPolicySource = await readFile(new URL("./application-skill-policy.ts", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
@@ -167,10 +168,45 @@ test("builds release configuration from a credential-free allowlist", () => {
   assert.match(packageScript, /apiKey\s*=\s*["']["']/);
   assert.match(packageScript, /extraEnv\s*=\s*@\{\}/);
   assert.match(packageScript, /NEWBRAIN_REQUIRE_SIGNATURE/);
-  assert.match(packageScript, /-unsigned\.msi/);
-  assert.match(windowsWorkflow, /NEWBRAIN_REQUIRE_SIGNATURE:\s*["']true["']/);
-  assert.match(windowsWorkflow, /secrets\.WINDOWS_CSC_LINK/);
-  assert.match(windowsWorkflow, /secrets\.WINDOWS_CSC_KEY_PASSWORD/);
+  assert.match(packageScript, /\$unsignedSuffix = if \(\$isProduction\) \{ "production-unsigned" \} else \{ "test-unsigned" \}/);
+  assert.match(windowsWorkflow, /permissions:\s*\r?\n\s*contents:\s*read/);
+  assert.match(windowsWorkflow, /NEWBRAIN_ALLOW_UNSIGNED:\s*["']true["']/);
+  assert.doesNotMatch(windowsWorkflow, /WINDOWS_CSC_KEY_PASSWORD:\s*["'][^"']+["']/);
+});
+
+test("requires pre-package smoke cases before MSI packaging", () => {
+  assert.match(packageScript, /SPRING-WEB-SEARCH-SMOKE-001/);
+  assert.match(packageScript, /spring-web-search-smoke\.test\.ts/);
+  assert.match(packageScript, /PPT-CONTENT-THEME-SMOKE-001/);
+  assert.match(packageScript, /ppt-content-theme-smoke\.test\.js/);
+  assert.match(packageScript, /PPT-MARK-SEND-SMOKE-001/);
+  assert.match(packageScript, /ppt-mark-send-smoke\.test\.ts/);
+  assert.match(packageScript, /PPT-SMART-READ-SMOKE-001/);
+  assert.match(packageScript, /ppt-smart-read-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-OPEN-FOLDER-SMOKE-001/);
+  assert.match(packageScript, /preview-open-folder-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-FILE-MENU-SMOKE-001/);
+  assert.match(packageScript, /preview-file-menu-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-EXPAND-SMOKE-001/);
+  assert.match(packageScript, /preview-expand-smoke\.test\.ts/);
+  assert.match(packageScript, /SOFTWARE-LINK-SMOKE-001/);
+  assert.match(packageScript, /software-link-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-RUN-SMOKE-001/);
+  assert.match(packageScript, /automation-run-smoke\.test\.ts/);
+  assert.match(packageScript, /EXPERT-USE-SMOKE-001/);
+  assert.match(packageScript, /expert-use-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-MISSING-THREAD-SMOKE-001/);
+  assert.match(packageScript, /automation-missing-thread-smoke\.test\.ts/);
+  assert.match(packageScript, /Pre-package smoke \$\(\$smoke\.Id\) failed\. Packaging stopped\./);
+});
+
+test("ubuntu and macOS installer workflows stay unsigned and credential-free", async () => {
+  for (const name of ["build-ubuntu-installer.yml", "build-macos-installer.yml"]) {
+    const workflow = await readFile(new URL(`../../../../../../.github/workflows/${name}`, import.meta.url), "utf8");
+    assert.match(workflow, /permissions:\s*\r?\n\s*contents:\s*read/);
+    assert.match(workflow, /NEWBRAIN_ALLOW_UNSIGNED:\s*["']true["']/);
+    assert.doesNotMatch(workflow, /CSC_LINK|APPLE_ID|CSC_KEY_PASSWORD|WINDOWS_CSC_KEY_PASSWORD/);
+  }
 });
 
 test("keeps isolated MSI build paths below the legacy WiX path limit", () => {
@@ -202,7 +238,8 @@ test("selects, discloses, and fully injects skills for every model turn", () => 
   assert.match(workspaceModulesSource, /GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED/);
   assert.match(modelChatAgentLoopServiceSource, /systemPrompt: input\.effectiveSystemPrompt/);
   assert.match(modelChatAgentLoopServiceSource, /permissionMode: input\.modelInput\.permissionMode === "full" \? "full" : "agent"/);
-  assert.match(modelChatAgentLoopServiceSource, /allowedToolNames: governmentRevisionPreview \? \[\] : remoteAllowedToolNames/);
+  assert.match(modelChatAgentLoopServiceSource, /allowedToolNames: agentLoopAllowedToolNames\(\{/);
+  assert.match(automationLoopPolicySource, /if \(input\.governmentRevisionPreview \|\| isAutomationCreationRequest\(input\.latestUserRequest\)\) return \[\];/);
   assert.doesNotMatch(source, /allowedToolNames: centralSkillNames\.includes\("government-research-writing"\)/);
   assert.doesNotMatch(source, /goalRuntimeEnabled \? \[\.\.\.GOAL_TOOL_NAMES,\s*"shell\.exec"/);
 });

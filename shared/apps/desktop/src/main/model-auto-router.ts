@@ -349,10 +349,9 @@ export function priorUserMessageHasImageAttachments(
 }
 
 /**
- * Whether this Auto turn needs vision routing.
- * - Latest user message carries images, or
- * - Interrupt/resume continuation after a prior user image turn (history still encodes those images).
- * Ordinary later text chat after an old image turn stays on text models.
+ * Whether this turn's own user message carries images.
+ * Codex keeps an image on the message that contained it and does not
+ * reclassify later turns — including interrupt/resume — as vision routing.
  */
 export function turnRequiresVisionRouting(
   messages: Array<{
@@ -361,13 +360,21 @@ export function turnRequiresVisionRouting(
     attachments?: Array<{ name?: string; path?: string; url?: string }>;
   }> | null | undefined
 ): boolean {
-  if (latestUserMessageHasImageAttachments(messages)) return true;
-  if (!priorUserMessageHasImageAttachments(messages)) return false;
-  const latestText = [...(messages ?? [])]
-    .reverse()
-    .find((message) => message?.role === "user")
-    ?.content ?? "";
-  return looksLikeInterruptedTurnContinuation(latestText);
+  return latestUserMessageHasImageAttachments(messages);
+}
+
+/**
+ * Whether the model that will receive this turn accepts image input.
+ * Used only to keep or omit image parts. It does not select a different model.
+ * DeepSeek V4 chat models accept user image parts; deepseek-ocr does not.
+ */
+export function modelSupportsImageInput(
+  option: Pick<AuthorizedModelOption, "model" | "provider" | "capabilities" | "label" | "routing">
+): boolean {
+  const haystack = `${option.provider || ""} ${option.model || ""} ${option.label || ""}`;
+  if (/deepseek-ocr/i.test(haystack)) return false;
+  if (/deepseek-v4/i.test(haystack)) return true;
+  return isVisionCapableModel(option);
 }
 
 function modelCapabilityTags(
@@ -648,8 +655,8 @@ function evaluatePinnedAgainstConstraint(
   if (missingCaps.length) {
     warnings.push(`当前固定模型可能缺少能力：${missingCaps.join(", ")}`);
   }
-  if (hasImages && !isVisionCapableModel(selected)) {
-    warnings.push("当前固定模型不支持识图，将尝试描述桥接或可能无法理解图片");
+  if (hasImages && !modelSupportsImageInput(selected)) {
+    warnings.push("当前固定模型不支持图片输入，图片内容会从请求中省略");
   }
   return warnings;
 }
@@ -899,12 +906,12 @@ export function resolveAutoConstraintDecision(input: {
     // Authorized models exist, but none have completed routing profiles yet.
     // Prefer a temporary manual-like pick over hard-failing simple chats.
     // Video asks prefer video models (or tool-capable pro), never vision-only chat.
-    // Image turns still prefer a vision-capable authorized model when available.
+    // Attached images do not change the model. Keep or omit the image later.
     const preferVideo = looksLikeVideoGenerationRequest(input.latestUserText);
     const preferMusic = looksLikeMusicGenerationRequest(input.latestUserText);
     const prefer3d = looksLike3dGenerationRequest(input.latestUserText);
     const preferOcr = looksLikeOcrRequest(input.latestUserText) && Boolean(input.hasImageAttachments);
-    const preferVision = Boolean(input.hasImageAttachments) && !preferVideo && !preferOcr;
+    const preferVision = false;
     const taskClass = classifyAutoTaskClass({
       text: input.latestUserText,
       selectedSkillNames: input.selectedSkillNames
@@ -1077,7 +1084,8 @@ export function resolveAutoConstraintDecision(input: {
   const preferMusic = looksLikeMusicGenerationRequest(input.latestUserText);
   const prefer3d = looksLike3dGenerationRequest(input.latestUserText);
   const preferOcr = looksLikeOcrRequest(input.latestUserText) && Boolean(input.hasImageAttachments);
-  const preferVision = Boolean(input.hasImageAttachments) && !preferVideo && !preferImage && !preferOcr;
+  // Codex does not switch models because the turn contains an image.
+  const preferVision = false;
   const autoDelegateHeavy = shouldAutoDelegateHeavyWork({
     taskClass,
     latestUserText: input.latestUserText

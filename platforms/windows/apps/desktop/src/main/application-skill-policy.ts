@@ -1,4 +1,5 @@
 import { ensureCompanionMemorySkill } from "../../../../../../shared/apps/agentd/src/companion-memory.js";
+import { ensurePptWritingTeamSkill } from "../../../../../../shared/apps/desktop/src/main/ppt-writing-team-skill.js";
 
 type SkillPolicyRuntime = {
   addSkillRoots(roots: string[]): Promise<unknown>;
@@ -14,6 +15,7 @@ export async function applyApplicationSkillPolicy(
   projectSkillRoots: string[] = []
 ) {
   await ensureCompanionMemorySkill(userSkillRoot);
+  await ensurePptWritingTeamSkill(userSkillRoot);
   const roots = [...new Set([userSkillRoot, ...projectSkillRoots.map((root) => String(root || "").trim()).filter(Boolean)])];
   await runtime.addSkillRoots(roots);
   const skills = await readFeatureSkills();

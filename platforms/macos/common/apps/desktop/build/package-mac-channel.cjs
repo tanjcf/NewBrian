@@ -56,9 +56,6 @@ function rewriteCompiledEndpoints(gatewayBaseUrl, previewUrl) {
       }
       if (!/\.(js|cjs|mjs|html|json|css|map)$/u.test(entry.name)) continue;
       const original = readFileSync(target, "utf8");
-      if (!original.includes("127.0.0.1") && !original.includes("120.48.151.202") && !original.includes("wangjietech.com")) {
-        continue;
-      }
       const updated = original
         .replaceAll("http://127.0.0.1:8790/v1", gatewayBaseUrl)
         .replaceAll("http://120.48.151.202:8790/v1", gatewayBaseUrl)
@@ -81,15 +78,24 @@ function rewriteCompiledEndpoints(gatewayBaseUrl, previewUrl) {
   return rewritten;
 }
 
-function ensureRustCore() {
+function rustTargetForPackageArch(arch) {
+  if (process.platform === "darwin" && arch !== process.arch) {
+    return arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
+  }
+  return String(process.env.BRAIN_CORE_TARGET || "").trim();
+}
+
+function ensureRustCore(arch) {
   if (existsSync(rustCoreBinary) && statSync(rustCoreBinary).size > 0) {
     console.log(`Reusing staged Rust Core: ${rustCoreBinary}`);
     return;
   }
+  const rustTarget = rustTargetForPackageArch(arch);
   run(process.execPath, [join(repoRoot, "scripts", "build-rust-core.mjs")], {
     env: {
       ...process.env,
-      CARGO_TARGET_DIR: join(repoRoot, "rust", "brain-core", "target")
+      CARGO_TARGET_DIR: join(repoRoot, "rust", "brain-core", "target"),
+      ...(rustTarget ? { BRAIN_CORE_TARGET: rustTarget } : {})
     }
   });
 }
@@ -126,6 +132,7 @@ function moveTestArtifacts(releaseDir, version, arch) {
 
 const { channel, arch } = parseArgs(process.argv.slice(2));
 const isProduction = channel === "production";
+const allowUnsigned = process.env.NEWBRAIN_ALLOW_UNSIGNED === "true";
 const { gatewayBaseUrl, previewUrl } = resolveChannelEndpoints(channel);
 const channelSlug = channel;
 const version = desktopPackage.version;
@@ -138,7 +145,7 @@ console.log(`Preview endpoint: ${previewUrl}`);
 
 process.env.NEWBRAIN_PACKAGE_CHANNEL = channel;
 preparePackageResources(channel);
-ensureRustCore();
+ensureRustCore(arch);
 run("pnpm", ["run", "build"]);
 const rewritten = rewriteCompiledEndpoints(gatewayBaseUrl, previewUrl);
 console.log(`Rewrote local defaults for the ${channel} channel in ${rewritten} out/ file(s)`);
@@ -152,18 +159,18 @@ const builderArgs = [
   builderArchFlag,
   `--config.directories.output=release/${channelSlug}`,
   `--config.extraMetadata.version=${version}`,
-  `--config.artifactName=NewBrain Mac-\${version}-\${arch}.\${ext}`
+  `--config.artifactName=NewBrain Mac-\${version}-\${arch}${isProduction && allowUnsigned ? "-production-unsigned" : ""}.\${ext}`
 ];
 const electronDist = resolveElectronDist(arch);
 if (electronDist) builderArgs.push(`--config.electronDist=${electronDist}`);
-if (!isProduction) {
+if (!isProduction || allowUnsigned) {
   builderArgs.push("-c.mac.notarize=false", "-c.mac.identity=null");
 }
 
 run(process.execPath, builderArgs, {
   env: {
     ...process.env,
-    CSC_IDENTITY_AUTO_DISCOVERY: isProduction ? process.env.CSC_IDENTITY_AUTO_DISCOVERY : "false"
+    CSC_IDENTITY_AUTO_DISCOVERY: !isProduction || allowUnsigned ? "false" : process.env.CSC_IDENTITY_AUTO_DISCOVERY
   }
 });
 

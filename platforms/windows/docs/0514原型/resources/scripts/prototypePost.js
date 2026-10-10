@@ -1,4 +1,4 @@
-﻿// 8.0.0.3398. Generated 1/18/2021 11:03:29 PM UTC
+// 8.0.0.3398. Generated 1/18/2021 11:03:29 PM UTC
 
 //***** messagecenter.js *****//
 if (typeof console == 'undefined') console = {
@@ -8242,7 +8242,7 @@ $axure.internal(function($ax) {
     var _escapeRichText = function(text) {
         if(typeof (text) != 'string') return text;
 
-        return text.replace('<', '&lt;');
+        return text.replace(/</g, '&lt;');
     };
 });
 //***** utils.temp.js *****//

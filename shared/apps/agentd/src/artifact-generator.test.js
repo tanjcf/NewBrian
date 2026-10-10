@@ -203,6 +203,7 @@ test("strips HTML/XML chrome so PDF does not print raw tags", async (t) => {
   ].join("\n");
   const plain = normalizeArtifactMarkup(markup);
   assert.doesNotMatch(plain, /<\/?[a-z]/i);
+  assert.doesNotMatch(normalizeArtifactMarkup("<scr<script>ipt>alert(1)</script>"), /<script/i);
   assert.match(plain, /宣传宣讲稿/);
   assert.match(plain, /开场导语/);
   assert.match(plain, /同志们/);

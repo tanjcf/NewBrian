@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const root = resolve(process.cwd(), "..", "..", "tmp", "e2e-evidence", "GOV-UI-MULTI-001");
 const evidenceDirectory = resolve(root, "round-6"); mkdirSync(evidenceDirectory, { recursive: true });
@@ -51,7 +52,7 @@ async function evaluate(expression) { return (await command("Runtime.evaluate", 
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 let activated = false;
 for (let attempt = 0; attempt < 45 && !activated; attempt += 1) {
-  activated = await evaluate(`(() => { const expand = [...document.querySelectorAll('button.thread-row.muted')].find((e) => /展开显示/u.test(e.textContent || '')); if (expand instanceof HTMLButtonElement) expand.click(); const row = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')].find((e) => e.getAttribute('data-thread-key')?.includes(${JSON.stringify(manifest.targetThreadId)})); if (!(row instanceof HTMLButtonElement)) return false; row.click(); return true; })()`);
+  activated = await evaluate(`(() => { const expand = [...document.querySelectorAll('button.thread-row.muted')].find((e) => /展开显示/u.test(e.textContent || '')); if (expand instanceof HTMLButtonElement) expand.click(); const row = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')].find((e) => e.getAttribute('data-thread-key')?.includes(${embedJsValue(manifest.targetThreadId)})); if (!(row instanceof HTMLButtonElement)) return false; row.click(); return true; })()`);
   if (!activated) await sleep(1_000);
 }
 assert.equal(activated, true, "Workspace thread was not found after restart."); await sleep(2_000);
@@ -73,7 +74,7 @@ for (const file of manifest.files) {
   assert.ok(existsSync(file.path)); assert.equal(hashFile(file.path), file.hash, `${file.path} changed after restart.`); assert.equal(statSync(file.path).mtimeMs, file.mtimeMs, `${file.path} was regenerated after restart.`);
   assert.ok(state.localFiles.some((shown) => file.path.endsWith(shown) || shown.endsWith(file.path.split(/[\\/]/).at(-1))), `${file.path} has no recovered UI link.`);
 }
-const clicks = await evaluate(`(() => { const names = ${JSON.stringify(manifest.files.map((file) => file.path.split(/[\/\\]/).at(-1)))}; return names.map((name) => { const element = [...document.querySelectorAll('[data-local-file-path]')].find((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '').endsWith(name)); if (!(element instanceof HTMLElement)) return false; element.click(); return true; }); })()`);
+const clicks = await evaluate(`(() => { const names = ${embedJsValue(manifest.files.map((file) => file.path.split(/[\/\\]/).at(-1)))}; return names.map((name) => { const element = [...document.querySelectorAll('[data-local-file-path]')].find((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '').endsWith(name)); if (!(element instanceof HTMLElement)) return false; element.click(); return true; }); })()`);
 assert.deepEqual(clicks, [true, true, true], "Not all three recovered artifact links were clickable."); await sleep(1_000);
 state = await evaluate(`(async () => ({ body: document.body.innerText, goal: await window.newbrain.getGoalExecution(), messages: (await window.newbrain.getSnapshot()).messages || [] }))()`);
 assert.doesNotMatch(state.body, /Workspace thread was not found|Renderer failed to start/u);

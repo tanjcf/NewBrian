@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { SCENE_LABELS } from "./scene-test-cdp-client.mjs";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const GAME_SCENE_TAB_LABELS = {
   project: "项目与文件",
@@ -92,7 +93,7 @@ async function clickGlobalResourceTab(ctx, tabKey) {
 async function clearReactInput(ctx, selector) {
   await ctx.cdp.mouseClickSelector(selector);
   await ctx.cdp.evaluate(`(() => {
-    const input = document.querySelector(${JSON.stringify(selector)});
+    const input = document.querySelector(${embedJsValue(selector)});
     if (!input) return false;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     setter?.call(input, "");
@@ -113,7 +114,7 @@ async function assertExpected(ctx, op, observation) {
     const key = expected.match(/"(\w+)"/)?.[1];
     const localId = ctx.state.lastCreatedLocalWorkspaceId;
     assert.ok(localId, `${op.opId}: missing lastCreatedLocalWorkspaceId`);
-    const projects = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(key)} })`);
+    const projects = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${embedJsValue(key)} })`);
     const hit = (projects || []).find((item) => item.localWorkspaceId === localId);
     assert.ok(hit, `${op.opId}: project not in ${key}`);
     assert.equal(hit.primaryWorkspaceKey, key);
@@ -124,10 +125,10 @@ async function assertExpected(ctx, op, observation) {
     const scene = expected.match(/workspaceKey=(\w+)/)?.[1] || ctx.scene;
     const currentId = ctx.state.lastCreatedBrainProjectId;
     assert.ok(currentId, `${op.opId}: missing created project id`);
-    const inScene = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(scene)} })`);
+    const inScene = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${embedJsValue(scene)} })`);
     assert.ok((inScene || []).some((item) => item.id === currentId), `${op.opId}: not in ${scene}`);
     for (const other of Object.keys(SCENE_LABELS).filter((key) => key !== scene)) {
-      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(other)} })`);
+      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${embedJsValue(other)} })`);
       assert.equal((list || []).some((item) => item.id === currentId), false, `${op.opId}: leaked to ${other}`);
     }
     return observation;
@@ -163,14 +164,14 @@ async function assertExpected(ctx, op, observation) {
   if (expected.startsWith("workspaceSceneTab ===")) {
     const key = expected.match(/"(\w+)"/)?.[1];
     const label = GAME_SCENE_TAB_LABELS[key] || key;
-    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-scene-nav button.active")].some((button) => (button.textContent || "").includes(${JSON.stringify(label)})))`);
+    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-scene-nav button.active")].some((button) => (button.textContent || "").includes(${embedJsValue(label)})))`);
     assert.ok(ok, `${op.opId}: scene tab ${key}`);
     return observation;
   }
   if (expected.startsWith("active ===")) {
     const tab = expected.split("===")[1]?.trim();
     const label = GLOBAL_RESOURCE_TAB_LABELS[tab] || tab;
-    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-global-nav button.active")].some((button) => (button.textContent || "").includes(${JSON.stringify(label)})))`);
+    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-global-nav button.active")].some((button) => (button.textContent || "").includes(${embedJsValue(label)})))`);
     assert.ok(ok, `${op.opId}: global tab ${tab}`);
     return observation;
   }
@@ -289,7 +290,7 @@ async function assertExpected(ctx, op, observation) {
     const projectId = ctx.state.lastCreatedBrainProjectId;
     assert.ok(projectId, `${op.opId}: missing project id`);
     const sectionKey = ctx.state.lastSectionKey || "design";
-    const revision = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(projectId)}, workspaceKey: "game", sectionKey: ${JSON.stringify(sectionKey)} }).then((section) => section.revision)`);
+    const revision = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(projectId)}, workspaceKey: "game", sectionKey: ${embedJsValue(sectionKey)} }).then((section) => section.revision)`);
     const before = ctx.state.sectionRevisionBefore ?? 0;
     assert.ok(Number(revision) > Number(before), `${op.opId}: revision ${revision} not > ${before}`);
     return { ...observation, revision };
@@ -486,16 +487,16 @@ async function handleL0Proj(ctx, op) {
       30_000
     );
     await ctx.cdp.waitFor(
-      `Boolean([...document.querySelectorAll('.brain-project-list button span')].some((span) => (span.textContent || '').includes(${JSON.stringify(saveName.slice(0, 8))})))`,
+      `Boolean([...document.querySelectorAll('.brain-project-list button span')].some((span) => (span.textContent || '').includes(${embedJsValue(saveName.slice(0, 8))})))`,
       30_000
     );
     await ensureProjectSectionExpanded(ctx);
     const meta = await ctx.cdp.evaluate(`(async () => {
-      const name = ${JSON.stringify(saveName)};
-      const scene = ${JSON.stringify(ctx.scene)};
+      const name = ${embedJsValue(saveName)};
+      const scene = ${embedJsValue(ctx.scene)};
       await window.newbrain.listBrainWorkspaces();
       const catalog = await window.newbrain.listWorkspaces();
-      const ws = catalog.find((item) => item.name === name || item.name?.includes(${JSON.stringify(saveName.slice(0, 8))}));
+      const ws = catalog.find((item) => item.name === name || item.name?.includes(${embedJsValue(saveName.slice(0, 8))}));
       const inScene = await window.newbrain.listBrainProjects({ workspaceKey: scene });
       const all = await window.newbrain.listBrainProjects({});
       const hit = inScene.find((item) => item.localWorkspaceId === ws?.id)
@@ -715,7 +716,7 @@ async function handleL1(ctx, op) {
     }
     if (suffix === "L1.section.design.004") {
       const projectId = ctx.state.lastCreatedBrainProjectId;
-      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(projectId)}, workspaceKey: "game", sectionKey: "design" }).then((section) => section.revision).catch(() => 0)`);
+      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(projectId)}, workspaceKey: "game", sectionKey: "design" }).then((section) => section.revision).catch(() => 0)`);
       await ctx.cdp.mouseClickButtonText("保存", '[data-testid="brain-section-design"]');
       return {};
     }
@@ -747,7 +748,7 @@ async function handleL1(ctx, op) {
     }
     if (step.includes("Tab")) return {};
     if (step.includes("保存")) {
-      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${JSON.stringify(ctx.state.lastCreatedBrainProjectId)}, workspaceKey: "game", sectionKey: ${JSON.stringify(sectionKey)} }).then((section) => section.revision).catch(() => 0)`);
+      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${embedJsValue(ctx.state.lastCreatedBrainProjectId)}, workspaceKey: "game", sectionKey: ${embedJsValue(sectionKey)} }).then((section) => section.revision).catch(() => 0)`);
       await ctx.cdp.mouseClickButtonText("保存", `[data-testid="brain-design-${sectionKey}"]`);
       return {};
     }
@@ -781,7 +782,7 @@ async function handleL3(ctx, op) {
     await ctx.cdp.switchWorkspace(other);
     const currentId = ctx.state.lastCreatedBrainProjectId;
     if (currentId) {
-      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${JSON.stringify(other)} })`);
+      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${embedJsValue(other)} })`);
       assert.equal((list || []).some((item) => item.id === currentId), false);
     }
     await ctx.cdp.switchWorkspace(ctx.scene);
