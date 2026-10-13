@@ -1,3 +1,22 @@
+const charMap = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029"
+};
+
+function escapeUnsafeChars(str) {
+  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+}
+
 #!/usr/bin/env node
 /**
  * Real-login game deliverable E2E:
@@ -143,7 +162,7 @@ async function waitFor(label, expression, timeoutMs = 180_000, onPoll) {
   }
   const diagnostic = await evaluate(`document.body?.innerText?.slice(0, 2200) || ""`).catch(() => "");
   const ui = await readUiDiagnostics().catch(() => null);
-  throw new Error(`Timed out waiting for ${label}: ui=${JSON.stringify(ui)} text=${diagnostic}`);
+  throw new Error(`Timed out waiting for ${label}: ui=${escapeUnsafeChars(JSON.stringify(ui))} text=${diagnostic}`);
 }
 
 async function screenshot(name) {
@@ -155,10 +174,10 @@ async function screenshot(name) {
 
 function setInput(selector, value) {
   return evaluate(`(() => {
-    const input = document.querySelector(${JSON.stringify(selector)});
+    const input = document.querySelector(${escapeUnsafeChars(JSON.stringify(selector))});
     if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return false;
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${JSON.stringify(value)});
+    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${escapeUnsafeChars(JSON.stringify(value))});
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
@@ -189,7 +208,7 @@ async function readAuthStatus() {
 
 async function assertRealAccount(label = "checkpoint") {
   const auth = await readAuthStatus();
-  assert.equal(auth?.authenticated, true, `[${label}] not authenticated: ${JSON.stringify(auth)}`);
+  assert.equal(auth?.authenticated, true, `[${label}] not authenticated: ${escapeUnsafeChars(JSON.stringify(auth))}`);
   assert.equal(auth.email.toLowerCase(), email.toLowerCase(), `[${label}] wrong account: expected ${email}, got ${auth?.email}`);
   assert.notEqual(auth.email.toLowerCase(), "e2e@newbrain.local", `[${label}] E2E bypass account detected`);
   return auth;
@@ -232,7 +251,7 @@ async function ensureRealAccountLogin() {
     await waitFor("login shell", `Boolean(document.querySelector('input[type="email"]') || document.body?.innerText?.includes('正在检查登录状态'))`, 120_000);
     let loginCaptcha = await readLoginCaptcha();
     if (!loginCaptcha && process.env.NEWBRAIN_E2E_SKIP_EMAIL_CAPTCHA === "1") {
-      await evaluate(`window.newbrain.sendLoginCode({ email: ${JSON.stringify(email)} })`);
+      await evaluate(`window.newbrain.sendLoginCode({ email: ${escapeUnsafeChars(JSON.stringify(email))} })`);
       evidence.steps.push("login-code-sent");
       process.stderr.write("[game-deliverable] 已发送邮箱验证码；可设置 NEWBRAIN_E2E_LOGIN_CAPTCHA 或 NEWBRAIN_E2E_LOGIN_CAPTCHA_FILE 后自动继续\\n");
       loginCaptcha = await waitForLoginCaptcha(120_000);
@@ -240,19 +259,19 @@ async function ensureRealAccountLogin() {
     evidence.screenshots.push(await screenshot("01-before-login"));
     await visiblePause();
     const loginResult = await evaluate(`window.newbrain.loginAuth({
-      email: ${JSON.stringify(email)},
-      password: ${JSON.stringify(password)},
-      captcha: ${JSON.stringify(loginCaptcha)},
+      email: ${escapeUnsafeChars(JSON.stringify(email))},
+      password: ${escapeUnsafeChars(JSON.stringify(password))},
+      captcha: ${escapeUnsafeChars(JSON.stringify(loginCaptcha))},
       agreement_accepted: true
     }).then((auth) => ({
       ok: Boolean(auth?.authenticated),
       email: String(auth?.user?.email || auth?.account?.email || "").trim()
     })).catch((error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }))`);
-    assert.equal(loginResult?.ok, true, `loginAuth failed: ${JSON.stringify(loginResult)}`);
+    assert.equal(loginResult?.ok, true, `loginAuth failed: ${escapeUnsafeChars(JSON.stringify(loginResult))}`);
     evidence.steps.push(loginCaptcha ? "login-submitted-code" : "login-submitted-ipc");
     await waitFor("login success", `(async () => {
       const auth = await window.newbrain.getAuthStatus();
-      return auth.authenticated && String(auth.user?.email || auth.account?.email || "").toLowerCase() === ${JSON.stringify(email.toLowerCase())};
+      return auth.authenticated && String(auth.user?.email || auth.account?.email || "").toLowerCase() === ${escapeUnsafeChars(JSON.stringify(email.toLowerCase()))};
     })()`, 120_000);
   }
   auth = await assertRealAccount("after-login");
@@ -264,7 +283,7 @@ async function ensureRealAccountLogin() {
 async function waitForProjectBinding(name) {
   return waitFor("project bound to legacy workspace", `(async () => {
     const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
-    const brain = projects.find((item) => item.name === ${JSON.stringify(name)});
+    const brain = projects.find((item) => item.name === ${escapeUnsafeChars(JSON.stringify(name))});
     if (!brain?.localWorkspaceId) return false;
     const catalog = await window.newbrain.listWorkspaces();
     const legacy = catalog.find((item) => item.id === brain.localWorkspaceId);
@@ -275,10 +294,10 @@ async function waitForProjectBinding(name) {
 async function ensureExecutionWorkspace(name) {
   const state = await evaluate(`(async () => {
     const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
-    const brain = projects.find((item) => item.name === ${JSON.stringify(name)});
+    const brain = projects.find((item) => item.name === ${escapeUnsafeChars(JSON.stringify(name))});
     const catalog = await window.newbrain.listWorkspaces();
-    const legacy = catalog.find((item) => item.id === brain?.localWorkspaceId) || catalog.find((item) => item.name === ${JSON.stringify(name)});
-    const header = [...document.querySelectorAll(".projects-section .project-header, .project-list .project-header")].find((el) => (el.textContent || "").includes(${JSON.stringify(name.slice(0, 8))}));
+    const legacy = catalog.find((item) => item.id === brain?.localWorkspaceId) || catalog.find((item) => item.name === ${escapeUnsafeChars(JSON.stringify(name))});
+    const header = [...document.querySelectorAll(".projects-section .project-header, .project-list .project-header")].find((el) => (el.textContent || "").includes(${escapeUnsafeChars(JSON.stringify(name.slice(0, 8)))}));
     header?.click();
     return {
       brainProjectId: brain?.id || "",
@@ -287,8 +306,8 @@ async function ensureExecutionWorkspace(name) {
       clicked: Boolean(header)
     };
   })()`);
-  assert.ok(state?.localWorkspaceId, `legacy workspace missing: ${JSON.stringify(state)}`);
-  assert.ok(state?.localPath, `legacy workspace path missing: ${JSON.stringify(state)}`);
+  assert.ok(state?.localWorkspaceId, `legacy workspace missing: ${escapeUnsafeChars(JSON.stringify(state))}`);
+  assert.ok(state?.localPath, `legacy workspace path missing: ${escapeUnsafeChars(JSON.stringify(state))}`);
   return state;
 }
 
@@ -323,7 +342,7 @@ try {
   await waitFor("name dialog", `Boolean(document.querySelector('.project-name-dialog input'))`);
   assert.equal(await setInput(".project-name-dialog input", projectName), true);
   await evaluate(`document.querySelector('.project-name-dialog')?.requestSubmit()`);
-  await waitFor("brain project visible", `[...document.querySelectorAll('.brain-project-list button span')].some((s) => (s.textContent || '').includes(${JSON.stringify(projectName.slice(0, 8))}))`, 60_000);
+  await waitFor("brain project visible", `[...document.querySelectorAll('.brain-project-list button span')].some((s) => (s.textContent || '').includes(${escapeUnsafeChars(JSON.stringify(projectName.slice(0, 8)))}))`, 60_000);
   await waitForProjectBinding(projectName);
   evidence.steps.push("project-created");
   evidence.projectBinding = await ensureExecutionWorkspace(projectName);
@@ -390,7 +409,7 @@ try {
   })()`, 600_000, async (ui) => {
     evidence.progress = evidence.progress || [];
     evidence.progress.push({ at: new Date().toISOString(), ui });
-    process.stderr.write(`[game-deliverable] waiting for BRAIN… ${JSON.stringify(ui)}\n`);
+    process.stderr.write(`[game-deliverable] waiting for BRAIN… ${escapeUnsafeChars(JSON.stringify(ui))}\n`);
     if (ui?.approval) await maybeApproveComposer();
   });
   evidence.steps.push("brain-replied");
@@ -399,9 +418,9 @@ try {
 
   const state = await evaluate(`(async () => {
     const catalog = await window.newbrain.listWorkspaces();
-    const local = catalog.find((item) => item.name === ${JSON.stringify(projectName)});
+    const local = catalog.find((item) => item.name === ${escapeUnsafeChars(JSON.stringify(projectName))});
     const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
-    const brain = projects.find((item) => item.name === ${JSON.stringify(projectName)});
+    const brain = projects.find((item) => item.name === ${escapeUnsafeChars(JSON.stringify(projectName))});
     let inspection = null;
     if (brain?.id && window.newbrain.inspectBrainGameProject) {
       try { inspection = await window.newbrain.inspectBrainGameProject({ projectId: brain.id }); } catch {}
@@ -422,8 +441,8 @@ try {
 
   const hasHtml = workspaceFiles.some((name) => /\.html$/i.test(name));
   const hasPackage = workspaceFiles.includes("package.json") || workspaceFiles.includes("server.mjs");
-  assert.ok(state.localPath, `missing workspace path: ${JSON.stringify(state)}`);
-  assert.ok(hasHtml || hasPackage, `BRAIN did not write game files. Files: ${JSON.stringify(workspaceFiles)} assistant: ${state.assistantText?.slice(0, 400)}`);
+  assert.ok(state.localPath, `missing workspace path: ${escapeUnsafeChars(JSON.stringify(state))}`);
+  assert.ok(hasHtml || hasPackage, `BRAIN did not write game files. Files: ${escapeUnsafeChars(JSON.stringify(workspaceFiles))} assistant: ${state.assistantText?.slice(0, 400)}`);
   evidence.steps.push("game-files-on-disk");
 
   await evaluate(`[...document.querySelectorAll('.brain-resource-scene-nav button')].find((b) => b.textContent?.includes('项目与文件'))?.click()`);
@@ -445,12 +464,12 @@ try {
   evidence.steps.push("preview-evidence");
 
   const evidencePath = join(artifactRoot, "evidence.json");
-  writeFileSync(evidencePath, `${JSON.stringify({ ok: true, evidence, workspaceFiles }, null, 2)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ ok: true, caseId: "BRAIN-GAME-DELIVERABLE", artifactRoot, evidencePath, workspaceFiles, projectName }, null, 2)}\n`);
+  writeFileSync(evidencePath, `${escapeUnsafeChars(JSON.stringify({ ok: true, evidence, workspaceFiles }, null, 2))}\n`, "utf8");
+  process.stdout.write(`${escapeUnsafeChars(JSON.stringify({ ok: true, caseId: "BRAIN-GAME-DELIVERABLE", artifactRoot, evidencePath, workspaceFiles, projectName }, null, 2))}\n`);
 } catch (error) {
   evidence.error = error instanceof Error ? error.message : String(error);
   evidence.screenshots.push(await screenshot("99-failure").catch(() => null));
-  writeFileSync(join(artifactRoot, "evidence.json"), `${JSON.stringify({ ok: false, evidence }, null, 2)}\n`, "utf8");
+  writeFileSync(join(artifactRoot, "evidence.json"), `${escapeUnsafeChars(JSON.stringify({ ok: false, evidence }, null, 2))}\n`, "utf8");
   throw error;
 } finally {
   socket.close();

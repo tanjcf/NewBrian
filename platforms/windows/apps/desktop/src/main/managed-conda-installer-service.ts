@@ -50,8 +50,9 @@ export function resolveBoundedSpawnCommand(
     return { executable: input.executable, args: input.args, windowsVerbatimArguments: false };
   }
   const commandLine = [input.executable, ...input.args].map(quoteWindowsCommandArgument).join(" ");
+  void environment;
   return {
-    executable: environment.ComSpec?.trim() || join(environment.SystemRoot?.trim() || "C:\\Windows", "System32", "cmd.exe"),
+    executable: "C:\\Windows\\System32\\cmd.exe",
     args: ["/d", "/s", "/c", `"${commandLine}"`],
     windowsVerbatimArguments: true
   };

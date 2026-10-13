@@ -6,6 +6,26 @@ import { join } from "node:path";
 import ExcelJS from "exceljs";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
+const charMap = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029"
+};
+
+function escapeUnsafeChars(str) {
+  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+}
+
+
 const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9342);
 const session = await ensureElectronE2ESession(debugPort);
 const page = session.pages.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
@@ -29,7 +49,7 @@ async function waitFor(expression, timeoutMs = 30_000) {
 }
 function hash(bytes) { return `sha256:${createHash("sha256").update(bytes).digest("hex")}`; }
 async function choose(selectTestId, value) {
-  return evaluate(`(() => { const select = document.querySelector('[data-testid="${selectTestId}"]'); if (!(select instanceof HTMLSelectElement)) return false; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set; setter?.call(select, ${JSON.stringify(value)}); select.dispatchEvent(new Event('input', { bubbles: true })); select.dispatchEvent(new Event('change', { bubbles: true })); return select.value === ${JSON.stringify(value)}; })()`);
+  return evaluate(`(() => { const select = document.querySelector('[data-testid="${selectTestId}"]'); if (!(select instanceof HTMLSelectElement)) return false; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set; setter?.call(select, ${escapeUnsafeChars(JSON.stringify(value))}); select.dispatchEvent(new Event('input', { bubbles: true })); select.dispatchEvent(new Event('change', { bubbles: true })); return select.value === ${escapeUnsafeChars(JSON.stringify(value))}; })()`);
 }
 
 const root = await mkdtemp(join(tmpdir(), "brain-data-ui-"));
@@ -42,7 +62,7 @@ const xlsxBytes = Buffer.from(await workbook.xlsx.writeBuffer());
 const xlsxPath = join(root, "prices.xlsx"); await writeFile(xlsxPath, xlsxBytes);
 
 const seeded = await evaluate(`(async () => {
-  const path = ${JSON.stringify(root)};
+  const path = ${escapeUnsafeChars(JSON.stringify(root))};
   let catalog = await window.newbrain.listWorkspaces();
   if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: "BRAIN Data E2E", path });
   const local = catalog.find((item) => item.path === path); if (!local) return { ok: false, reason: "workspace-missing" };
@@ -53,7 +73,7 @@ const seeded = await evaluate(`(async () => {
   let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey: "data" });
   let conversation = conversations[0]; if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey: "data", title: "数据工作台验收" });
   const files = await window.newbrain.listBrainFiles({ projectId: project.id });
-  const entries = ${JSON.stringify([{ name: "prices.csv", mime: "text/csv", key: "prices.csv", size: csvBytes.byteLength, hash: hash(csvBytes) }, { name: "prices.xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key: "prices.xlsx", size: xlsxBytes.byteLength, hash: hash(xlsxBytes) }])};
+  const entries = ${escapeUnsafeChars(JSON.stringify([{ name: "prices.csv", mime: "text/csv", key: "prices.csv", size: csvBytes.byteLength, hash: hash(csvBytes) }, { name: "prices.xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key: "prices.xlsx", size: xlsxBytes.byteLength, hash: hash(xlsxBytes) }]))};
   for (const entry of entries) if (!files.some((file) => file.storageKey === entry.key)) await window.newbrain.registerBrainFile({ projectId: project.id, logicalName: entry.name, mimeType: entry.mime, sizeBytes: entry.size, contentHash: entry.hash, storageKey: entry.key });
   localStorage.setItem("brain.workspaceSelection.v2", JSON.stringify({ version: 2, selectedWorkspaceKey: "data", catalogs: { data: { projectId: project.id, conversationId: conversation.id } } }));
   return { ok: true };

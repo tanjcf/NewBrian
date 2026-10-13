@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
+
+const charMap = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029"
+};
+
+function escapeUnsafeChars(str) {
+  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+}
+
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -124,10 +144,10 @@ async function screenshot(name) {
 
 function setInput(selector, value) {
   return evaluate(`(() => {
-    const input = document.querySelector(${JSON.stringify(selector)});
+    const input = document.querySelector(${escapeUnsafeChars(JSON.stringify(selector))});
     if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return false;
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${JSON.stringify(value)});
+    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${escapeUnsafeChars(JSON.stringify(value))});
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
@@ -192,13 +212,13 @@ try {
   await waitFor("project name dialog", `Boolean(document.querySelector(".project-name-dialog input"))`);
   assert.equal(await setInput(".project-name-dialog input", projectName), true);
   await evaluate(`document.querySelector(".project-name-dialog")?.requestSubmit()`);
-  await waitFor("created project", `[...document.querySelectorAll(".project-group")].some((item) => item.textContent?.includes(${JSON.stringify(projectName)}))`);
+  await waitFor("created project", `[...document.querySelectorAll(".project-group")].some((item) => item.textContent?.includes(${escapeUnsafeChars(JSON.stringify(projectName))}))`);
   evidence.screenshots.push(await screenshot("02-project-created"));
   evidence.steps.push("project-created");
   await visiblePause();
 
   await evaluate(`(() => {
-    const project = [...document.querySelectorAll(".project-group")].find((item) => item.textContent?.includes(${JSON.stringify(projectName)}));
+    const project = [...document.querySelectorAll(".project-group")].find((item) => item.textContent?.includes(${escapeUnsafeChars(JSON.stringify(projectName))}));
     project?.querySelector('[data-testid="project-new-thread-button"]')?.click();
     return Boolean(project);
   })()`);
@@ -275,7 +295,7 @@ try {
 
   const state = await evaluate(`(async () => {
     const catalog = await window.newbrain.listWorkspaces();
-    const workspace = catalog.find((item) => item.name === ${JSON.stringify(projectName)});
+    const workspace = catalog.find((item) => item.name === ${escapeUnsafeChars(JSON.stringify(projectName))});
     const snapshot = await window.newbrain.getSnapshot();
     return {
       workspacePath: workspace?.path || "",
@@ -302,12 +322,12 @@ try {
   assert.doesNotMatch(docAssistantMessage, /中断|是否.*创建|需要我现在.*创建/i);
   assert.ok(
     state.artifactPaths.some((path) => /test\.docx$/i.test(path)),
-    `Expected a visible test.docx artifact, received: ${JSON.stringify(state.artifactPaths)}`
+    `Expected a visible test.docx artifact, received: ${escapeUnsafeChars(JSON.stringify(state.artifactPaths))}`
   );
 
   const evidencePath = join(artifactRoot, "evidence.json");
-  writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ ok: true, artifactRoot, evidencePath, evidence }, null, 2)}\n`);
+  writeFileSync(evidencePath, `${escapeUnsafeChars(JSON.stringify(evidence, null, 2))}\n`, "utf8");
+  process.stdout.write(`${escapeUnsafeChars(JSON.stringify({ ok: true, artifactRoot, evidencePath, evidence }, null, 2))}\n`);
   if (keepOpenMs > 0) {
     process.stdout.write(`Keeping the visible NewBrain window open for ${keepOpenMs}ms.\n`);
     await sleep(keepOpenMs);

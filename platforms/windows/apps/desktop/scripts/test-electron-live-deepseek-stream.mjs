@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
+const charMap = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029"
+};
+
+function escapeUnsafeChars(str) {
+  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+}
+
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9444);
 const session = await ensureElectronE2ESession(debugPort);
@@ -47,7 +67,7 @@ async function waitFor(label, expression, timeoutMs = 60_000) {
 await waitFor("authenticated workspace", `Boolean(document.querySelector('[data-testid="new-chat-button"]'))`, 120_000);
 const threadTitle = `Live DeepSeek Stream ${Date.now()}`;
 const prepared = await evaluate(`(async () => {
-  const path = ${JSON.stringify("G:\\workrpase\\NewBrain")};
+  const path = ${escapeUnsafeChars(JSON.stringify("G:\\workrpase\\NewBrain"))};
   let catalog = await window.newbrain.listWorkspaces();
   if (!catalog.some((item) => item.path === path)) {
     catalog = await window.newbrain.addWorkspace({ name: "NewBrain", path });
@@ -56,7 +76,7 @@ const prepared = await evaluate(`(async () => {
   if (!workspace) return false;
   await window.newbrain.addWorkspaceThread({
     workspaceId: workspace.id,
-    title: ${JSON.stringify(threadTitle)},
+    title: ${escapeUnsafeChars(JSON.stringify(threadTitle))},
     summary: "Authorized real DeepSeek streaming verification",
     scope: "project"
   });
@@ -65,15 +85,15 @@ const prepared = await evaluate(`(async () => {
 assert.equal(prepared, true, "Could not prepare the existing NewBrain project.");
 socket.send(JSON.stringify({ id: 0, method: "Page.reload", params: { ignoreCache: true } }));
 await sleep(1_500);
-await waitFor("prepared live task", `Boolean([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${JSON.stringify(threadTitle)})))`, 30_000);
-await evaluate(`([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${JSON.stringify(threadTitle)})))?.click()`);
+await waitFor("prepared live task", `Boolean([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${escapeUnsafeChars(JSON.stringify(threadTitle))})))`, 30_000);
+await evaluate(`([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${escapeUnsafeChars(JSON.stringify(threadTitle))})))?.click()`);
 await waitFor("composer", `Boolean(document.querySelector('[data-testid="composer-input"]'))`, 30_000);
-await waitFor("selected prepared task", `([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${JSON.stringify(threadTitle)})))?.classList.contains('active')`, 30_000);
+await waitFor("selected prepared task", `([...document.querySelectorAll('[data-testid="sidebar-task-row"], .thread-row')].find((item) => item.textContent?.includes(${escapeUnsafeChars(JSON.stringify(threadTitle))})))?.classList.contains('active')`, 30_000);
 const prompt = "请只回答：流式验证通过。不要调用任何工具。";
 const filled = await evaluate(`(() => {
   const input = document.querySelector('[data-testid="composer-input"]');
   if (!(input instanceof HTMLTextAreaElement)) return false;
-  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(prompt)});
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${escapeUnsafeChars(JSON.stringify(prompt))});
   input.dispatchEvent(new Event('input', { bubbles: true }));
   window.__liveStream = {
     submittedAt: 0, firstAt: 0, samples: [], lengths: [],
