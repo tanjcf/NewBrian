@@ -17,8 +17,9 @@ const charMap = {
   "\u2029": "\\u2029"
 };
 
-function escapeUnsafeChars(str) {
-  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+function escapeUnsafeChars(value) {
+  const json = JSON.stringify(value) ?? "null";
+  return json.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
 }
 
 
@@ -48,8 +49,8 @@ try {
     await client.command("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
     await client.command("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
     actions.push({ type: "ui-click", target: label });
-    await client.waitFor(`(() => { const active = document.querySelector('.brain-resource-scene-nav button.active'); return active?.textContent?.trim() === ${escapeUnsafeChars(JSON.stringify(label))}; })()`, 15_000);
-    await client.waitFor(`document.body?.innerText?.includes(${escapeUnsafeChars(JSON.stringify(expected))})`, 20_000);
+    await client.waitFor(`(() => { const active = document.querySelector('.brain-resource-scene-nav button.active'); return active?.textContent?.trim() === ${escapeUnsafeChars(label)}; })()`, 15_000);
+    await client.waitFor(`document.body?.innerText?.includes(${escapeUnsafeChars(expected)})`, 20_000);
     const visibleText = await client.evaluate("document.body?.innerText?.slice(-1800) || ''");
     assert.match(visibleText, new RegExp(expected.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
     results.push({ tab: label, expected, passed: true });

@@ -20,8 +20,9 @@ const charMap = {
   "\u2029": "\\u2029"
 };
 
-function escapeUnsafeChars(str) {
-  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+function escapeUnsafeChars(value) {
+  const json = JSON.stringify(value) ?? "null";
+  return json.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
 }
 
 
@@ -59,7 +60,7 @@ assert.equal(hashFile(firstPdfPath), firstPdfHash, "First PDF changed before rou
 
 let activated = false;
 for (let attempt = 0; attempt < 30 && !activated; attempt += 1) {
-  activated = await evaluate(`(() => { const expand = [...document.querySelectorAll('button.thread-row.muted')].find((e) => /展开显示/u.test(e.textContent || '')); if (expand instanceof HTMLButtonElement) expand.click(); const row = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')].find((e) => e.getAttribute('data-thread-key')?.includes(${escapeUnsafeChars(JSON.stringify(targetThreadId))})); if (!(row instanceof HTMLButtonElement)) return false; row.click(); return true; })()`);
+  activated = await evaluate(`(() => { const expand = [...document.querySelectorAll('button.thread-row.muted')].find((e) => /展开显示/u.test(e.textContent || '')); if (expand instanceof HTMLButtonElement) expand.click(); const row = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')].find((e) => e.getAttribute('data-thread-key')?.includes(${escapeUnsafeChars(targetThreadId)})); if (!(row instanceof HTMLButtonElement)) return false; row.click(); return true; })()`);
   if (!activated) await sleep(1_000);
 }
 assert.equal(activated, true, "Could not activate the GOV-UI-MULTI-001 project conversation.");
@@ -72,14 +73,14 @@ const request = `确认修改。生成第二版完整正文，同时输出以下
 2. 煤炭企业2025年年终总结发言稿-第二版.docx
 
 第一版PDF必须继续保留。生成后检查两个文件是否能够正常打开，内容必须一致。`;
-const submitted = await evaluate(`(() => { const input = document.querySelector('[data-testid="composer-input"]'); if (!(input instanceof HTMLTextAreaElement)) return false; Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${escapeUnsafeChars(JSON.stringify(request))}); input.dispatchEvent(new Event('input', { bubbles: true })); const button = document.querySelector('[data-testid="composer-send-button"]'); if (!(button instanceof HTMLButtonElement) || button.disabled) return false; button.click(); return true; })()`);
+const submitted = await evaluate(`(() => { const input = document.querySelector('[data-testid="composer-input"]'); if (!(input instanceof HTMLTextAreaElement)) return false; Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${escapeUnsafeChars(request)}); input.dispatchEvent(new Event('input', { bubbles: true })); const button = document.querySelector('[data-testid="composer-send-button"]'); if (!(button instanceof HTMLButtonElement) || button.disabled) return false; button.click(); return true; })()`);
 assert.equal(submitted, true, "Could not submit round 5 through the visible composer.");
 
 let state = null;
 let sawBusy = false;
 const deadline = Date.now() + 420_000;
 while (Date.now() < deadline) {
-  state = await evaluate(`(async () => { const goal = await window.newbrain.getGoalExecution(); let approvalClicked = false; if (goal?.goal?.threadId === ${escapeUnsafeChars(JSON.stringify(targetThreadId))}) { const button = document.querySelector('[data-testid="approval-approve-button"]'); if (button instanceof HTMLButtonElement && !button.disabled) { button.click(); approvalClicked = true; } } return { approvalClicked, busy: Boolean(document.querySelector('.composer-card.busy')), messages: (await window.newbrain.getSnapshot()).messages || [], goal, localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '')), threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0, composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true, body: document.body.innerText }; })()`);
+  state = await evaluate(`(async () => { const goal = await window.newbrain.getGoalExecution(); let approvalClicked = false; if (goal?.goal?.threadId === ${escapeUnsafeChars(targetThreadId)}) { const button = document.querySelector('[data-testid="approval-approve-button"]'); if (button instanceof HTMLButtonElement && !button.disabled) { button.click(); approvalClicked = true; } } return { approvalClicked, busy: Boolean(document.querySelector('.composer-card.busy')), messages: (await window.newbrain.getSnapshot()).messages || [], goal, localFiles: [...document.querySelectorAll('[data-local-file-path]')].map((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '')), threadCount: (await window.newbrain.listWorkspaces()).find((item) => item.name === 'workspace')?.threads.length || 0, composerDisabled: document.querySelector('[data-testid="composer-input"]')?.hasAttribute('disabled') ?? true, body: document.body.innerText }; })()`);
   const files = state.localFiles || [];
   sawBusy ||= state.busy;
   const newAssistant = state.messages.filter((m) => m.role === "assistant").length > before.messages.filter((m) => m.role === "assistant").length;
@@ -94,7 +95,7 @@ const docxPath = displayedDocx ? resolveDisplayed(displayedDocx) : "";
 const evidenceDirectory = resolve(root, "round-5"); mkdirSync(evidenceDirectory, { recursive: true });
 const screenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
 writeFileSync(resolve(evidenceDirectory, "round-5.png"), Buffer.from(screenshot.data, "base64"));
-writeFileSync(resolve(evidenceDirectory, "round-5.json"), `${escapeUnsafeChars(JSON.stringify({ status: "CAPTURED_BEFORE_ASSERTIONS", request, state, firstPdfPath, firstPdfHash, pdfPath, docxPath }, null, 2))}\n`);
+writeFileSync(resolve(evidenceDirectory, "round-5.json"), `${escapeUnsafeChars({ status: "CAPTURED_BEFORE_ASSERTIONS", request, state, firstPdfPath, firstPdfHash, pdfPath, docxPath }, null, 2)}\n`);
 assert.equal(state?.messages?.filter((m) => m.role === "user").at(-1)?.content, request, "Round 5 user input was not persisted exactly.");
 assert.equal(state?.threadCount, before.threadCount, "Round 5 created another workspace thread.");
 assert.equal(hashFile(firstPdfPath), firstPdfHash, "Round 5 overwrote the first PDF.");
@@ -112,6 +113,6 @@ for (const fact of ["301万吨", "5180人次", "31套", "无较大及以上安�
 assert.equal(state?.composerDisabled, false, "Composer did not recover after round 5.");
 assert.equal(state?.goal?.goal?.status, "complete", "Goal did not reach complete state after both artifacts were generated.");
 const artifacts = { firstPdf: { path: firstPdfPath, hash: firstPdfHash }, secondPdf: { path: pdfPath, hash: hashFile(pdfPath), size: pdfBytes.length, text: pdfResult.text }, secondDocx: { path: docxPath, hash: hashFile(docxPath), size: docxBytes.length, text: docxResult.value } };
-writeFileSync(resolve(evidenceDirectory, "round-5.json"), `${escapeUnsafeChars(JSON.stringify({ status: "PASS", request, state, artifacts }, null, 2))}\n`);
+writeFileSync(resolve(evidenceDirectory, "round-5.json"), `${escapeUnsafeChars({ status: "PASS", request, state, artifacts }, null, 2)}\n`);
 console.log(JSON.stringify({ caseId: "GOV-UI-MULTI-001", round: 5, status: "PASS", evidenceDirectory, artifacts: { firstPdf: artifacts.firstPdf, secondPdf: { ...artifacts.secondPdf, text: undefined }, secondDocx: { ...artifacts.secondDocx, text: undefined } } }, null, 2));
 socket.close();

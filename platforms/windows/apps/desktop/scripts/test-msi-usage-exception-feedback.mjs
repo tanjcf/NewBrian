@@ -21,8 +21,9 @@ const charMap = {
   "\u2029": "\\u2029"
 };
 
-function escapeUnsafeChars(str) {
-  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+function escapeUnsafeChars(value) {
+  const json = JSON.stringify(value) ?? "null";
+  return json.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
 }
 
 
@@ -46,18 +47,18 @@ const debugPort = 26_000 + (process.pid % 1_500);
 const workspace = await mkdtemp(join(tmpdir(), "newbrain-msi-usage-ws-"));
 const stateRoot = join(workspace, ".newbrain");
 await mkdir(stateRoot, { recursive: true });
-await writeFile(join(workspace, "newbrain.config.json"), `${escapeUnsafeChars(JSON.stringify({ llm: {
+await writeFile(join(workspace, "newbrain.config.json"), `${escapeUnsafeChars({ llm: {
   provider: "newbrain", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "newbrain-e2e",
   wireApi: "responses", model: "newbrain-e2e-model", reviewModel: "newbrain-e2e-model",
   reasoningEffort: "medium", disableResponseStorage: true
-} }, null, 2))}\n`);
-await writeFile(join(stateRoot, "authorized-models.json"), `${escapeUnsafeChars(JSON.stringify([{
+} }, null, 2)}\n`);
+await writeFile(join(stateRoot, "authorized-models.json"), `${escapeUnsafeChars([{
   id: "newbrain-e2e-model", model: "newbrain-e2e-model", label: "E2E", provider: "newbrain"
-}], null, 2))}\n`);
-await writeFile(join(stateRoot, "desktop-auth.json"), `${escapeUnsafeChars(JSON.stringify({
+}], null, 2)}\n`);
+await writeFile(join(stateRoot, "desktop-auth.json"), `${escapeUnsafeChars({
   mode: "desktop_token", access_token: `plain:${Buffer.from("msi-usage-user").toString("base64")}`,
   user: { id: "msi-usage-user", email: "msi-usage@example.test", role: "user" }
-}, null, 2))}\n`);
+}, null, 2)}\n`);
 
 const server = spawn(process.execPath, [fileURLToPath(new URL("./usage-exception-feedback-mock-server.mjs", import.meta.url))], {
   env: { ...process.env, NEWBRAIN_USAGE_FEEDBACK_PORT: String(port) }, windowsHide: true,
@@ -87,10 +88,10 @@ try {
   await mkdir(projectPath, { recursive: true });
   await cdp.evaluate(`(async () => {
     let catalog = await window.newbrain.listWorkspaces();
-    if (!catalog.some((item) => item.path === ${escapeUnsafeChars(JSON.stringify(projectPath))})) {
-      catalog = await window.newbrain.addWorkspace({ name: "MSI Usage Feedback", path: ${escapeUnsafeChars(JSON.stringify(projectPath))} });
+    if (!catalog.some((item) => item.path === ${escapeUnsafeChars(projectPath)})) {
+      catalog = await window.newbrain.addWorkspace({ name: "MSI Usage Feedback", path: ${escapeUnsafeChars(projectPath)} });
     }
-    let workspaceItem = catalog.find((item) => item.path === ${escapeUnsafeChars(JSON.stringify(projectPath))});
+    let workspaceItem = catalog.find((item) => item.path === ${escapeUnsafeChars(projectPath)});
     if (!(workspaceItem?.threads || []).length) {
       catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspaceItem.id, title: "Usage Feedback", summary: "MSI", scope: "chat" });
       workspaceItem = catalog.find((item) => item.id === workspaceItem.id);
@@ -140,9 +141,9 @@ try {
     uploads: final.uploads.length,
     chatRequests: final.chatRequests
   };
-  await writeFile(join(evidenceDir, "msi-manifest.json"), `${escapeUnsafeChars(JSON.stringify(manifest, null, 2))}\n`, "utf8");
-  await writeFile(join(evidenceDir, "msi-runtime.txt"), `${escapeUnsafeChars(JSON.stringify(manifest))}\n`, "utf8");
-  process.stdout.write(`${escapeUnsafeChars(JSON.stringify(manifest))}\n`);
+  await writeFile(join(evidenceDir, "msi-manifest.json"), `${escapeUnsafeChars(manifest, null, 2)}\n`, "utf8");
+  await writeFile(join(evidenceDir, "msi-runtime.txt"), `${escapeUnsafeChars(manifest)}\n`, "utf8");
+  process.stdout.write(`${escapeUnsafeChars(manifest)}\n`);
 } finally {
   cdp?.close();
   child.kill();
@@ -242,7 +243,7 @@ async function submitCommand(driver, text) {
   const scope = ".task-column:not(.new-chat-task)";
   await driver.evaluate(`(() => { const input = document.querySelector('${scope} [data-testid="composer-input"]'); input.focus(); input.select(); return true; })()`);
   await driver.typeText(text);
-  await driver.waitFor("draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${escapeUnsafeChars(JSON.stringify(text))}`);
+  await driver.waitFor("draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${escapeUnsafeChars(text)}`);
   const send = `document.querySelector('${scope} [data-testid="composer-input"]')?.closest('.composer-card')?.querySelector('[data-testid="composer-send-button"]')`;
   await driver.waitFor("send", `Boolean(${send}) && !(${send}).disabled && !(${send}).classList.contains('stop-btn')`);
   await driver.clickExpression(send);
@@ -277,7 +278,7 @@ async function connect(pages) {
       while (Date.now() < end) { if (await evaluate(expression)) return; await sleep(100); }
       throw new Error(`Timed out waiting for ${label}`);
     },
-    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${escapeUnsafeChars(JSON.stringify(text))}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
+    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${escapeUnsafeChars(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
     typeText: async (text) => {
       for (const character of text) {
         socket.send(JSON.stringify({ id: ++id, method: "Input.dispatchKeyEvent", params: { type: "char", key: character, text: character, unmodifiedText: character } }));

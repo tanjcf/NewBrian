@@ -21,8 +21,9 @@ const charMap = {
   "\u2029": "\\u2029"
 };
 
-function escapeUnsafeChars(str) {
-  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+function escapeUnsafeChars(value) {
+  const json = JSON.stringify(value) ?? "null";
+  return json.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
 }
 
 
@@ -34,18 +35,18 @@ const root = await mkdtemp(join(tmpdir(), "newbrain-usage-feedback-e2e-"));
 const stateRoot = join(root, ".newbrain");
 await mkdir(stateRoot, { recursive: true });
 await mkdir(evidenceDir, { recursive: true });
-await writeFile(join(root, "newbrain.config.json"), `${escapeUnsafeChars(JSON.stringify({ llm: {
+await writeFile(join(root, "newbrain.config.json"), `${escapeUnsafeChars({ llm: {
   provider: "newbrain", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "newbrain-e2e",
   wireApi: "responses", model: "newbrain-e2e-model", reviewModel: "newbrain-e2e-model",
   reasoningEffort: "medium", disableResponseStorage: true
-} }, null, 2))}\n`);
-await writeFile(join(stateRoot, "authorized-models.json"), `${escapeUnsafeChars(JSON.stringify([{
+} }, null, 2)}\n`);
+await writeFile(join(stateRoot, "authorized-models.json"), `${escapeUnsafeChars([{
   id: "newbrain-e2e-model", model: "newbrain-e2e-model", label: "E2E", provider: "newbrain"
-}], null, 2))}\n`);
-await writeFile(join(stateRoot, "desktop-auth.json"), `${escapeUnsafeChars(JSON.stringify({
+}], null, 2)}\n`);
+await writeFile(join(stateRoot, "desktop-auth.json"), `${escapeUnsafeChars({
   mode: "desktop_token", access_token: `plain:${Buffer.from("usage-feedback-user").toString("base64")}`,
   user: { id: "usage-feedback-user", email: "usage@example.test", role: "user" }
-}, null, 2))}\n`);
+}, null, 2)}\n`);
 
 const server = spawn(process.execPath, [fileURLToPath(new URL("./usage-exception-feedback-mock-server.mjs", import.meta.url))], {
   env: { ...process.env, NEWBRAIN_USAGE_FEEDBACK_PORT: String(port) }, windowsHide: true,
@@ -72,10 +73,10 @@ try {
   await mkdir(workspacePath, { recursive: true });
   const target = await cdp.evaluate(`(async () => {
     let catalog = await window.newbrain.listWorkspaces();
-    if (!catalog.some((item) => item.path === ${escapeUnsafeChars(JSON.stringify(workspacePath))})) {
-      catalog = await window.newbrain.addWorkspace({ name: "Usage Feedback E2E", path: ${escapeUnsafeChars(JSON.stringify(workspacePath))} });
+    if (!catalog.some((item) => item.path === ${escapeUnsafeChars(workspacePath)})) {
+      catalog = await window.newbrain.addWorkspace({ name: "Usage Feedback E2E", path: ${escapeUnsafeChars(workspacePath)} });
     }
-    let workspace = catalog.find((item) => item.path === ${escapeUnsafeChars(JSON.stringify(workspacePath))});
+    let workspace = catalog.find((item) => item.path === ${escapeUnsafeChars(workspacePath)});
     if (!(workspace?.threads || []).length) {
       catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Usage Feedback", summary: "E2E", scope: "chat" });
       workspace = catalog.find((item) => item.id === workspace.id);
@@ -154,11 +155,11 @@ try {
     uploadsAfterRestart: final.uploads.length,
     screenshots: ["preview.png", "cancel.png", "confirmed-id.png", "retry-after-restart.png"]
   };
-  await writeFile(join(evidenceDir, "electron-runtime.json"), `${escapeUnsafeChars(JSON.stringify(summary, null, 2))}\n`, "utf8");
-  process.stdout.write(`${escapeUnsafeChars(JSON.stringify(summary))}\n`);
+  await writeFile(join(evidenceDir, "electron-runtime.json"), `${escapeUnsafeChars(summary, null, 2)}\n`, "utf8");
+  process.stdout.write(`${escapeUnsafeChars(summary)}\n`);
 } catch (error) {
   const renderer = await cdp?.evaluate(`({ feedbackIpc: window.__feedbackIpc, values: [...document.querySelectorAll('[data-testid="composer-input"]')].map((item) => item.value), buttons: [...document.querySelectorAll('[data-testid="composer-send-button"]')].map((item) => { const key = Object.keys(item).find((name) => name.startsWith('__reactProps')); const rect = item.getBoundingClientRect(); return { disabled: item.disabled, rect: [rect.x, rect.y, rect.width, rect.height], reactOnClick: typeof item[key]?.onClick }; }), errors: [...document.querySelectorAll('[class*="error"]')].map((item) => item.textContent).filter(Boolean), statuses: [...document.querySelectorAll('[class*="status"]')].map((item) => item.textContent).filter(Boolean) })`).catch(() => null);
-  process.stderr.write(`${escapeUnsafeChars(JSON.stringify({ remote: await remoteState().catch(() => null), renderer, root, error: String(error) }, null, 2))}\n`);
+  process.stderr.write(`${escapeUnsafeChars({ remote: await remoteState().catch(() => null), renderer, root, error: String(error) }, null, 2)}\n`);
   throw error;
 } finally {
   cdp?.close();
@@ -170,7 +171,7 @@ async function submitCommand(driver, text) {
   const scope = ".task-column:not(.new-chat-task)";
   await driver.evaluate(`(() => { const input = document.querySelector('${scope} [data-testid="composer-input"]'); input.focus(); input.select(); return true; })()`);
   await driver.typeText(text);
-  await driver.waitFor("feedback command draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${escapeUnsafeChars(JSON.stringify(text))}`);
+  await driver.waitFor("feedback command draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${escapeUnsafeChars(text)}`);
   const send = `document.querySelector('${scope} [data-testid="composer-input"]')?.closest('.composer-card')?.querySelector('[data-testid="composer-send-button"]')`;
   await driver.waitFor("enabled send button", `Boolean(${send}) && !(${send}).disabled && !(${send}).classList.contains('stop-btn')`);
   await driver.clickExpression(send);
@@ -225,7 +226,7 @@ async function connect(currentSession) {
     },
     reload: async () => { socket.send(JSON.stringify({ id: 0, method: "Page.reload", params: { ignoreCache: true } })); await sleep(1_500); },
     waitFor: async (label, expression, timeout = 10_000) => { const end = Date.now() + timeout; while (Date.now() < end) { if (await evaluate(expression)) return; await sleep(100); } throw new Error(`Timed out waiting for ${label}: ${await evaluate("document.body.innerText.slice(0, 1000)").catch(() => "")}`); },
-    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${escapeUnsafeChars(JSON.stringify(text))}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
+    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${escapeUnsafeChars(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
     typeText: async (text) => {
       for (const character of text) {
         socket.send(JSON.stringify({ id: ++id, method: "Input.dispatchKeyEvent", params: { type: "char", key: character, text: character, unmodifiedText: character } }));
