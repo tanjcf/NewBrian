@@ -137,8 +137,6 @@ function mask(text) {
     next = next.replace(re, token);
   }
   // Protect remaining standalone "Codex" (OpenAI product) when not already masked
-  next = next.replace(/\bCodex\b/g, "Codex");
-  next = next.replace(/\bcodex\b/g, "codex");
   return next;
 }
 
@@ -146,11 +144,7 @@ function unmask(text) {
   return text
     .replace(/@codex-forge//g, "@codex-forge/")
     .replace(/.codex-plugin/g, ".codex-plugin")
-    .replace(/.codex/g, ".codex")
-    .replace(/codex-storage/g, "codex-storage")
-    .replace(/openai-wire/g, "openai-wire")
-    .replace(/Codex/g, "Codex")
-    .replace(/codex/g, "codex");
+    .replace(/.codex/g, ".codex");
 }
 
 function transformContent(text) {
@@ -159,8 +153,6 @@ function transformContent(text) {
     next = next.replace(re, to);
   }
   // Fix Window interface patterns that may not have matched
-  next = next.replace(/newbrain\?:/g, "newbrain?:");
-  next = next.replace(/Window\["newbrain"\]/g, 'Window["newbrain"]');
   next = unmask(next);
   return next;
 }
@@ -198,10 +190,6 @@ function renameFiles() {
     for (const [from, to] of FILE_RENAMES) {
       if (nextBase === from) nextBase = to;
     }
-    nextBase = nextBase
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/newbrain/g, "newbrain");
     if (nextBase === base) continue;
     const dest = path.join(path.dirname(file), nextBase);
     if (fs.existsSync(dest)) {
@@ -239,10 +227,7 @@ function renameFiles() {
   dirs.sort((a, b) => b.length - a.length);
   for (const dir of dirs) {
     const base = path.basename(dir);
-    const nextName = base
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/NewBrain/g, "NewBrain")
-      .replace(/newbrain/g, "newbrain");
+    const nextName = base;
     if (nextName === base) continue;
     const dest = path.join(path.dirname(dir), nextName);
     if (fs.existsSync(dest)) {

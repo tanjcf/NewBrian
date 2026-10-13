@@ -4,6 +4,26 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
 
+const charMap = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029"
+};
+
+function escapeUnsafeChars(str) {
+  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+}
+
+
 const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9350);
 const evidenceDir = join(process.cwd(), "..", "..", "integration-artifacts", "holon-ui-demo", String(Date.now()));
 mkdirSync(evidenceDir, { recursive: true });
@@ -47,14 +67,14 @@ async function screenshot(name) {
   writeFileSync(join(evidenceDir, `${name}.png`), Buffer.from(result.data, "base64"));
 }
 async function clickText(text) {
-  const box = await evaluate(`(() => { const node = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim().includes(${JSON.stringify(text)})); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  const box = await evaluate(`(() => { const node = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim().includes(${escapeUnsafeChars(JSON.stringify(text))})); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
   assert.ok(box, `Visible button not found: ${text}`);
   await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
   await command("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x: box.x, y: box.y });
   await command("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, x: box.x, y: box.y });
 }
 async function typeText(selector, value) {
-  const box = await evaluate(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; })()`);
+  const box = await evaluate(`(() => { const node = document.querySelector(${escapeUnsafeChars(JSON.stringify(selector))}); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; })()`);
   assert.ok(box, `Visible input not found: ${selector}`);
   await command("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x: box.x, y: box.y });
   await command("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, x: box.x, y: box.y });
@@ -155,14 +175,14 @@ try {
   assert.equal(existsSync(gamePath), true, "Desktop game artifact disappeared after NewBrain restart.");
   await screenshot("08-after-newbrain-restart");
   const result = { status: "PASS", evidenceDir, completed: ["visible Holon navigation", "mouse task claim", "mouse execution confirmation", "visible approval", "mouse approval", "desktop game launch", "keyboard movement", "keyboard pause", "keyboard restart", "desktop game close", "NewBrain restart", "workspace and artifact recovery"], artifacts: [gamePath, join(workspacePath, "outputs", "holon-snake", "README.txt")] };
-  writeFileSync(join(evidenceDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
+  writeFileSync(join(evidenceDir, "result.json"), `${escapeUnsafeChars(JSON.stringify(result, null, 2))}\n`);
   console.log(JSON.stringify(result));
 } catch (error) {
   const remoteState = await fetch(`http://127.0.0.1:${modelPort}/__state`).then((response) => response.json()).catch(() => null);
   const uiState = await evaluate(`(() => ({ body: document.body.innerText.slice(0, 8000), approvalVisible: Boolean(document.querySelector('[data-testid="approval-dialog"]')), workItem: document.querySelector('.holon-work-item')?.innerText || '' }))()`).catch(() => null);
   const result = { status: "FAIL", evidenceDir, error: error instanceof Error ? error.message : String(error), remoteState, uiState };
   await screenshot("failure").catch(() => undefined);
-  writeFileSync(join(evidenceDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
+  writeFileSync(join(evidenceDir, "result.json"), `${escapeUnsafeChars(JSON.stringify(result, null, 2))}\n`);
   console.error(JSON.stringify(result));
   process.exitCode = 1;
 } finally {

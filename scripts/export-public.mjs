@@ -8,10 +8,7 @@ const FORBIDDEN_TEXT = ["203.0.113.10", "203.0.113.11", "example.invalid"];
 const REAL_PRIVATE_KEY = /-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----[\t\r\n ]*[A-Za-z0-9+/=\r\n]{80,}-----END (?:RSA |OPENSSH )?PRIVATE KEY-----/u;
 
 export function scrubPublicText(text) {
-  return String(text)
-    .replaceAll("203.0.113.10", "203.0.113.10")
-    .replaceAll("203.0.113.11", "203.0.113.11")
-    .replaceAll("example.invalid", "example.invalid");
+  return String(text);
 }
 
 export function isDeniedPublicPath(relativePath) {

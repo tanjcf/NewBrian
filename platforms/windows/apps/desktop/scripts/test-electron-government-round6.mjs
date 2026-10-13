@@ -3,6 +3,26 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+const charMap = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029"
+};
+
+function escapeUnsafeChars(str) {
+  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+}
+
+
 const root = resolve(process.cwd(), "..", "..", "tmp", "e2e-evidence", "GOV-UI-MULTI-001");
 const evidenceDirectory = resolve(root, "round-6"); mkdirSync(evidenceDirectory, { recursive: true });
 const manifestPath = resolve(evidenceDirectory, "pre-restart.json");
@@ -23,7 +43,7 @@ if (process.argv.includes("--prepare")) {
     ],
     files: paths.map((path) => ({ path, hash: hashFile(path), mtimeMs: statSync(path).mtimeMs, size: statSync(path).size }))
   };
-  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(manifestPath, `${escapeUnsafeChars(JSON.stringify(manifest, null, 2))}\n`);
   console.log(JSON.stringify({ status: "PREPARED", manifestPath, targetThreadId: manifest.targetThreadId }, null, 2));
   process.exit(0);
 }
@@ -51,7 +71,7 @@ async function evaluate(expression) { return (await command("Runtime.evaluate", 
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 let activated = false;
 for (let attempt = 0; attempt < 45 && !activated; attempt += 1) {
-  activated = await evaluate(`(() => { const expand = [...document.querySelectorAll('button.thread-row.muted')].find((e) => /展开显示/u.test(e.textContent || '')); if (expand instanceof HTMLButtonElement) expand.click(); const row = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')].find((e) => e.getAttribute('data-thread-key')?.includes(${JSON.stringify(manifest.targetThreadId)})); if (!(row instanceof HTMLButtonElement)) return false; row.click(); return true; })()`);
+  activated = await evaluate(`(() => { const expand = [...document.querySelectorAll('button.thread-row.muted')].find((e) => /展开显示/u.test(e.textContent || '')); if (expand instanceof HTMLButtonElement) expand.click(); const row = [...document.querySelectorAll('[data-testid="sidebar-project-task-row"]')].find((e) => e.getAttribute('data-thread-key')?.includes(${escapeUnsafeChars(JSON.stringify(manifest.targetThreadId))})); if (!(row instanceof HTMLButtonElement)) return false; row.click(); return true; })()`);
   if (!activated) await sleep(1_000);
 }
 assert.equal(activated, true, "Workspace thread was not found after restart."); await sleep(2_000);
@@ -63,7 +83,7 @@ for (let attempt = 0; attempt < 45; attempt += 1) {
 }
 const users = state.messages.filter((message) => message.role === "user").map((message) => message.content);
 const screenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }); writeFileSync(resolve(evidenceDirectory, "round-6.png"), Buffer.from(screenshot.data, "base64"));
-writeFileSync(resolve(evidenceDirectory, "round-6.json"), `${JSON.stringify({ status: "CAPTURED_BEFORE_ASSERTIONS", manifest, state }, null, 2)}\n`);
+writeFileSync(resolve(evidenceDirectory, "round-6.json"), `${escapeUnsafeChars(JSON.stringify({ status: "CAPTURED_BEFORE_ASSERTIONS", manifest, state }, null, 2))}\n`);
 assert.deepEqual(users, manifest.expectedUsers, "The recovered thread does not contain exactly the five expected user turns in order.");
 assert.equal(state.goal?.goal?.threadId, manifest.targetThreadId); assert.equal(state.goal?.goal?.status, "complete");
 assert.equal(state.composerDisabled, false, "Composer did not recover after restart.");
@@ -73,10 +93,10 @@ for (const file of manifest.files) {
   assert.ok(existsSync(file.path)); assert.equal(hashFile(file.path), file.hash, `${file.path} changed after restart.`); assert.equal(statSync(file.path).mtimeMs, file.mtimeMs, `${file.path} was regenerated after restart.`);
   assert.ok(state.localFiles.some((shown) => file.path.endsWith(shown) || shown.endsWith(file.path.split(/[\\/]/).at(-1))), `${file.path} has no recovered UI link.`);
 }
-const clicks = await evaluate(`(() => { const names = ${JSON.stringify(manifest.files.map((file) => file.path.split(/[\/\\]/).at(-1)))}; return names.map((name) => { const element = [...document.querySelectorAll('[data-local-file-path]')].find((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '').endsWith(name)); if (!(element instanceof HTMLElement)) return false; element.click(); return true; }); })()`);
+const clicks = await evaluate(`(() => { const names = ${escapeUnsafeChars(JSON.stringify(manifest.files.map((file) => file.path.split(/[\/\\]/).at(-1))))}; return names.map((name) => { const element = [...document.querySelectorAll('[data-local-file-path]')].find((e) => decodeURIComponent(e.getAttribute('data-local-file-path') || '').endsWith(name)); if (!(element instanceof HTMLElement)) return false; element.click(); return true; }); })()`);
 assert.deepEqual(clicks, [true, true, true], "Not all three recovered artifact links were clickable."); await sleep(1_000);
 state = await evaluate(`(async () => ({ body: document.body.innerText, goal: await window.newbrain.getGoalExecution(), messages: (await window.newbrain.getSnapshot()).messages || [] }))()`);
 assert.doesNotMatch(state.body, /Workspace thread was not found|Renderer failed to start/u);
-writeFileSync(resolve(evidenceDirectory, "round-6.json"), `${JSON.stringify({ status: "PASS", manifest, state, clicks }, null, 2)}\n`);
+writeFileSync(resolve(evidenceDirectory, "round-6.json"), `${escapeUnsafeChars(JSON.stringify({ status: "PASS", manifest, state, clicks }, null, 2))}\n`);
 console.log(JSON.stringify({ caseId: "GOV-UI-MULTI-001", round: 6, status: "PASS", evidenceDirectory, files: manifest.files }, null, 2));
 socket.close();

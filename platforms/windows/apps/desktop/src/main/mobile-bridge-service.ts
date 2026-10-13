@@ -193,9 +193,9 @@ export class MobileBridgeService {
         }
         response.writeHead(404, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
         response.end(JSON.stringify({ ok: false, detail: "Not found." }));
-      } catch (error) {
+      } catch {
         response.writeHead(400, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-        response.end(JSON.stringify({ ok: false, detail: error instanceof Error ? error.message : String(error) }));
+        response.end(JSON.stringify({ ok: false, detail: "Request failed." }));
       }
     });
     const host = this.options.getLocalAddress?.() ?? getLocalIpv4Address();
