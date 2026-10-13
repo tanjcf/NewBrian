@@ -1,4 +1,4 @@
-﻿// 8.0.0.3398. Generated 1/18/2021 11:03:29 PM UTC
+// 8.0.0.3398. Generated 1/18/2021 11:03:29 PM UTC
 
 //***** axQuery.js *****//
 $axure = function(query) {
@@ -745,7 +745,7 @@ $axure.internal(function($ax) {
                 if($ax.document.configuration.useLabels) {
                     var label = $('#' + elementId).attr("data-label");
                     if(!label || label == "") label = "?";
-                    $('#' + textId).append("<div id='" + elementId + "Note' class='annnotelabel' >" + label + "</div>");
+                    $('#' + textId).append($("<div>", { id: elementId + "Note", "class": "annnotelabel", text: label }));
                 } else {
                     $('#' + textId).append("<div id='" + elementId + "Note' class='annnoteimage' ></div>");
                 }
@@ -759,7 +759,7 @@ $axure.internal(function($ax) {
                 if($ax.document.configuration.useLabels) {
                     var label = $('#' + elementId).attr("data-label");
                     if(!label || label == "") label = "?";
-                    $('#' + elementId + "_ann").append("<div id='" + elementId + "Note' class='annnotelabel'>" + label + "</div>");
+                    $('#' + elementId + "_ann").append($("<div>", { id: elementId + "Note", "class": "annnotelabel", text: label }));
                 } else {
                     $('#' + elementId + "_ann").append("<div id='" + elementId + "Note' class='annnoteimage'></div>");
                 }

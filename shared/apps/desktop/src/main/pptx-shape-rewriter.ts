@@ -13,7 +13,7 @@ export async function replacePptxShapeText(input: { bytes: Buffer; slide: number
   const shape = [...xml.matchAll(/<p:sp(?:\s[^>]*)?>[\s\S]*?<\/p:sp>/g)].map((match) => match[0]).find((value) => new RegExp(`<p:cNvPr[^>]+\\bid=["']${input.shapeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`).test(value));
   if (!shape) throw new Error("BRAIN_PPTX_SHAPE_NOT_FOUND");
   const textMatches = [...shape.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g)];
-  const plain = textMatches.map((item) => item[1].replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">" )).join("");
+  const plain = textMatches.map((item) => item[1].replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&")).join("");
   if (input.end > plain.length) throw new Error("BRAIN_PPTX_RANGE_OUTSIDE_SHAPE");
   const next = plain.slice(0, input.start) + input.replacement + plain.slice(input.end);
   let index = 0;

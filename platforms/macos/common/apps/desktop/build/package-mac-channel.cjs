@@ -56,9 +56,6 @@ function rewriteCompiledEndpoints(gatewayBaseUrl, previewUrl) {
       }
       if (!/\.(js|cjs|mjs|html|json|css|map)$/u.test(entry.name)) continue;
       const original = readFileSync(target, "utf8");
-      if (!original.includes("127.0.0.1") && !original.includes("203.0.113.10") && !original.includes("wangjietech.com")) {
-        continue;
-      }
       const updated = original
         .replaceAll("http://127.0.0.1:8790/v1", gatewayBaseUrl)
         .replaceAll("http://203.0.113.10:8790/v1", gatewayBaseUrl)

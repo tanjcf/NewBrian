@@ -300,10 +300,32 @@ function currentFile() {
   return state.accepted ? "一期鮨招商-v2.pptx" : "一期鮨招商.pptx";
 }
 
-function addBubble(role, html) {
+function addBubble(role, source) {
   const el = document.createElement("div");
   el.className = "bubble " + role;
-  el.innerHTML = html;
+  const text = String(source);
+  const pattern = /<b>|<\/b>|<br\s*\/?>/gi;
+  let last = 0;
+  let bold = false;
+  let match;
+  const appendChunk = (chunk) => {
+    if (!chunk) return;
+    const node = document.createTextNode(chunk);
+    if (!bold) {
+      el.appendChild(node);
+      return;
+    }
+    const strong = document.createElement("b");
+    strong.appendChild(node);
+    el.appendChild(strong);
+  };
+  while ((match = pattern.exec(text))) {
+    appendChunk(text.slice(last, match.index));
+    if (match[0].toLowerCase().startsWith("<br")) el.appendChild(document.createElement("br"));
+    else bold = match[0].toLowerCase() !== "</b>";
+    last = match.index + match[0].length;
+  }
+  appendChunk(text.slice(last));
   thread.appendChild(el);
   thread.scrollTop = thread.scrollHeight;
 }
@@ -505,9 +527,25 @@ function renderSlide() {
       prompt.style.left = mark.x + "%";
       prompt.style.top = `calc(${mark.y + mark.h}% + 10px)`;
       prompt.style.width = Math.max(mark.w, 36) + "%";
-      prompt.innerHTML = `<input id="markText" placeholder="描述你想要的修改" value="${(mark.text || "").replace(/"/g, "&quot;")}" />
-        <button class="send" type="submit" aria-label="发送修改" title="发送修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6"/><path d="m6 11 6-6 6 6"/></svg></button>
-        <button type="button" id="markDelete" aria-label="删除标记" title="删除标记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>`;
+      const markInput = document.createElement("input");
+      markInput.id = "markText";
+      markInput.placeholder = "描述你想要的修改";
+      markInput.value = mark.text || "";
+      prompt.appendChild(markInput);
+      const sendButton = document.createElement("button");
+      sendButton.className = "send";
+      sendButton.type = "submit";
+      sendButton.setAttribute("aria-label", "发送修改");
+      sendButton.title = "发送修改";
+      sendButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6"/><path d="m6 11 6-6 6 6"/></svg>';
+      prompt.appendChild(sendButton);
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.id = "markDelete";
+      deleteButton.setAttribute("aria-label", "删除标记");
+      deleteButton.title = "删除标记";
+      deleteButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+      prompt.appendChild(deleteButton);
       prompt.addEventListener("pointerdown", (event) => event.stopPropagation());
       prompt.onsubmit = (event) => {
         event.preventDefault();

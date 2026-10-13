@@ -93,6 +93,23 @@ export function selectGovernmentDraftCandidate(current: string, priorAssistantMe
  * Prefer the same substantive candidate as finalization; fall back to a short
  * complete speech (salutation) so brief closing remarks still export.
  */
+function stripAngleMarkup(value: string) {
+  let result = "";
+  let depth = 0;
+  for (const char of value) {
+    if (char === "<") {
+      depth += 1;
+      continue;
+    }
+    if (char === ">" && depth > 0) {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0) result += char;
+  }
+  return result;
+}
+
 export function prepareGovernmentPdfContent(content: string, priorAssistantMessages: string[], _sourceText = "") {
   void _sourceText;
   const preferred = selectGovernmentDraftCandidate(content, priorAssistantMessages);
@@ -111,12 +128,11 @@ export function prepareGovernmentPdfContent(content: string, priorAssistantMessa
     .map((salutation) => selected.indexOf(salutation))
     .filter((offset) => offset >= 0);
   const salutationOffset = salutationOffsets.length ? Math.min(...salutationOffsets) : -1;
-  return (salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
+  const withoutMarkup = (salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
     .split(/\n#{1,6}\s*终审结果/u)[0]
     .replace(/\n*PDF (?:文件)?尚未生成并验证[\s\S]*$/u, "")
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/<\/?[^>]+>/g, "")
-    .trim();
+    .replace(/```[\s\S]*?```/g, "");
+  return stripAngleMarkup(withoutMarkup).trim();
 }
 
 export function buildGovernmentWritingFinalizationRequest(userRequest: string, draft: string) {

@@ -1516,7 +1516,7 @@ def _cmd_configure(args):
 
     elif args.key == "youtube-cookies":
         config.set("youtube_cookies_from", value)
-        print(f"✅ YouTube cookie source configured: {value}")
+        print("✅ YouTube cookie source configured.")
         print("   yt-dlp will use cookies from this browser for age-restricted/member videos.")
 
     elif args.key == "xhs-cookies":
