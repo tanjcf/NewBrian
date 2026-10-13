@@ -137,25 +137,26 @@ function decodeBasicEntities(value) {
  * PDFKit does not render HTML; leaving tags prints them literally in the PDF.
  */
 export function normalizeArtifactMarkup(content) {
-  let source = String(content ?? "").replace(/\r\n/g, "\n");
-  source = source
-    .replace(/<\/?(?:document|html|head|body|meta|style|script)\b[^>]*>/gi, "")
-    .replace(/<(?:font|margins)\b[^>]*\/?>/gi, "")
-    .replace(/<hr\s*\/?>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n");
-  source = source.replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_match, level, inner) => {
-    const heading = decodeBasicEntities(inner.replace(/<\/?[^>]+>/g, "")).trim();
-    if (!heading) return "\n";
-    return `\n${"#".repeat(Math.min(Number(level) || 1, 6))} ${heading}\n`;
-  });
-  source = source.replace(/<(?:p|div)\b[^>]*>([\s\S]*?)<\/(?:p|div)>/gi, (_match, inner) => {
-    const body = decodeBasicEntities(inner.replace(/<\/?[^>]+>/g, "")).trim();
-    return body ? `\n${body}\n` : "\n";
-  });
-  source = source
-    .replace(/<\/?(?:b|strong)>/gi, "")
-    .replace(/<\/?[^>]+>/g, "");
-  return decodeBasicEntities(source)
+  const decoded = decodeBasicEntities(String(content ?? "").replace(/\r\n/g, "\n"));
+  let result = "";
+  let index = 0;
+  while (index < decoded.length) {
+    if (decoded[index] !== "<") {
+      result += decoded[index];
+      index += 1;
+      continue;
+    }
+    const close = decoded.indexOf(">", index + 1);
+    if (close === -1) break;
+    const rawTag = decoded.slice(index + 1, close).trim().toLowerCase();
+    const closing = rawTag.startsWith("/");
+    const name = rawTag.replace(/^\//, "").split(/[\s/]/)[0];
+    if (name === "br" || name === "hr") result += "\n";
+    else if (/^h[1-6]$/.test(name) && !closing) result += "\n" + "#".repeat(Number(name[1]) || 1) + " ";
+    else if ((/^h[1-6]$/.test(name) || name === "p" || name === "div") && closing) result += "\n";
+    index = close + 1;
+  }
+  return result
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

@@ -110,7 +110,10 @@ test("image_generate downloads COS result and opens local preview", async () => 
             result_json: JSON.stringify({ urls: ["https://cos.ap-guangzhou.myqcloud.com/demo/a.png"] })
           }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
-        if (href.includes("myqcloud.com")) {
+        const mediaHost = (() => {
+          try { return new URL(href).hostname; } catch { return ""; }
+        })();
+        if (mediaHost === "myqcloud.com" || mediaHost.endsWith(".myqcloud.com")) {
           return new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
         }
         return new Response(String(init?.body || "{}"), { status: 404 });

@@ -112,7 +112,14 @@ test("search falls back to Chinese HTML results when Bing RSS ignores the offici
         headers: { "content-type": "application/json" },
       });
     }
-    if (requested.filter((url) => url.includes("bing.com")).length === 1) {
+    if (requested.filter((url) => {
+      try {
+        const host = new URL(url).hostname;
+        return host === "bing.com" || host.endsWith(".bing.com");
+      } catch {
+        return false;
+      }
+    }).length === 1) {
       return new Response(
         `<?xml version="1.0"?><rss><channel>
           <item><title>Unrelated result</title><link>https://example.com/marketing</link><description>ignored</description></item>

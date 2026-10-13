@@ -233,8 +233,13 @@ export function SettingsWorkspace(ctx: any) {
   function openFigmaDesktopMcpPreset() {
     const existing = mcpServers.find((server: any) => {
       const name = String(server.name || "").toLowerCase();
-      const url = String(server.url || "");
-      return name.includes("figma") || url.includes("127.0.0.1:3845") || url.includes("mcp.figma.com");
+      if (name.includes("figma")) return true;
+      try {
+        const parsed = new URL(String(server.url || ""));
+        return (parsed.hostname === "127.0.0.1" && parsed.port === "3845") || parsed.hostname === "mcp.figma.com";
+      } catch {
+        return false;
+      }
     });
     if (existing) {
       openMcpSettingsEditor(existing);
@@ -299,18 +304,9 @@ export function SettingsWorkspace(ctx: any) {
   }
 
 function PrototypeBillingSettingsPage() {
-    const billingCacheKey = "newbrain.billingSnapshot.v1";
     const [billing, setBilling] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState("");
-    useEffect(() => {
-      try {
-        const saved = JSON.parse(localStorage.getItem(billingCacheKey) || "null");
-        if (saved && typeof saved === "object") setBilling(saved);
-      } catch {
-        // Ignore invalid cache.
-      }
-    }, []);
 
     const loadBilling = async () => {
       setLoading(true);
@@ -320,7 +316,6 @@ function PrototypeBillingSettingsPage() {
         const subscriptions = Array.isArray(data?.subscriptions) ? data.subscriptions : [];
         if (data && (subscriptions.length > 0 || Array.isArray(data.billing_history))) {
           setBilling(data);
-          localStorage.setItem(billingCacheKey, JSON.stringify(data));
         } else {
           setBilling((current: any) => current || data || { summary: {}, subscriptions: [] });
         }
