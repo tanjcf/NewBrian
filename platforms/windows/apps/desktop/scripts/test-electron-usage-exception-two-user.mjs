@@ -21,8 +21,9 @@ const charMap = {
   "\u2029": "\\u2029"
 };
 
-function escapeUnsafeChars(str) {
-  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+function escapeUnsafeChars(value) {
+  const json = JSON.stringify(value) ?? "null";
+  return json.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
 }
 
 
@@ -82,16 +83,16 @@ try {
     },
     springAdmin: springAttempt
   };
-  await writeFile(join(evidenceDir, "two-user-mock.json"), `${escapeUnsafeChars(JSON.stringify(evidence, null, 2))}\n`, "utf8");
+  await writeFile(join(evidenceDir, "two-user-mock.json"), `${escapeUnsafeChars(evidence, null, 2)}\n`, "utf8");
   if (springAttempt.status === "PASS") {
-    await writeFile(join(evidenceDir, "two-user-spring-admin.json"), `${escapeUnsafeChars(JSON.stringify(springAttempt, null, 2))}\n`, "utf8");
+    await writeFile(join(evidenceDir, "two-user-spring-admin.json"), `${escapeUnsafeChars(springAttempt, null, 2)}\n`, "utf8");
   } else {
-    await writeFile(join(evidenceDir, "two-user-spring-admin.json"), `${escapeUnsafeChars(JSON.stringify({
+    await writeFile(join(evidenceDir, "two-user-spring-admin.json"), `${escapeUnsafeChars({
       status: springAttempt.status,
       reason: springAttempt.reason
-    }, null, 2))}\n`, "utf8");
+    }, null, 2)}\n`, "utf8");
   }
-  process.stdout.write(`${escapeUnsafeChars(JSON.stringify(evidence))}\n`);
+  process.stdout.write(`${escapeUnsafeChars(evidence)}\n`);
 } finally {
   cdpA?.close();
   cdpB?.close();
@@ -104,19 +105,19 @@ async function openUser(userId, debugPort) {
   const root = await mkdtemp(join(tmpdir(), `newbrain-usage-two-user-${userId}-`));
   const stateRoot = join(root, ".newbrain");
   await mkdir(stateRoot, { recursive: true });
-  await writeFile(join(root, "newbrain.config.json"), `${escapeUnsafeChars(JSON.stringify({ llm: {
+  await writeFile(join(root, "newbrain.config.json"), `${escapeUnsafeChars({ llm: {
     provider: "newbrain", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "newbrain-e2e",
     wireApi: "responses", model: "newbrain-e2e-model", reviewModel: "newbrain-e2e-model",
     reasoningEffort: "medium", disableResponseStorage: true
-  } }, null, 2))}\n`);
-  await writeFile(join(stateRoot, "authorized-models.json"), `${escapeUnsafeChars(JSON.stringify([{
+  } }, null, 2)}\n`);
+  await writeFile(join(stateRoot, "authorized-models.json"), `${escapeUnsafeChars([{
     id: "newbrain-e2e-model", model: "newbrain-e2e-model", label: "E2E", provider: "newbrain"
-  }], null, 2))}\n`);
-  await writeFile(join(stateRoot, "desktop-auth.json"), `${escapeUnsafeChars(JSON.stringify({
+  }], null, 2)}\n`);
+  await writeFile(join(stateRoot, "desktop-auth.json"), `${escapeUnsafeChars({
     mode: "desktop_token",
     access_token: `plain:${Buffer.from(userId).toString("base64")}`,
     user: { id: userId, email: `${userId}@example.test`, role: "user" }
-  }, null, 2))}\n`);
+  }, null, 2)}\n`);
   Object.assign(process.env, {
     NEWBRAIN_E2E_FORCE_FRESH: "1",
     NEWBRAIN_E2E_USE_LIVE_WORKSPACE: "1",
@@ -135,10 +136,10 @@ async function submitAndConfirm(cdp, workspaceName) {
   await mkdir(workspacePath, { recursive: true });
   await cdp.evaluate(`(async () => {
     let catalog = await window.newbrain.listWorkspaces();
-    if (!catalog.some((item) => item.path === ${escapeUnsafeChars(JSON.stringify(workspacePath))})) {
-      catalog = await window.newbrain.addWorkspace({ name: ${escapeUnsafeChars(JSON.stringify(workspaceName))}, path: ${escapeUnsafeChars(JSON.stringify(workspacePath))} });
+    if (!catalog.some((item) => item.path === ${escapeUnsafeChars(workspacePath)})) {
+      catalog = await window.newbrain.addWorkspace({ name: ${escapeUnsafeChars(workspaceName)}, path: ${escapeUnsafeChars(workspacePath)} });
     }
-    let workspace = catalog.find((item) => item.path === ${escapeUnsafeChars(JSON.stringify(workspacePath))});
+    let workspace = catalog.find((item) => item.path === ${escapeUnsafeChars(workspacePath)});
     if (!(workspace?.threads || []).length) {
       catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Usage Feedback", summary: "E2E", scope: "chat" });
       workspace = catalog.find((item) => item.id === workspace.id);
@@ -195,7 +196,7 @@ async function submitCommand(driver, text) {
   const scope = ".task-column:not(.new-chat-task)";
   await driver.evaluate(`(() => { const input = document.querySelector('${scope} [data-testid="composer-input"]'); input.focus(); input.select(); return true; })()`);
   await driver.typeText(text);
-  await driver.waitFor("draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${escapeUnsafeChars(JSON.stringify(text))}`);
+  await driver.waitFor("draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${escapeUnsafeChars(text)}`);
   const send = `document.querySelector('${scope} [data-testid="composer-input"]')?.closest('.composer-card')?.querySelector('[data-testid="composer-send-button"]')`;
   await driver.waitFor("send", `Boolean(${send}) && !(${send}).disabled && !(${send}).classList.contains('stop-btn')`);
   await driver.clickExpression(send);
@@ -230,7 +231,7 @@ async function connect(currentSession) {
       while (Date.now() < end) { if (await evaluate(expression)) return; await sleep(100); }
       throw new Error(`Timed out waiting for ${label}: ${await evaluate("document.body.innerText.slice(0, 1000)").catch(() => "")}`);
     },
-    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${escapeUnsafeChars(JSON.stringify(text))}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
+    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${escapeUnsafeChars(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
     typeText: async (text) => {
       for (const character of text) {
         socket.send(JSON.stringify({ id: ++id, method: "Input.dispatchKeyEvent", params: { type: "char", key: character, text: character, unmodifiedText: character } }));

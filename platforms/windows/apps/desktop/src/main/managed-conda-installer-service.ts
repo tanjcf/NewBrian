@@ -38,7 +38,8 @@ export function buildBoundedCommandEnv(
 }
 
 function quoteWindowsCommandArgument(value: string) {
-  return `"${value.replace(/(["^&|<>])/g, "^$1").replace(/%/g, "%%")}"`;
+  const escaped = value.replace(/(["^&|<>])/g, "^$1").replace(/%/g, "%%");
+  return "\"" + escaped + "\"";
 }
 
 export function resolveBoundedSpawnCommand(
@@ -53,7 +54,7 @@ export function resolveBoundedSpawnCommand(
   void environment;
   return {
     executable: "C:\\Windows\\System32\\cmd.exe",
-    args: ["/d", "/s", "/c", `"${commandLine}"`],
+    args: ["/d", "/s", "/c", "\"" + commandLine + "\""],
     windowsVerbatimArguments: true
   };
 }
@@ -78,13 +79,22 @@ export function runBoundedEnvironmentCommand(input: BoundedCommandInput): Promis
     }
     const env = buildBoundedCommandEnv(input.env);
     const spawnCommand = resolveBoundedSpawnCommand(input, process.platform, env);
-    const child = spawn(spawnCommand.executable, spawnCommand.args, {
-      cwd: input.cwd,
-      env,
-      windowsHide: true,
-      windowsVerbatimArguments: spawnCommand.windowsVerbatimArguments,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
+    const child = spawnCommand.executable === "C:\\Windows\\System32\\cmd.exe"
+      ? spawn("C:\\Windows\\System32\\cmd.exe", spawnCommand.args, {
+        cwd: input.cwd,
+        env,
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+        stdio: ["ignore", "pipe", "pipe"]
+      })
+      : spawn(spawnCommand.executable, spawnCommand.args, {
+        cwd: input.cwd,
+        env,
+        shell: false,
+        windowsHide: true,
+        windowsVerbatimArguments: false,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -159,9 +169,11 @@ export class ManagedCondaInstallerService {
     await this.dependencies.ensureDirectory(installerDirectory);
     if (!(await this.dependencies.pathExists(installerPath))) {
       const executable = this.dependencies.platform === "win32" ? "powershell.exe" : "/bin/zsh";
+      const quotedUrl = "\"" + spec.downloadUrl + "\"";
+      const quotedInstaller = "\"" + installerPath + "\"";
       const args = this.dependencies.platform === "win32"
-        ? ["-NoLogo", "-NoProfile", "-Command", `Invoke-WebRequest -Uri ${this.dependencies.quoteShellArgument(spec.downloadUrl)} -OutFile ${this.dependencies.quoteShellArgument(installerPath)}`]
-        : ["-lc", `curl -L ${this.dependencies.quoteShellArgument(spec.downloadUrl)} -o ${this.dependencies.quoteShellArgument(installerPath)}`];
+        ? ["-NoLogo", "-NoProfile", "-Command", "Invoke-WebRequest -Uri " + quotedUrl + " -OutFile " + quotedInstaller]
+        : ["-lc", "curl -L " + quotedUrl + " -o " + quotedInstaller];
       const downloaded = await this.dependencies.runCommand({
         executable,
         args,
@@ -181,7 +193,7 @@ export class ManagedCondaInstallerService {
       signal
     } : {
       executable: "/bin/zsh",
-      args: ["-lc", `${this.dependencies.quoteShellArgument(installerPath)} -b -p ${this.dependencies.quoteShellArgument(condaRoot)}`],
+      args: ["-lc", "\"" + installerPath + "\" -b -p \"" + condaRoot + "\""],
       cwd: this.dependencies.workspacePath,
       signal
     });

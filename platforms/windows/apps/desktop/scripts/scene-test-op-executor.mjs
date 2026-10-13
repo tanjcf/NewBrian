@@ -16,8 +16,9 @@ const charMap = {
   "\u2029": "\\u2029"
 };
 
-function escapeUnsafeChars(str) {
-  return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
+function escapeUnsafeChars(value) {
+  const json = JSON.stringify(value) ?? "null";
+  return json.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (character) => charMap[character]);
 }
 
 
@@ -112,7 +113,7 @@ async function clickGlobalResourceTab(ctx, tabKey) {
 async function clearReactInput(ctx, selector) {
   await ctx.cdp.mouseClickSelector(selector);
   await ctx.cdp.evaluate(`(() => {
-    const input = document.querySelector(${escapeUnsafeChars(JSON.stringify(selector))});
+    const input = document.querySelector(${escapeUnsafeChars(selector)});
     if (!input) return false;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     setter?.call(input, "");
@@ -133,7 +134,7 @@ async function assertExpected(ctx, op, observation) {
     const key = expected.match(/"(\w+)"/)?.[1];
     const localId = ctx.state.lastCreatedLocalWorkspaceId;
     assert.ok(localId, `${op.opId}: missing lastCreatedLocalWorkspaceId`);
-    const projects = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(JSON.stringify(key))} })`);
+    const projects = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(key)} })`);
     const hit = (projects || []).find((item) => item.localWorkspaceId === localId);
     assert.ok(hit, `${op.opId}: project not in ${key}`);
     assert.equal(hit.primaryWorkspaceKey, key);
@@ -144,10 +145,10 @@ async function assertExpected(ctx, op, observation) {
     const scene = expected.match(/workspaceKey=(\w+)/)?.[1] || ctx.scene;
     const currentId = ctx.state.lastCreatedBrainProjectId;
     assert.ok(currentId, `${op.opId}: missing created project id`);
-    const inScene = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(JSON.stringify(scene))} })`);
+    const inScene = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(scene)} })`);
     assert.ok((inScene || []).some((item) => item.id === currentId), `${op.opId}: not in ${scene}`);
     for (const other of Object.keys(SCENE_LABELS).filter((key) => key !== scene)) {
-      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(JSON.stringify(other))} })`);
+      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(other)} })`);
       assert.equal((list || []).some((item) => item.id === currentId), false, `${op.opId}: leaked to ${other}`);
     }
     return observation;
@@ -183,14 +184,14 @@ async function assertExpected(ctx, op, observation) {
   if (expected.startsWith("workspaceSceneTab ===")) {
     const key = expected.match(/"(\w+)"/)?.[1];
     const label = GAME_SCENE_TAB_LABELS[key] || key;
-    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-scene-nav button.active")].some((button) => (button.textContent || "").includes(${escapeUnsafeChars(JSON.stringify(label))})))`);
+    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-scene-nav button.active")].some((button) => (button.textContent || "").includes(${escapeUnsafeChars(label)})))`);
     assert.ok(ok, `${op.opId}: scene tab ${key}`);
     return observation;
   }
   if (expected.startsWith("active ===")) {
     const tab = expected.split("===")[1]?.trim();
     const label = GLOBAL_RESOURCE_TAB_LABELS[tab] || tab;
-    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-global-nav button.active")].some((button) => (button.textContent || "").includes(${escapeUnsafeChars(JSON.stringify(label))})))`);
+    const ok = await ctx.cdp.evaluate(`Boolean([...document.querySelectorAll(".brain-resource-global-nav button.active")].some((button) => (button.textContent || "").includes(${escapeUnsafeChars(label)})))`);
     assert.ok(ok, `${op.opId}: global tab ${tab}`);
     return observation;
   }
@@ -309,7 +310,7 @@ async function assertExpected(ctx, op, observation) {
     const projectId = ctx.state.lastCreatedBrainProjectId;
     assert.ok(projectId, `${op.opId}: missing project id`);
     const sectionKey = ctx.state.lastSectionKey || "design";
-    const revision = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${escapeUnsafeChars(JSON.stringify(projectId))}, workspaceKey: "game", sectionKey: ${escapeUnsafeChars(JSON.stringify(sectionKey))} }).then((section) => section.revision)`);
+    const revision = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${escapeUnsafeChars(projectId)}, workspaceKey: "game", sectionKey: ${escapeUnsafeChars(sectionKey)} }).then((section) => section.revision)`);
     const before = ctx.state.sectionRevisionBefore ?? 0;
     assert.ok(Number(revision) > Number(before), `${op.opId}: revision ${revision} not > ${before}`);
     return { ...observation, revision };
@@ -506,16 +507,16 @@ async function handleL0Proj(ctx, op) {
       30_000
     );
     await ctx.cdp.waitFor(
-      `Boolean([...document.querySelectorAll('.brain-project-list button span')].some((span) => (span.textContent || '').includes(${escapeUnsafeChars(JSON.stringify(saveName.slice(0, 8)))})))`,
+      `Boolean([...document.querySelectorAll('.brain-project-list button span')].some((span) => (span.textContent || '').includes(${escapeUnsafeChars(saveName.slice(0, 8))})))`,
       30_000
     );
     await ensureProjectSectionExpanded(ctx);
     const meta = await ctx.cdp.evaluate(`(async () => {
-      const name = ${escapeUnsafeChars(JSON.stringify(saveName))};
-      const scene = ${escapeUnsafeChars(JSON.stringify(ctx.scene))};
+      const name = ${escapeUnsafeChars(saveName)};
+      const scene = ${escapeUnsafeChars(ctx.scene)};
       await window.newbrain.listBrainWorkspaces();
       const catalog = await window.newbrain.listWorkspaces();
-      const ws = catalog.find((item) => item.name === name || item.name?.includes(${escapeUnsafeChars(JSON.stringify(saveName.slice(0, 8)))}));
+      const ws = catalog.find((item) => item.name === name || item.name?.includes(${escapeUnsafeChars(saveName.slice(0, 8))}));
       const inScene = await window.newbrain.listBrainProjects({ workspaceKey: scene });
       const all = await window.newbrain.listBrainProjects({});
       const hit = inScene.find((item) => item.localWorkspaceId === ws?.id)
@@ -529,7 +530,7 @@ async function handleL0Proj(ctx, op) {
         allCount: all.length
       };
     })()`);
-    assert.ok(meta?.project, `鼠标点保存后未找到 BRAIN 项目: ${escapeUnsafeChars(JSON.stringify(meta))}`);
+    assert.ok(meta?.project, `鼠标点保存后未找到 BRAIN 项目: ${escapeUnsafeChars(meta)}`);
     if (meta.project.primaryWorkspaceKey !== ctx.scene) {
       throw new Error(
         `primaryWorkspaceKey=${meta.project.primaryWorkspaceKey}, catalog.brainWorkspaceKey=${meta.catalogBrainWorkspaceKey}, expected=${ctx.scene}`
@@ -735,7 +736,7 @@ async function handleL1(ctx, op) {
     }
     if (suffix === "L1.section.design.004") {
       const projectId = ctx.state.lastCreatedBrainProjectId;
-      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${escapeUnsafeChars(JSON.stringify(projectId))}, workspaceKey: "game", sectionKey: "design" }).then((section) => section.revision).catch(() => 0)`);
+      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${escapeUnsafeChars(projectId)}, workspaceKey: "game", sectionKey: "design" }).then((section) => section.revision).catch(() => 0)`);
       await ctx.cdp.mouseClickButtonText("保存", '[data-testid="brain-section-design"]');
       return {};
     }
@@ -767,7 +768,7 @@ async function handleL1(ctx, op) {
     }
     if (step.includes("Tab")) return {};
     if (step.includes("保存")) {
-      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${escapeUnsafeChars(JSON.stringify(ctx.state.lastCreatedBrainProjectId))}, workspaceKey: "game", sectionKey: ${escapeUnsafeChars(JSON.stringify(sectionKey))} }).then((section) => section.revision).catch(() => 0)`);
+      ctx.state.sectionRevisionBefore = await ctx.cdp.evaluate(`window.newbrain.getBrainWorkspaceSection({ projectId: ${escapeUnsafeChars(ctx.state.lastCreatedBrainProjectId)}, workspaceKey: "game", sectionKey: ${escapeUnsafeChars(sectionKey)} }).then((section) => section.revision).catch(() => 0)`);
       await ctx.cdp.mouseClickButtonText("保存", `[data-testid="brain-design-${sectionKey}"]`);
       return {};
     }
@@ -801,7 +802,7 @@ async function handleL3(ctx, op) {
     await ctx.cdp.switchWorkspace(other);
     const currentId = ctx.state.lastCreatedBrainProjectId;
     if (currentId) {
-      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(JSON.stringify(other))} })`);
+      const list = await ctx.cdp.evaluate(`window.newbrain.listBrainProjects({ workspaceKey: ${escapeUnsafeChars(other)} })`);
       assert.equal((list || []).some((item) => item.id === currentId), false);
     }
     await ctx.cdp.switchWorkspace(ctx.scene);
