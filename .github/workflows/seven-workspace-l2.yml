@@ -12,6 +12,7 @@ on:
       - ".github/workflows/seven-workspace-l2.yml"
 
 permissions:
+  actions: write
   contents: read
 
 jobs:
