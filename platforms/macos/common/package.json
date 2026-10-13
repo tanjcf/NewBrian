@@ -15,5 +15,10 @@
     "build": "pnpm -r build",
     "check": "pnpm -r check",
     "check:desktop": "pnpm --dir apps/desktop check"
+  },
+  "pnpm": {
+    "overrides": {
+      "tar": "7.5.22"
+    }
   }
 }
