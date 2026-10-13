@@ -18,7 +18,29 @@
   },
   "pnpm": {
     "overrides": {
-      "tar": "7.5.22"
+      "@xmldom/xmldom@0.8": "0.8.15",
+      "@xmldom/xmldom@0.9": "0.9.12",
+      "adm-zip": "0.6.1",
+      "app-builder-lib": "26.15.3",
+      "brace-expansion@1": "1.1.21",
+      "brace-expansion@2": "2.1.7",
+      "brace-expansion@5": "5.0.12",
+      "browserslist": "4.29.3",
+      "builder-util-runtime": "9.7.0",
+      "electron": "41.10.7",
+      "electron-builder-squirrel-windows": "26.15.3",
+      "form-data": "4.0.6",
+      "http-cache-semantics": "4.3.0",
+      "image-size": "2.0.4",
+      "ip-address": "10.7.3",
+      "js-yaml": "4.3.2",
+      "nanoid@3": "3.3.19",
+      "postcss": "8.5.28",
+      "sharp": "0.35.5",
+      "source-map-js": "1.2.2",
+      "tar": "7.5.22",
+      "tmp": "0.2.7",
+      "vite": "6.4.3"
     }
   }
 }

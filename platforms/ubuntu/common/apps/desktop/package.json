@@ -55,7 +55,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "electron": "^35.0.0",
+    "electron": "41.10.7",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
     "typescript": "^5.8.0",
@@ -78,13 +78,34 @@
       "node_modules/pdfjs-dist/**"
     ],
     "extraResources": [
-      { "from": "build/package-resources/newbrain.config.json", "to": "newbrain.config.json" },
-      { "from": "build/package-resources/newbrain.features.json", "to": "newbrain.features.json" },
-      { "from": "../../newbrain.bootstrap.json", "to": "newbrain.bootstrap.json" },
-      { "from": "src/renderer/icon.ico", "to": "newbrain.ico" },
-      { "from": "document-worker.js", "to": "document-worker.js" },
-      { "from": "build/rust-core/brain-core", "to": "brain-core/brain-core" },
-      { "from": "build/rust-core/brain-core-release.json", "to": "brain-core/brain-core-release.json" }
+      {
+        "from": "build/package-resources/newbrain.config.json",
+        "to": "newbrain.config.json"
+      },
+      {
+        "from": "build/package-resources/newbrain.features.json",
+        "to": "newbrain.features.json"
+      },
+      {
+        "from": "../../newbrain.bootstrap.json",
+        "to": "newbrain.bootstrap.json"
+      },
+      {
+        "from": "src/renderer/icon.ico",
+        "to": "newbrain.ico"
+      },
+      {
+        "from": "document-worker.js",
+        "to": "document-worker.js"
+      },
+      {
+        "from": "build/rust-core/brain-core",
+        "to": "brain-core/brain-core"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
+      }
     ],
     "linux": {
       "maintainer": "NewBrain <opensource@newbrain.local>",
