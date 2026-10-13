@@ -37,6 +37,8 @@
       "js-yaml": "4.3.2",
       "nanoid@3": "3.3.19",
       "postcss": "8.5.28",
+      "http-cache-semantics": "4.3.0",
+      "source-map-js": "1.2.2",
       "sharp": "0.35.5",
       "tar": "7.5.22",
       "tmp": "0.2.7",
