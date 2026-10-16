@@ -167,7 +167,7 @@ import type {
 } from "@codex-forge/protocol";
 import { brainWorkspaceIpcChannels, desktopIpcChannels } from "@codex-forge/protocol";
 
-contextBridge.exposeInMainWorld("newbrain", {
+const newbrainApi = {
   listBrainWorkspaces: (): Promise<BrainWorkspaceDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.workspaceList),
   listBrainProjects: (input: BrainProjectListInput = {}): Promise<BrainProjectDto[]> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectList, input),
   createBrainProject: (input: BrainProjectCreateInput): Promise<BrainProjectDto> => ipcRenderer.invoke(brainWorkspaceIpcChannels.projectCreate, input),
@@ -665,4 +665,8 @@ contextBridge.exposeInMainWorld("newbrain", {
   chatWithModel: (input: ModelChatInput) => ipcRenderer.invoke(desktopIpcChannels.model.chat, input),
   cancelModelRequest: (input?: CancelModelRequestInput) => ipcRenderer.invoke(desktopIpcChannels.model.cancelRequest, input),
   guideModelRequest: (input: GuideModelRequestInput) => ipcRenderer.invoke(desktopIpcChannels.model.guideRequest, input)
-});
+};
+
+contextBridge.exposeInMainWorld("newbrain", newbrainApi);
+
+export type NewbrainApi = typeof newbrainApi;

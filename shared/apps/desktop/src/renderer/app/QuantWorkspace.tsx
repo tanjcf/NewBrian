@@ -175,14 +175,15 @@ export function QuantWorkspace({
   const isSymbolWatched = Boolean(activeWatchlistGroup?.symbols.includes(symbol));
 
   const refreshWatchlistQuotes = async () => {
-    if (!window.newbrain?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
+    const api = window.newbrain;
+    if (!api?.queryQuantBars || !activeWatchlistGroup?.symbols.length) {
       setWatchlistQuotes({});
       return;
     }
     setWatchlistStatus("正在读取真实行情…");
     const entries = await Promise.all(activeWatchlistGroup.symbols.map(async (item) => {
       try {
-        const result = await window.newbrain.queryQuantBars({
+        const result = await api.queryQuantBars({
           query: { symbol: item, interval: "1d", adjustment: "none", startDate: startDate || undefined, endDate: endDate || undefined }
         });
         const bars = Array.isArray(result) ? result.filter((bar) => typeof bar?.close === "number") : [];
@@ -386,7 +387,8 @@ export function QuantWorkspace({
       setUi((current) => ({ ...current, symbol: String(query.symbol || current.symbol), interval: nextInterval, adjustment: nextAdjustment, startDate: typeof query.startDate === "string" ? query.startDate : current.startDate, endDate: typeof query.endDate === "string" ? query.endDate : current.endDate, dateRangePreset: DATE_RANGE_PRESET }));
       const valid = payload.bars.filter((bar: any) => ["open", "high", "low", "close", "volume"].every((key) => typeof bar?.[key] === "number"));
       setBars(valid.slice(-400));
-      setStatus(valid.length ? `已加载 ${valid.length} 条真实行情 · ${valid[0]?.source?.provider || "行情网关"}` : "该条件下暂无已同步行情");
+      const provider = (valid[0] as { source?: { provider?: string } } | undefined)?.source?.provider;
+      setStatus(valid.length ? `已加载 ${valid.length} 条真实行情 · ${provider || "行情网关"}` : "该条件下暂无已同步行情");
       setQueryVersion((value) => value + 1);
     });
   }, [projectId, workspaceId, setUi]);
@@ -452,10 +454,11 @@ export function QuantWorkspace({
   }, [symbol, interval, adjustment, startDate, endDate]);
 
   useEffect(() => {
-    if (!projectId || !window.newbrain?.createQuantSession || !window.newbrain?.getQuantActivity) return;
+    const api = window.newbrain;
+    if (!projectId || !api?.createQuantSession || !api.getQuantActivity) return;
     let active = true;
-    void window.newbrain.createQuantSession({ projectId, initialCash: 100_000 })
-      .then(() => window.newbrain.getQuantActivity?.({ projectId, prices: {} }))
+    void api.createQuantSession({ projectId, initialCash: 100_000 })
+      .then(() => api.getQuantActivity({ projectId, prices: {} }))
       .then((activity: any) => {
         if (!active || !activity) return;
         setPortfolio(activity.snapshot);
@@ -667,10 +670,11 @@ export function QuantWorkspace({
   };
 
   const executeOrder = (side: "buy" | "sell") => {
+    const api = window.newbrain;
     if (!latest) { setOrderStatus("暂无真实行情，不能生成模拟成交"); return; }
-    if (!projectId || !window.newbrain?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
-    void window.newbrain.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side, quantity, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
-      .then(() => window.newbrain.getQuantActivity?.({ projectId, prices: { [symbol]: latest.close } }))
+    if (!projectId || !api?.executeQuantOrder) { setOrderStatus("模拟会话尚未连接"); return; }
+    void api.executeQuantOrder({ projectId, order: { id: `order-${Date.now()}`, symbol, side, quantity, price: latest.close, feeRate: 0.0003, createdAt: new Date().toISOString() } })
+      .then(() => api.getQuantActivity?.({ projectId, prices: { [symbol]: latest.close } }))
       .then((activity: any) => { if (activity) { setPortfolio(activity.snapshot); setPortfolioActivity(activity); } setOrderStatus(`已手动模拟${side === "buy" ? "买入" : "卖出"} ${symbol} ${quantity} 股（对照盘，不含 Skill）`); })
       .catch((error: unknown) => setOrderStatus(error instanceof Error ? error.message : "模拟下单失败"));
   };
@@ -720,7 +724,8 @@ export function QuantWorkspace({
       setSkillPerformance((current) => ({ ...current, [skillId]: result.performance }));
       setSkillPortfolios((current) => ({ ...current, [skillId]: result.snapshot }));
       try {
-        const activity = await window.newbrain.getQuantSkillActivity?.({
+        const api = window.newbrain;
+        const activity = await api?.getQuantSkillActivity?.({
           projectId,
           skillId,
           prices: latest ? { [symbol]: latest.close } : {}
