@@ -3,6 +3,7 @@ param(
   [string]$WindowTitle = "NewBrain",
   [string]$ProcessName = "newbrain",
   [int]$ProcessId = 0,
+  [long]$WindowHandle = 0,
   [string]$Name = "",
   [string]$AutomationId = "",
   [string]$Text = "",
@@ -16,6 +17,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
@@ -66,6 +69,9 @@ public static class NativeInput {
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
   [DllImport("user32.dll")] public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
@@ -80,6 +86,18 @@ public static class NativeInput {
     if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))) != inputs.Length) {
       throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
+  }
+  public static void ForceForeground(IntPtr hWnd) {
+    uint currentThread = GetCurrentThreadId();
+    uint foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+    uint targetThread = GetWindowThreadProcessId(hWnd, IntPtr.Zero);
+    if (foregroundThread != 0 && foregroundThread != currentThread) AttachThreadInput(currentThread, foregroundThread, true);
+    if (targetThread != 0 && targetThread != currentThread) AttachThreadInput(currentThread, targetThread, true);
+    ShowWindow(hWnd, 9);
+    BringWindowToTop(hWnd);
+    SetForegroundWindow(hWnd);
+    if (targetThread != 0 && targetThread != currentThread) AttachThreadInput(currentThread, targetThread, false);
+    if (foregroundThread != 0 && foregroundThread != currentThread) AttachThreadInput(currentThread, foregroundThread, false);
   }
   public static void TypeUnicode(char value) {
     const uint UNICODE = 0x0004;
@@ -103,14 +121,25 @@ public static class NativeInput {
 
 function Activate-Window([Windows.Automation.AutomationElement]$Window) {
   $handle = [IntPtr]$Window.Current.NativeWindowHandle
-  [void][NativeInput]::ShowWindow($handle, 5)
-  [void][NativeInput]::BringWindowToTop($handle)
-  [void][NativeInput]::SetForegroundWindow($handle)
+  [NativeInput]::ForceForeground($handle)
+  if ([NativeInput]::GetForegroundWindow() -ne $handle) {
+    [NativeInput]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+    [NativeInput]::ForceForeground($handle)
+    [NativeInput]::keybd_event(0x12, 0, [NativeInput]::KEYUP, [UIntPtr]::Zero)
+  }
   try { $Window.SetFocus() } catch { }
   Start-Sleep -Milliseconds 250
+  if ([NativeInput]::GetForegroundWindow() -ne $handle) {
+    throw "未能把目标窗口切到前台。请确认 NewBrain 与目标应用在同一桌面会话，且目标应用不是用更高权限启动的。"
+  }
 }
 
 function Find-Window {
+  if ($WindowHandle -gt 0) {
+    $window = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]$WindowHandle)
+    if ($null -eq $window) { throw "Visible window not found for handle: $WindowHandle" }
+    return $window
+  }
   if ($ProcessId -gt 0) {
     $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if ($null -eq $process -or $process.MainWindowHandle -eq 0) {
@@ -243,15 +272,27 @@ function Type-UnicodeText([string]$Value) {
   }
 }
 
+function Write-Utf8Json($Value) {
+  $json = if ($null -eq $Value) { "null" } else { ConvertTo-Json -InputObject $Value -Depth 6 -Compress }
+  if ([string]::IsNullOrEmpty($json)) { $json = "[]" }
+  $utf8 = New-Object System.Text.UTF8Encoding $false
+  $bytes = $utf8.GetBytes($json)
+  $stream = [Console]::OpenStandardOutput()
+  $stream.Write($bytes, 0, $bytes.Length)
+  $stream.Flush()
+}
+
 if ($Action.ToLowerInvariant() -eq "list") {
   $windows = foreach ($process in Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle }) {
     try {
       $element = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]$process.MainWindowHandle)
       $bounds = $element.Current.BoundingRectangle
+      $title = [string]$element.Current.Name
+      if ([string]::IsNullOrWhiteSpace($title)) { $title = [string]$process.MainWindowTitle }
       [ordered]@{
         processId = $process.Id
         processName = $process.ProcessName
-        title = $process.MainWindowTitle
+        title = $title
         handle = $process.MainWindowHandle.ToInt64()
         bounds = @{
           left = $bounds.Left
@@ -264,7 +305,8 @@ if ($Action.ToLowerInvariant() -eq "list") {
       # A protected process must not prevent other visible windows from being listed.
     }
   }
-  @($windows) | ConvertTo-Json -Depth 4 -Compress
+  $listed = @($windows | Where-Object { $_ })
+  if ($listed.Count -eq 0) { Write-Utf8Json @() } else { Write-Utf8Json $listed }
   exit 0
 }
 

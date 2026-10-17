@@ -88,6 +88,26 @@ export function selectGovernmentDraftCandidate(current: string, priorAssistantMe
   return substantive[0] ?? "";
 }
 
+function stripMarkupTags(value: string) {
+  let result = "";
+  let index = 0;
+  while (index < value.length) {
+    const char = value[index];
+    const next = value[index + 1];
+    if (char === "<" && next && /[A-Za-z/!]/.test(next)) {
+      const close = value.indexOf(">", index + 1);
+      const newline = value.indexOf("\n", index + 1);
+      if (close !== -1 && (newline === -1 || close < newline)) {
+        index = close + 1;
+        continue;
+      }
+    }
+    result += char;
+    index += 1;
+  }
+  return result;
+}
+
 /**
  * Pick government article body for native PDF/DOCX delivery.
  * Prefer the same substantive candidate as finalization; fall back to a short
@@ -103,7 +123,7 @@ export function prepareGovernmentPdfContent(content: string, priorAssistantMessa
   const selected = preferred
     || candidates.find((candidate) =>
       salutations.some((salutation) => candidate.includes(salutation))
-      && candidate.replace(/\s+/g, "").length >= 80
+      && candidate.replace(/\s+/g, "").length >= 40
     )
     || "";
   if (!selected) return "";
@@ -111,11 +131,10 @@ export function prepareGovernmentPdfContent(content: string, priorAssistantMessa
     .map((salutation) => selected.indexOf(salutation))
     .filter((offset) => offset >= 0);
   const salutationOffset = salutationOffsets.length ? Math.min(...salutationOffsets) : -1;
-  return (salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
+  return stripMarkupTags((salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
     .split(/\n#{1,6}\s*终审结果/u)[0]
     .replace(/\n*PDF (?:文件)?尚未生成并验证[\s\S]*$/u, "")
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/<\/?[^>]+>/g, "")
+    .replace(/```[\s\S]*?```/g, ""))
     .trim();
 }
 

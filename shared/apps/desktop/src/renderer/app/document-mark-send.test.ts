@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { placeDocumentMarkPrompt } from "./document-mark-prompt-placement.ts";
 
 test("annotation toolbar no longer saves a mark into the composer", () => {
   const layer = readFileSync(new URL("./DocumentAnnotationLayer.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(layer, /保存标注/);
   assert.doesNotMatch(layer, /document-annotation-editor/);
   assert.doesNotMatch(layer, /onSave/);
+  assert.doesNotMatch(layer, /加入对话/);
 });
 
 test("mark prompt sends the revision straight into the conversation", () => {
@@ -16,7 +18,9 @@ test("mark prompt sends the revision straight into the conversation", () => {
   const sendEnd = modules.indexOf("const handlePreviewMark =", sendStart);
   const sendSource = modules.slice(sendStart, sendEnd);
   assert.ok(sendStart > 0 && sendEnd > sendStart);
+  assert.match(sendSource, /clearPendingDocumentMark\(\)/);
   assert.match(sendSource, /submitComposerRequest\(\{[\s\S]*keepComposer:\s*true/);
+  assert.doesNotMatch(marking, /data-testid="document-marking-saved"/);
   assert.doesNotMatch(sendSource, /setQuestion\(/);
   assert.doesNotMatch(sendSource, /composerTextareaRef/);
   assert.match(marking, /data-testid="document-mark-prompt"/);
@@ -24,6 +28,19 @@ test("mark prompt sends the revision straight into the conversation", () => {
   assert.match(marking, /markPrompt\.onSubmit\(\)/);
   assert.match(modules, /<DocumentMarkPromptProvider value=\{documentMarkPrompt\}>/);
   assert.doesNotMatch(modules, /saveDocumentAnnotation/);
+});
+
+test("the yellow dashed mark stays on the region and the prompt sits outside it", () => {
+  const marking = readFileSync(new URL("./DocumentMarkingLayer.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(marking, /document-marking-region-label">标记区域/);
+  assert.doesNotMatch(marking, /加入对话/);
+  assert.match(styles, /\.document-marking-pending\.select-rect[\s\S]*border:\s*2px dashed/);
+  const below = placeDocumentMarkPrompt({ x: 20, y: 30, width: 80, height: 40 }, { width: 400, height: 300 });
+  assert.equal(below.top, 80);
+  assert.equal(below.left, 20);
+  const above = placeDocumentMarkPrompt({ x: 20, y: 250, width: 80, height: 40 }, { width: 400, height: 300 });
+  assert.equal(above.top, 200);
 });
 
 test("direct mark send does not clear an unrelated composer draft", () => {

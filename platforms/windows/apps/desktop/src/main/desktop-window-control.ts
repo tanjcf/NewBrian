@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { decodeDriverOutput } from "./desktop-window-output.js";
 import type {
   DesktopWindowClickInput,
   DesktopWindowInfo,
@@ -34,8 +35,18 @@ function appendTargetArgs(args: string[], target: DesktopWindowTarget) {
   }
   if (target.processName !== undefined) args.push("-ProcessName", requireText(target.processName, "processName"));
   if (target.windowTitle !== undefined) args.push("-WindowTitle", requireText(target.windowTitle, "windowTitle"));
-  if (target.processId === undefined && target.processName === undefined && target.windowTitle === undefined) {
-    throw new TypeError("A processId, processName, or windowTitle is required.");
+  if (target.handle !== undefined) {
+    const handle = Number(target.handle);
+    if (!Number.isInteger(handle) || handle <= 0) throw new TypeError("handle must be a positive integer.");
+    args.push("-WindowHandle", String(handle));
+  }
+  if (
+    target.processId === undefined
+    && target.processName === undefined
+    && target.windowTitle === undefined
+    && target.handle === undefined
+  ) {
+    throw new TypeError("A processId, processName, windowTitle, or handle is required.");
   }
 }
 
@@ -61,16 +72,16 @@ function runPowerShellDriver(driverPath: string, args: string[]) {
       driverPath,
       ...args
     ], { windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => { stdout.push(chunk); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr.push(chunk); });
     child.once("error", reject);
     child.once("close", (code) => {
-      if (code === 0) resolvePromise(stdout);
-      else reject(new Error((stderr || stdout || `PowerShell exited with code ${code}`).trim()));
+      const out = decodeDriverOutput(Buffer.concat(stdout));
+      const err = decodeDriverOutput(Buffer.concat(stderr));
+      if (code === 0) resolvePromise(out);
+      else reject(new Error((err || out || `PowerShell exited with code ${code}`).trim()));
     });
   });
 }

@@ -19,7 +19,10 @@ if (!hasSource) {
   await fetchOfficialRustCore({ sourceRoot, outputPath: stagedBinary });
 } else {
   const cargo = process.env.CARGO?.trim() || "cargo";
-  const build = spawnSync(cargo, ["build", "--release", "--locked", "--manifest-path", manifestPath], {
+  const cargoTarget = process.env.BRAIN_CORE_TARGET?.trim() || "";
+  const cargoArgs = ["build", "--release", "--locked", "--manifest-path", manifestPath];
+  if (cargoTarget) cargoArgs.push("--target", cargoTarget);
+  const build = spawnSync(cargo, cargoArgs, {
     cwd: sourceRoot,
     env: process.env,
     stdio: "inherit",
@@ -27,7 +30,8 @@ if (!hasSource) {
   });
   if (build.error) throw build.error;
   if (build.status !== 0) throw new Error(`Rust Core release build failed with exit code ${build.status ?? 1}`);
-  const builtBinary = join(sourceRoot, "rust", "brain-core", "target", "release", executableName);
+  const targetDir = process.env.CARGO_TARGET_DIR?.trim() || join(sourceRoot, "rust", "brain-core", "target");
+  const builtBinary = join(targetDir, ...(cargoTarget ? [cargoTarget] : []), "release", executableName);
   await mkdir(dirname(stagedBinary), { recursive: true });
   await copyFile(builtBinary, stagedBinary);
   if (process.platform !== "win32") await chmod(stagedBinary, 0o755);

@@ -11,6 +11,9 @@ on:
       - "package.json"
       - ".github/workflows/seven-workspace-l2.yml"
 
+permissions:
+  contents: read
+
 jobs:
   contract-tests:
     strategy:

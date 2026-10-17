@@ -1,0 +1,51 @@
+{
+  "png_dir": ".",
+  "batch": "",
+  "generated_files": [
+    "pages/closing_dark.png",
+    "pages/content_base.png",
+    "pages/contents_light.png",
+    "pages/cover_dark.png",
+    "pages/section_dark.png"
+  ],
+  "files": [
+    {
+      "file": "pages/closing_dark.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 8654,
+      "valid_size": true
+    },
+    {
+      "file": "pages/content_base.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 8700,
+      "valid_size": true
+    },
+    {
+      "file": "pages/contents_light.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 8700,
+      "valid_size": true
+    },
+    {
+      "file": "pages/cover_dark.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 8654,
+      "valid_size": true
+    },
+    {
+      "file": "pages/section_dark.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 8654,
+      "valid_size": true
+    }
+  ],
+  "count": 5,
+  "all_valid_size": true,
+  "contact_sheet": "full_deck_contact_sheet.png"
+}

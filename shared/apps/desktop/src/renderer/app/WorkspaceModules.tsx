@@ -4,8 +4,15 @@ import { createPortal } from "react-dom";
 import type { PreviewPlacement } from "./desktop-model";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { NovelTtsButton } from "./NovelTtsButton";
+import { speechTextForPreview } from "./preview-speech-text";
+import { previewFolderOpenRequest } from "./preview-folder-open";
+import { absoluteWorkspaceFilePath, planPreviewSystemOpen, planPreviewVsCodeOpen } from "./preview-file-menu";
+import { nextBrainToolsPlacement } from "./brain-tools-expand";
+import { planSoftwareLinkActivate } from "./software-link-window";
+import { planAutomationThreadTarget } from "../../shared/automation-thread-recovery";
+import { PPT_WRITING_TEAM_SKILL_LABEL, PPT_WRITING_TEAM_SKILL_NAME } from "../../shared/ppt-writing-team-skill.js";
 import { AssistantThinkingPanel } from "./AssistantThinkingPanel";
-import { automationIntentExamples, isAutomationCreationRequest, parseAutomationIntent, resolveAutomationCreationText } from "./parseAutomationIntent";
+import { automationIntentExamples, automationSkillZipPaths, automationTaskPrompt, isAutomationCreationRequest, parseAutomationIntent, resolveAutomationCreationText } from "./parseAutomationIntent";
 import { copyTextToClipboard } from "./clipboard-text";
 import {
   artifactPathsReferToSameFile,
@@ -62,9 +69,10 @@ import { SidebarIcon } from "./SidebarIcon";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { isCustomModelSelection } from "../../shared/custom-model-endpoint";
 import { CustomModelEndpointMenu } from "./CustomModelEndpointMenu";
+import { liveTurnAnswerText, nextScrollTop, nextStickToBottom } from "./chat-scroll-stability.ts";
 import { sanitizeVisibleModelContent } from "../../shared/model-content-visibility.js";
 import { GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED } from "../../shared/product-flags.js";
-import { isSubscriptionInactiveError } from "../../shared/model-user-facing-error.ts";
+import { isSubscriptionInactiveError, isUserCancelledModelError } from "../../shared/model-user-facing-error.ts";
 import { builtinPluginCatalog } from "../../shared/builtin-plugins";
 import { executionKindDescription, executionKindLabel } from "../../shared/plugin-execution";
 import { projectPersistedActivities } from "./persisted-activity-policy";
@@ -77,6 +85,13 @@ import {
 } from "./thread-activity-policy";
 import { stripApprovalWaitNotice } from "../../shared/approval-wait-notice.ts";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
+import {
+  moveProjectBefore,
+  PROJECT_DRAG_TYPE,
+  sameProjectOrder,
+  SIDEBAR_PROJECT_ORDER_STORAGE_KEY,
+  THREAD_DRAG_TYPE
+} from "../../shared/sidebar-layout";
 import { resolveLocalArtifactHref } from "./local-file-link";
 import { crossSceneRecentProjects, filterWorkspaceCatalogByScene, isUserVisibleThread, orderSidebarProjects, projectSearchResults, normalizeWorkspaceCatalog, resolveCatalogBrainWorkspaceKey, resolveSceneExecutionWorkspace, resolveUserVisibleThreadSelection, sceneChatWorkspaces } from "./workspace-visibility";
 import {
@@ -101,8 +116,9 @@ import { ExpertsMarketplace } from "./ExpertsMarketplace";
 import { WorkspaceArtifactViewerHost } from "./artifact-viewer-registry";
 import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
 import { annotationPageNumber, attachMarkOverlay, buildAnnotationChatReference, bindDocxPreviewParagraphs, buildMarkingAnchor, documentAnchorsNeedChunkRefresh, isValidDocumentMarkRect, linesFromPreviewRect, resolveDocxAnchorFromMark, resolveMarkdownAnchorFromMark, resolvePdfAnchorFromMark, resolvePptxAnchorFromMark, resolveTxtAnchorFromMark, resolveXlsxAnchorFromMark } from "./document-annotation-policy";
+import { planDocumentMarkSend } from "./document-mark-send-policy";
 import { captureAnnotationSnapshot, dataUrlToArrayBuffer, resolveAnnotationSnapshotPreview } from "./document-annotation-snapshot";
-import { DocumentMarkingLayer, DocumentMarkPromptProvider, renderTextLineMarks } from "./DocumentMarkingLayer";
+import { DocumentMarkingLayer, DocumentMarkPromptProvider } from "./DocumentMarkingLayer";
 import { WorkspaceSpreadsheetViewer } from "./WorkspaceSpreadsheetViewer";
 import { ANNOTATION_MARKING_COLORS } from "@codex-forge/protocol";
 import type { AnnotationMarkingTool } from "@codex-forge/protocol";
@@ -147,19 +163,19 @@ const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ ke
   explore: [],
   quant: [
     { key: "market", label: "行情" },
-    { key: "portfolio", label: "组合" },
+    { key: "portfolio", label: "组坈" },
     { key: "strategy", label: "策略" },
     { key: "radar", label: "雷达" },
     { key: "research", label: "研究笔记" }
   ],
   game: [
     { key: "level", label: "关卡" }, { key: "project", label: "项目与文件" },
-    { key: "design", label: "游戏策划" }, { key: "world", label: "角色与世界观" },
+    { key: "design", label: "游戝策划" }, { key: "world", label: "角色与世界观" },
     { key: "combat", label: "战斗设计" }, { key: "assets", label: "资产与测试" }
   ],
   video: [
     { key: "script", label: "脚本" }, { key: "storyboard", label: "分镜" },
-    { key: "generate", label: "单镜生成" }, { key: "tracks", label: "本镜音视频轨" }
+    { key: "generate", label: "坕镜生成" }, { key: "tracks", label: "本镜音视频轨" }
   ],
   music: [
     { key: "gen", label: "生成" }, { key: "tracks", label: "音轨" },
@@ -171,7 +187,7 @@ const brainWorkspaceCapabilityTabs: Record<BrainWorkspaceKey, ReadonlyArray<{ ke
     { key: "chart", label: "图表" }, { key: "flow", label: "决策 Flow" }
   ],
   software: [
-    { key: "terminal", label: "终端" }, { key: "code", label: "代码" },
+    { key: "terminal", label: "终端" }, { key: "code", label: "代砝" },
     { key: "test", label: "测试" }, { key: "deploy", label: "部署" },
     { key: "flow", label: "Flow" }, { key: "files", label: "项目文件" }
   ],
@@ -515,9 +531,11 @@ function artifactExtension(filePath: string) {
   return filePath.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE";
 }
 
-function composerSkillLabel(skill: { name?: string }) {
-  if (skill.name === RESEARCH_WRITING_SKILL) return "政务写作";
-  return String(skill.name || "技能").replace(/-skill$/i, "");
+function composerSkillLabel(skill: { name?: string } | string) {
+  const name = typeof skill === "string" ? skill : skill?.name;
+  if (name === RESEARCH_WRITING_SKILL) return "政务写作";
+  if (name === PPT_WRITING_TEAM_SKILL_NAME) return PPT_WRITING_TEAM_SKILL_LABEL;
+  return String(name || "技能").replace(/-skill$/i, "");
 }
 
 /** Keep the marked thinking panel filled with Chinese process text, never English placeholders. */
@@ -542,7 +560,7 @@ function buildLiveReasoningProcess(reasoning: string, activities: any[] = [], pl
     ? planningFallback.trim()
     : "";
   const combined = [cleaned, planning, extras.join("\n")].filter(Boolean).join("\n\n").trim();
-  return combined || "正在梳理任务目标、约束与当前上下文，过程会实时显示在这里。";
+  return combined || "正在梳睆任务目标〝约束与当前上下文，过程会实时显示在这里。";
 }
 
 function formatLiveProcessSteps(activities: any[] = []) {
@@ -564,6 +582,14 @@ export function WorkspaceModules(ctx: any) {
   const { selectedComposerSkill, setSelectedComposerSkill, bindThreadComposerSkill, setSelectedComposerTools, composerSkillContext, setComposerSkillContext, composerModes, setComposerModes, usageExceptionFeedbackPreview, usageExceptionFeedbackBusy, cancelUsageExceptionFeedback, confirmUsageExceptionFeedback, reportGenerationFailureFeedback, appUpdateStatus, appUpdateBusy, appUpdateProgress, appUpdateDiscoverOpen, appUpdateApplied, startDesktopAppUpdate, applyDesktopAppUpdate, skipDesktopAppUpdate, dismissAppUpdateProgress, dismissAppUpdateDiscover, dismissAppliedAppUpdate } = ctx;
   const releaseInactiveModelRequest = ctx.releaseInactiveModelRequest;
   const [hoveredThread, setHoveredThread] = useState<any>(null);
+  const [sidebarProjectOrder, setSidebarProjectOrder] = useState<string[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(SIDEBAR_PROJECT_ORDER_STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  });
   const [dismissedAppUpdateVersion, setDismissedAppUpdateVersion] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<any>(null);
   const [artifactTabs, setArtifactTabs] = useState<any[]>([]);
@@ -821,11 +847,17 @@ export function WorkspaceModules(ctx: any) {
     try { localStorage.setItem("brain.resource-panel-width", String(brainResourceWidth)); } catch { /* local preferences may be unavailable */ }
     return () => frame.style.removeProperty("--brain-resource-panel-width");
   }, [brainResourceWidth]);
-  // Center file preview shares the main row with chat; keep Tools on the side to avoid a 3-way grid fight.
+  // Expanded Tools own the right column. A centered file preview must yield instead of snapping Tools back to the side.
+  useLayoutEffect(() => {
+    const frame = document.querySelector<HTMLElement>(".workspace-frame");
+    if (!frame) return;
+    frame.classList.toggle("brain-tools-expanded", brainResourcePlacement === "center");
+    return () => frame.classList.remove("brain-tools-expanded");
+  }, [brainResourcePlacement]);
   useEffect(() => {
-    if (previewPlacement !== "center" || previewMode === "empty" || brainResourcePlacement !== "center") return;
-    setBrainResourcePlacement("side");
-  }, [previewPlacement, previewMode, brainResourcePlacement]);
+    if (brainResourcePlacement !== "center" || previewPlacement !== "center" || previewMode === "empty") return;
+    setPreviewPlacement("hidden");
+  }, [brainResourcePlacement, previewMode, previewPlacement, setPreviewPlacement]);
   const attachBrainResourcePanel = useCallback((node: HTMLElement | null) => {
     brainResourcePanelRef.current = node;
     node?.closest<HTMLElement>(".workspace-frame")?.style.setProperty("--brain-resource-panel-width", `${brainResourceWidth}px`);
@@ -1269,6 +1301,10 @@ export function WorkspaceModules(ctx: any) {
         return next;
       });
       activatedBrainThreadRef.current = "";
+      // Drop the foreign conversation too. Leaving it selected makes this effect
+      // clear the thread that selection repair just restored, which loops while
+      // a generation is still running and crashes with React error #185.
+      setSelectedBrainConversationId("");
       setSelectedThreadId("");
       setIsComposingNewThread(true);
       return;
@@ -1393,7 +1429,7 @@ export function WorkspaceModules(ctx: any) {
                 if (result.warnings?.length) setChatStatus(result.warnings.join(" "));
               })
               .catch((error: unknown) => {
-                if (!disposed) setChatStatus(error instanceof Error ? error.message : "文档结构解析失败");
+                if (!disposed) setChatStatus(error instanceof Error ? error.message : "文档结构解枝失败");
               });
           }
         }
@@ -1642,7 +1678,7 @@ export function WorkspaceModules(ctx: any) {
   const [pluginCatalogPage, setPluginCatalogPage] = useState(1);
   const [automationCatalogPage, setAutomationCatalogPage] = useState(1);
   const [pluginSortMode, setPluginSortMode] = useState<"popular" | "name" | "installed">("popular");
-  const [pluginVendorFilter, setPluginVendorFilter] = useState("全部来源");
+  const [pluginVendorFilter, setPluginVendorFilter] = useState("全部来溝");
   const [skillMenuId, setSkillMenuId] = useState("");
   const [automationMenuId, setAutomationMenuId] = useState("");
   const [automationRunPendingId, setAutomationRunPendingId] = useState("");
@@ -1671,7 +1707,7 @@ export function WorkspaceModules(ctx: any) {
     if (activeFeature !== "skills" || skillsTab !== "recommended") return;
     if (desktopPreferences?.market?.directClawhubAllowed !== true) return;
     if (!api?.searchOpenClawSkills) {
-      setErrorMessage("当前桌面版本尚未启用 ClawHub 搜索。");
+      setErrorMessage("当前桌面版本尚未坯用 ClawHub 杜索。");
       return;
     }
     let cancelled = false;
@@ -1845,7 +1881,12 @@ export function WorkspaceModules(ctx: any) {
   const [goalCustomAdjustment, setGoalCustomAdjustment] = useState("");
   const goalQuestionCardRef = useRef<HTMLElement | null>(null);
   const taskScrollRef = useRef<HTMLDivElement | null>(null);
+  const conversationHistoryRef = useRef<HTMLDivElement | null>(null);
+  const programmaticScrollRef = useRef(false);
   const stickToBottomRef = useRef(true);
+  const retainedLiveAnswerRef = useRef("");
+  const retainedLiveAnswerThreadRef = useRef("");
+  const retainedLiveAnswerRequestRef = useRef("");
   const showJumpToLatestRef = useRef(false);
   const wasAskingForScrollRef = useRef(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -1855,18 +1896,53 @@ export function WorkspaceModules(ctx: any) {
   const skipResearchPersistRef = useRef(false);
   const lastCreatorMaterializeRef = useRef("");
   const NEAR_BOTTOM_PX = 140;
+  const rememberLiveAnswer = (streamText: string, turnText: string, requestId: string, earlierTurnTexts: string[] = []) => {
+    const threadId = String(selectedThread?.id || "");
+    const sameRequest = retainedLiveAnswerThreadRef.current === threadId
+      && retainedLiveAnswerRequestRef.current === requestId;
+    const next = liveTurnAnswerText({
+      streamText,
+      turnText,
+      earlierTurnTexts,
+      retained: retainedLiveAnswerRef.current,
+      sameRequest: Boolean(requestId) && sameRequest
+    });
+    retainedLiveAnswerThreadRef.current = threadId;
+    retainedLiveAnswerRequestRef.current = requestId;
+    retainedLiveAnswerRef.current = isAskingModel ? next : "";
+    return next;
+  };
   const scrollTaskToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = taskScrollRef.current;
     if (!scrollContainer) return;
-    const targetTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
-    if (Math.abs(scrollContainer.scrollTop - targetTop) <= 1) return;
+    const targetTop = nextScrollTop({
+      scrollHeight: scrollContainer.scrollHeight,
+      clientHeight: scrollContainer.clientHeight,
+      scrollTop: scrollContainer.scrollTop,
+      stick: true
+    });
+    if (targetTop == null) return;
+    programmaticScrollRef.current = true;
+    if (behavior === "auto") {
+      scrollContainer.scrollTop = targetTop;
+      programmaticScrollRef.current = false;
+      return;
+    }
     scrollContainer.scrollTo({ top: targetTop, behavior });
+    window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, 700);
   }, []);
   const syncStickFromScrollPosition = useCallback(() => {
     const scrollContainer = taskScrollRef.current;
     if (!scrollContainer) return;
     const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-    const nearBottom = distanceFromBottom <= NEAR_BOTTOM_PX;
+    const nearBottom = nextStickToBottom({
+      distanceFromBottom,
+      nearBottomPx: NEAR_BOTTOM_PX,
+      programmatic: programmaticScrollRef.current,
+      currentlyStuck: stickToBottomRef.current
+    });
     if (stickToBottomRef.current === nearBottom) return;
     stickToBottomRef.current = nearBottom;
     const nextShowJump = !nearBottom;
@@ -2036,10 +2112,10 @@ export function WorkspaceModules(ctx: any) {
     }
   }, [api, deliveryPreferenceBusy]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!goalExecution?.pendingQuestion?.questionId || isAskingModel) return;
     if (!stickToBottomRef.current) return;
-    window.requestAnimationFrame(() => scrollTaskToBottom("auto"));
+    scrollTaskToBottom("auto");
   }, [goalExecution?.pendingQuestion?.questionId, isAskingModel, scrollTaskToBottom]);
   useEffect(() => {
     const scrollContainer = taskScrollRef.current;
@@ -2048,21 +2124,15 @@ export function WorkspaceModules(ctx: any) {
     scrollContainer.addEventListener("scroll", onScroll, { passive: true });
     return () => scrollContainer.removeEventListener("scroll", onScroll);
   }, [selectedThread?.id, syncStickFromScrollPosition, isComposingNewThread]);
-  useEffect(() => {
-    if (isAskingModel && !wasAskingForScrollRef.current) {
-      if (stickToBottomRef.current) {
-        window.requestAnimationFrame(() => scrollTaskToBottom("auto"));
-      }
+  useLayoutEffect(() => {
+    if (isAskingModel && !wasAskingForScrollRef.current && stickToBottomRef.current) {
+      scrollTaskToBottom("auto");
     }
     wasAskingForScrollRef.current = isAskingModel;
   }, [isAskingModel, scrollTaskToBottom]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAskingModel || !stickToBottomRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      if (!stickToBottomRef.current) return;
-      scrollTaskToBottom("auto");
-    });
-    return () => window.cancelAnimationFrame(frame);
+    scrollTaskToBottom("auto");
   }, [
     isAskingModel,
     activeStreamContent.length,
@@ -2073,6 +2143,17 @@ export function WorkspaceModules(ctx: any) {
     assistantActivities?.length,
     scrollTaskToBottom
   ]);
+  useLayoutEffect(() => {
+    const scrollContainer = taskScrollRef.current;
+    const content = conversationHistoryRef.current;
+    if (!scrollContainer || typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(() => {
+      if (!stickToBottomRef.current) return;
+      scrollTaskToBottom("auto");
+    });
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [selectedThread?.id, isComposingNewThread, scrollTaskToBottom]);
   useEffect(() => {
     // A new-chat draft has no stable thread id yet. Selecting a project or creating
     // its backing thread changes the storage key; do not discard the skill capsule
@@ -2124,7 +2205,7 @@ export function WorkspaceModules(ctx: any) {
       ? [{
           id: "central-government-research-writing",
           name: RESEARCH_WRITING_SKILL,
-          summary: "由 Spring 中枢执行，支持提纲、分段写作、事实校验和 Word/WPS 导出",
+          summary: "由 Spring 中枢执行，支挝杝纲〝分段写作〝事实校验和 Word/WPS 导出",
           status: "enabled",
           icon: "政"
         }]
@@ -2173,7 +2254,7 @@ export function WorkspaceModules(ctx: any) {
         const planContext = (result.plan || []).map((step: DynamicResearchPlanStep, index: number) =>
           `${index + 1}. ${step.title}\n动作：${step.description}\n阶段结果：${step.result || "已完成"}`
         ).join("\n\n");
-        const completedContext = [`政务写作执行计划及逐步结果：\n${planContext}`, result.targetContext].filter(Boolean).join("\n\n");
+        const completedContext = [`政务写作执行计划坊逝步结果：\n${planContext}`, result.targetContext].filter(Boolean).join("\n\n");
         setComposerSkillContext(completedContext);
         setChatStatus("政务写作需求分析已完成，正在基于已确认选项生成目标成果。");
         const capturedDraft = researchIntakeDraftRef.current;
@@ -2224,7 +2305,7 @@ export function WorkspaceModules(ctx: any) {
           : "需求分析暂未完成，请重新分析，或基于已确认的信息直接生成。";
       setResearchIntakeError(message);
       setErrorMessage(message);
-      setChatStatus("政务写作需求分析失败。");
+      setChatStatus("政务写作需求分枝失败。");
     } finally {
       if (generation === researchIntakeGenerationRef.current) setResearchIntakeLoading(false);
     }
@@ -2241,7 +2322,7 @@ export function WorkspaceModules(ctx: any) {
       history.length
         ? `用户已确认的信息：\n${history.map((item, index) => `${index + 1}. ${item.question}\n答：${item.answer}`).join("\n")}`
         : "用户尚未确认补充信息。",
-      "请直接基于以上信息生成目标成果；缺失信息采用保守、通用表述，不得虚构政策文件、统计数据、时间节点、领导姓名或实际工作成绩，并将必须补充的事实标记为【待核验】。"
+      "请直接基于以上信息生成目标戝果；缺失信息采用保守〝通用表述，不得虚构政策文件〝统计数据〝时间节点〝领导姓坝或实际工作戝绩，并将必须补充的事实标记为〝待核验】。"
     ].join("\n\n");
     setResearchIntakeError("");
     setResearchIntakeQuestion(null);
@@ -2291,7 +2372,7 @@ export function WorkspaceModules(ctx: any) {
     setResearchIntakeError("");
     setResearchIntakeAnalysis("");
     researchIntakeDraftRef.current = null;
-    setChatStatus(`已启用技能：${skill.name}`);
+    setChatStatus(`已启用技能：${composerSkillLabel(skill)}`);
     setComposerMenu(null);
   }
 
@@ -2444,8 +2525,8 @@ export function WorkspaceModules(ctx: any) {
 
   function requestGovernmentSpecificationModel(action: "revision" | "guidance", instruction: string) {
     const request = action === "revision"
-      ? `请修改当前政务写作规格。修改要求：${instruction || "检查并优化任务、核心要求、官方证据和结构模板"}。必须返回完整四部分及可解析的JSON规格正文，不要起草文章正文。`
-      : `请指导我修改当前政务写作规格。要求：${instruction || "检查任务、核心要求、官方证据和结构模板"}。不要直接改写规格。请先逐条说明建议，再返回一个 JSON 代码块，内容必须是建议数组，每项严格使用 {"suggestionId":"s-1","target":{"kind":"task"},"reason":"原因","proposedValue":"建议的新值"}。target.kind 只能是 task、requirement 或 section-points；后两者分别补充 key 或 sectionId。不要起草文章正文。`;
+      ? `请修改当前政务写作规格。修改要求：${instruction || "检查并优化任务〝核心要求〝官方话杮和结构模板"}。必须返回完整四部分及可解析的JSON规格正文，不要起草文章正文。`
+      : `请指导我修改当前政务写作规格。要求：${instruction || "检查任务〝核心要求〝官方话杮和结构模板"}。不要直接改写规格。请先逐条说明建议，再返回一个 JSON 代码块，内容必须是建议数组，每项严格使用 {"suggestionId":"s-1","target":{"kind":"task"},"reason":"原因","proposedValue":"建议的新值"}。target.kind 坪能是 task〝requirement 或 section-points；坎两者分别补充 key 或 sectionId。不要起蝉文章正文。`;
     const draft = { threadId: selectedThread?.id || "", question: request, images: [], tools: [], skill: null, skillContext: "", modes: ["goal"], createdAt: new Date().toISOString() };
     if (isGlobalModelBusy) {
       enqueueComposerQueueDraft(draft);
@@ -2480,8 +2561,8 @@ export function WorkspaceModules(ctx: any) {
       const details = (review.risks || []).filter((risk: any) => !risk.supported).slice(0, 12)
         .map((risk: any) => `- [${risk.label}/${risk.severity}] ${risk.claim}\n  ${risk.suggestion}`)
         .join("\n");
-      setQuestion(`请根据以下确定性事实校验结果修订当前稿件；没有来源支持的内容不得自行补写，只能删除或标注【待核验】。\n\n未找到直接素材依据：${review.unsupported_count} 项\n${details || "- 当前扫描项均找到直接素材依据，仍需人工核对上下文口径。"}`);
-      setChatStatus(`事实校验完成：${review.unsupported_count} 项需复核`);
+      setQuestion(`请根杮以下确定性事实校验结果修订当前稿件；没有来溝支挝的内容不得自行补写，坪能删除或标注〝待核验】。\n\n未找到直接素杝依杮：${review.unsupported_count} 项\n${details || "- 当前扫描项均找到直接素材依据，仍需人工核对上下文口径。"}`);
+      setChatStatus(`事实校验完成：${review.unsupported_count} 项需夝核`);
     } catch (error) {
       setChatStatus(error instanceof Error ? error.message : String(error));
     }
@@ -3113,7 +3194,7 @@ export function WorkspaceModules(ctx: any) {
     const grouped: Array<{ offset: number; activities: any[] }> = [];
     activities.forEach((activity: any) => {
       const rawOffset = Number(activity.contentOffset ?? content.length);
-      const firstSentenceEnd = content.search(/[。！？.!?]\s/);
+      const firstSentenceEnd = content.search(/[。＝？.!?]\s/);
       const preferredOffset = rawOffset <= 0 && firstSentenceEnd > 0 ? firstSentenceEnd + 1 : rawOffset;
       const offset = Math.max(cursor, Math.min(content.length, preferredOffset));
       const last = grouped.at(-1);
@@ -3388,7 +3469,7 @@ export function WorkspaceModules(ctx: any) {
       return;
     }
     if (!api?.guideModelRequest) {
-      requeue("当前运行不支持插入消息，已保持排队；本轮结束后会自动发送。");
+      requeue("当前运行丝支挝插入消息，已保挝排队；本轮结束坎会自动发送。");
       return;
     }
     const attachments = (Array.isArray(item.images) ? item.images : [])
@@ -3408,7 +3489,7 @@ export function WorkspaceModules(ctx: any) {
         return;
       }
       if (result?.ok === false) {
-        requeue(result.detail || "未能插入当前运行，已保持排队。");
+        requeue(result.detail || "未能插入当前运行，已保挝排队。");
         return;
       }
       setChatStatus(result?.detail || "已插入当前运行。");
@@ -3416,8 +3497,8 @@ export function WorkspaceModules(ctx: any) {
       // Direct-draft / no-loop turns cannot be steered; keep the item so finish auto-sends.
       requeue(
         error instanceof Error
-          ? `当前运行暂不可插入消息（${error.message}），已保持排队；本轮结束后会自动发送。`
-          : "当前运行暂不可插入消息，已保持排队；本轮结束后会自动发送。"
+          ? `当前运行暂不可插入消息（${error.message}），已保挝排队；本轮结束坎会自动发送。`
+          : "当前运行暂不可插入消息，已保挝排队；本轮结束坎会自动发送。"
       );
     }
   };
@@ -3796,7 +3877,7 @@ export function WorkspaceModules(ctx: any) {
     }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
-      setChatStatus("当前运行环境不支持系统语音识别。");
+      setChatStatus("当前运行环境丝支挝系统语音识别。");
       return;
     }
     const microphoneAllowed = await ensureMicrophonePermission();
@@ -4026,7 +4107,7 @@ export function WorkspaceModules(ctx: any) {
       name: "GitHub 集成",
       version: "1.2.0",
       enabled: true,
-      summary: "连接代码仓库、Issue 和 Pull Request。",
+      summary: "连接代砝仓库〝Issue 和 Pull Request。",
       permissions: ["repo:read", "issues:write"],
       token: "",
       baseUrl: "https://api.github.com",
@@ -4037,7 +4118,7 @@ export function WorkspaceModules(ctx: any) {
       name: "Jira 集成",
       version: "0.9.3",
       enabled: false,
-      summary: "读取项目、创建任务并同步处理状态。",
+      summary: "读坖项目〝创建任务并同步处理状态。",
       permissions: ["project:read", "issues:write"],
       token: "",
       baseUrl: "https://your-company.atlassian.net",
@@ -4048,7 +4129,7 @@ export function WorkspaceModules(ctx: any) {
       name: "Slack 通知",
       version: "1.0.1",
       enabled: true,
-      summary: "将任务结果和审批提醒发送到团队频道。",
+      summary: "将任务结果和审批杝醒发送到团队频靓。",
       permissions: ["channels:read", "chat:write"],
       token: "",
       baseUrl: "https://slack.com/api",
@@ -4073,7 +4154,7 @@ export function WorkspaceModules(ctx: any) {
       extension.id === selectedExtension.id ? { ...extension, ...patch } : extension
     );
     if (persist) {
-      persistExtensions(nextExtensions, "扩展配置已保存");
+      persistExtensions(nextExtensions, "扩展酝置已保存");
     } else {
       setExtensions(nextExtensions);
       setExtensionNotice("");
@@ -4091,8 +4172,8 @@ export function WorkspaceModules(ctx: any) {
     .slice(0, 9);
   const sceneVisibleWorkspaceCatalog = filterWorkspaceCatalogByScene(visibleWorkspaceCatalog, selectedBrainWorkspaceKey);
   const sceneWorkspaceCatalog = filterWorkspaceCatalogByScene(normalizeWorkspaceCatalog(workspaceCatalog), selectedBrainWorkspaceKey);
-  // 「聊天」= scene-bound conversation threads (INTERNAL_CHAT + chat-scope on scene projects).
-  // Distinct from 「项目」 threads; do not list via scene-filtered catalog alone (INTERNAL_CHAT has no scene key).
+  // 「聊天〝= scene-bound conversation threads (INTERNAL_CHAT + chat-scope on scene projects).
+  // Distinct from 「项目〝 threads; do not list via scene-filtered catalog alone (INTERNAL_CHAT has no scene key).
   const standaloneChats = sceneChatWorkspaces(normalizeWorkspaceCatalog(workspaceCatalog), selectedBrainWorkspaceKey)
     .flatMap((workspace: any) =>
       sortThreadsForMenu(workspace.threads ?? [])
@@ -4108,7 +4189,42 @@ export function WorkspaceModules(ctx: any) {
   };
   const sidebarTaskEntries = sortSidebarEntries(sidebarOrganizeMode === "list" ? allSidebarTasks : standaloneChats);
   const visibleSidebarTaskEntries = sidebarTasksExpanded ? sidebarTaskEntries : sidebarTaskEntries.slice(0, 8);
-  const orderedSidebarProjects = orderSidebarProjects(sceneVisibleWorkspaceCatalog, pinnedWorkspaceIds);
+  const orderedSidebarProjects = orderSidebarProjects(sceneVisibleWorkspaceCatalog, pinnedWorkspaceIds, sidebarProjectOrder);
+  async function acceptProjectDrop(event: any, targetWorkspaceId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const threadRaw = event.dataTransfer?.getData(THREAD_DRAG_TYPE) || "";
+    const projectId = event.dataTransfer?.getData(PROJECT_DRAG_TYPE) || "";
+    try {
+      if (threadRaw) {
+        const payload = JSON.parse(threadRaw);
+        if (!payload?.threadId || !payload?.workspaceId || payload.workspaceId === targetWorkspaceId) return;
+        if (typeof api?.moveWorkspaceThread !== "function") {
+          setErrorMessage("大模型没有返回下一问题或目标约束。");
+          return;
+        }
+        const nextCatalog = await api.moveWorkspaceThread({
+          threadId: payload.threadId,
+          fromWorkspaceId: payload.workspaceId,
+          toWorkspaceId: targetWorkspaceId
+        });
+        setWorkspaceCatalog(normalizeWorkspaceCatalog(nextCatalog));
+        setExpandedWorkspaceIds((current: Set<string>) => new Set([...current, targetWorkspaceId]));
+        setExpandedThreadListWorkspaceIds((current: Set<string>) => new Set([...current, targetWorkspaceId]));
+        if (selectedThreadId === payload.threadId) setSelectedWorkspaceId(targetWorkspaceId);
+        setChatStatus(`已把对话移到这个项目`);
+        return;
+      }
+      if (!projectId || projectId === targetWorkspaceId) return;
+      const next = moveProjectBefore(orderedSidebarProjects, projectId, targetWorkspaceId);
+      if (sameProjectOrder(orderedSidebarProjects, next)) return;
+      const ids = next.map((item: { id: string }) => item.id);
+      setSidebarProjectOrder(ids);
+      localStorage.setItem(SIDEBAR_PROJECT_ORDER_STORAGE_KEY, JSON.stringify(ids));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
   const visibleSidebarProjects = sidebarProjectsExpanded ? orderedSidebarProjects : orderedSidebarProjects.slice(0, 5);
   const selectedProjectWorkspace = sceneVisibleWorkspaceCatalog.find((workspace: any) => workspace.id === selectedWorkspace?.id)
     || visibleWorkspaceCatalog.find((workspace: any) => workspace.id === selectedWorkspace?.id);
@@ -4302,7 +4418,7 @@ export function WorkspaceModules(ctx: any) {
       setApprovalError(message);
       setErrorMessage(message);
       // Terminal resume failures must clear the live request, or the composer stays
-      // stuck on「处理中」even after the agent loop has already ended.
+      // stuck on「处理中〝even after the agent loop has already ended.
       if (typeof settleApprovalRequest === "function") {
         settleApprovalRequest(requestId, selectedThread?.id || "", { approval: null, pendingTool: null } as any);
       }
@@ -4320,8 +4436,8 @@ export function WorkspaceModules(ctx: any) {
               ...existing,
               content: existingAnswer || failureText,
               reasoningSummary: existing.reasoningSummary?.trim()
-                ? `${existing.reasoningSummary.trim()}\n\n本轮在完成前发生异常：${message}`
-                : `本轮在完成前发生异常：${message}`,
+                ? `${existing.reasoningSummary.trim()}\n\n本轮在完成剝坑生异常：${message}`
+                : `本轮在完成剝坑生异常：${message}`,
               excludeFromModelContext: true
             };
             return messages;
@@ -4536,9 +4652,15 @@ function startNewChat() {
       <button
         key={threadKey}
         type="button"
+        draggable
         data-testid="sidebar-task-row"
         data-thread-key={threadKey}
         className={`thread-row sidebar-chat-row${active ? " active" : ""}${pinnedThreadIds.has(thread.id) ? " pinned" : ""}${unreadThreadIds.has(thread.id) ? " unread" : ""}`}
+        onDragStart={(event) => {
+          event.stopPropagation();
+          event.dataTransfer.setData(THREAD_DRAG_TYPE, JSON.stringify({ threadId: thread.id, workspaceId: workspace.id }));
+          event.dataTransfer.effectAllowed = "move";
+        }}
         onClick={() => {
           setSelectedSidebarRow(`chat:${workspace.id}:${thread.id}`);
           setSearchFilePreview(null);
@@ -4822,9 +4944,23 @@ function renderSidebarModule() {
                   const projectStateCount = threadStateCountsByWorkspace.get(workspace.id) ?? 0;
 
                   return (
-                    <article key={workspace.id} className={`project-group${active ? " active" : ""}${pinnedWorkspaceIds.has(workspace.id) ? " pinned" : ""}`}>
+                    <article
+                      key={workspace.id}
+                      className={`project-group${active ? " active" : ""}${pinnedWorkspaceIds.has(workspace.id) ? " pinned" : ""}`}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(event) => { void acceptProjectDrop(event, workspace.id); }}
+                    >
                       <div
                         className={`project-header${selectedSidebarRow === `project:${workspace.id}` ? " active" : ""}`}
+                        draggable
+                        data-testid="sidebar-project-header"
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData(PROJECT_DRAG_TYPE, workspace.id);
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
                         onContextMenu={(event) => {
                           event.preventDefault();
                           setProjectContextMenu({
@@ -4933,10 +5069,16 @@ function renderSidebarModule() {
                             return (
                               <button
                                 key={thread.id}
+                                draggable
                                 data-testid="sidebar-project-task-row"
                                 data-thread-key={threadKey}
                                 className={`thread-row${activeThread ? " active" : ""}${pinnedThreadIds.has(thread.id) ? " pinned" : ""}${unreadThreadIds.has(thread.id) ? " unread" : ""}${threadStateClass}`}
                                 type="button"
+                                onDragStart={(event) => {
+                                  event.stopPropagation();
+                                  event.dataTransfer.setData(THREAD_DRAG_TYPE, JSON.stringify({ threadId: thread.id, workspaceId: workspace.id }));
+                                  event.dataTransfer.effectAllowed = "move";
+                                }}
                                 onMouseEnter={(event) => {
                                   const rect = event.currentTarget.getBoundingClientRect();
                                   setHoveredThread({
@@ -4991,7 +5133,7 @@ function renderSidebarModule() {
                                   {isFailedThread ? <em className="thread-failed-badge">{thread.statusLabel || "失败"}</em> : null}
                                 </span>
                                 <time>{formatRelativeTimeLabel(thread.updatedAt)}</time>
-                                {/* 侧栏 hover 仅显示置顶、归档；其余操作通过右键菜单 */}
+                                {/* 侧栏 hover 仅显示置顶〝归档；其余操作通过坳键蝜坕 */}
                                 <span className="thread-hover-actions">
                                   <span
                                     role="button"
@@ -5032,7 +5174,7 @@ function renderSidebarModule() {
                                 });
                               }}
                             >
-                              <span>{threadListExpanded ? "折叠显示" : "展开显示"}</span>
+                              <span>{threadListExpanded ? "折坠显示" : "展开显示"}</span>
                             </button>
                           ) : null}
                         </div>
@@ -5651,7 +5793,7 @@ function renderSidebarModule() {
     setErrorMessage("");
     try {
       const attachmentNote = hasAttachments
-        ? `\n\n[附件：${(draft?.images ?? composerImages).map((item: any) => item.name).join("、")}]`
+        ? `\n\n[附件：${(draft?.images ?? composerImages).map((item: any) => item.name).join("〝")}]`
         : "";
       const contentWithRefs = injectConversationRefsIntoQuestion(content, composerConversationRefs);
       const sourceRefsJson = JSON.stringify(composerConversationRefs.map((ref) => ({
@@ -5716,6 +5858,17 @@ function renderSidebarModule() {
         });
         syncSnapshot(threadSnapshot, executionThreadId);
       }
+      const activeSkillNames = draft?.skill?.name
+        ? [draft.skill.name]
+        : selectedComposerSkill?.name
+          ? [selectedComposerSkill.name]
+          : [];
+      if (activeSkillNames.includes(PPT_WRITING_TEAM_SKILL_NAME) && api.summonExpertFromSkill) {
+        await api.summonExpertFromSkill({
+          threadId: executionThreadId,
+          skillName: PPT_WRITING_TEAM_SKILL_NAME
+        }).catch(() => undefined);
+      }
       setChatStatus("BRAIN 正在处理…");
       const requestId = `brain-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
       const rustConversation = (window.newbrain as any)?.rustConversation as undefined | ((input: any) => Promise<any>);
@@ -5743,11 +5896,7 @@ function renderSidebarModule() {
           `当前本地项目：${selectedBrainProject?.name || "未命名项目"}`,
           "回答应服务于当前工作台与项目；不得声称执行了尚未执行的工具或文件操作。"
         ].filter(Boolean).join("\n\n"),
-        selectedSkillNames: draft?.skill?.name
-          ? [draft.skill.name]
-          : selectedComposerSkill?.name
-            ? [selectedComposerSkill.name]
-            : [],
+        selectedSkillNames: activeSkillNames,
         composerModes: draft?.modes ?? [...composerModes],
         // The active NewBrain Thread already owns prior turns. Send only the
         // new turn here; replaying BRAIN history caused duplicate messages.
@@ -5758,7 +5907,7 @@ function renderSidebarModule() {
           createdAt: userMessage.createdAt
         }]
       });
-      const finalContent = String(result?.content || "").trim() || "本轮没有生成可见回复。";
+      const finalContent = String(result?.content || "").trim() || "本轮没有生成坯觝回复。";
       if (rustConversation) {
         await rustConversation({ projectId: executionWorkspaceId, workspaceType: "chat", operation: "conversation.turn.append_message", payload: { thread_id: executionThreadId, role: "assistant", content: finalContent } }).catch(() => undefined);
         await rustConversation({ projectId: executionWorkspaceId, workspaceType: "chat", operation: "conversation.turn.finish", payload: { thread_id: executionThreadId } }).catch(() => undefined);
@@ -5815,6 +5964,15 @@ function renderSidebarModule() {
           return null;
         }
         const parsed = parseAutomationIntent(text);
+        for (const zipPath of automationSkillZipPaths(text)) {
+          if (!api.importSkillZipToProject || !selectedWorkspace?.id) break;
+          await api.importSkillZipToProject({
+            workspaceId: selectedWorkspace.id,
+            zipPath,
+            acknowledgeRisk: true,
+            force: true
+          });
+        }
         const item = {
           title: parsed.title || "新自动化任务",
           trigger: parsed.trigger || text,
@@ -5837,7 +5995,7 @@ function renderSidebarModule() {
           item
         });
         setFeatureConfig(nextConfig);
-        if (typeof setChatStatus === "function") setChatStatus(`已创建自动化「${parsed.title || "新自动化任务"}」，并继续在对话中确认细节`);
+        if (typeof setChatStatus === "function") setChatStatus(`已创建自动化「${parsed.title || "新自动化任务"}〝，并继续在对话中确认细节`);
         return parsed;
       }
       if (creatorLabel === "Skill Creator") {
@@ -5854,7 +6012,7 @@ function renderSidebarModule() {
           }
         });
         setFeatureConfig(nextConfig);
-        if (typeof setChatStatus === "function") setChatStatus(`已登记技能「${name}」，可在技能页继续完善`);
+        if (typeof setChatStatus === "function") setChatStatus(`已登记技能「${name}〝，坯在技能页继续完善`);
         return { name };
       }
       if (creatorLabel === "Plugin Creator") {
@@ -6048,17 +6206,13 @@ function renderSidebarModule() {
       setBrainResourceTab("scene");
     };
     const isCenter = placement === "center";
-    // Toggle: center = focus Tools (hide left nav via CSS, keep chat); side = restore full layout.
+    // Toggle: center = expanded preview (hide left nav, keep chat); side = restore full layout.
     const toggleBrainExpanded = () => {
-      setBrainResourcePlacement((current) => {
-        if (current === "center") {
-          // Second click: restore nav + chat + side Tools. Force left nav visible even if
-          // Ctrl+B had collapsed it before/during expand (CSS hide does not sync that flag).
-          window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "expand-sidebar" } }));
-          return "side";
-        }
-        return "center";
-      });
+      const next = nextBrainToolsPlacement(isCenter ? "center" : "side");
+      if (next === "side") {
+        window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "expand-sidebar" } }));
+      }
+      setBrainResourcePlacement(next);
     };
     const collapseBrainPanel = () => {
       setBrainResourcePlacement("hidden");
@@ -6096,7 +6250,7 @@ function renderSidebarModule() {
       if (selectedBrainProjectId && window.newbrain?.ingestBrainFile && !isBrainAudioFile(file)) {
         void window.newbrain.ingestBrainFile({ projectId: selectedBrainProjectId, fileId: file.id })
           .then((result) => { setBrainDocumentAnchors(result.anchors || []); if (result.warnings?.length) setChatStatus(result.warnings.join(" ")); })
-          .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解析失败"));
+          .catch((error: unknown) => setChatStatus(error instanceof Error ? error.message : "文档结构解枝失败"));
       }
     };
     const deactivateDocumentMarking = () => {
@@ -6109,7 +6263,7 @@ function renderSidebarModule() {
     const activateDocumentMarkingInPreview = () => {
       const targetFile = brainFiles.find((file) => file.id === activeBrainDocumentFileId) || brainFiles[0];
       if (!targetFile) {
-        setChatStatus("请先在「文件」中添加文档，再进行标注。");
+        setChatStatus("请先在「文件〝中添加文档，冝进行标注。");
         setBrainResourceTab("files");
         return;
       }
@@ -6146,16 +6300,16 @@ function renderSidebarModule() {
         if (brainSceneTab === "level") return <GameLevelEditor projectId={selectedBrainProject?.id} />;
         if (["project", "assets"].includes(brainSceneTab)) return <GameWorkspace projectId={selectedBrainProject?.id} conversationId={selectedBrainConversationId || undefined} />;
         if (brainSceneTab === "design") {
-          return <WorkspaceSectionEditor projectId={selectedBrainProject?.id} workspaceKey="game" sectionKey="design" title="游戏策划" description="定义核心体验、循环、规则与版本范围" prompts={["核心体验", "核心循环", "玩家目标", "版本范围"]} />;
+          return <WorkspaceSectionEditor projectId={selectedBrainProject?.id} workspaceKey="game" sectionKey="design" title="游戝策划" description="定义核心体验〝循环〝规则与版本范围" prompts={["核心体验", "核心循环", "玩家目标", "版本范围"]} />;
         }
         const gameSections: Record<string, { title: string; description: string; sectionKey: string }> = {
-          world: { title: "角色与世界观", description: "维护世界规则、角色关系、势力与剧情线", sectionKey: "world" },
-          combat: { title: "战斗设计", description: "管理玩家操作、敌人机制、数值目标与验证标准", sectionKey: "combat" }
+          world: { title: "角色与世界观", description: "维护世界规则〝角色关系〝势力与剧情线", sectionKey: "world" },
+          combat: { title: "战斗设计", description: "管理玩家操作〝敌人机制〝数值目标与验话标准", sectionKey: "combat" }
         };
         const section = gameSections[brainSceneTab];
         return section
           ? <GameDesignPanel projectId={selectedBrainProject?.id} workspaceKey="game" sectionKey={section.sectionKey} title={section.title} description={section.description} />
-          : renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "游戏制作");
+          : renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "游戝制作");
       }
       if (selectedBrainWorkspaceKey === "video") {
         if (["script", "storyboard", "generate", "tracks", "mux", "export"].includes(brainSceneTab)) {
@@ -6179,7 +6333,7 @@ function renderSidebarModule() {
         if (["gen", "tracks", "slice", "export"].includes(brainSceneTab)) {
           return <MusicDawShell projectId={selectedBrainProject?.id} activeStep={brainSceneTab as "gen" | "tracks" | "slice" | "export"} refreshToken={dataWorkspaceRefreshToken} />;
         }
-        return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "音乐创作");
+        return renderPendingCapability(capabilityTabs.find((item) => item.key === brainSceneTab)?.label || "音九创作");
       }
       if (selectedBrainWorkspaceKey === "data") {
         if (brainSceneTab === "analysis") return <DataJuliusShell projectId={selectedBrainProject?.id} files={brainFiles} refreshToken={dataWorkspaceRefreshToken} />;
@@ -6217,7 +6371,6 @@ function renderSidebarModule() {
             onSelectFile={selectBrainDocumentFile}
             onSelectAnchor={() => { activateDocumentMarkingInPreview(); }}
             onToggleAnnotation={toggleDocumentMarking}
-            onSendAnnotation={sendDocumentAnnotationToChat}
             onPreviewChangeSet={(changeSet) => void previewDocumentChangeSet(changeSet)}
             onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
             onExportChangeSet={(changeSet) => void exportDocumentChangeSet(changeSet)}
@@ -6238,7 +6391,6 @@ function renderSidebarModule() {
           onSelectFile={selectBrainDocumentFile}
           onSelectAnchor={() => { activateDocumentMarkingInPreview(); }}
           onToggleAnnotation={toggleDocumentMarking}
-          onSendAnnotation={sendDocumentAnnotationToChat}
           onPreviewChangeSet={(changeSet) => void previewDocumentChangeSet(changeSet)}
           onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
           onExportChangeSet={(changeSet) => void exportDocumentChangeSet(changeSet)}
@@ -6436,14 +6588,17 @@ function renderChatModule() {
                   ) : null}
                 </div>
                 <div className="new-chat-project-picker">
+                  {(workspaceHeaderStatus?.branch || newChatBranches.current) ? (
                   <button type="button" aria-expanded={newChatProjectMenu === "branch"} onClick={() => openNewChatProjectMenu("branch")}>
                     <SidebarIcon name="branch" />
-                    <strong>{workspaceHeaderStatus?.branch || newChatBranches.current || "main"}</strong>
+                    <strong>{workspaceHeaderStatus?.branch || newChatBranches.current}</strong>
                     <em><SidebarIcon name="chevron-down" /></em>
                   </button>
+                  ) : null}
                   {newChatProjectMenu === "branch" ? (
                     <div className="new-chat-project-menu branch-menu">
-                      {(newChatBranches.branches.length ? newChatBranches.branches : [workspaceHeaderStatus?.branch || "main"]).map((branch: string) => (
+                      <span className="new-chat-project-menu-label">{newChatBranches.current ? `当前分支：${newChatBranches.current}` : "当前分支：(detached HEAD)"}</span>
+                      {(newChatBranches.branches.length ? newChatBranches.branches : [workspaceHeaderStatus?.branch].filter(Boolean)).map((branch: string) => (
                         <button key={branch} type="button" className={branch === (newChatBranches.current || workspaceHeaderStatus?.branch) ? "active" : ""} onClick={() => setNewChatProjectMenu(null)}>
                           <SidebarIcon name="branch" />
                           <span>{branch}</span>
@@ -6462,9 +6617,9 @@ function renderChatModule() {
                   <small>了解工程对话线程动态</small>
                 </button>
                 <button type="button" onClick={openIntegrationSettings}>
-                  <span className="integration-logo github" aria-hidden="true">●</span>
+                  <span className="integration-logo github" aria-hidden="true">◝</span>
                   <strong>连接 GitHub</strong>
-                  <small>审查 PR、代码和 CI 检查项</small>
+                  <small>审查 PR〝代砝和 CI 检查项</small>
                 </button>
                 <button type="button" onClick={openIntegrationSettings}>
                   <span className="integration-logo linear" aria-hidden="true">◒</span>
@@ -6474,10 +6629,10 @@ function renderChatModule() {
               </div>
             </div>
           ) : (
-          <div className="conversation-history">
+          <div className="conversation-history" ref={conversationHistoryRef}>
             {goalExecution?.runtime?.selectedSkillNames?.length ? (
               <div className="goal-skill-record" data-testid="goal-skill-record">
-                本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => name === RESEARCH_WRITING_SKILL ? "政务写作" : name).join("、")}
+                本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => composerSkillLabel(name)).join("〝")}
               </div>
             ) : null}
             {goalExecution?.goal?.status === "complete" && goalExecution?.plan?.length ? (
@@ -6494,6 +6649,8 @@ function renderChatModule() {
                 (activity: any) => typeof activity.contentOffset !== "number"
               );
               const isLiveTurn = isAskingModel && index === conversationTurns.length - 1;
+              const earlierTurnTexts = conversationTurns.slice(0, index).map((item: any) => sanitizeVisibleModelContent(item.assistant?.content || ""));
+              let pendingLiveAnswer = "";
               return (
               <section className={`conversation-turn${isLiveTurn ? " current" : ""}`} key={turn.id}>
                 {turn.user ? (
@@ -6685,7 +6842,12 @@ function renderChatModule() {
                     {isLiveTurn && !effectiveApproval ? (
                       <div className="assistant-live-progress">
                         {(() => {
-                          const liveAnswer = sanitizeVisibleModelContent(activeStreamContent || turn.assistant.content);
+                          const liveAnswer = rememberLiveAnswer(
+                            sanitizeVisibleModelContent(activeStreamContent),
+                            sanitizeVisibleModelContent(turn.assistant?.content || ""),
+                            activeReasoningRequestId,
+                            earlierTurnTexts
+                          );
                           const planningFallback = activeStreamContent.trim() && !liveAnswer
                             ? activeStreamContent.trim()
                             : "";
@@ -6764,7 +6926,12 @@ function renderChatModule() {
                     ) : null}
                     {(() => {
                       const renderedContentRaw = isLiveTurn
-                        ? sanitizeVisibleModelContent(activeStreamContent || turn.assistant.content)
+                        ? rememberLiveAnswer(
+                          sanitizeVisibleModelContent(activeStreamContent),
+                          sanitizeVisibleModelContent(turn.assistant?.content || ""),
+                          activeReasoningRequestId,
+                          earlierTurnTexts
+                        )
                         : sanitizeVisibleModelContent(turn.assistant.content);
                       const stillWaitingForApproval = index === conversationTurns.length - 1
                         && Boolean(effectiveApproval)
@@ -6778,7 +6945,7 @@ function renderChatModule() {
                       const displayContent = renderedContent.trim()
                         ? renderedContent
                         : (turn.assistant.excludeFromModelContext
-                          ? "本轮生成已中断，内容未完整保留。请再发一条消息继续。"
+                          ? "本轮生成已中断，内容未完整保留。请冝坑一条消息继续。"
                           : "本轮没有生成可见回复。请再发一条消息继续，或重新描述你的需求。");
                       return (
                     <article
@@ -6874,7 +7041,13 @@ function renderChatModule() {
                     </div>
                     <div className="assistant-live-progress">
                       {(() => {
-                        const liveAnswer = sanitizeVisibleModelContent(activeStreamContent);
+                        const liveAnswer = rememberLiveAnswer(
+                          sanitizeVisibleModelContent(activeStreamContent),
+                          "",
+                          activeReasoningRequestId,
+                          earlierTurnTexts
+                        );
+                        pendingLiveAnswer = liveAnswer;
                         const planningFallback = activeStreamContent.trim() && !liveAnswer
                           ? activeStreamContent.trim()
                           : "";
@@ -6897,16 +7070,16 @@ function renderChatModule() {
                         );
                       })()}
                     </div>
-                    {sanitizeVisibleModelContent(activeStreamContent) ? (
+                    {pendingLiveAnswer.trim() ? (
                       <article className="assistant-block streaming-output">
-                        <MarkdownMessage content={sanitizeVisibleModelContent(activeStreamContent)} workspaceId={selectedWorkspace?.id} onOpenLocalFile={openLocalFilePreview} isStreaming />
+                        <MarkdownMessage content={pendingLiveAnswer} workspaceId={selectedWorkspace?.id} onOpenLocalFile={openLocalFilePreview} isStreaming />
                       </article>
                     ) : null}
                   </div>
                 ) : null}
           {goalOwnerTurnId === turn.id && goalExecution?.runtime?.selectedSkillNames?.length ? (
             <div className="goal-skill-record" data-testid="goal-skill-record">
-              本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => name === RESEARCH_WRITING_SKILL ? "政务写作" : name).join("、")}
+              本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => composerSkillLabel(name)).join("〝")}
             </div>
           ) : null}
           {showGovernmentSpecification && index === conversationTurns.length - 1 ? (
@@ -6968,7 +7141,7 @@ function renderChatModule() {
                 <section className="goal-paused-card" data-testid="goal-paused-card" aria-live="polite">
                   <strong>任务已暂停</strong>
                   <p>
-                    已完成 {completedSteps}/{planSteps.length} 个阶段{pausedStep ? `，当前停在“${pausedStep.title}”` : ""}。已保存大纲、材料引用和生成进度。
+                    已完成 {completedSteps}/{planSteps.length} 个阶段{pausedStep ? `，当前停在“${pausedStep.title}”` : ""}。已保存大纲〝材料引用和生成进度。
                   </p>
                   <div className="goal-paused-actions">
                     <button type="button" data-testid="goal-paused-resume" onClick={() => void enableGoalMode()}>
@@ -6978,7 +7151,7 @@ function renderChatModule() {
                       setChatStatus("请在下方输入修改要求，发送后任务将按新要求继续。");
                       document.querySelector<HTMLTextAreaElement>("[data-testid=\"composer-input\"]")?.focus();
                     }}>
-                      <span aria-hidden="true">✍</span> 修改要求后继续
+                      <span aria-hidden="true">✝</span> 修改要求后继续
                     </button>
                     <button type="button" className="goal-paused-detail" onClick={() => setGoalPlanExpanded(true)}>
                       查看进度 <span aria-hidden="true">›</span>
@@ -7079,9 +7252,9 @@ function renderChatModule() {
                 const adjustment = goalCustomAdjustment.trim();
                 if (!adjustment || answeringGoalQuestion) return;
                 setGoalCustomAdjustment("");
-                void answerGoalDecision(isIntakeQuestion ? adjustment : `${isExpertQuestion ? "调整专家分工" : "调整提纲"}：${adjustment}`);
+                void answerGoalDecision(isIntakeQuestion ? adjustment : `${isExpertQuestion ? "调整专家分工" : "调整杝纲"}：${adjustment}`);
               }}>
-                <label htmlFor="goal-custom-adjustment-input">{isIntakeQuestion ? "补充信息" : "自定义调整意见"}</label>
+                <label htmlFor="goal-custom-adjustment-input">{isIntakeQuestion ? "补充信息" : "自定义调整愝觝"}</label>
                 <textarea
                   id="goal-custom-adjustment-input"
                   data-testid="goal-custom-adjustment-input"
@@ -7090,8 +7263,8 @@ function renderChatModule() {
                   onChange={(event) => setGoalCustomAdjustment(event.target.value)}
                   rows={5}
                   placeholder={isExpertQuestion ? "例如：只检查接口安全；暂时不安排交付验收；换一位擅长视频分镜的专家。" : isIntakeQuestion
-                    ? "可补充使用场景、目标字数等信息，例如：\n用于全市年终工作会议发言；\n字数3500字左右。"
-                    : "可逐条说明调整要求，例如：\n1. 安全生产放在第一部分；\n2. 增加“存在的问题”；\n3. 暂时不要生成正文和文件。"}
+                    ? "坯补充使用场景〝目标字数等信息，例如：\n用于全市年终工作会议坑言；\n字数3500字左坳。"
+                    : "坯逝条说明调整要求，例如：\n1. 安全生产放在第一部分；\n2. 增加“存在的问题”；\n3. 暂时不要生成正文和文件。"}
                 />
                 <button data-testid="goal-custom-adjustment-submit" type="submit" disabled={answeringGoalQuestion || !goalCustomAdjustment.trim()}>{isIntakeQuestion ? "提交补充" : "提交调整"}</button>
               </form>
@@ -7101,7 +7274,8 @@ function renderChatModule() {
               </section>
               );
             })}
-          {ctx.generationFailure && ctx.generationFailure.threadId === selectedThread?.id && !isGlobalModelBusy ? (
+          {ctx.generationFailure && ctx.generationFailure.threadId === selectedThread?.id && !isGlobalModelBusy
+            && !isUserCancelledModelError(ctx.generationFailure.message) ? (
             <section className="goal-failure-card" data-testid="generation-failure-card" role="alert">
               <strong>{isSubscriptionInactiveError(ctx.generationFailure.message) ? "订阅未激活或已过期" : "生成异常终止"}</strong>
               <p>{ctx.generationFailure.message}</p>
@@ -7154,7 +7328,7 @@ function renderChatModule() {
                   setChatStatus("请在下方输入修改要求，发送后将按新要求继续。");
                   document.querySelector<HTMLTextAreaElement>("[data-testid=\"composer-input\"]")?.focus();
                 }}>
-                  <span aria-hidden="true">✍</span> 修改要求后继续
+                  <span aria-hidden="true">✝</span> 修改要求后继续
                 </button>
                 <button
                   type="button"
@@ -7683,10 +7857,10 @@ function renderChatModule() {
                         </span>
                       </button>
                       <span className="composer-menu-label">添加</span>
-                      <button type="button" data-composer-mode="goal" className={composerModes.includes("goal") ? "active" : ""} aria-pressed={composerModes.includes("goal")} onClick={() => void enableGoalMode()}><SidebarIcon name="target" /><span><strong>{goalExecution?.goal?.status === "paused" ? "继续目标" : "目标"}</strong><small>{goalExecution?.goal?.status === "paused" ? goalExecution.goal.objective : "设置要持续追求的目标"}</small></span><span className="composer-add-option-check" aria-hidden="true">{composerModes.includes("goal") ? "✓" : ""}</span></button>
+                      <button type="button" data-composer-mode="goal" className={composerModes.includes("goal") ? "active" : ""} aria-pressed={composerModes.includes("goal")} onClick={() => void enableGoalMode()}><SidebarIcon name="target" /><span><strong>{goalExecution?.goal?.status === "paused" ? "继续目标" : "目标"}</strong><small>{goalExecution?.goal?.status === "paused" ? goalExecution.goal.objective : "设置覝挝续追求的目标"}</small></span><span className="composer-add-option-check" aria-hidden="true">{composerModes.includes("goal") ? "✓" : ""}</span></button>
                       <button type="button" data-composer-mode="plan" className={composerModes.includes("plan") ? "active" : ""} aria-pressed={composerModes.includes("plan")} onClick={() => void enablePlanMode()}><SidebarIcon name="plan" /><span><strong>计划模式</strong><small>开启计划模式</small></span><span className="composer-add-option-check" aria-hidden="true">{composerModes.includes("plan") ? "✓" : ""}</span></button>
                       {researchWritingSession.enabled ? <>
-                        <button type="button" onClick={() => void reviewCurrentResearchWriting()}><SidebarIcon name="file-check" /><span><strong>校验最新稿件</strong><small>检查数据、政策、时间、做法和行政层级来源</small></span></button>
+                        <button type="button" onClick={() => void reviewCurrentResearchWriting()}><SidebarIcon name="file-check" /><span><strong>校验最新稿件</strong><small>检查数据〝政策〝时间〝坚法和行政层级来溝</small></span></button>
                         <button type="button" onClick={() => void exportCurrentResearchWriting("docx")}><SidebarIcon name="file-word" /><span><strong>导出 Word / WPS</strong><small>将最新助手稿件导出为 DOCX</small></span></button>
                         <button type="button" onClick={() => void exportCurrentResearchWriting("review-docx")}><SidebarIcon name="file-review" /><span><strong>导出校验版</strong><small>DOCX 正文附带事实风险清单</small></span></button>
                         <button type="button" onClick={() => void exportCurrentResearchWriting("txt")}><SidebarIcon name="file-text" /><span><strong>导出纯文本</strong><small>UTF-8 文本，不附带校验清单</small></span></button>
@@ -7707,7 +7881,7 @@ function renderChatModule() {
                 </div>
                 {composerModes.includes("goal") || goalExecution?.goal?.status === "active" ? (
                   <div className="composer-picker-wrap">
-                    <button type="button" data-testid="composer-goal-button" className="composer-goal-button" title={goalExecution?.goal?.objective || (selectedComposerTools.length ? `目标 · ${selectedComposerTools.map((tool: any) => tool.label).join("、")}` : "目标模式")} onClick={() => { setComposerMenu("add"); setShowMcpToolPicker(true); }}>
+                    <button type="button" data-testid="composer-goal-button" className="composer-goal-button" title={goalExecution?.goal?.objective || (selectedComposerTools.length ? `目标 · ${selectedComposerTools.map((tool: any) => tool.label).join("〝")}` : "目标模式")} onClick={() => { setComposerMenu("add"); setShowMcpToolPicker(true); }}>
                       <SidebarIcon name="target" />
                       <span>目标</span>
                     </button>
@@ -8126,8 +8300,39 @@ function renderChatModule() {
     setDocumentAnnotationSnapshot(null);
   };
   const sendPendingDocumentMark = async () => {
-    if (!activeBrainFile || !selectedBrainProjectId || !documentAnnotationCandidate || !documentAnnotationInstruction.trim()) return;
-    if (!window.newbrain?.createBrainAnnotation) return;
+    const instruction = documentAnnotationInstruction.trim();
+    const plan = planDocumentMarkSend({
+      instruction,
+      hasBrainFile: Boolean(activeBrainFile),
+      hasProject: Boolean(selectedBrainProjectId),
+      hasCandidate: Boolean(documentAnnotationCandidate),
+      hasAnnotationApi: Boolean(window.newbrain?.createBrainAnnotation)
+    });
+    if (plan.action === "ignore") {
+      setChatStatus("请先填写修改要求，再点击发送。");
+      return;
+    }
+    const sendInstructionToChat = (images: Array<{ name: string; path: string; url?: string }> = []) => {
+      submitComposerRequest({
+        question: instruction,
+        images,
+        keepComposer: true
+      });
+      clearPendingDocumentMark();
+      setChatStatus("修改要求已发送到对话。");
+    };
+    if (plan.action === "chat") {
+      sendInstructionToChat();
+      return;
+    }
+    const file = activeBrainFile;
+    const projectId = selectedBrainProjectId;
+    const candidate = documentAnnotationCandidate;
+    const createAnnotation = window.newbrain?.createBrainAnnotation;
+    if (!file || !projectId || !candidate || !createAnnotation) {
+      sendInstructionToChat();
+      return;
+    }
     setDocumentAnnotationBusy(true);
     try {
       let snapshotGeometry: { snapshotPath?: string; snapshotUrl?: string } = {};
@@ -8139,12 +8344,12 @@ function renderChatModule() {
         });
         snapshotGeometry = { snapshotPath: saved.path, snapshotUrl: saved.url };
       }
-      const annotation = await window.newbrain.createBrainAnnotation({
-        projectId: selectedBrainProjectId,
-        fileId: activeBrainFile.id,
-        fileVersion: activeBrainFile.versionNo,
-        anchor: documentAnnotationCandidate,
-        instruction: documentAnnotationInstruction.trim(),
+      const annotation = await createAnnotation({
+        projectId,
+        fileId: file.id,
+        fileVersion: file.versionNo,
+        anchor: candidate,
+        instruction,
         geometry: {
           ...(documentAnnotationGeometry ? { style: documentAnnotationGeometry } : { style: { tool: documentMarkingTool, color: documentMarkingColor } }),
           ...snapshotGeometry
@@ -8153,7 +8358,7 @@ function renderChatModule() {
       setBrainAnnotations((current) => [annotation, ...current]);
       clearPendingDocumentMark();
       setDocumentAnnotationActive(true);
-      const fileName = activeBrainFile.logicalName;
+      const fileName = file.logicalName;
       const snapshotPath = String(annotation.geometry?.snapshotPath || snapshotGeometry.snapshotPath || "").trim();
       const snapshotUrl = resolveAnnotationSnapshotPreview(annotation.geometry) || snapshotGeometry.snapshotUrl || "";
       const reference = buildAnnotationChatReference(annotation, {
@@ -8173,6 +8378,7 @@ function renderChatModule() {
       setChatStatus(`标注 ${markLabel} 的修改要求已发送到对话。`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
+      sendInstructionToChat();
     } finally {
       setDocumentAnnotationBusy(false);
     }
@@ -8212,7 +8418,7 @@ function renderChatModule() {
         anchor = attachMarkOverlay(anchor, { rect: input.rect, viewport: input.viewport, transform: input.transform });
       } else if (input.format === "xlsx") {
         const sheet = input.sheet;
-        if (!sheet?.trim()) throw new Error("无法定位工作表。");
+        if (!sheet?.trim()) throw new Error("无法定佝工作表。");
         anchor = resolveXlsxAnchorFromMark(
           input.rect,
           input.viewport,
@@ -8289,38 +8495,6 @@ function renderChatModule() {
     if (changeSet) await previewDocumentChangeSet(changeSet);
     setBrainResourceTab("tasks");
     setBrainResourcePlacement("side");
-  };
-  const sendDocumentAnnotationToChat = (annotation: any) => {
-    if (!String(annotation.instruction || "").trim()) {
-      setChatStatus("请先在标注中填写修改要求，再加入对话。");
-      return;
-    }
-    const fileName = activeBrainFile?.id === annotation.fileId
-      ? activeBrainFile.logicalName
-      : brainFiles.find((file) => file.id === annotation.fileId)?.logicalName;
-    const snapshotPath = String(annotation.geometry?.snapshotPath || "").trim();
-    const snapshotUrl = resolveAnnotationSnapshotPreview(annotation.geometry);
-    const reference = buildAnnotationChatReference(annotation, {
-      fileName,
-      hasSnapshot: Boolean(snapshotPath || snapshotUrl)
-    });
-    setQuestion((current) => {
-      const next = [current.trim(), reference].filter(Boolean).join("\n\n");
-      composerTextareaRef.current?.setValue(next);
-      return next;
-    });
-    setBrainDraft((current) => [current.trim(), reference].filter(Boolean).join("\n\n"));
-    if (snapshotPath) {
-      const markLabel = annotation.geometry?.displayIndex || annotation.id;
-      attachComposerAttachmentsAtCursor([{
-        name: `标记-${markLabel}.png`,
-        path: snapshotPath,
-        url: snapshotUrl || undefined
-      }], COMPOSER_FOCUS_ATTACHMENT_LIMIT);
-    }
-    setChatStatus(snapshotPath
-      ? `标注 ${annotation.geometry?.displayIndex || annotation.id} 已加入对话（含区域截图），发送后 Agent 将按附图处理。`
-      : `标注 ${annotation.geometry?.displayIndex || annotation.id} 已加入对话输入框，发送后 Agent 将按标记位置处理。`);
   };
   const previewDocumentChangeSet = async (changeSet: any) => {
     if (!selectedBrainProjectId || !window.newbrain?.previewBrainChangeSet) return;
@@ -8411,7 +8585,7 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             </div>
           ) : previewMode !== "empty" ? (
             <button type="button" className="side-panel-tab" onClick={() => { setPreviewMode("empty"); setPreviewPlacement("hidden"); setSearchFilePreview(null); }}>
-              <span>{previewMode === "workspace" ? searchFilePreview?.name || selectedWorkspace?.name || "项目" : previewMode === "review" ? "审查" : previewMode === "terminal" ? "终端" : previewMode === "browser" ? "浏览器" : previewMode === "files" ? "文件" : "侧边聊天"}</span>
+              <span>{previewMode === "workspace" ? searchFilePreview?.name || selectedWorkspace?.name || "项目" : previewMode === "review" ? "审查" : previewMode === "terminal" ? "终端" : previewMode === "browser" ? "浝览器" : previewMode === "files" ? "文件" : "侧边聊天"}</span>
               <strong aria-hidden="true">×</strong>
             </button>
           ) : <span />}
@@ -8428,8 +8602,9 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 {!searchFilePreview.loading && !searchFilePreview.error && !searchFilePreview.binary ? (
                   <NovelTtsButton
                     className="artifact-tts"
-                    text={String(searchFilePreview.content || "")}
-                    sourceText={String(searchFilePreview.content || "")}
+                    text={String(searchFilePreview.content || searchFilePreview.html || "")}
+                    resolveText={() => speechTextForPreview(searchFilePreview)}
+                    sourceText={String(searchFilePreview.content || searchFilePreview.html || "")}
                     synthesizer={api?.synthesizeNovelSpeech}
                     canceller={api?.cancelNovelSpeech}
                     onStatus={setChatStatus}
@@ -8446,27 +8621,51 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 }}>
                   <SidebarIcon name="refresh" />
                 </button>
-                <button type="button" className="artifact-icon-button" title="下载副本" aria-label="下载副本" onClick={async () => {
+                <button type="button" className="artifact-icon-button" title="打开文件夹" aria-label="打开文件夹" onClick={async () => {
                   setPreviewFileMenu(false);
+                  const request = previewFolderOpenRequest({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                  if (!request.ok) {
+                    setChatStatus(request.detail);
+                    return;
+                  }
                   try {
-                    if (!selectedWorkspace?.id) throw new Error("当前工作区不可用。");
-                    const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace.id, filePath: searchFilePreview.path, action: "save-as" });
+                    if (!api?.performWorkspaceFileAction) {
+                      setChatStatus("无法打开文件夹");
+                      return;
+                    }
+                    const result = await api.performWorkspaceFileAction({
+                      workspaceId: request.workspaceId,
+                      filePath: request.filePath,
+                      action: request.action
+                    });
                     if (result?.detail) setChatStatus(result.detail);
+                    else if (!result?.ok) setChatStatus("无法打开文件夹");
+                    else setChatStatus("已打开文件所在文件夹。");
                   } catch (error) {
-                    setChatStatus(error instanceof Error ? error.message : "文件另存为失败。");
+                    setChatStatus(error instanceof Error ? error.message : "无法打开文件夹");
                   }
                 }}>
-                  <SidebarIcon name="download" />
+                  <SidebarIcon name="folder-open" />
                 </button>
                 {/\.(?:docx|xlsx|pptx)$/i.test(String(searchFilePreview.name || searchFilePreview.path || "")) ? (
                   <button type="button" className="artifact-icon-button" title="用 Word / WPS 打开编辑" aria-label="用系统应用打开" onClick={async () => {
                     setPreviewFileMenu(false);
+                    const request = planPreviewSystemOpen({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                    if (!request.ok) {
+                      setChatStatus(request.detail);
+                      return;
+                    }
                     try {
-                      const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
-                      if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
-                      else setChatStatus("已在系统应用中打开，可直接编辑表格与排版。");
+                      if (!api?.performWorkspaceFileAction) {
+                        setChatStatus("无法用系统应用打开");
+                        return;
+                      }
+                      const result = await api.performWorkspaceFileAction(request);
+                      if (result?.detail) setChatStatus(result.detail);
+                      else if (!result?.ok) setChatStatus("无法用系统应用打开");
+                      else setChatStatus("已用系统应用打开。");
                     } catch (error) {
-                      setChatStatus(error instanceof Error ? error.message : "文件无法打开");
+                      setChatStatus(error instanceof Error ? error.message : "无法用系统应用打开");
                     }
                   }}>
                     <SidebarIcon name="external-link" />
@@ -8480,11 +8679,22 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     <div className="artifact-more-menu" role="menu">
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
+                        const request = planPreviewSystemOpen({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                        if (!request.ok) {
+                          setChatStatus(request.detail);
+                          return;
+                        }
                         try {
-                          const result = await api?.openComposerAttachment?.({ path: searchFilePreview.path });
-                          if (result && !result.ok) setChatStatus(result.detail || "文件无法打开");
+                          if (!api?.performWorkspaceFileAction) {
+                            setChatStatus("无法用系统应用打开");
+                            return;
+                          }
+                          const result = await api.performWorkspaceFileAction(request);
+                          if (result?.detail) setChatStatus(result.detail);
+                          else if (!result?.ok) setChatStatus("无法用系统应用打开");
+                          else setChatStatus("已用系统应用打开。");
                         } catch (error) {
-                          setChatStatus(error instanceof Error ? error.message : "文件无法打开");
+                          setChatStatus(error instanceof Error ? error.message : "无法用系统应用打开");
                         }
                       }}>用系统应用打开</button>
                       <button type="button" onClick={async () => {
@@ -8500,19 +8710,33 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                       }}>在文件夹中显示</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
+                        const copied = absoluteWorkspaceFilePath(String(selectedWorkspace?.path || ""), searchFilePreview.path);
+                        if (!copied.ok) {
+                          setChatStatus(copied.detail);
+                          return;
+                        }
                         try {
-                          await copyTextToClipboard(searchFilePreview.path);
-                          setChatStatus("已复制文件路径。");
+                          await copyTextToClipboard(copied.path);
+                          setChatStatus("已复制完整路径。");
                         } catch {
                           setChatStatus("复制路径失败。");
                         }
                       }}>复制路径</button>
                       <button type="button" onClick={async () => {
                         setPreviewFileMenu(false);
+                        const request = planPreviewVsCodeOpen({ workspaceId: selectedWorkspace?.id, filePath: searchFilePreview.path });
+                        if (!request.ok) {
+                          setChatStatus(request.detail);
+                          return;
+                        }
                         try {
-                          if (!selectedWorkspace?.id) throw new Error("当前工作区不可用。");
-                          const result = await api?.performWorkspaceFileAction?.({ workspaceId: selectedWorkspace.id, filePath: searchFilePreview.path, action: "open-vscode" });
-                          if (result && !result.ok) setChatStatus(result.detail || "无法用 VS Code 打开");
+                          if (!api?.performWorkspaceFileAction) {
+                            setChatStatus("无法用 VS Code 打开");
+                            return;
+                          }
+                          const result = await api.performWorkspaceFileAction(request);
+                          if (!result?.ok) setChatStatus(result.detail || "无法用 VS Code 打开");
+                          else setChatStatus(result.detail || "已用 VS Code 打开。");
                         } catch (error) {
                           setChatStatus(error instanceof Error ? error.message : "无法用 VS Code 打开");
                         }
@@ -8551,7 +8775,6 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
               }}
               onMarkingToolChange={setDocumentMarkingTool}
               onMarkingColorChange={setDocumentMarkingColor}
-              onSendToChat={sendDocumentAnnotationToChat}
               onPreviewChangeSet={(changeSet) => void previewDocumentChangeSet(changeSet)}
               onReviewChangeSet={(changeSet, status) => void reviewDocumentChangeSet(changeSet, status)}
               onExportChangeSet={(changeSet) => void exportDocumentChangeSet(changeSet)}
@@ -8563,8 +8786,8 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
             ) : searchFilePreview.error || searchFilePreview.blankReason || (!searchFilePreview.binary && !searchFilePreview.kind && !String(searchFilePreview.content || "").length && !searchFilePreview.loading) ? (
               <div className="search-file-preview-state error" data-testid="file-preview-blank-state">
                 <strong>{searchFilePreview.error || "预览内容为空"}</strong>
-                {searchFilePreview.blankReason ? <span>原因代码：{searchFilePreview.blankReason}</span> : null}
-                {searchFilePreview.diagnosticId ? <span>诊断编号：{searchFilePreview.diagnosticId}</span> : null}
+                {searchFilePreview.blankReason ? <span>原因代砝：{searchFilePreview.blankReason}</span> : null}
+                {searchFilePreview.diagnosticId ? <span>诊断编坷：{searchFilePreview.diagnosticId}</span> : null}
                 <button
                   type="button"
                   className="artifact-retry-button"
@@ -8644,6 +8867,20 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 content={String(searchFilePreview.content || "")}
                 previewUrl={String(searchFilePreview.previewUrl || "")}
                 refreshToken={htmlPreviewRefreshToken}
+                marking={{
+                  active: documentAnnotationActive,
+                  tool: documentMarkingTool,
+                  color: documentMarkingColor,
+                  savedAnnotations: savedFileAnnotations,
+                  pendingMark: documentAnnotationPendingMark,
+                  onComplete: ({ rect, viewport, host }) => handlePreviewMark({
+                    format: "image",
+                    rect,
+                    viewport,
+                    transform: { coordinateSpace: "pixels", basisWidth: viewport.width, basisHeight: viewport.height, scale: 1 },
+                    captureTarget: host
+                  })
+                }}
               />
             ) : searchFilePreview.kind === "image" ? (
               <div className="workspace-artifact-image">
@@ -8709,6 +8946,7 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     content={String(searchFilePreview.content || "")}
                     workspaceId={selectedWorkspace?.id}
                     onOpenLocalFile={openLocalFilePreview}
+                  collapsible={false}
                   />
                 </div>
               </>
@@ -8720,9 +8958,6 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                 <div className="workspace-artifact-text-shell">
                   <pre><code>{(() => {
                   const contentLines = String(searchFilePreview.content || "").split("\n");
-                  const textMarks = activeTextAnnotationFormat && activeBrainFile
-                    ? renderTextLineMarks({ annotations: savedFileAnnotations, fileId: activeBrainFile.id, format: activeTextAnnotationFormat })
-                    : [];
                   return contentLines.map((line: string, index: number) => {
                     const lineNumber = index + 1;
                     const citationSelected = Boolean(searchFilePreview.line)
@@ -8731,20 +8966,16 @@ function renderPreviewModule(placement: Extract<PreviewPlacement, "side" | "cent
                     const ttsSelected = ttsFollow?.scope === "preview"
                       && lineNumber >= ttsFollow.line
                       && lineNumber <= ttsFollow.endLine;
-                    const lineMark = textMarks.find((mark) => mark.line === lineNumber);
                     const className = [
                       "preview-line",
                       citationSelected ? "selected" : "",
-                      ttsSelected ? "tts-active" : "",
-                      lineMark?.tool === "highlight" ? "document-marking-line highlight" : "",
-                      lineMark?.tool === "select-rect" ? "document-marking-line select-rect" : ""
+                      ttsSelected ? "tts-active" : ""
                     ].filter(Boolean).join(" ");
                     return (
                       <span
                         className={className}
                         data-preview-line={lineNumber}
                         key={lineNumber}
-                        style={lineMark ? ({ ["--mark-color" as string]: lineMark.color } as React.CSSProperties) : undefined}
                       >
                         <i>{lineNumber}</i>{line}{index < contentLines.length - 1 ? "\n" : ""}
                       </span>
@@ -9021,7 +9252,7 @@ function renderSkillsModule() {
         }
       });
       setFeatureConfig(nextConfig);
-      if (typeof setChatStatus === "function") setChatStatus(`${skill.name} 已${nextStatus === "enabled" ? "启用" : "停用"}`);
+      if (typeof setChatStatus === "function") setChatStatus(`${skill.name} 已${nextStatus === "enabled" ? "坯用" : "坜用"}`);
     }
 
     async function toggleSkill(skill: any) {
@@ -9134,7 +9365,7 @@ function renderSkillsModule() {
         setErrorMessage("请先在左侧打开一个本地项目，再导入技能压缩包。");
         return;
       }
-      const confirmed = window.confirm(`即将把技能压缩包导入项目「${selectedWorkspace.name || "当前项目"}」。\n\n文件会放到该项目的 .newbrain/skills，脚本不会自动执行。`);
+      const confirmed = window.confirm(`坳将把技能压缩包导入项目「${selectedWorkspace.name || "当前项目"}〝。\n\n文件会放到该项目的 .newbrain/skills，脚本丝会自动执行。`);
       if (!confirmed) return;
       setClawhubBusy(true);
       try {
@@ -9265,7 +9496,7 @@ function renderSkillsModule() {
                   <article className="skill-row" key={skill.id ?? `${skill.name}-${index}`}>
                     {renderCapabilityVisual(skill.name)}
                     <span className="skill-copy">
-                      <strong>{skill.name}</strong>
+                      <strong>{composerSkillLabel(skill)}</strong>
                       <p>{skill.summary || "暂无描述"}</p>
                       <small>工作区技能 · 可在对话中调用</small>
                     </span>
@@ -9289,7 +9520,7 @@ function renderSkillsModule() {
           <footer className="catalog-pagination">
             <span>第 {page} / {pages} 页</span>
             <div>
-              <button type="button" disabled={page <= 1} onClick={() => setSkillCatalogPage((current) => Math.max(1, current - 1))} aria-label="上一页">←</button>
+              <button type="button" disabled={page <= 1} onClick={() => setSkillCatalogPage((current) => Math.max(1, current - 1))} aria-label="上一页">↝</button>
               <button type="button" disabled={page >= pages} onClick={() => setSkillCatalogPage((current) => Math.min(pages, current + 1))} aria-label="下一页">→</button>
             </div>
           </footer>
@@ -9306,7 +9537,7 @@ function renderSkillsModule() {
                 <div className="skill-detail-head">
                   {renderCapabilityVisual(selectedSkill.name, true)}
                   <div>
-                    <h2>{selectedSkill.name} <span>Skill</span></h2>
+                    <h2>{composerSkillLabel(selectedSkill)} <span>Skill</span></h2>
                     <p>{selectedSkill.summary || "暂无描述"}</p>
                   </div>
                   <div className="skill-actions">
@@ -9315,13 +9546,13 @@ function renderSkillsModule() {
                   </div>
                 </div>
                 <div className="skill-instructions">
-                  <h3>{selectedSkill.name} 使用说明</h3>
-                  <p>来源：{selectedSkill.source || "local"} · 作用域：{selectedSkill.scope || "global"} · 路径：{selectedSkill.path || "未配置"}</p>
+                  <h3>{composerSkillLabel(selectedSkill)} 使用说明</h3>
+                  <p>来源：{selectedSkill.source || "local"} · 作用域：{selectedSkill.scope || "global"} · 路径：{selectedSkill.path || "未酝置"}</p>
                   <ol>
-                    <li>读取当前对话及用户明确提供的文件。</li>
-                    <li>按照技能定义执行稳定、可复用的工作流。</li>
-                    <li>遇到缺失信息时先说明具体缺口。</li>
-                    <li>输出结果后给出验证状态和可继续操作的文件。</li>
+                    <li>读坖当前对话坊用户明确杝供的文件。</li>
+                    <li>按照技能定义执行稳定〝坯夝用的工作浝。</li>
+                    <li>靇到缺失信息时先说明具体缺坣。</li>
+                    <li>输出结果坎给出验话状态和坯继续操作的文件。</li>
                   </ol>
                 </div>
               </div>
@@ -9337,7 +9568,7 @@ function renderSkillsModule() {
   }
 function renderPluginsModule() {
     const pluginCatalog = [
-      { id: "plugin-git-console", name: "Git Console", summary: "内置 Git 工作区助手，用于查看状态、分支和仓库操作。", version: "内置", source: "NewBrain", capabilities: ["git", "workspace"], category: "精选", color: "emerald", bundled: true, tags: ["内置", "精选"], published: "", calls: "", success: "", latency: "" },
+      { id: "plugin-git-console", name: "Git Console", summary: "内置 Git 工作区助手，用于查看状态〝分支和仓库操作。", version: "内置", source: "NewBrain", capabilities: ["git", "workspace"], category: "精选", color: "emerald", bundled: true, tags: ["内置", "精选"], published: "", calls: "", success: "", latency: "" },
       { id: "plugin-shell-runner", name: "Shell Runner", summary: "内置命令执行器，支持审批模式下运行 shell 命令。", version: "内置", source: "NewBrain", capabilities: ["shell", "approval"], category: "精选", color: "orange", bundled: true, tags: ["内置", "精选"], published: "", calls: "", success: "", latency: "" },
       ...builtinPluginCatalog.map((plugin) => ({ ...plugin, version: "1.0.0", source: "NewBrain", bundled: true, tags: ["内置", plugin.category].filter(Boolean), published: "", calls: "", success: "", latency: "" })),
       ...repositoryPlugins.map((plugin) => ({
@@ -9360,7 +9591,7 @@ function renderPluginsModule() {
       .filter((plugin) => pluginMarketTab === "all" || plugin.installed)
       .filter((plugin) => pluginCategoryFilter === "全部" || pluginCategoryFilter === "自动推荐" || (plugin.category || "其他") === pluginCategoryFilter)
       .filter((plugin) => {
-        if (pluginVendorFilter === "全部来源") return true;
+        if (pluginVendorFilter === "全部来溝") return true;
         if (pluginVendorFilter === "由 NewBrain 构建" || pluginVendorFilter === "由 OpenAI 构建") return plugin.bundled || plugin.source === "NewBrain" || String(plugin.tags || []).includes("官方");
         return String(plugin.source || "").includes(pluginVendorFilter.split(" ")[0]);
       })
@@ -9474,7 +9705,7 @@ function renderPluginsModule() {
           <div>
             <span className="catalog-kicker">INTEGRATION DIRECTORY</span>
             <h1>插件</h1>
-            <p>连接外部服务和实时数据源，让对话能够读取、查询和执行操作。</p>
+            <p>连接外部服务和实时数据溝，让对话能够读坖〝查询和执行操作。</p>
           </div>
           <button className="catalog-create" type="button" onClick={startNewPlugin}>＋ 新建插件</button>
         </header>
@@ -9487,15 +9718,15 @@ function renderPluginsModule() {
               </div>
             </div>
             <div className="catalog-filterbar plugin-filterbar">
-              <label className="catalog-search"><span>⌕</span><input value={pluginSearchQuery} onChange={(event) => { setPluginSearchQuery(event.target.value); setPluginCatalogPage(1); }} placeholder="搜索插件、分类或提供方" /></label>
-              <select className="catalog-select" value={pluginVendorFilter} onChange={(event) => { setPluginVendorFilter(event.target.value); setPluginCatalogPage(1); }} aria-label="插件来源">
-                <option>全部来源</option>
+              <label className="catalog-search"><span>⌕</span><input value={pluginSearchQuery} onChange={(event) => { setPluginSearchQuery(event.target.value); setPluginCatalogPage(1); }} placeholder="杜索插件〝分类或杝供方" /></label>
+              <select className="catalog-select" value={pluginVendorFilter} onChange={(event) => { setPluginVendorFilter(event.target.value); setPluginCatalogPage(1); }} aria-label="插件来溝">
+                <option>全部来溝</option>
                 <option>由 NewBrain 构建</option>
-                <option>扣子官方</option>
+                <option>扣孝官方</option>
               </select>
-              <select className="catalog-select" value={pluginSortMode} onChange={(event) => { setPluginSortMode(event.target.value as any); setPluginCatalogPage(1); }} aria-label="插件排序">
-                <option value="popular">按热度排序</option>
-                <option value="name">按名称排序</option>
+              <select className="catalog-select" value={pluginSortMode} onChange={(event) => { setPluginSortMode(event.target.value as any); setPluginCatalogPage(1); }} aria-label="插件排庝">
+                <option value="popular">按热度排庝</option>
+                <option value="name">按坝称排庝</option>
                 <option value="installed">已安装优先</option>
               </select>
               <button className="catalog-icon-button" type="button" title="刷新" onClick={() => void loadRepositoryPlugins()}>↻</button>
@@ -9569,7 +9800,7 @@ function renderPluginsModule() {
                         ) : null}
                         {plugin.repository ? (
                           <button className="catalog-row-action" type="button" onClick={() => void setCatalogPluginEnabled(plugin, plugin.installState === "disabled")}>
-                            {plugin.installState === "disabled" ? "启用" : "停用"}
+                            {plugin.installState === "disabled" ? "坯用" : "坜用"}
                           </button>
                         ) : null}
                         {!plugin.bundled ? (
@@ -9597,7 +9828,7 @@ function renderPluginsModule() {
           <footer className="catalog-pagination">
             <span>第 {page} / {pages} 页</span>
             <div>
-              <button type="button" disabled={page <= 1} onClick={() => { setPluginCatalogPage((current) => Math.max(1, current - 1)); setExpandedPluginId(""); }} aria-label="上一页">←</button>
+              <button type="button" disabled={page <= 1} onClick={() => { setPluginCatalogPage((current) => Math.max(1, current - 1)); setExpandedPluginId(""); }} aria-label="上一页">↝</button>
               <button type="button" disabled={page >= pages} onClick={() => { setPluginCatalogPage((current) => Math.min(pages, current + 1)); setExpandedPluginId(""); }} aria-label="下一页">→</button>
             </div>
           </footer>
@@ -9666,7 +9897,7 @@ function renderMcpModule() {
         const list = Array.isArray(windows) ? windows : [];
         setDesktopWindows(list);
         if (list[0]) setSelectedDesktopWindowKey(`${list[0].processId}:${list[0].title}`);
-        setWindowControlMessage(list.length ? `已发现 ${list.length} 个可操作窗口。` : "未发现可操作窗口。");
+        setWindowControlMessage(list.length ? `已发现 ${list.length} 个可操作窗口。` : "未坑现坯操作窗坣。");
       } catch (error) {
         setWindowControlMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -9674,16 +9905,21 @@ function renderMcpModule() {
       }
     }
 
-    async function activateSelectedWindow() {
-      if (!selectedWindow || !api?.windowControl?.activate) return;
+    async function focusDesktopWindow(windowItem: any) {
+      const plan = planSoftwareLinkActivate(windowItem);
+      if (!plan.ok) {
+        setWindowControlMessage(plan.message);
+        return;
+      }
+      setSelectedDesktopWindowKey(plan.selectKey);
+      if (!api?.windowControl?.activate) {
+        setWindowControlMessage("当前系统不支持本机窗口开箱操控（仅 Windows）。");
+        return;
+      }
       setWindowControlBusy(true);
       try {
-        await api.windowControl.activate({
-          processId: selectedWindow.processId,
-          processName: selectedWindow.processName,
-          windowTitle: selectedWindow.title
-        });
-        setWindowControlMessage(`已聚焦：${selectedWindow.title || selectedWindow.processName}`);
+        await api.windowControl.activate(plan.activate);
+        setWindowControlMessage(plan.message);
       } catch (error) {
         setWindowControlMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -9705,10 +9941,10 @@ function renderMcpModule() {
             <div className="software-link-card-head">
               <div>
                 <h2>本机窗口</h2>
-                <span>{windowControlSupported ? "列表 / 聚焦 / 输入 / 截屏" : "当前平台占位"}</span>
+                <span>{windowControlSupported ? "列表 / 蝚焦 / 输入 / 截屝" : "当前平坰坠佝"}</span>
               </div>
               <button type="button" disabled={!windowControlSupported || windowControlBusy} onClick={() => void refreshDesktopWindows()}>
-                {windowControlBusy ? "刷新中…" : "刷新窗口列表"}
+                {windowControlBusy ? "刷新中…" : "刷新窗坣列表"}
               </button>
             </div>
             {!windowControlSupported ? (
@@ -9717,7 +9953,7 @@ function renderMcpModule() {
               <>
                 <div className="software-window-list" role="list">
                   {desktopWindows.length === 0 ? (
-                    <p className="software-link-empty">点击「刷新窗口列表」发现当前桌面上的应用窗口。</p>
+                    <p className="software-link-empty">点击「刷新窗坣列表〝坑现当前桌面上的应用窗坣。</p>
                   ) : desktopWindows.map((windowItem: any) => {
                     const key = `${windowItem.processId}:${windowItem.title}`;
                     return (
@@ -9726,7 +9962,7 @@ function renderMcpModule() {
                         type="button"
                         role="listitem"
                         className={`software-window-item${key === selectedDesktopWindowKey ? " active" : ""}`}
-                        onClick={() => setSelectedDesktopWindowKey(key)}
+                        onClick={() => void focusDesktopWindow(windowItem)}
                       >
                         <strong>{windowItem.title || windowItem.processName || "未命名窗口"}</strong>
                         <em>{windowItem.processName} · PID {windowItem.processId}</em>
@@ -9735,7 +9971,7 @@ function renderMcpModule() {
                   })}
                 </div>
                 <div className="software-link-actions">
-                  <button type="button" className="primary" disabled={!selectedWindow || windowControlBusy} onClick={() => void activateSelectedWindow()}>
+                  <button type="button" className="primary" disabled={!selectedWindow || windowControlBusy} onClick={() => void focusDesktopWindow(selectedWindow)}>
                     测试聚焦
                   </button>
                   <span>{windowControlMessage}</span>
@@ -9813,7 +10049,7 @@ function renderMcpModule() {
                   <label><span>环境变量</span><textarea value={draft?.env ?? ""} onChange={(event) => setMcpDraft((current: any) => ({ ...current, env: event.target.value }))} rows={4} placeholder="KEY=value" /></label>
                   <div className="mcp-state-strip">
                     <span className={`mcp-status ${selectedHealth?.ok ? "ok" : "pending"}`}>{selectedHealth?.ok ? "Connected" : "未检测"}</span>
-                    <strong>{selectedHealth?.detail || "测试连接后显示服务器状态"}</strong>
+                    <strong>{selectedHealth?.detail || "测试连接坎显示服务器状态"}</strong>
                   </div>
                   <div className="mcp-capabilities">
                     <span>能力与工具</span>
@@ -9826,7 +10062,7 @@ function renderMcpModule() {
                   </div>
                   <div className="mcp-detail-actions">
                     <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleInspectMcpServer(selectedServer)}>读取能力</button>
-                    <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleToggleMcpServer(selectedServer.id)}>{selectedServer?.enabled ? "停用" : "启用"}</button>
+                    <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleToggleMcpServer(selectedServer.id)}>{selectedServer?.enabled ? "坜用" : "坯用"}</button>
                     <button type="button" disabled={!selectedServer} onClick={() => selectedServer && void handleDeleteMcpServer(selectedServer.id)}>移除</button>
                     <button className="primary" type="button" onClick={() => void handleSaveMcpServer()}>{editingMcpId ? "保存服务器" : "添加服务器"}</button>
                   </div>
@@ -9844,7 +10080,7 @@ function renderAutomationModule() {
       : [
           {
             id: "daily-workspace-scan",
-            title: "每日工作区扫描",
+            title: "毝日工作区扫杝",
             trigger: "每天启动后检查当前项目文件树和运行记录",
             action: "workspace_scan",
             intervalMinutes: "1440",
@@ -9860,15 +10096,15 @@ function renderAutomationModule() {
           },
           {
             id: "thread-follow-up",
-            title: "线程跟进提醒",
-            trigger: "对长时间未推进的对话给出后续建议",
+            title: "线程跟进杝醒",
+            trigger: "对长时间未推进的对话给出坎续建议",
             action: "thread_follow_up",
             intervalMinutes: "120",
             status: "paused"
           }
         ];
     const actionLabels: Record<string, string> = {
-      workspace_scan: "工作区扫描",
+      workspace_scan: "工作区扫杝",
       git_status: "Git 状态",
       thread_follow_up: "线程跟进"
     };
@@ -9903,7 +10139,7 @@ function renderAutomationModule() {
           <header className="automation-head">
             <div>
               <h1>自动化</h1>
-              <p>把重复的项目扫描、状态检查和线程跟进交给 NewBrain 定时执行。</p>
+              <p>把針夝的项目扫杝〝状态检查和线程跟进交给 NewBrain 定时执行。</p>
             </div>
             <button type="button" onClick={() => resetFeatureDraft("automations")}>
               + 新自动化
@@ -9913,7 +10149,7 @@ function renderAutomationModule() {
           <section className="automation-create-card">
             <div className="automation-create-copy">
               <strong>{editingFeatureId ? "编辑自动化" : "创建自动化"}</strong>
-              <span>配置名称、触发说明、执行动作和循环间隔。</span>
+              <span>酝置坝称〝触坑说明〝执行动作和循环间隔。</span>
             </div>
             <div className="automation-form-grid">
               <label>
@@ -9921,7 +10157,7 @@ function renderAutomationModule() {
                 <input
                   value={automationDraft.title}
                   onChange={(event) => setAutomationDraft((current: any) => ({ ...current, title: event.target.value }))}
-                  placeholder="自动化名称"
+                  placeholder="自动化坝称"
                 />
               </label>
               <label>
@@ -9950,7 +10186,7 @@ function renderAutomationModule() {
                 <textarea
                   value={automationDraft.trigger}
                   onChange={(event) => setAutomationDraft((current: any) => ({ ...current, trigger: event.target.value }))}
-                  placeholder="描述什么时候执行、执行前要检查什么"
+                  placeholder="描述什么时候执行〝执行剝覝检查什么"
                   rows={3}
                 />
               </label>
@@ -10004,7 +10240,7 @@ function renderAutomationPrototypeModule() {
       if (item.schedule === "hourly") return "每小时";
       if (item.schedule === "daily") return "每天";
       if (item.schedule === "weekly") return "每周";
-      if (item.intervalMinutes) return `每 ${item.intervalMinutes} 分钟`;
+      if (item.intervalMinutes) return `毝 ${item.intervalMinutes} 分钟`;
       return item.schedule || item.trigger || "未配置计划";
     };
     const statusKey = (item: any) => {
@@ -10050,9 +10286,9 @@ function renderAutomationPrototypeModule() {
       : "0 个结果";
 
     const suggestions = [
-      { group: "信息汇总", name: "每日简报", time: "工作日 8:00", desc: "汇总日历、重要未读消息和当天优先事项", prompt: "请创建一个工作日早上 8 点运行的每日简报，汇总日历、重要未读消息和当天优先事项。" },
-      { group: "项目管理", name: "每周回顾", time: "每周五 16:00", desc: "整理本周项目进展、风险和下周计划", prompt: "请创建一个每周五下午 4 点运行的周报，汇总本周项目进展、风险和下周计划。" },
-      { group: "持续监测", name: "跟进监控", time: "工作日 9:00", desc: "检查指定信息源并标记需要关注的更新", prompt: "请创建一个工作日上午 9 点运行的跟进监控，检查指定信息源并标记需要关注的更新。" }
+      { group: "信息汇总", name: "毝日简报", time: "工作日 8:00", desc: "汇总日历〝針覝未读消息和当天优先事项", prompt: "请创建一个工作日早上 8 点运行的毝日简报，汇总日历〝針覝未读消息和当天优先事项。" },
+      { group: "项目管理", name: "毝周回顾", time: "每周五 16:00", desc: "整睆本周项目进展〝风险和下周计划", prompt: "请创建一个毝周五下坈 4 点运行的周报，汇总本周项目进展〝风险和下周计划。" },
+      { group: "挝续监测", name: "跟进监控", time: "工作日 9:00", desc: "检查指定信息源并标记需要关注的更新", prompt: "请创建一个工作日上午 9 点运行的跟进监控，检查指定信息源并标记需要关注的更新。" }
     ];
 
     function openCreatorChat(invocation: string, draft = "") {
@@ -10116,16 +10352,85 @@ function renderAutomationPrototypeModule() {
       }
     }
 
-    async function runAutomationNow(item: any) {
-      if (!item?.id || automationRunPendingId === item.id) return;
-      const prompt = String(item.prompt || item.trigger || "").trim();
-      if (!item.workspaceId || !item.threadId) {
-        setErrorMessage("这个任务还没有绑定对话线程，无法在会话里执行。");
+    function automationThreadTarget(item: any) {
+      const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
+      const workspace = catalog.find((entry) => entry.id === item?.workspaceId);
+      const thread = workspace?.threads?.find((entry) => entry.id === item?.threadId && isUserVisibleThread(entry));
+      return workspace?.id && thread?.id ? { workspaceId: workspace.id, threadId: thread.id } : null;
+    }
+
+    function openAutomationThread(item: any) {
+      const target = automationThreadTarget(item);
+      setAutomationMenuId("");
+      setAutomationDetailModalId("");
+      if (!target) {
+        setErrorMessage("这条自动化的对话不在列表里。");
         return;
       }
+      setErrorMessage("");
+      setIsComposingNewThread(false);
+      setActiveFeature("new-chat");
+      setSelectedSidebarRow(`chat:${target.workspaceId}:${target.threadId}`);
+      if (typeof selectWorkspaceThread === "function") {
+        selectWorkspaceThread(target.workspaceId, target.threadId, { force: true });
+      }
+      if (typeof setChatStatus === "function") setChatStatus(`已打开「${item.title || "自动化任务"}〝的对话`);
+    }
+
+    async function runAutomationNow(item: any) {
+      if (!item?.id || automationRunPendingId === item.id) return;
+      const prompt = automationTaskPrompt(String(item.prompt || item.trigger || "").trim());
       if (!prompt) {
         setErrorMessage("这个任务没有可执行的指令。");
         return;
+      }
+      const catalog = normalizeWorkspaceCatalog(workspaceCatalog);
+      const boundWorkspace = catalog.find((entry) => entry.id === item.workspaceId);
+      const boundThread = boundWorkspace?.threads?.find((thread) => thread.id === item.threadId);
+      const threadPlan = planAutomationThreadTarget({
+        boundWorkspaceId: item.workspaceId,
+        boundThreadId: item.threadId,
+        workspaceExists: Boolean(boundWorkspace),
+        threadExists: Boolean(boundThread),
+        fallbackWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID
+      });
+      let workspaceId = String(item.workspaceId || threadPlan.workspaceId);
+      let threadId = String(item.threadId || "");
+      if (threadPlan.createThread) {
+        if (!api?.addWorkspaceThread || !api.activateWorkspaceThread) {
+          setErrorMessage("绑定的对话不存在，且当前版本不能新建线程。");
+          return;
+        }
+        try {
+          const scope = "chat";
+          const existingIds = new Set(
+            (catalog.find((entry) => entry.id === threadPlan.workspaceId)?.threads || []).map((thread) => thread.id)
+          );
+          const nextCatalog = normalizeWorkspaceCatalog(await api.addWorkspaceThread({
+            workspaceId: threadPlan.workspaceId,
+            title: String(item.title || "自动化任务").slice(0, 36),
+            summary: "绑定的对话不存在，已新建线程执行。",
+            scope,
+            ...(threadPlan.workspaceId === INTERNAL_CHAT_WORKSPACE_ID && selectedBrainWorkspaceKey
+              ? { brainWorkspaceKey: selectedBrainWorkspaceKey }
+              : {})
+          }));
+          setWorkspaceCatalog(nextCatalog);
+          const created = nextCatalog.find((entry) => entry.id === threadPlan.workspaceId)?.threads?.find((thread) =>
+            thread.scope === scope && !existingIds.has(thread.id)
+          );
+          if (!created?.id) {
+            setErrorMessage("绑定的对话不存在，新建线程失败。");
+            return;
+          }
+          await api.activateWorkspaceThread({ workspaceId: threadPlan.workspaceId, threadId: created.id });
+          workspaceId = threadPlan.workspaceId;
+          threadId = created.id;
+          await persistAutomation(item, { workspaceId, threadId });
+        } catch (error) {
+          setErrorMessage(error instanceof Error ? error.message : String(error));
+          return;
+        }
       }
       setAutomationRunPendingId(item.id);
       setAutomationMenuId("");
@@ -10133,9 +10438,9 @@ function renderAutomationPrototypeModule() {
       setErrorMessage("");
       setIsComposingNewThread(false);
       setActiveFeature("new-chat");
-      setSelectedSidebarRow(`chat:${item.workspaceId}:${item.threadId}`);
+      setSelectedSidebarRow(`chat:${workspaceId}:${threadId}`);
       if (typeof selectWorkspaceThread === "function") {
-        selectWorkspaceThread(item.workspaceId, item.threadId, { force: true });
+        selectWorkspaceThread(workspaceId, threadId, { force: true });
       }
       if (typeof setChatStatus === "function") setChatStatus(`“${item.title || "自动化任务"}”正在对话中执行`);
       try {
@@ -10147,11 +10452,11 @@ function renderAutomationPrototypeModule() {
           skillContext: "",
           modes: [],
           keepComposer: true,
-          targetWorkspaceId: item.workspaceId,
-          targetThreadId: item.threadId
+          targetWorkspaceId: workspaceId,
+          targetThreadId: threadId
         });
         if (outcome === "sent") {
-          await persistAutomation(item, { status: "record_run" });
+          await persistAutomation(item, { status: "record_run", workspaceId, threadId });
           if (api?.getFeatureConfig) setFeatureConfig(await api.getFeatureConfig());
         }
       } catch (error) {
@@ -10182,7 +10487,7 @@ function renderAutomationPrototypeModule() {
           <div>
             <span className="catalog-kicker">AUTOMATION CONTROL</span>
             <h1>自动化</h1>
-            <p>集中管理定时任务、持续监测和自动执行结果。</p>
+            <p>集中管理定时任务〝挝续监测和自动执行结果。</p>
           </div>
           <button className="catalog-create create-automation" type="button" onClick={() => startNewAutomation()}>＋ 新建自动化</button>
         </header>
@@ -10196,10 +10501,10 @@ function renderAutomationPrototypeModule() {
               </div>
             </div>
             <div className="catalog-filterbar automation-filterbar">
-              <label className="catalog-search"><span>⌕</span><input value={automationSearchQuery} onChange={(event) => { setAutomationSearchQuery(event.target.value); setAutomationCatalogPage(1); }} placeholder="搜索任务名称、计划或指令" /></label>
-              <select className="catalog-select" value={automationSortMode} onChange={(event) => { setAutomationSortMode(event.target.value as any); setAutomationCatalogPage(1); }} aria-label="自动化排序">
+              <label className="catalog-search"><span>⌕</span><input value={automationSearchQuery} onChange={(event) => { setAutomationSearchQuery(event.target.value); setAutomationCatalogPage(1); }} placeholder="杜索任务坝称〝计划或指令" /></label>
+              <select className="catalog-select" value={automationSortMode} onChange={(event) => { setAutomationSortMode(event.target.value as any); setAutomationCatalogPage(1); }} aria-label="自动化排庝">
                 <option value="next">运行中优先</option>
-                <option value="name">按名称排序</option>
+                <option value="name">按坝称排庝</option>
                 <option value="result">有新结果优先</option>
               </select>
             </div>
@@ -10229,6 +10534,7 @@ function renderAutomationPrototypeModule() {
                   </div>
                   <span className={`scheduled-state ${key}`}><i></i>{statusText(item)}</span>
                   <span className="task-menu">
+                  <button className="catalog-row-action" type="button" data-testid="automation-open-thread" onClick={(event) => { event.stopPropagation(); openAutomationThread(item); }}>查看对话</button>
                   <button className="catalog-row-action" type="button" data-testid="automation-run-now" onClick={(event) => { event.stopPropagation(); void runAutomationNow(item); }}>{automationRunPendingId === item.id || item.status === "running" ? "执行中" : "立即执行"}</button>
                   <button className="task-menu-btn" type="button" aria-label="更多操作" onClick={(event) => { event.stopPropagation(); setAutomationMenuId(open ? "" : item.id); }}>•••</button>
                   {open ? (
@@ -10248,7 +10554,7 @@ function renderAutomationPrototypeModule() {
           <footer className="catalog-pagination">
             <span>第 {page} / {pages} 页</span>
             <div>
-              <button type="button" disabled={page <= 1} onClick={() => setAutomationCatalogPage((current) => Math.max(1, current - 1))} aria-label="上一页">←</button>
+              <button type="button" disabled={page <= 1} onClick={() => setAutomationCatalogPage((current) => Math.max(1, current - 1))} aria-label="上一页">↝</button>
               <button type="button" disabled={page >= pages} onClick={() => setAutomationCatalogPage((current) => Math.min(pages, current + 1))} aria-label="下一页">→</button>
             </div>
           </footer>
@@ -10286,7 +10592,7 @@ function renderAutomationPrototypeModule() {
                   <div><small>运行计划</small><strong style={{ display: "block" }}>{scheduleLabel(selected)}</strong></div>
                   <div><small>下次运行</small><strong style={{ display: "block" }}>{selected.nextRunAt ? new Date(selected.nextRunAt).toLocaleString() : "待调度"}</strong></div>
                   <div><small>最近运行</small><strong style={{ display: "block" }}>{selected.lastRunAt ? new Date(selected.lastRunAt).toLocaleString() : "尚未运行"}</strong></div>
-                  <div><small>运行结果</small><strong style={{ display: "block" }}>{selected.lastError || (selected.lastRunAt ? "成功" : "—")}</strong></div>
+                  <div><small>运行结果</small><strong style={{ display: "block" }}>{selected.lastError || (selected.lastRunAt ? "戝功" : "—")}</strong></div>
                 </div>
                 <div>
                   <strong style={{ fontSize: 13 }}>任务指令</strong>
@@ -10545,7 +10851,7 @@ function renderSearchDialog() {
                 </button>
               );
             }) : (
-              <div className="search-dialog-empty">没有找到匹配的项目、聊天或文件</div>
+              <div className="search-dialog-empty">没有找到匹酝的项目〝聊天或文件</div>
             )}
           </div>
         </section>
@@ -10560,7 +10866,7 @@ function renderMobileModule() {
       <main className="mobile-connect-page">
         <section className="mobile-connect-copy">
           <div className="mobile-connect-copy-inner">
-            <h1>{isConnected ? "手机已连接到这台电脑" : "将你的手机连接到这台电脑"}</h1>
+            <h1>{isConnected ? "手机已连接到这坰电脑" : "将你的手机连接到这坰电脑"}</h1>
             <p>{isConnected ? "项目与聊天状态正在通过局域网实时同步" : "通过手机或其他设备继续与 NewBrain 协作"}</p>
 
             {!isWaiting && !isConnected ? (
@@ -10590,7 +10896,7 @@ function renderMobileModule() {
                 {!isConnected ? (
                   <>
                     <label>
-                      <span>配对地址</span>
+                      <span>酝对地址</span>
                       <div><input readOnly value={mobilePairing.url} /><button type="button" onClick={() => writeClipboard(mobilePairing.url)}>复制</button></div>
                     </label>
                     <div className="mobile-pairing-code"><span>配对码</span><strong>{mobilePairing.code}</strong></div>
@@ -10602,7 +10908,7 @@ function renderMobileModule() {
                   type="button"
                   onClick={async () => setMobilePairing(await api.stopMobilePairing())}
                 >
-                  {isConnected ? "断开设备" : "取消配对"}
+                  {isConnected ? "断开设备" : "取消酝对"}
                 </button>
               </div>
             )}
@@ -10616,7 +10922,7 @@ function renderMobileModule() {
           <div className="mobile-phone">
             <div className="mobile-phone-speaker" />
             <div className="mobile-phone-screen">
-              <div className="mobile-phone-status"><b>9:41</b><span>● ◔ ▰</span></div>
+              <div className="mobile-phone-status"><b>9:41</b><span>◝ ◔ ▰</span></div>
               <div className="mobile-phone-toolbar">
                 <button type="button" onClick={() => void api.getMobilePairingStatus()}>☰</button>
                 <button type="button" onClick={() => void api.getMobilePairingStatus()}>•••</button>
@@ -10700,7 +11006,7 @@ function renderWorkspaceModules() {
       const workspaceId = INTERNAL_CHAT_WORKSPACE_ID;
       const sceneKeys = ["quant", "game", "video", "music", "data", "software", "document", "explore"];
       const sceneKey = sceneKeys.includes(selectedBrainWorkspaceKey) ? selectedBrainWorkspaceKey : "explore";
-      const prompt = String(expert.defaultInitPrompt || expert.quickPrompts?.[0] || `请以「${expert.displayName || expertId}」的专业方式处理我接下来的任务。`).trim();
+      const prompt = String(expert.defaultInitPrompt || expert.quickPrompts?.[0] || `请以「${expert.displayName || expertId}〝的专业方式处理我接下来的任务。`).trim();
       const existingIds = new Set(
         (normalizeWorkspaceCatalog(workspaceCatalog).find((item) => item.id === workspaceId)?.threads || []).map((thread) => thread.id)
       );
@@ -10729,7 +11035,7 @@ function renderWorkspaceModules() {
       setQuestion(prompt);
       if (questionRef) questionRef.current = prompt;
       composerTextareaRef.current?.setValue?.(prompt);
-      setChatStatus(`已启用专家「${expert.displayName || expertId}」。发送后会按该专家处理。`);
+      setChatStatus(`已坯用专家「${expert.displayName || expertId}〝。发送坎会按该专家处理。`);
       setErrorMessage("");
     };
 
@@ -10880,10 +11186,10 @@ function renderWorkspaceModules() {
               </button>
               <button
                 type="button"
-                aria-label="稍后提醒"
+                aria-label="稝坎杝醒"
                 onClick={() => setDismissedAppUpdateVersion(String(appUpdateStatus.latestVersion || ""))}
               >
-                稍后
+                清空
               </button>
             </div>
           </div>,

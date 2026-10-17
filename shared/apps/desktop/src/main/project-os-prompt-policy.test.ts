@@ -109,3 +109,33 @@ test("buildProjectOsPromptBlock formats injection and skips empty", () => {
   assert.equal(isProjectManagerSkillName("demo-project-manager"), true);
   assert.equal(isProjectManagerSkillName("other"), false);
 });
+
+test("knowledge injection keeps legacy lines, hides deprecated lines, and titles proposed lines", () => {
+  const selected = selectProjectManagerReferences([
+    {
+      name: "user-output-rules.md",
+      content: [
+        "- LEGACY_KEEP",
+        "- [active] 事实: 用中文 | 状态: active",
+        "- [proposed] 事实: 也许用表格 | 状态: proposed | 批次: 2026-10-11T00:00:00.000Z",
+        "- [deprecated] 事实: 旧规则 | 状态: deprecated",
+        "- [active] 事实: 密码: hunter2-secret | 状态: active"
+      ].join("\n")
+    },
+    {
+      name: "project-knowledge.md",
+      content: "- [proposed] 事实: NEWBRAIN候选: 临时架构 | 状态: proposed\n"
+    }
+  ]);
+  const rules = selected.find((item) => item.name === "user-output-rules.md")?.content || "";
+  const knowledge = selected.find((item) => item.name === "project-knowledge.md")?.content || "";
+  assert.match(rules, /LEGACY_KEEP/);
+  assert.match(rules, /\[active\].*用中文/);
+  assert.match(rules, /只提到过一次/);
+  assert.match(rules, /也许用表格/);
+  assert.doesNotMatch(rules, /旧规则/);
+  assert.doesNotMatch(rules, /hunter2-secret/);
+  assert.match(knowledge, /只提到过一次/);
+  assert.match(knowledge, /临时架构/);
+  assert.doesNotMatch(knowledge, /\[proposed\]/);
+});

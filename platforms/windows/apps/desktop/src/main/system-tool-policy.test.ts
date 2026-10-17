@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { resolveSystemTools } = await import(new URL("./system-tool-policy.ts", import.meta.url).href);
+const { resolveSystemToolCommand, resolveSystemTools, systemToolCatalog } = await import(new URL("./system-tool-policy.ts", import.meta.url).href);
 
 test("uses known Windows installations before PATH lookup", () => {
   const commands: string[] = [];
@@ -14,6 +14,19 @@ test("uses known Windows installations before PATH lookup", () => {
   assert.equal(tools.find((tool: { id: string }) => tool.id === "vscode").available, true);
   assert.equal(tools.find((tool: { id: string }) => tool.id === "finder").label, "File Explorer");
   assert.equal(commands.includes("where.exe code"), false);
+});
+
+test("upgrades a code.cmd shim to the installed Code.exe", () => {
+  const located = "C:\\Users\\test\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd";
+  const executable = "C:\\Users\\test\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe";
+  const vscode = systemToolCatalog.find((tool: { id: string }) => tool.id === "vscode");
+  const command = resolveSystemToolCommand(vscode, {
+    platform: "win32",
+    env: {},
+    fileExists: (path: string) => path === executable,
+    runCommand: () => ({ status: 0, stdout: `${located}\r\n` })
+  });
+  assert.equal(command, executable);
 });
 
 test("detects macOS applications through osascript", () => {

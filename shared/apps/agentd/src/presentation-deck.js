@@ -1,6 +1,7 @@
 /**
  * Shared presentation deck engine for NewBrain artifact.create.
- * Produces modern multi-layout PPTX and Cursor-style HTML slide decks.
+ * Produces multi-layout PPTX and HTML slide decks.
+ * Color comes from the model theme for this deck, or from the deck text when the model omits it.
  */
 
 import { promises as fs } from "node:fs";
@@ -9,22 +10,158 @@ import PptxGenJS from "pptxgenjs";
 import { localizeChineseDoubleQuotes } from "./chinese-typography.js";
 
 const FONT = "Microsoft YaHei";
+const HEX6 = /^#?([0-9A-Fa-f]{6})$/;
 
-/** Clean premium palette — ink + teal, not default Office blue-gray. */
-export const DECK_THEME = Object.freeze({
-  ink: "0F172A",
-  inkSoft: "1E293B",
-  accent: "0D9488",
-  accentSoft: "14B8A6",
-  surface: "F8FAFC",
-  surfaceAlt: "F1F5F9",
-  card: "FFFFFF",
-  text: "0F172A",
-  muted: "475569",
-  onDark: "F8FAFC",
-  onDarkMuted: "94A3B8",
-  line: "E2E8F0"
-});
+const CONTENT_PALETTES = [
+  { cues: /故宫|青铜|文物|非遗|国风|书法|茶|山水|瓷器/, accent: "8C4A2F", ink: "1C1410", surface: "F7F1E8" },
+  { cues: /海洋|深海|科考|航天|芯片|人工智能|数据|软件/, accent: "2563EB", ink: "0B1220", surface: "F4F7FB" },
+  { cues: /医疗|健康|公益|生态|森林|农业|环保/, accent: "15803D", ink: "052E16", surface: "F3FAF5" },
+  { cues: /金融|投行|预算|财报|股价|证券/, accent: "B45309", ink: "1C1917", surface: "FFFBF5" },
+  { cues: /政务|政府|党建|公文|政策/, accent: "9F1239", ink: "1A0A10", surface: "FDF6F7" },
+  { cues: /教育|课程|校园|儿童|课堂/, accent: "7C3AED", ink: "1E1B4B", surface: "F7F5FF" }
+];
+
+const UNMATCHED_ACCENTS = ["1D4ED8", "C2410C", "7C3AED", "BE123C", "A16207", "0369A1", "4D7C0F", "0F766E"];
+
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function parseHex(hex) {
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16)
+  };
+}
+
+function formatHex(channels) {
+  return [channels.r, channels.g, channels.b]
+    .map((value) => clampByte(value).toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+function mixHex(hex, other, weight) {
+  const left = parseHex(hex);
+  const right = parseHex(other);
+  return formatHex({
+    r: left.r * (1 - weight) + right.r * weight,
+    g: left.g * (1 - weight) + right.g * weight,
+    b: left.b * (1 - weight) + right.b * weight
+  });
+}
+
+function normalizeHex(value) {
+  const match = HEX6.exec(String(value || "").trim());
+  return match ? match[1].toUpperCase() : "";
+}
+
+function hashBrief(value) {
+  let hash = 0;
+  for (const char of String(value || "")) hash = (hash * 33 + char.codePointAt(0)) >>> 0;
+  return hash;
+}
+
+function deckBrief(input) {
+  const parts = [input?.title, input?.subtitle, input?.content];
+  if (Array.isArray(input?.slides)) {
+    for (const slide of input.slides) {
+      parts.push(slide?.title, slide?.subtitle, slide?.body);
+      if (Array.isArray(slide?.bullets)) parts.push(...slide.bullets);
+    }
+  }
+  if (Array.isArray(input?.sections)) {
+    for (const section of input.sections) parts.push(section?.heading, section?.body);
+  }
+  return parts.filter((part) => typeof part === "string" && part.trim()).join("\n");
+}
+
+function paletteFromBrief(brief) {
+  const matched = CONTENT_PALETTES.find((palette) => palette.cues.test(brief));
+  if (matched) return { accent: matched.accent, ink: matched.ink, surface: matched.surface, name: "", mood: "content" };
+  const accent = UNMATCHED_ACCENTS[hashBrief(brief) % UNMATCHED_ACCENTS.length];
+  return { accent, ink: "0F172A", surface: "F8FAFC", name: "", mood: "content" };
+}
+
+const PPT_TEAM_THEMES = {
+  magazine: {
+    name: "电子杂志",
+    mood: "暖纸、衬线标题、一种锚点色",
+    accent: "8C4A2F",
+    ink: "1C1410",
+    surface: "F7F1E8",
+    fontTitle: "SimSun"
+  },
+  swiss: {
+    name: "瑞士网格",
+    mood: "无衬线、发丝网格、单一高饱和锚点色",
+    accent: "002FA7",
+    ink: "111111",
+    surface: "F4F4F4",
+    fontTitle: "Microsoft YaHei"
+  },
+  workplace: {
+    name: "职场汇报",
+    mood: "清晰层级、留白、一种强调色",
+    accent: "1D4ED8",
+    ink: "0F172A",
+    surface: "F8FAFC",
+    fontTitle: "Microsoft YaHei"
+  }
+};
+
+function buildDeckTheme(seed, source) {
+  const accent = normalizeHex(seed.accent) || "1D4ED8";
+  const ink = normalizeHex(seed.ink) || "0F172A";
+  const surface = normalizeHex(seed.surface) || "F8FAFC";
+  return {
+    id: text(seed.id),
+    name: text(seed.name),
+    mood: text(seed.mood),
+    source,
+    fontTitle: text(seed.fontTitle) || FONT,
+    ink,
+    inkSoft: mixHex(ink, "FFFFFF", 0.16),
+    accent,
+    accentSoft: mixHex(accent, "FFFFFF", 0.28),
+    surface,
+    surfaceAlt: mixHex(surface, ink, 0.05),
+    card: "FFFFFF",
+    text: ink,
+    muted: mixHex(ink, surface, 0.42),
+    onDark: "F8FAFC",
+    onDarkMuted: mixHex("F8FAFC", ink, 0.38),
+    line: mixHex(surface, ink, 0.14)
+  };
+}
+
+/**
+ * Theme for one deck. A shared team theme id selects the catalog. Otherwise a model-supplied accent wins, then the deck text.
+ *
+ * @param {{ title?: string; subtitle?: string; content?: string; slides?: unknown[]; sections?: unknown[]; theme?: { name?: string; mood?: string; accent?: string; ink?: string; surface?: string } }} input
+ */
+export function resolveDeckTheme(input) {
+  const provided = input?.theme && typeof input.theme === "object" ? input.theme : null;
+  const teamId = text(provided?.id).toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(PPT_TEAM_THEMES, teamId)) {
+    const catalog = PPT_TEAM_THEMES[teamId];
+    return buildDeckTheme({
+      ...catalog,
+      id: teamId,
+      name: text(provided?.name) || catalog.name,
+      mood: text(provided?.mood) || catalog.mood,
+      accent: normalizeHex(provided?.accent) || catalog.accent,
+      ink: normalizeHex(provided?.ink) || catalog.ink,
+      surface: normalizeHex(provided?.surface) || catalog.surface
+    }, "team");
+  }
+  const accent = normalizeHex(provided?.accent);
+  if (accent) {
+    return buildDeckTheme({ ...provided, accent }, "model");
+  }
+  return buildDeckTheme(paletteFromBrief(deckBrief(input)), "content");
+}
 
 const text = (value, fallback = "") => (typeof value === "string" ? value.trim() : fallback);
 
@@ -244,7 +381,7 @@ function renderTitleSlide(deck, slideModel, theme) {
   });
   slide.addText(slideModel.title, {
     x: 0.9, y: 2.35, w: 10.8, h: 1.4,
-    fontFace: FONT, fontSize: 40, bold: true, color: theme.onDark, margin: 0, valign: "middle"
+    fontFace: theme.fontTitle || FONT, fontSize: 40, bold: true, color: theme.onDark, margin: 0, valign: "middle"
   });
   if (slideModel.subtitle || slideModel.body) {
     slide.addText(slideModel.subtitle || slideModel.body, {
@@ -252,7 +389,7 @@ function renderTitleSlide(deck, slideModel, theme) {
       fontFace: FONT, fontSize: 18, color: theme.onDarkMuted, margin: 0
     });
   }
-  slide.addText("NewBrain", {
+  slide.addText(theme.name || "NewBrain", {
     x: 0.9, y: 6.7, w: 4, h: 0.3,
     fontFace: FONT, fontSize: 12, color: theme.accentSoft, margin: 0
   });
@@ -267,7 +404,7 @@ function renderClosingSlide(deck, slideModel, theme) {
   });
   slide.addText(slideModel.title || "谢谢", {
     x: 0.9, y: 2.6, w: 11.5, h: 1.1,
-    fontFace: FONT, fontSize: 44, bold: true, color: theme.onDark, align: "center", margin: 0
+    fontFace: theme.fontTitle || FONT, fontSize: 44, bold: true, color: theme.onDark, align: "center", margin: 0
   });
   const detail = slideModel.body || slideModel.bullets.join(" · ");
   if (detail) {
@@ -287,7 +424,7 @@ function renderSectionSlide(deck, slideModel, theme, page, total) {
   });
   slide.addText(slideModel.title, {
     x: 0.9, y: 3.4, w: 11.5, h: 0.9,
-    fontFace: FONT, fontSize: 32, bold: true, color: theme.onDark, margin: 0
+    fontFace: theme.fontTitle || FONT, fontSize: 32, bold: true, color: theme.onDark, margin: 0
   });
   if (slideModel.body) {
     slide.addText(slideModel.body, {
@@ -573,7 +710,7 @@ function renderStatSlide(deck, slideModel, theme, page, total) {
  */
 export async function writePptxDeck(input, target, sectionsFn, options = {}) {
   const { deckTitle, slides } = planPresentationDeck(input, sectionsFn);
-  const theme = DECK_THEME;
+  const theme = resolveDeckTheme(input);
   const deck = new PptxGenJS();
   deck.layout = "LAYOUT_WIDE";
   deck.author = "NewBrain";
@@ -636,7 +773,7 @@ export async function writePptxDeck(input, target, sectionsFn, options = {}) {
       await options.onSlideWritten({ slideCount: index + 1, total, path: target });
     }
   }
-  return { slideCount: total, deckTitle };
+  return { slideCount: total, deckTitle, theme };
 }
 
 function escapeHtml(value) {
@@ -647,12 +784,12 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function htmlSlideInner(slideModel) {
+function htmlSlideInner(slideModel, theme) {
   const title = escapeHtml(slideModel.title);
   const body = escapeHtml(slideModel.body);
   const subtitle = escapeHtml(slideModel.subtitle || "");
   if (slideModel.layout === "title") {
-    return `<div class="slide title-slide"><div class="accent-rail"></div><div class="copy"><h1>${title}</h1>${subtitle || body ? `<p class="lede">${subtitle || body}</p>` : ""}<span class="brand">NewBrain</span></div></div>`;
+    return `<div class="slide title-slide"><div class="accent-rail"></div><div class="copy"><h1>${title}</h1>${subtitle || body ? `<p class="lede">${subtitle || body}</p>` : ""}<span class="brand">${escapeHtml(theme?.name || "NewBrain")}</span></div></div>`;
   }
   if (slideModel.layout === "closing") {
     return `<div class="slide closing-slide"><h1>${title}</h1>${body ? `<p>${body}</p>` : ""}${slideModel.bullets.length ? `<p>${slideModel.bullets.map(escapeHtml).join(" · ")}</p>` : ""}<div class="closing-bar"></div></div>`;
@@ -713,35 +850,44 @@ function htmlSlideInner(slideModel) {
  * @param {string} target Absolute .html path
  * @param {(input: unknown) => Array<{ heading: string; body: string; bullets: string[] }>} sectionsFn
  */
+function deckThemeStyle(theme) {
+  const color = (hex) => `#${hex}`;
+  return `  :root {
+    --ink: ${color(theme.ink)};
+    --ink-soft: ${color(theme.inkSoft)};
+    --accent: ${color(theme.accent)};
+    --accent-soft: ${color(theme.accentSoft)};
+    --surface: ${color(theme.surface)};
+    --surface-alt: ${color(theme.surfaceAlt)};
+    --card: ${color(theme.card)};
+    --text: ${color(theme.text)};
+    --muted: ${color(theme.muted)};
+    --line: ${color(theme.line)};
+    --on-dark: ${color(theme.onDark)};
+    --on-dark-muted: ${color(theme.onDarkMuted)};
+    --title-font: ${JSON.stringify(theme.fontTitle || "Microsoft YaHei")};
+  }`;
+}
+
 export async function writeHtmlDeck(input, target, sectionsFn) {
   const { deckTitle, slides } = planPresentationDeck(input, sectionsFn);
+  const theme = resolveDeckTheme(input);
   const pages = slides.map((slideModel, index) => (
-    `<section class="page${index === 0 ? " active" : ""}" data-index="${index}" aria-label="第 ${index + 1} 页">${htmlSlideInner(slideModel)}<div class="pager">${index + 1} / ${slides.length}</div></section>`
+    `<section class="page${index === 0 ? " active" : ""}" data-index="${index}" aria-label="第 ${index + 1} 页">${htmlSlideInner(slideModel, theme)}<div class="pager">${index + 1} / ${slides.length}</div></section>`
   )).join("\n");
 
   const html = `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="${escapeHtml(theme.id || "")}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(deckTitle)}</title>
 <style>
-  :root {
-    --ink: #0f172a;
-    --ink-soft: #1e293b;
-    --accent: #0d9488;
-    --accent-soft: #14b8a6;
-    --surface: #f8fafc;
-    --surface-alt: #f1f5f9;
-    --card: #ffffff;
-    --text: #0f172a;
-    --muted: #475569;
-    --line: #e2e8f0;
-    --on-dark: #f8fafc;
-    --on-dark-muted: #94a3b8;
-  }
+${deckThemeStyle(theme)}
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #020617; color: var(--text); font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
+  h1 { font-family: var(--title-font), "Microsoft YaHei", sans-serif; }
+  html[data-theme="swiss"] .viewport { background-image: linear-gradient(rgba(17,17,17,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(17,17,17,.12) 1px, transparent 1px); background-size: 24px 24px; }
   .stage { height: 100%; display: grid; place-items: center; padding: 24px; }
   .viewport {
     width: min(96vw, calc(96vh * 16 / 9));
@@ -830,5 +976,5 @@ export async function writeHtmlDeck(input, target, sectionsFn) {
 `;
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.writeFile(target, html, "utf8");
-  return { slideCount: slides.length, deckTitle };
+  return { slideCount: slides.length, deckTitle, theme };
 }

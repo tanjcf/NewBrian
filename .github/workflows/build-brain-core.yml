@@ -1,0 +1,72 @@
+name: Build brain-core
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "rust/brain-core/**"
+      - ".github/workflows/build-brain-core.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-brain-core:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-x64
+            runner: ubuntu-latest
+            cross: false
+            brain_core_target: ""
+          - name: ubuntu-arm64
+            runner: ubuntu-24.04-arm
+            cross: false
+            brain_core_target: ""
+          - name: macos-arm64
+            runner: macos-latest
+            cross: false
+            brain_core_target: ""
+          - name: macos-x64
+            runner: macos-latest
+            cross: true
+            brain_core_target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        if: matrix.cross == false
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust with the Intel macOS target
+        if: matrix.cross == true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+      - name: Build official brain-core
+        env:
+          BRAIN_CORE_TARGET: ${{ matrix.brain_core_target }}
+        run: |
+          set -euo pipefail
+          args=(build --release --locked --manifest-path rust/brain-core/Cargo.toml)
+          out="rust/brain-core/target/release/brain-core"
+          if [ -n "${BRAIN_CORE_TARGET}" ]; then
+            args+=(--target "${BRAIN_CORE_TARGET}")
+            out="rust/brain-core/target/${BRAIN_CORE_TARGET}/release/brain-core"
+          fi
+          cargo "${args[@]}"
+          mkdir -p dist-brain-core
+          cp "${out}" dist-brain-core/brain-core
+          chmod 755 dist-brain-core/brain-core
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum dist-brain-core/brain-core | tee dist-brain-core/SHA256SUMS.txt
+          else
+            shasum -a 256 dist-brain-core/brain-core | tee dist-brain-core/SHA256SUMS.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brain-core-${{ matrix.name }}
+          if-no-files-found: error
+          path: dist-brain-core/

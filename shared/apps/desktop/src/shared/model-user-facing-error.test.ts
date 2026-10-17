@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   SUBSCRIPTION_INACTIVE_USER_MESSAGE,
   isSubscriptionInactiveError,
+  isUserCancelledModelError,
   mapSubscriptionInactiveUserMessage,
   toUserFacingModelFailureMessage
 } from "./model-user-facing-error.ts";
@@ -25,4 +26,16 @@ test("maps subscription refusals to purchase/admin guidance", () => {
     SUBSCRIPTION_INACTIVE_USER_MESSAGE
   );
   assert.equal(toUserFacingModelFailureMessage("gateway failed"), "gateway failed");
+});
+
+test("treats manual stop and abort as a normal cancellation, not a failure", () => {
+  assert.equal(isUserCancelledModelError("This operation was aborted"), true);
+  assert.equal(isUserCancelledModelError(new Error("AbortError: The user aborted a request.")), true);
+  assert.equal(isUserCancelledModelError("Agent loop was cancelled."), true);
+  assert.equal(isUserCancelledModelError("User requested cancellation."), true);
+  assert.equal(isUserCancelledModelError("当前任务已停止。"), true);
+  assert.equal(isUserCancelledModelError("用户已请求停止当前任务"), true);
+  assert.equal(isUserCancelledModelError("上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。"), true);
+  assert.equal(isUserCancelledModelError("无法连接模型服务"), false);
+  assert.equal(isUserCancelledModelError("模型请求过于频繁，请稍后再试。"), false);
 });

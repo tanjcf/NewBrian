@@ -13,6 +13,8 @@ coverage/
 *.exe
 *.dmg
 *.zip
+*.pfx
+*.password
 __pycache__/
 *.pyc
 

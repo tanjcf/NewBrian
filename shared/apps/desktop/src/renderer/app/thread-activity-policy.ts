@@ -302,7 +302,48 @@ export function reconcileThreadDisplayMessages<T extends DisplayMessageWithProgr
       return localHasRicherProgress ? mergeDisplayMessageProgress(local, message) : message;
     });
   }
-  return [...mergedCanonical, ...optimisticTail];
+  return keepNewInputBelowHistoricalOutput([...mergedCanonical, ...optimisticTail]);
+}
+
+/**
+ * A later user message must stay below the previous turn's assistant output.
+ * Snapshot merges can append an older local assistant after a newer user row;
+ * that paints the new input above the historical answer.
+ */
+export function keepNewInputBelowHistoricalOutput<T extends { role: string; createdAt?: string }>(
+  messages: T[]
+): T[] {
+  const next = [...messages];
+  let index = 0;
+  while (index < next.length) {
+    const message = next[index];
+    if (message.role !== "assistant") {
+      index += 1;
+      continue;
+    }
+    const assistantTime = Date.parse(message.createdAt ?? "");
+    if (!Number.isFinite(assistantTime)) {
+      index += 1;
+      continue;
+    }
+    let newerUserIndex = -1;
+    for (let cursor = 0; cursor < index; cursor += 1) {
+      if (next[cursor].role !== "user") continue;
+      const userTime = Date.parse(next[cursor].createdAt ?? "");
+      if (Number.isFinite(userTime) && userTime > assistantTime) {
+        newerUserIndex = cursor;
+        break;
+      }
+    }
+    if (newerUserIndex < 0) {
+      index += 1;
+      continue;
+    }
+    const [assistant] = next.splice(index, 1);
+    next.splice(newerUserIndex, 0, assistant);
+    index = newerUserIndex + 1;
+  }
+  return next;
 }
 
 type TurnEvent = {

@@ -62,6 +62,21 @@ export function isTerminalDelegatedStatus(status: string | undefined | null) {
   return value === "completed" || value === "failed" || value === "cancelled" || value === "canceled";
 }
 
+/** Failed children from earlier turns must not block the next scheduled run. */
+export function countDelegateFailuresSince(
+  tasks: Array<{ status?: string; createdAt?: string }>,
+  turnStartedAt?: string | number
+) {
+  const since = typeof turnStartedAt === "number" ? turnStartedAt : Date.parse(String(turnStartedAt || ""));
+  const bounded = Number.isFinite(since);
+  return tasks.filter((task) => {
+    if (String(task.status || "").toLowerCase() !== "failed") return false;
+    const created = Date.parse(String(task.createdAt || ""));
+    if (!Number.isFinite(created)) return !bounded;
+    return bounded ? created >= since : true;
+  }).length;
+}
+
 export function countActiveChildren(
   tasks: Array<{ status?: string }>,
   maxChildren = DEFAULT_MAX_CHILDREN_PER_PARENT

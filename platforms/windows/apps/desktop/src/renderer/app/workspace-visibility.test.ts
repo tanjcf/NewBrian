@@ -222,3 +222,24 @@ test("orders sidebar projects newest-first with pinned workspaces on top", () =>
     ["older", "pinned-old", "newer"]
   );
 });
+
+test("scene switch during generation does not repair a thread back into the selection", () => {
+  assert.equal(visibility.shouldRepairSelectedThread({
+    isComposingNewThread: true,
+    visibleThreadCount: 2,
+    selectedThreadId: "",
+    resolvedThreadId: "generating-thread"
+  }), false);
+  assert.equal(visibility.shouldRepairSelectedThread({
+    isComposingNewThread: false,
+    visibleThreadCount: 2,
+    selectedThreadId: "hidden-child",
+    resolvedThreadId: "project-parent"
+  }), true);
+  assert.equal(visibility.shouldRepairSelectedThread({
+    isComposingNewThread: false,
+    visibleThreadCount: 1,
+    selectedThreadId: "project-parent",
+    resolvedThreadId: "project-parent"
+  }), false);
+});

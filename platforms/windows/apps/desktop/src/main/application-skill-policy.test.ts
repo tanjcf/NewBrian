@@ -29,4 +29,7 @@ test("each task runtime receives the global skill root and disabled skills", asy
   const memory = await readFile(path.join(userSkillRoot, "companion-memory", "references", "memory.md"), "utf8");
   assert.match(skill, /小满/);
   assert.match(memory, /用户称呼:/);
+  const pptTeam = await readFile(path.join(userSkillRoot, "ppt-writing-team", "SKILL.md"), "utf8");
+  assert.match(pptTeam, /expert: ppt-creation-expert/);
+  assert.match(pptTeam, /PPT写作团队/);
 });

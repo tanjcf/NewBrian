@@ -132,3 +132,12 @@ test("government draft body helpers reject meta claims", async () => {
   assert.equal(isGovernmentDraftClaimWithoutBody("Continue with the current deliverable; do not call goal.finish directly."), true);
   assert.equal(hasSubstantiveGovernmentDraftBody("正文已经开始。"), false);
 });
+
+test("prepareGovernmentPdfContent removes nested markup", async () => {
+  const { prepareGovernmentPdfContent } = await import(new URL("./government-writing-finalization.ts", import.meta.url).href) as typeof import("./government-writing-finalization.js");
+  const body = `同志们，${"现就有关工作作出安排，明确责任单位和完成时限。".repeat(4)}<scr<script>ipt>alert(1)</script>`;
+  const prepared = prepareGovernmentPdfContent(body, []);
+  assert.equal(prepared.includes("<"), false);
+  assert.match(prepared, /同志们/);
+  assert.match(prepared, /alert\(1\)/);
+});

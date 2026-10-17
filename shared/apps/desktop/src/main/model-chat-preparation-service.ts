@@ -6,8 +6,6 @@ import type {
 } from "@codex-forge/protocol";
 import {
   isModelAutoSelection,
-  isSpecializedNonChatModel,
-  isVisionCapableModel,
   MODEL_AUTO_ID,
   normalizeOptimizeFor,
   resolveModelAutoDecision,
@@ -82,133 +80,19 @@ function mapServerTaskClass(value: string): AutoTaskClass {
   return "general";
 }
 
-function resolveVisionModelOption(
-  modelName: string,
-  availableModels: AuthorizedModelOption[]
-): AuthorizedModelOption {
-  const normalized = String(modelName || "").trim().toLowerCase();
-  return availableModels.find((item) => item.model.trim().toLowerCase() === normalized)
-    ?? { model: modelName, provider: "", label: modelName };
-}
-
-function filterVisionFallbackChain(
-  chain: string[] | null | undefined,
-  availableModels: AuthorizedModelOption[],
-  selectedModel: string
-): string[] {
-  const selected = String(selectedModel || "").trim().toLowerCase();
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const name of chain ?? []) {
-    const trimmed = String(name || "").trim();
-    if (!trimmed) continue;
-    const key = trimmed.toLowerCase();
-    if (key === selected || seen.has(key)) continue;
-    if (!isVisionCapableModel(resolveVisionModelOption(trimmed, availableModels))) continue;
-    if (isSpecializedNonChatModel(resolveVisionModelOption(trimmed, availableModels))) continue;
-    seen.add(key);
-    out.push(trimmed);
-    if (out.length >= 3) break;
-  }
-  return out;
-}
-
 /**
- * Safety net when spring-app Auto returns a non-vision chat model for an image turn
- * (or interrupt-resume after an image turn). Keep specialty image/video channels alone.
+ * Codex does not replace the selected model because a turn or its history
+ * contains images. Image parts stay on their own message and are kept or
+ * omitted later from that model's image-input support.
  */
 export function enforceVisionCapableAutoSelection(input: {
   decision: AutoDecision;
   availableModels: AuthorizedModelOption[];
   hasImageAttachments?: boolean;
 }): AutoDecision {
-  if (!input.hasImageAttachments) return input.decision;
-  const channel = String(input.decision.orchestrator?.primary_channel || "").trim();
-  if (channel === "image_gen" || channel === "video_gen") return input.decision;
-
-  const selectedName = String(input.decision.model.selected || "").trim();
-  const selected = resolveVisionModelOption(selectedName, input.availableModels);
-  const visionPool = input.availableModels.filter(
-    (item) => isVisionCapableModel(item) && !isSpecializedNonChatModel(item)
-  );
-
-  if (isVisionCapableModel(selected)) {
-    const fallback_chain = filterVisionFallbackChain(
-      input.decision.model.fallback_chain,
-      input.availableModels,
-      selected.model
-    );
-    const sameChain = fallback_chain.join("\0") === (input.decision.model.fallback_chain ?? []).join("\0");
-    if (sameChain) return input.decision;
-    return {
-      ...input.decision,
-      model: {
-        ...input.decision.model,
-        fallback_chain,
-        reason_codes: [...new Set([
-          ...input.decision.model.reason_codes,
-          "requires_vision",
-          "vision_capable",
-          "vision_fallback_filtered"
-        ])]
-      }
-    };
-  }
-
-  if (!visionPool.length) {
-    return {
-      ...input.decision,
-      model: {
-        ...input.decision.model,
-        reason_codes: [...new Set([
-          ...input.decision.model.reason_codes,
-          "vision_unavailable_use_bridge"
-        ])]
-      }
-    };
-  }
-
-  const fromServerChain = (input.decision.model.fallback_chain ?? [])
-    .map((name) => visionPool.find((item) => item.model.toLowerCase() === String(name || "").trim().toLowerCase()))
-    .find(Boolean);
-  const next = fromServerChain ?? visionPool[0]!;
-  const fallback_chain = filterVisionFallbackChain(
-    [
-      ...(input.decision.model.fallback_chain ?? []),
-      ...visionPool.map((item) => item.model)
-    ],
-    input.availableModels,
-    next.model
-  );
-  const reasonCodes = [
-    ...input.decision.model.reason_codes,
-    "requires_vision",
-    "vision_capable",
-    "local_vision_model_guard",
-    "channel=vision_qa"
-  ];
-  return {
-    ...input.decision,
-    model: {
-      ...input.decision.model,
-      selected: next.model,
-      fallback_chain,
-      fallback_index: 0,
-      reason_codes: [...new Set(reasonCodes.map((code) => String(code || "").trim()).filter(Boolean))]
-    },
-    notes: `local vision guard: ${selectedName || "unknown"} → ${next.model}`,
-    orchestrator: {
-      schema_version: 1,
-      intent: "vision_qa",
-      handled_by: "router",
-      can_handle_directly: false,
-      primary_channel: "vision_qa",
-      reason_codes: [...new Set([
-        ...(input.decision.orchestrator?.reason_codes ?? []),
-        ...reasonCodes
-      ].map((code) => String(code || "").trim()).filter(Boolean))]
-    }
-  };
+  void input.availableModels;
+  void input.hasImageAttachments;
+  return input.decision;
 }
 
 function autoDecisionFromServer(input: {
@@ -331,8 +215,8 @@ export class ModelChatPreparationService {
       .reverse()
       .find((message) => message.role === "user")
       ?.content ?? "";
-    // Latest-turn images, or interrupt-resume after a prior image turn.
-    // Ordinary later text after an older image must not forever force vision_qa.
+    // Only this user message's own images. Older images stay on their message
+    // and do not switch the model.
     const hasImages = turnRequiresVisionRouting(input.messages);
     const configuredDefault = String(authorized.model || "").trim();
     const selectedSkillNames = input.selectedSkillNames ?? [];
@@ -421,14 +305,6 @@ export class ModelChatPreparationService {
       (item) => item.model.toLowerCase() === input.reviewModel.trim().toLowerCase()
     )?.model ?? selected.model;
     const outboundIsAuto = isModelAutoSelection(input.model);
-    // Image / interrupt-resume vision turns pin the vision-capable parent model so
-    // /v1/responses(model=auto) cannot re-pick a text-only flash after spring routing.
-    // Specialty 出图/视频 still stay on model=auto + child tools.
-    const pinVisionParent = outboundIsAuto
-      && hasImages
-      && isVisionCapableModel(selected)
-      && String(autoDecision.orchestrator?.primary_channel || "") !== "image_gen"
-      && String(autoDecision.orchestrator?.primary_channel || "") !== "video_gen";
 
     return {
       workspace,
@@ -439,9 +315,8 @@ export class ModelChatPreparationService {
         ...input,
         provider: selected.provider,
         wireApi: "responses",
-        // Auto mode: outbound stays model=auto except vision-required turns above.
-        // Never pin specialty 出图/视频 models on the desktop — child tools execute.
-        model: pinVisionParent ? selected.model : (outboundIsAuto ? MODEL_AUTO_ID : selected.model),
+        // Auto stays model=auto. Images do not pin a different vision model.
+        model: outboundIsAuto ? MODEL_AUTO_ID : selected.model,
         reviewModel,
         optimizeFor: autoDecision.optimize_for ?? optimizeFor,
         // Advisory only: callModelApi uses this so Auto+image turns send native

@@ -3,7 +3,8 @@ import path from "node:path";
 
 const CRITICAL_COMMANDS = [
   { id: "critical-root-delete", pattern: /\brm\b(?=[^\r\n]*\s-\S*r)(?=[^\r\n]*\s-\S*f)[^\r\n]*\s\/\*?(?:\s|$)|\bremove-item\b[^\r\n]*(?:-recurse\b[^\r\n]*)?(?:['"]?[a-z]:\\?['"]?\s*$|['"]?\/['"]?\s*$)/i },
-  { id: "critical-disk-management", pattern: /\b(?:diskpart|format(?:\.com)?|mkfs(?:\.\w+)?|fdisk)\b/i },
+  // A leading dash is a flag (`docker --format`), not disk format / Format-Volume.
+  { id: "critical-disk-management", pattern: /(?<![\w-])(?:diskpart|format(?:\.com)?|mkfs(?:\.\w+)?|fdisk)\b/i },
   { id: "critical-power-control", pattern: /\b(?:shutdown(?:\.exe)?|stop-computer|restart-computer|reboot|poweroff)\b/i },
   { id: "critical-boot-config", pattern: /\b(?:bcdedit|bootrec|manage-bde)\b/i },
   { id: "critical-system-registry", pattern: /\breg(?:\.exe)?\s+delete\s+(?:HKLM|HKEY_LOCAL_MACHINE)\\/i }
@@ -250,6 +251,14 @@ export class PolicyEngine {
         };
       }
       if (NETWORK_COMMAND.test(command)) {
+        if (permissionMode === "agent") {
+          return {
+            decision: "allow",
+            source: "permission",
+            ruleId: ":agent-shell",
+            reason: "替我审批模式下，普通 Shell 命令直接执行，不需要每次确认。"
+          };
+        }
         return {
           decision: "ask",
           source: "builtin",
@@ -286,11 +295,27 @@ export class PolicyEngine {
             reason: "写操作使用了无法静态校验的动态路径表达式，需要你确认。"
           };
         }
+        if (permissionMode === "agent") {
+          return {
+            decision: "allow",
+            source: "permission",
+            ruleId: ":agent-shell",
+            reason: "替我审批模式下，工作区内的普通 Shell 写操作直接执行，不需要每次确认。"
+          };
+        }
         return {
           decision: "ask",
           source: "builtin",
           ruleId: "workspace-mutating-shell",
           reason: "该命令会修改工作区文件，需要你确认。"
+        };
+      }
+      if (permissionMode === "agent") {
+        return {
+          decision: "allow",
+          source: "permission",
+          ruleId: ":agent-shell",
+          reason: "替我审批模式下，普通 Shell 命令直接执行，不需要每次确认。"
         };
       }
     }

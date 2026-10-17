@@ -44,9 +44,13 @@ const AUTOMATION_CREATE_REQUEST = /(?:请帮我)?创建(?:一个)?自动化(?:�
  * True when the user is asking this turn to create an automation, including a short
  * follow-up such as "你来创建自动化任务". Edit requests stay on the update path.
  */
+const AUTOMATION_CREATE_NEGATION = /(?:不要|不用|无需|别|勿)(?:再)?创建(?:一个)?自动化|do not create an automation/i;
+
 export function isAutomationCreationRequest(raw: string): boolean {
   const text = String(raw || "").replace(/\s+/g, " ").trim();
   if (!text || /修改自动化/.test(text)) return false;
+  if (/^这是已保存的定时任务/.test(text)) return false;
+  if (AUTOMATION_CREATE_NEGATION.test(text)) return false;
   return AUTOMATION_CREATE_REQUEST.test(text);
 }
 
@@ -186,11 +190,14 @@ const ENGLISH_CREATION_PREFIX = /^(?:please\s+)?create\s+an\s+automation(?:\s+ta
 const ATTACHED_PATH = /(?:^|\s)(?:[A-Za-z]:\\(?:\\?\S)+|\/(?:\S+\/)+\S+\.(?:zip|tar|gz|tgz|skill))\b/gi;
 const LEADING_SCHEDULE = /^(?:每天|每日|每个工作日|每周[一二三四五六日天]?|每小时|every\s+day|daily)\s*(?:早上|上午|下午|晚上|中午)?\s*(?:(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|\d{1,2}\s*(?:点|时)(?:\s*\d{1,2}\s*分?)?)(?:\s*[（(][^）)]{0,20}[）)])?\s*/i;
 
-/**
- * Instruction the scheduled run should execute. Drops the "please create an
- * automation" wrapper, the schedule already stored on the task, and attached
- * zip paths that are not part of the work.
- */
+/** Local skill archives attached to a create request. They are installed, not left in the saved instruction. */
+export function automationSkillZipPaths(raw: string): string[] {
+  const text = String(raw || "");
+  return [...text.matchAll(ATTACHED_PATH)]
+    .map((match) => match[0].trim())
+    .filter((filePath) => /\.zip$/i.test(filePath));
+}
+
 export function automationTaskPrompt(raw: string): string {
   const text = String(raw || "").replace(/\s+/g, " ").trim();
   if (!text) return "";

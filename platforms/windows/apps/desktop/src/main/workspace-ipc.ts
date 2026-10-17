@@ -4,6 +4,7 @@ import {
   type AddWorkspaceInput,
   type AddWorkspaceThreadInput,
   type ArchiveWorkspaceThreadInput,
+  type MoveWorkspaceThreadInput,
   type ChatMessage,
   type CreateBlankWorkspaceInput,
   type ExportWorkspaceThreadHtmlInput,
@@ -18,6 +19,7 @@ import {
   type WorkspaceIdInput,
   type WorkspaceThreadInput
 } from "@codex-forge/protocol";
+import { optionalBrainWorkspaceKey } from "../shared/expert-workspace-policy.js";
 import { parseWorkspaceThreadInput } from "./workspace-lifecycle-contract.js";
 import { parseWorkspaceFileAction } from "./workspace-file-action-contract.js";
 
@@ -36,6 +38,7 @@ interface WorkspaceIpcServices {
   rewindThread: (input: RewindWorkspaceThreadInput) => MaybePromise<unknown>;
   renameThread: (input: RenameWorkspaceThreadInput) => MaybePromise<unknown>;
   archiveThread: (input: ArchiveWorkspaceThreadInput) => MaybePromise<unknown>;
+  moveThread: (input: MoveWorkspaceThreadInput) => MaybePromise<unknown>;
   deleteThread: (input: WorkspaceThreadInput) => MaybePromise<unknown>;
   activateThread: (input: WorkspaceThreadInput) => MaybePromise<unknown>;
   exportThreadHtml: (input: ExportWorkspaceThreadHtmlInput) => MaybePromise<unknown>;
@@ -102,7 +105,14 @@ function parseOpenLocation(input: unknown): OpenWorkspaceLocationInput {
 function parseAddThread(input: unknown): AddWorkspaceThreadInput {
   const record = requireRecord(input, "Add workspace thread");
   if (record.scope !== undefined && record.scope !== "project" && record.scope !== "chat") throw new TypeError("Add workspace thread input is invalid.");
-  return { workspaceId: requireString(record, "workspaceId", "Add workspace thread"), title: requireString(record, "title", "Add workspace thread"), summary: requireString(record, "summary", "Add workspace thread"), scope: record.scope };
+  const brainWorkspaceKey = optionalBrainWorkspaceKey(record.brainWorkspaceKey);
+  return {
+    workspaceId: requireString(record, "workspaceId", "Add workspace thread"),
+    title: requireString(record, "title", "Add workspace thread"),
+    summary: requireString(record, "summary", "Add workspace thread"),
+    scope: record.scope,
+    ...(brainWorkspaceKey ? { brainWorkspaceKey: brainWorkspaceKey as AddWorkspaceThreadInput["brainWorkspaceKey"] } : {})
+  };
 }
 
 function parseRewindThread(input: unknown): RewindWorkspaceThreadInput {
@@ -131,6 +141,15 @@ function parseArchiveThread(input: unknown): ArchiveWorkspaceThreadInput {
   const record = requireRecord(input, "Archive workspace thread");
   if (typeof record.archived !== "boolean" || (record.scope !== undefined && record.scope !== "project" && record.scope !== "chat")) throw new TypeError("Archive workspace thread input is invalid.");
   return { workspaceId: requireString(record, "workspaceId", "Archive workspace thread"), threadId: requireString(record, "threadId", "Archive workspace thread"), archived: record.archived, scope: record.scope };
+}
+
+function parseMoveThread(input: unknown): MoveWorkspaceThreadInput {
+  const record = requireRecord(input, "Move workspace thread");
+  return {
+    threadId: requireString(record, "threadId", "Move workspace thread"),
+    fromWorkspaceId: requireString(record, "fromWorkspaceId", "Move workspace thread"),
+    toWorkspaceId: requireString(record, "toWorkspaceId", "Move workspace thread")
+  };
 }
 
 function parseLiveMessages(value: unknown): ChatMessage[] | undefined {
@@ -188,6 +207,7 @@ export function registerWorkspaceIpcHandlers(services: WorkspaceIpcServices) {
   ipcMain.handle(desktopIpcChannels.workspace.rewindThread, (_event, input: unknown) => services.rewindThread(parseRewindThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.renameThread, (_event, input: unknown) => services.renameThread(parseRenameThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.archiveThread, (_event, input: unknown) => services.archiveThread(parseArchiveThread(input)));
+  ipcMain.handle(desktopIpcChannels.workspace.moveThread, (_event, input: unknown) => services.moveThread(parseMoveThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.deleteThread, (_event, input: unknown) => services.deleteThread(parseWorkspaceThreadInput(input)));
   ipcMain.handle(desktopIpcChannels.workspace.activateThread, (_event, input: unknown) => services.activateThread(parseWorkspaceThreadInput(input)));
   ipcMain.handle(desktopIpcChannels.workspace.exportThreadHtml, (_event, input: unknown) => services.exportThreadHtml(parseExportThreadHtml(input)));

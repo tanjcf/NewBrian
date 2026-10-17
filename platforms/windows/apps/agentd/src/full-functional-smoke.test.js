@@ -43,14 +43,15 @@ test("critical workspace, approval, shell, git, and patch journey", async () => 
     assert.equal(existsSync(deniedMarker), false);
 
     const approvedPending = await runtime.queueShellCommand(
-      "Set-Content -LiteralPath 'approved.txt' -Value 'approved' -Encoding utf8",
+      "New-Item -ItemType Directory -Path 'approved-dir' | Out-Null; Write-Output 'approved'",
       { permissionMode: "approval" }
     );
     assert.equal(approvedPending.session.status, "awaiting-approval");
     const approved = await runtime.respondToApproval(true);
     assert.equal(approved.session.status, "idle");
     assert.equal(approved.runs[0].status, "completed");
-    assert.match(readFileSync(join(root, "approved.txt"), "utf8"), /approved/);
+    assert.equal(existsSync(join(root, "approved-dir")), true);
+    assert.match(approved.runs[0].output, /approved/);
 
     const failedPending = await runtime.queueShellCommand(
       "Write-Error 'expected failure'; exit 7",

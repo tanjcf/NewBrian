@@ -129,9 +129,12 @@ test("never activates a conversation thread that belongs to the outgoing project
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /mappedThreadBelongsToWorkspace/);
   assert.match(source, /selectedWorkspace\?\.threads\?\.some/);
-  assert.match(source, /delete next\[selectedBrainConversationId\]/);
   const guard = source.indexOf("if (!mappedThreadBelongsToWorkspace)");
   const activation = source.indexOf("void api.activateWorkspaceThread", guard);
+  const guardSource = source.slice(guard, activation);
+  assert.match(guardSource, /delete next\[selectedBrainConversationId\]/);
+  assert.match(guardSource, /setSelectedBrainConversationId\(""\)/);
+  assert.match(guardSource, /setIsComposingNewThread\(true\)/);
   assert.ok(guard >= 0 && activation > guard);
 });
 
@@ -253,7 +256,8 @@ test("expanding the right Tools panel hides the left sidebar like open-file arti
   const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
 
   // Shared expand toggle for every scene (center ↔ side).
-  assert.match(resourcePanel, /current === "center"[\s\S]*?return "side"/);
+  assert.match(resourcePanel, /nextBrainToolsPlacement\(isCenter \? "center" : "side"\)/);
+  assert.match(resourcePanel, /setBrainResourcePlacement\(next\)/);
   assert.match(resourcePanel, /title=\{isCenter \? "还原布局" : "展开预览"\}/);
   assert.match(resourcePanel, /aria-pressed=\{isCenter\}/);
   assert.match(resourcePanel, /expand-sidebar/);

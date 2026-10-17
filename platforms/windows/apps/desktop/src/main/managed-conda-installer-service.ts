@@ -41,17 +41,18 @@ function quoteWindowsCommandArgument(value: string) {
   return `"${value.replace(/(["^&|<>])/g, "^$1").replace(/%/g, "%%")}"`;
 }
 
+const WINDOWS_CMD_EXE = "C:\\Windows\\System32\\cmd.exe";
+
 export function resolveBoundedSpawnCommand(
   input: Pick<BoundedCommandInput, "executable" | "args">,
-  platform: NodeJS.Platform = process.platform,
-  environment: NodeJS.ProcessEnv = process.env
+  platform: NodeJS.Platform = process.platform
 ) {
   if (platform !== "win32" || !/\.(?:cmd|bat)$/i.test(input.executable)) {
     return { executable: input.executable, args: input.args, windowsVerbatimArguments: false };
   }
   const commandLine = [input.executable, ...input.args].map(quoteWindowsCommandArgument).join(" ");
   return {
-    executable: environment.ComSpec?.trim() || join(environment.SystemRoot?.trim() || "C:\\Windows", "System32", "cmd.exe"),
+    executable: WINDOWS_CMD_EXE,
     args: ["/d", "/s", "/c", `"${commandLine}"`],
     windowsVerbatimArguments: true
   };
@@ -76,7 +77,7 @@ export function runBoundedEnvironmentCommand(input: BoundedCommandInput): Promis
       return;
     }
     const env = buildBoundedCommandEnv(input.env);
-    const spawnCommand = resolveBoundedSpawnCommand(input, process.platform, env);
+    const spawnCommand = resolveBoundedSpawnCommand(input, process.platform);
     const child = spawn(spawnCommand.executable, spawnCommand.args, {
       cwd: input.cwd,
       env,

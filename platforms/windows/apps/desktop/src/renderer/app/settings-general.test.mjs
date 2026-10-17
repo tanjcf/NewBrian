@@ -28,9 +28,7 @@ test("general settings controls are wired to persisted desktop preferences", () 
   const requiredSnippets = [
     'workMode: "coding"',
     'workMode: "everyday"',
-    "configuration: { ...current.configuration, requireApprovalForShell: true }",
     "configuration: { ...current.configuration, requireApprovalForShell: false }",
-    "requireApprovalForShell: !fullAccess",
     "reviewFindingsFirst: !current.personalization.reviewFindingsFirst",
     "const fullAccess = !desktopPreferences.permissions?.fullAccess",
     "fullAccess }",
@@ -61,6 +59,10 @@ test("general settings controls are wired to persisted desktop preferences", () 
   for (const snippet of requiredSnippets) {
     assert.ok(generalSettingsSource.includes(snippet), `missing persisted setting snippet: ${snippet}`);
   }
+  assert.ok(
+    source.includes("requireApprovalForShell: !current.configuration.requireApprovalForShell"),
+    "shell approval toggle must stay wired on the configuration page"
+  );
 });
 
 test("general settings source remains UTF-8 clean", () => {

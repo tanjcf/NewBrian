@@ -24,11 +24,6 @@ export interface DesktopWebSearchResult {
   items: DesktopWebSearchItem[];
 }
 
-export interface DesktopMarketNewsItem extends DesktopWebSearchItem {
-  evidenceId?: string;
-  sourceType?: string;
-}
-
 export interface DesktopFetchedPage {
   url: string;
   title: string;
@@ -38,21 +33,6 @@ export interface DesktopFetchedPage {
   fetchedAt?: string;
   truncated?: boolean;
   charCount?: number;
-}
-
-export interface DesktopMarketNewsResult {
-  query: string;
-  searchedAt: string;
-  decision: string;
-  status: string;
-  message: string;
-  complete: boolean;
-  paidAttempted: boolean;
-  paidSucceeded: boolean;
-  sourceTypesUsed: string[];
-  items: DesktopMarketNewsItem[];
-  fetches: DesktopFetchedPage[];
-  fetchAttempted: boolean;
 }
 
 export interface DesktopWebSearchClientDependencies {
@@ -121,7 +101,7 @@ export class DesktopWebSearchClient {
 
     const accessToken = (await this.dependencies.readAccessToken()).trim();
     if (!accessToken) {
-      throw new DesktopWebSearchError("WEB_SEARCH_AUTH_REQUIRED", "Desktop session is required before paid web search.");
+      throw new DesktopWebSearchError("WEB_SEARCH_AUTH_REQUIRED", "Desktop session is required before web search.");
     }
 
     const gatewayOrigin = (await this.dependencies.readGatewayOrigin()).replace(/\/+$/u, "");
@@ -142,7 +122,7 @@ export class DesktopWebSearchClient {
     if (!response.ok) {
       await throwDesktopWebSearchHttpError(
         response,
-        `Paid web search failed with HTTP ${response.status}.`
+        `Web search failed with HTTP ${response.status}.`
       );
     }
 
@@ -165,7 +145,7 @@ export class DesktopWebSearchClient {
     if (!payload?.ok || !payload.data) {
       throw new DesktopWebSearchError(
         String(payload?.code || "WEB_SEARCH_UNAVAILABLE"),
-        String(payload?.message || "Paid web search is unavailable.")
+        String(payload?.message || "Web search is unavailable.")
       );
     }
 
@@ -192,128 +172,7 @@ export class DesktopWebSearchClient {
     };
   }
 
-  /** Free-news-first market search via Spring orchestrator; Baidu then Bocha stay server-side. */
-  async searchMarketNews(input: {
-    query: string;
-    freshness?: DesktopWebSearchFreshness;
-    count?: number;
-  }): Promise<DesktopMarketNewsResult> {
-    const query = String(input.query || "").trim();
-    if (!query || query.length > 200) {
-      throw new DesktopWebSearchError("WEB_SEARCH_QUERY_INVALID", "Query must contain 1 to 200 characters.");
-    }
-    const freshness = input.freshness || "noLimit";
-    const allowed: DesktopWebSearchFreshness[] = ["noLimit", "oneDay", "oneWeek", "oneMonth", "oneYear"];
-    if (!allowed.includes(freshness)) {
-      throw new DesktopWebSearchError("WEB_SEARCH_FRESHNESS_INVALID", "Freshness value is unsupported.");
-    }
-    const count = input.count ?? 5;
-    if (!Number.isInteger(count) || count < 1 || count > 10) {
-      throw new DesktopWebSearchError("WEB_SEARCH_COUNT_INVALID", "Count must be an integer from 1 to 10.");
-    }
-
-    const accessToken = (await this.dependencies.readAccessToken()).trim();
-    if (!accessToken) {
-      throw new DesktopWebSearchError("WEB_SEARCH_AUTH_REQUIRED", "Desktop session is required before market news search.");
-    }
-
-    const gatewayOrigin = (await this.dependencies.readGatewayOrigin()).replace(/\/+$/u, "");
-    const response = await this.fetchImpl(`${gatewayOrigin}/api/desktop/v1/market-news-search`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        ...this.dependencies.createHeaders({ accessToken })
-      },
-      body: JSON.stringify({
-        query,
-        freshness,
-        count
-      })
-    });
-
-    if (!response.ok) {
-      await throwDesktopWebSearchHttpError(
-        response,
-        `Market news search failed with HTTP ${response.status}.`
-      );
-    }
-
-    const payload = await response.json() as {
-      ok?: boolean;
-      data?: {
-        query?: string;
-        searchedAt?: string;
-        decision?: string;
-        status?: string;
-        message?: string;
-        complete?: boolean;
-        paidAttempted?: boolean;
-        paidSucceeded?: boolean;
-        sourceTypesUsed?: unknown;
-        items?: Array<Record<string, unknown>>;
-        fetches?: Array<Record<string, unknown>>;
-        fetchAttempted?: boolean;
-      };
-      message?: string;
-      code?: string;
-    };
-
-    if (!payload?.ok || !payload.data) {
-      throw new DesktopWebSearchError(
-        String(payload?.code || "WEB_SEARCH_UNAVAILABLE"),
-        String(payload?.message || "Market news search is unavailable.")
-      );
-    }
-
-    const items: DesktopMarketNewsItem[] = Array.isArray(payload.data.items)
-      ? payload.data.items.map((item) => ({
-        evidenceId: item.evidenceId == null ? undefined : String(item.evidenceId),
-        title: String(item.title || ""),
-        url: String(item.url || ""),
-        siteName: String(item.source || item.siteName || ""),
-        snippet: String(item.snippet || ""),
-        summary: String(item.snippet || ""),
-        publishedAt: String(item.publishedAt || ""),
-        sourceType: item.sourceType == null ? undefined : String(item.sourceType)
-      })).filter((item) => item.url)
-      : [];
-
-    const fetches: DesktopFetchedPage[] = Array.isArray(payload.data.fetches)
-      ? payload.data.fetches.map((item) => ({
-        url: String(item.url || ""),
-        title: String(item.title || ""),
-        text: String(item.text || ""),
-        status: String(item.status || "empty"),
-        statusCode: typeof item.statusCode === "number" ? item.statusCode : Number(item.status_code || 0) || 0,
-        fetchedAt: item.fetched_at == null && item.fetchedAt == null ? undefined : String(item.fetched_at || item.fetchedAt),
-        truncated: Boolean(item.truncated),
-        charCount: typeof item.char_count === "number"
-          ? item.char_count
-          : typeof item.charCount === "number"
-            ? item.charCount
-            : undefined
-      })).filter((item) => item.url)
-      : [];
-
-    return {
-      query: String(payload.data.query || query),
-      searchedAt: String(payload.data.searchedAt || new Date().toISOString()),
-      decision: String(payload.data.decision || "NONE"),
-      status: String(payload.data.status || (items.length ? "ok" : "unavailable")),
-      message: String(payload.data.message || ""),
-      complete: payload.data.complete !== false,
-      paidAttempted: Boolean(payload.data.paidAttempted),
-      paidSucceeded: Boolean(payload.data.paidSucceeded),
-      sourceTypesUsed: Array.isArray(payload.data.sourceTypesUsed)
-        ? payload.data.sourceTypesUsed.map((value) => String(value))
-        : [],
-      items,
-      fetches,
-      fetchAttempted: Boolean(payload.data.fetchAttempted) || fetches.length > 0
-    };
-  }
-
-  /** Fetch a single page body via Spring web-fetch (no paid search quota). */
+  /** Fetch a single page body via Spring web-fetch. */
   async fetchPage(input: {
     url: string;
     maxChars?: number;

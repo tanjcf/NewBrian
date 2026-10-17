@@ -1,4 +1,4 @@
-import { Component, isValidElement, memo, useEffect, useId, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, isValidElement, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -8,6 +8,12 @@ import { isArtifactFilePath, isLocalFileLink, parseLocalFileReference, resolveLo
 import { normalizeStreamingMarkdown, safeMarkdownUrl } from "./streaming-markdown";
 import { LocalFileContextMenu, positionLocalFileMenu, type LocalFileMenuState } from "./LocalFileContextMenu";
 import { copyTextToClipboard } from "./clipboard-text";
+import {
+  createMermaidDiagramId,
+  loadMermaidOnce,
+  peekMermaidSvgCache,
+  rememberMermaidSvg
+} from "./mermaid-diagram-stability.ts";
 
 type OpenLocalFile = (filePath: string, location?: Omit<LocalFileReference, "filePath">) => void;
 
@@ -39,28 +45,60 @@ function openLocalFile(workspaceId: string, reference: LocalFileReference, onOpe
   else window.dispatchEvent(new CustomEvent("newbrain:open-local-file", { detail: { workspaceId, ...reference } }));
 }
 
-function MermaidDiagram({ source }: { source: string }) {
+const MermaidDiagram = memo(function MermaidDiagram({ source }: { source: string }) {
   const reactId = useId();
-  const [svg, setSvg] = useState("");
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const renderAttemptRef = useRef(0);
+  const [svg, setSvg] = useState(() => peekMermaidSvgCache(source));
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const cached = peekMermaidSvgCache(source);
+    if (cached) {
+      setSvg(cached);
+      setError("");
+      return;
+    }
     let active = true;
-    const diagramId = `newbrain-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-    void import("mermaid").then(async ({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, theme: "neutral" });
+    renderAttemptRef.current += 1;
+    const diagramId = createMermaidDiagramId(reactId, renderAttemptRef.current);
+    void loadMermaidOnce().then(async ({ default: mermaid }) => {
       const result = await mermaid.render(diagramId, source);
-      if (active) { setSvg(result.svg); setError(""); }
+      if (!active) return;
+      rememberMermaidSvg(source, result.svg);
+      setSvg(result.svg);
+      setError("");
     }).catch((reason: unknown) => {
-      if (active) { setSvg(""); setError(reason instanceof Error ? reason.message : "Mermaid 图表无法渲染"); }
+      if (!active) return;
+      setSvg("");
+      setError(reason instanceof Error ? reason.message : "Mermaid 图表无法渲染");
     });
     return () => { active = false; };
   }, [reactId, source]);
 
-  if (error) return <div className="markdown-mermaid-error" role="alert"><strong>Mermaid 图表无法渲染</strong><span>{error}</span><pre>{source}</pre></div>;
-  if (!svg) return <div className="markdown-mermaid-loading">正在渲染图表…</div>;
-  return <div className="markdown-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
-}
+  // Lock the first painted height so later remounts / font reflow do not bounce the page.
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host || !svg) return;
+    const height = Math.ceil(host.getBoundingClientRect().height);
+    if (height > 0) host.style.minHeight = `${height}px`;
+  }, [svg]);
+
+  if (error) {
+    return <div className="markdown-mermaid-error" role="alert" data-testid="markdown-mermaid-error">
+      <strong>Mermaid 图表无法渲染</strong><span>{error}</span><pre>{source}</pre>
+    </div>;
+  }
+  if (!svg) {
+    return <div className="markdown-mermaid-loading" data-testid="markdown-mermaid-loading">正在渲染图表…</div>;
+  }
+  return <div
+    ref={hostRef}
+    className="markdown-mermaid"
+    data-testid="markdown-mermaid"
+    dangerouslySetInnerHTML={{ __html: svg }}
+  />;
+});
 
 function CodeBlock({ children }: { children?: ReactNode }) {
   const child = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children : null;
@@ -211,20 +249,23 @@ function useStreamingSnapshot(content: string, isStreaming: boolean) {
   return isStreaming ? snapshot : content;
 }
 
-function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreaming = false }: {
+function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreaming = false, collapsible = true }: {
   content: string;
   workspaceId?: string;
   onOpenLocalFile?: OpenLocalFile;
   priorOrderedItemCount?: number;
   isStreaming?: boolean;
+  /** File preview passes false so Mermaid charts are not remounted inside collapsible headings. */
+  collapsible?: boolean;
 }) {
   const [fileMenu, setFileMenu] = useState<LocalFileMenuState | null>(null);
   const [showSource, setShowSource] = useState(false);
   const streamingSnapshot = useStreamingSnapshot(content, isStreaming);
   const renderableContent = useMemo(() => normalizeStreamingMarkdown(streamingSnapshot, isStreaming), [streamingSnapshot, isStreaming]);
   const components = useMemo(() => markdownComponents(workspaceId, onOpenLocalFile), [workspaceId, onOpenLocalFile]);
+  const useFlatDocument = isStreaming || !collapsible;
 
-  return <div className={`markdown-message${isStreaming ? " markdown-message-streaming" : ""}`} onContextMenu={(event) => {
+  return <div className={`markdown-message${isStreaming ? " markdown-message-streaming" : ""}${!collapsible ? " markdown-message-file-preview" : ""}`} onContextMenu={(event) => {
     const link = (event.target as HTMLElement).closest<HTMLElement>("[data-local-file-path]");
     const filePath = link?.dataset.localFilePath;
     if (!filePath || !workspaceId) return;
@@ -242,8 +283,9 @@ function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreamin
           Windows-only: Chromium scroll anchoring + stick-to-bottom fights Collapsible
           heading remounts while tokens stream, so answer text jumps up/down. Other OS
           builds do not hit this; keep flat MarkdownDocument only on Windows.
+          File preview also stays flat so Mermaid diagrams keep a stable layout.
         */}
-        {isStreaming
+        {useFlatDocument
           ? <MarkdownDocument content={renderableContent} components={components} />
           : <CollapsibleMarkdownDocument content={renderableContent} components={components} />}
       </MarkdownErrorBoundary>}

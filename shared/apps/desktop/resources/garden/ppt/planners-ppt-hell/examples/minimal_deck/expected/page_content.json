@@ -1,0 +1,12 @@
+{
+  "project": "示例",
+  "pages": [
+    {
+      "page_key": "opening",
+      "title": "明确本次提案的主张",
+      "content": "保留源材料的核心证据、来源和限定条件。",
+      "source_assets": [],
+      "notes": "讲稿补充"
+    }
+  ]
+}

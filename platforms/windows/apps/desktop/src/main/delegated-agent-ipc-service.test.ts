@@ -120,3 +120,28 @@ test("reconciles abandoned running children to failed when no active run remains
   assert.equal(tasks[0].status, "failed");
   assert.match(failedReason, /no longer active/i);
 });
+
+test("does not fail a queued child before its run is registered", async () => {
+  let failedReason = "";
+  const task = { id: "task-1", childThreadId: "child", parentThreadId: "parent", status: "queued" };
+  const thread = { id: "child" };
+  const workspace = { id: "workspace", threads: [{ id: "parent" }, thread] };
+  const service = new DelegatedAgentIpcService({
+    readCatalog: async () => ({ workspaces: [workspace] }),
+    listTasks: () => [task],
+    readState: async () => ({ agentCheckpoint: { status: "idle" } }),
+    respondApproval: () => undefined,
+    run: async () => task,
+    observeRunFailure: () => undefined,
+    hasActiveRun: () => false,
+    failTask: (current, reason) => {
+      failedReason = reason;
+      current.status = "failed";
+      current.error = reason;
+      return { ...current };
+    }
+  } as never);
+  const tasks = await service.list({ workspaceId: "workspace", parentThreadId: "parent" });
+  assert.equal(tasks[0].status, "queued");
+  assert.equal(failedReason, "");
+});

@@ -5,7 +5,7 @@
 export function buildUserSkillPlatformInheritanceInstruction(): string {
   return [
     "User-skill platform inheritance (mandatory):",
-    "1. Global skills (user .newbrain/skills/) and project skills (workspace .newbrain/skills/) are user knowledge crystallization. They add domain rules; they do NOT replace NewBrain native tools, scene tools, Project OS (NEWBRAIN.md), approvals, agent.delegate, or Auto routing.",
+    "1. Global skills live in the user home directory `.newbrain/skills/<skill>/SKILL.md` (never `.newbrain/.newbrain/skills`). Project skills live in the workspace `.newbrain/skills/`. They add domain rules; they do NOT replace NewBrain native tools, scene tools, Project OS (NEWBRAIN.md), approvals, agent.delegate, or Auto routing. A Chinese skill name is the directory name.",
     "2. Workspace retrieval is platform-owned and identical with or without any Skill selected: find files with workspace.glob (alias glob), search contents with workspace.grep (alias grep), read files with workspace.read (alias read), shallow list with workspace.scan. Do not use shell.exec recursive search (Get-ChildItem -Recurse / grep -r / find without -maxdepth / Select-String -Recurse) for ordinary code lookup—even when a Skill.md suggests shell search.",
     "3. Document delivery must use registered native tools (document.create_pdf, document.create_docx, artifact.create, artifact.inspect, office.open, office.convert) and scene document tools when in the document workspace. Never claim a product-offline central skill removed platform export capability.",
     "4. Media generation (image_generate, video_generate, music_generate) is a platform Auto capability available in chat even when a user skill is selected. When the user asks to generate music/song/audio, image, or video, you MUST call the matching tool and wait for the result. In business scenes (music/video/quant/data/…), prefer the scene Tools sub-architecture (`music.song.generate`, `video.shot.generate`, `quant.*`, `data.*`, …) over bare gateway tools. Never deny capability or redirect to external services unless the tool actually failed.",
@@ -15,7 +15,7 @@ export function buildUserSkillPlatformInheritanceInstruction(): string {
     "8. Do not tell the user that NewBrain lost writing, export, media, retrieval, or tool ability merely because a built-in central specialty skill is product-offline.",
     "",
     "用户 Skill 平台传承（强制）：",
-    "1. 全局 Skill（用户目录 .newbrain/skills/）与项目 Skill（工作区 .newbrain/skills/）只补充领域规则，不能替代 NewBrain 原生工具、场景 tools、Project OS、审批与子 Agent。",
+    "1. 全局 Skill 在用户主目录下的 `.newbrain/skills/<技能目录>/SKILL.md`，不要到 `.newbrain/.newbrain/skills` 查找。项目 Skill 在工作区 `.newbrain/skills/`。中文技能名原样作为目录名。它们只补充领域规则，不能替代 NewBrain 原生工具、场景 tools、Project OS、审批与子 Agent。",
     "2. 工作区检索为平台能力：查文件用 workspace.glob（别名 glob），搜内容用 workspace.grep（别名 grep），读文件用 workspace.read（别名 read）；禁止用 shell 无边界递归检索代替，即使 Skill.md 写了 shell 搜索也以平台工具为准。",
     "3. 文稿交付必须调用已注册工具（document.create_*、artifact.create、office.open、office.convert 等）；内置政务 Skill 下线不等于平台失去写稿/导出能力。",
     "4. 音乐/图片/视频生成是平台 Auto 能力：业务场景优先右侧 Tools 子架构（如 music.song.generate / video.shot.generate）；不得否认能力或只回复「正在生成」却不调工具。",

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const port = 19_000 + (process.pid % 2_000);
@@ -52,10 +53,10 @@ try {
   await mkdir(workspacePath, { recursive: true });
   const target = await cdp.evaluate(`(async () => {
     let catalog = await window.newbrain.listWorkspaces();
-    if (!catalog.some((item) => item.path === ${JSON.stringify(workspacePath)})) {
-      catalog = await window.newbrain.addWorkspace({ name: "Usage Feedback E2E", path: ${JSON.stringify(workspacePath)} });
+    if (!catalog.some((item) => item.path === ${embedJsValue(workspacePath)})) {
+      catalog = await window.newbrain.addWorkspace({ name: "Usage Feedback E2E", path: ${embedJsValue(workspacePath)} });
     }
-    let workspace = catalog.find((item) => item.path === ${JSON.stringify(workspacePath)});
+    let workspace = catalog.find((item) => item.path === ${embedJsValue(workspacePath)});
     if (!(workspace?.threads || []).length) {
       catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspace.id, title: "Usage Feedback", summary: "E2E", scope: "chat" });
       workspace = catalog.find((item) => item.id === workspace.id);
@@ -150,7 +151,7 @@ async function submitCommand(driver, text) {
   const scope = ".task-column:not(.new-chat-task)";
   await driver.evaluate(`(() => { const input = document.querySelector('${scope} [data-testid="composer-input"]'); input.focus(); input.select(); return true; })()`);
   await driver.typeText(text);
-  await driver.waitFor("feedback command draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${JSON.stringify(text)}`);
+  await driver.waitFor("feedback command draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${embedJsValue(text)}`);
   const send = `document.querySelector('${scope} [data-testid="composer-input"]')?.closest('.composer-card')?.querySelector('[data-testid="composer-send-button"]')`;
   await driver.waitFor("enabled send button", `Boolean(${send}) && !(${send}).disabled && !(${send}).classList.contains('stop-btn')`);
   await driver.clickExpression(send);
@@ -205,7 +206,7 @@ async function connect(currentSession) {
     },
     reload: async () => { socket.send(JSON.stringify({ id: 0, method: "Page.reload", params: { ignoreCache: true } })); await sleep(1_500); },
     waitFor: async (label, expression, timeout = 10_000) => { const end = Date.now() + timeout; while (Date.now() < end) { if (await evaluate(expression)) return; await sleep(100); } throw new Error(`Timed out waiting for ${label}: ${await evaluate("document.body.innerText.slice(0, 1000)").catch(() => "")}`); },
-    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${JSON.stringify(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
+    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${embedJsValue(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
     typeText: async (text) => {
       for (const character of text) {
         socket.send(JSON.stringify({ id: ++id, method: "Input.dispatchKeyEvent", params: { type: "char", key: character, text: character, unmodifiedText: character } }));

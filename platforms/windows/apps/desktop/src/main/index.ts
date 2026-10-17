@@ -223,9 +223,12 @@ import {
 } from "./workspace-catalog-policy.js";
 import {
   ensureInternalChatWorkspace,
+  INTERNAL_CHAT_WORKSPACE_ID,
   isInternalChatWorkspace,
   resolveInternalChatPath
 } from "./internal-chat-workspace.js";
+import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.js";
+import { moveThreadBetweenProjects } from "../shared/sidebar-layout.js";
 import { ensureInternalChatWorkspaceCatalog } from "./internal-chat-workspace-catalog-service.js";
 import { ensureWorkspaceCatalogConda as ensureWorkspaceCatalogCondaValue } from "./workspace-catalog-conda-service.js";
 import { resolveExistingFileInsideRoot } from "./path-security.js";
@@ -241,6 +244,7 @@ import {
   titleCaseSkillName,
   validateSkillMarkdown
 } from "./skill-scaffold-policy.js";
+import { resolveUserSkillRoot } from "./user-skill-root.js";
 import {
   assertAttachmentSize,
   formatAttachmentSize,
@@ -274,6 +278,7 @@ import {
 import { runGitUtf8 } from "./git-command.js";
 import { runBoundedExtractor } from "./bounded-extractor.js";
 import { applyApplicationSkillPolicy as applySkillPolicy } from "./application-skill-policy.js";
+import { ensurePptWritingTeamSkill } from "../../../../../../shared/apps/desktop/src/main/ppt-writing-team-skill.js";
 import { resolveRepositoryVirtualPath } from "./repository-plugin-paths.js";
 import {
   buildRepositoryPluginSpec,
@@ -440,7 +445,7 @@ import {
   canContinueThinkingWithMessages,
   extractResponsesText,
   extractResponsesTextFromSse,
-  isThinkingContextGatewayRejection,
+  shouldRetryModelRequestWithoutThinking,
   requiresThinkingWireProtocol,
   resolveGatewayBaseUrl,
   resolveGatewayOrigin,
@@ -492,6 +497,8 @@ import {
   markAutomationFailed,
   markAutomationRunning,
   markAutomationSucceeded,
+  resolveAutomationSkillNames,
+  scheduledAutomationRequest,
   selectDueAutomations,
   updateAutomationSpec
 } from "./automation-schedule-policy.js";
@@ -521,6 +528,7 @@ import {
 import {
   assertCanDelegateChild,
   countActiveChildren,
+  countDelegateFailuresSince,
   DEFAULT_MAX_CHILDREN_PER_PARENT,
   isTerminalDelegatedStatus,
   normalizeChildThreadIds,
@@ -691,7 +699,7 @@ async function listExpertsForRuntime() {
   });
 }
 function collectSkillRootsForExpertBridge(workspacePathValue?: string) {
-  const roots = [userSkillRoot];
+  const roots = [...managedUserSkillRoots()];
   if (workspacePathValue) {
     roots.push(join(workspacePathValue, "skills"), join(workspacePathValue, ".newbrain", "skills"));
   }
@@ -773,7 +781,12 @@ const desktopPreviewScreenshotPath = join(workspaceStateRoot, "preview-screensho
 const desktopDiagnosticsLogPath = join(workspaceStateRoot, "diagnostics.log");
 const desktopErrorOutbox = new DesktopErrorOutbox(join(workspaceStateRoot, "error-reports"));
 let rendererFailureRestartScheduled = false;
-const userSkillRoot = join(workspaceStateRoot, "skills");
+const userSkillLocations = resolveUserSkillRoot({ homeDir: os.homedir(), workspacePath });
+const userSkillRoot = userSkillLocations.primary;
+const legacyUserSkillRoots = userSkillLocations.legacy;
+function managedUserSkillRoots() {
+  return [userSkillRoot, ...legacyUserSkillRoots];
+}
 const pluginRepositoryRoot = join(app.getPath("userData"), "plugins");
 const userKnowledgeRoot = workspaceStateRoot;
 const authAuditLogPath = join(workspacePath, "tmp-auth-session.log");
@@ -3475,7 +3488,7 @@ interface FeatureConfigFile {
 }
 async function discoverWorkspaceSkillSpecs() {
   const discovered: SkillSpec[] = [];
-  const roots = [userSkillRoot, join(workspacePath, "skills")];
+  const roots = [...managedUserSkillRoots(), join(workspacePath, "skills")];
   for (const root of roots) {
     let entries;
     try {
@@ -3508,6 +3521,7 @@ async function discoverWorkspaceSkillSpecs() {
   return discovered;
 }
 async function syncDiscoveredSkills(config: FeatureConfigFile) {
+  await ensurePptWritingTeamSkill(userSkillRoot, join(expertBuiltinRoot, "..", "garden", "ppt"));
   const discoveredSkills = await discoverWorkspaceSkillSpecs();
   if (!discoveredSkills.length) return config;
   const existingKeys = new Set(config.skills.map((skill) => skill.name || skill.id));
@@ -3546,7 +3560,7 @@ async function updateManagedSkillScaffold(current: SkillSpec, input: FeatureItem
   await ensureDirectory(join(nextPath, "agents"));
   await fs.writeFile(join(nextPath, "SKILL.md"), skillMarkdown, "utf8");
   await fs.writeFile(join(nextPath, "agents", "openai.yaml"), makeOpenAiYaml(nextName, displayName, description), "utf8");
-  await runtime.addSkillRoots([userSkillRoot]);
+  await runtime.addSkillRoots(managedUserSkillRoots());
   return {
     id: `skill-${nextName}`,
     name: nextName,
@@ -3567,7 +3581,7 @@ async function deleteManagedSkillScaffold(skill: SkillSpec) {
     throw new Error(`Refusing to delete skill outside managed root: ${skillPath}`);
   }
   await fs.rm(normalizedPath, { recursive: true, force: true });
-  await runtime.addSkillRoots([userSkillRoot]);
+  await runtime.addSkillRoots(managedUserSkillRoots());
 }
 async function createSkillScaffold(input: FeatureItemInput): Promise<SkillSpec> {
   const requestedName = input.name?.trim() || input.title?.trim() || input.id?.trim() || "";
@@ -3587,7 +3601,7 @@ async function createSkillScaffold(input: FeatureItemInput): Promise<SkillSpec> 
   await ensureDirectory(join(skillDir, "agents"));
   await fs.writeFile(join(skillDir, "SKILL.md"), skillMarkdown, "utf8");
   await fs.writeFile(join(skillDir, "agents", "openai.yaml"), makeOpenAiYaml(skillName, displayName, description), "utf8");
-  await runtime.addSkillRoots([userSkillRoot]);
+  await runtime.addSkillRoots(managedUserSkillRoots());
   return {
     id: input.id?.trim() || `skill-${skillName}`,
     name: skillName,
@@ -4070,7 +4084,10 @@ const systemToolPolicyContext = {
     platform: process.platform,
     env: process.env,
     fileExists: existsSync,
-    runCommand: (command: string, args: string[]) => spawnSync(command, args, { encoding: "utf8", windowsHide: true })
+    runCommand: (command: string, args: string[]) => {
+      const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
+      return { status: result.status, stdout: typeof result.stdout === "string" ? result.stdout : "" };
+    }
 };
 function resolveSystemToolCommand(tool: SystemToolEntry) {
   return resolveSystemToolCommandValue(tool, systemToolPolicyContext);
@@ -4242,7 +4259,7 @@ async function applyApplicationSkillPolicy(targetRuntime: Awaited<ReturnType<typ
     : [];
   const experts = await listExpertsForRuntime();
   for (const expert of experts.filter(item => item.installed)) projectRoots.push(join(expert.rootPath, "skills"));
-  await applySkillPolicy(targetRuntime, userSkillRoot, async () => (await readFeatureConfig()).skills, projectRoots);
+  await applySkillPolicy(targetRuntime, userSkillRoot, async () => (await readFeatureConfig()).skills, [...legacyUserSkillRoots, ...projectRoots], join(expertBuiltinRoot, "..", "garden", "ppt"));
   const scene = workspace?.threads.find(item => item.id === activeThreadId)?.brainWorkspaceKey || workspace?.brainWorkspaceKey || "unknown";
   const disabled = (await readFeatureConfig()).skills.filter(item => item.status === "disabled").map(item => item.name);
   const confirmedExpertIds = new Set<string>();
@@ -5352,6 +5369,8 @@ async function readWorkspaceCatalog(): Promise<WorkspaceCatalogFile> {
           title: thread.title,
           summary: thread.summary || thread.preview,
           scope: thread.scope,
+          kind: thread.kind,
+          parentThreadId: thread.parentThreadId,
           updatedAt: new Date(thread.updatedAt).toISOString(),
           lastEventSummary: thread.lastEventSummary || thread.preview,
           status: thread.status as WorkspaceThreadRecord["status"],
@@ -5436,7 +5455,9 @@ async function writeWorkspaceCatalog(workspaces: WorkspaceCatalogItem[]) {
         lastEventSummary: thread.lastEventSummary,
         statusLabel: thread.statusLabel,
         memoryMode: "enabled",
-        model: ""
+        model: "",
+        kind: thread.kind === "subagent" ? "subagent" : "user",
+        parentThreadId: thread.parentThreadId
       });
     }
   }
@@ -7772,7 +7793,10 @@ function registerAgentCollaborationTools(
         spawnDepth: parentThread.kind === "subagent" ? 1 : 0,
         activeChildCount: countActiveChildren(existingTasks).active,
         maxChildrenPerParent: DEFAULT_MAX_CHILDREN_PER_PARENT,
-        recentFailedCount: existingTasks.filter((task) => String(task.status).toLowerCase() === "failed").length
+        recentFailedCount: countDelegateFailuresSince(
+          existingTasks,
+          delegationTurnStartedAt.get(parentThread.id)
+        )
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -7822,11 +7846,24 @@ function registerAgentCollaborationTools(
         runtime.listDelegatedTasks().find((task) => task.childThreadId === dependency)?.status,
       onDependencyFailure: failDependency,
       run: async () => {
-        if (graph.get(childThread.id)?.status === "cancelled") return failDependency();
-        graph.mark(childThread.id, "running");
-        const result = await runDelegatedAgent({ workspaceId: workspace.id, childThreadId: childThread.id });
-        graph.mark(childThread.id, result.status === "completed" ? "completed" : "failed", result.result);
-        return result;
+        try {
+          if (graph.get(childThread.id)?.status === "cancelled") return failDependency();
+          graph.mark(childThread.id, "running");
+          const result = await runDelegatedAgent({ workspaceId: workspace.id, childThreadId: childThread.id });
+          graph.mark(childThread.id, result.status === "completed" ? "completed" : "failed", result.result);
+          return result;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          void appendDesktopDebugLog(`delegated agent start failed child=${childThread.id}: ${reason}`);
+          try {
+            const failed = runtime.failDelegatedTask(childThread.id, reason);
+            codexStorage.upsertDelegatedAgentTask(failed);
+          } catch {
+            // Already terminal, or the task was removed. The thrown error still rejects the run.
+          }
+          graph.mark(childThread.id, "failed");
+          throw error;
+        }
       }
     });
     void run.catch(() => undefined);
@@ -7962,12 +7999,14 @@ function registerAgentCollaborationTools(
       const activeRun = delegatedAgentControlService.getRun(childThreadId);
       const waited = await waitForAgentRun(activeRun, owned);
       if (!waited.ok) {
-        const reason = `Child agent run is unavailable: ${childThreadId}.`;
+        const latest = runtime.listDelegatedTasks(parentThread.id).find((task) => task.childThreadId === childThreadId);
+        const persistedError = String(latest?.error || "").trim();
+        const reason = persistedError || `Child agent run is unavailable: ${childThreadId}.`;
         return {
           childThreadId,
           ok: false as const,
           code: WAIT_UNAVAILABLE,
-          task: waited.value ?? owned,
+          task: latest ?? waited.value ?? owned,
           output: reason
         };
       }
@@ -8114,7 +8153,7 @@ async function getWorkspaceHeaderStatus(workspaceId: string) {
   }
   const ghResult = spawnSync("gh", ["--version"], { encoding: "utf8", windowsHide: true });
   return {
-    branch: branchResult.stdout?.trim() || "main",
+    branch: branchResult.status === 0 ? (branchResult.stdout?.trim() || "") : "",
     changes: (statusResult.stdout || "").split(/\r?\n/).filter(Boolean).length,
     additions,
     deletions,
@@ -8520,6 +8559,31 @@ async function archiveWorkspaceThread(input: {
 }) {
   return threadRolloutLifecycleService.setArchived(input);
 }
+async function moveWorkspaceThread(input: {
+  threadId: string;
+  fromWorkspaceId: string;
+  toWorkspaceId: string;
+}) {
+  const catalog = await readWorkspaceCatalog();
+  const nextWorkspaces = moveThreadBetweenProjects(catalog.workspaces, input);
+  await relocateThreadFiles(input.fromWorkspaceId, input.toWorkspaceId, input.threadId);
+  if (activeThreadId === input.threadId && activeWorkspaceId === input.fromWorkspaceId) {
+    activeWorkspaceId = input.toWorkspaceId;
+  }
+  return writeWorkspaceCatalog(nextWorkspaces);
+}
+async function relocateThreadFiles(fromWorkspaceId: string, toWorkspaceId: string, threadId: string) {
+  const targetDir = join(getWorkspaceStateDir(toWorkspaceId), "threads");
+  await fs.mkdir(targetDir, { recursive: true });
+  for (const source of [getThreadEventLogPath(fromWorkspaceId, threadId), getLegacyThreadStatePath(fromWorkspaceId, threadId)]) {
+    try {
+      await fs.rename(source, join(targetDir, basename(source)));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+  }
+}
 async function deleteWorkspaceThread(input: {
   workspaceId: string;
   threadId: string;
@@ -8722,6 +8786,20 @@ async function previewConversationRef(input: {
     messages: threadState.messages ?? []
   });
 }
+async function listProjectSkillNames(projectPath: string) {
+  const names: Array<{ name: string; summary: string; status: "enabled" }> = [];
+  let entries: Array<{ name: string; isDirectory: () => boolean }> = [];
+  try {
+    entries = await fs.readdir(join(projectPath, ".newbrain", "skills"), { withFileTypes: true });
+  } catch {
+    return names;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    names.push({ name: entry.name, summary: "", status: "enabled" });
+  }
+  return names;
+}
 async function runScheduledAutomation(automation: AutomationSpec) {
   if (!runtime) throw new Error("Automation runtime is not available.");
   const startedAt = nowIso();
@@ -8731,12 +8809,47 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     automations: markAutomationRunning(currentConfig.automations, automation.id, startedAt)
   });
   const catalog = await readWorkspaceCatalog();
-  const workspace = automation.action === "error_remediation"
+  let workspace = automation.action === "error_remediation"
     ? catalog.workspaces.find((item) => resolve(item.path) === resolve(workspacePath)) ?? catalog.workspaces[0]
     : catalog.workspaces.find((item) => item.id === automation.workspaceId);
-  const thread = automation.action === "error_remediation"
+  let thread = automation.action === "error_remediation"
     ? workspace?.threads.find((item) => item.id === automation.threadId) ?? workspace?.threads[0]
     : workspace?.threads.find((item) => item.id === automation.threadId);
+  if (automation.action !== "error_remediation") {
+    const fallbackWorkspace = catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID) ?? catalog.workspaces[0];
+    const threadPlan = planAutomationThreadTarget({
+      boundWorkspaceId: workspace?.id || automation.workspaceId,
+      boundThreadId: thread?.id || automation.threadId,
+      workspaceExists: Boolean(workspace),
+      threadExists: Boolean(thread),
+      fallbackWorkspaceId: fallbackWorkspace?.id || ""
+    });
+    if (threadPlan.createThread) {
+      workspace = catalog.workspaces.find((item) => item.id === threadPlan.workspaceId) ?? fallbackWorkspace;
+      if (!workspace) throw new Error("Automation target workspace/thread was not found.");
+      const before = new Set(workspace.threads.map((item) => item.id));
+      const scope = "chat" as const;
+      const created = await workspaceThreadLifecycleService.add({
+        workspaceId: workspace.id,
+        title: String(automation.title || "自动化任务").slice(0, 36),
+        summary: "绑定的对话不存在，已新建线程执行。",
+        scope,
+        ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
+      });
+      thread = created.workspaces.find((item) => item.id === workspace.id)?.threads.find((item) => !before.has(item.id));
+      const createdThread = thread;
+      const reboundWorkspaceId = workspace.id;
+      if (createdThread) {
+        const rebound = await readFeatureConfig();
+        await writeFeatureConfig({
+          ...rebound,
+          automations: rebound.automations.map((item) => item.id === automation.id
+            ? { ...item, workspaceId: reboundWorkspaceId, threadId: createdThread.id }
+            : item)
+        });
+      }
+    }
+  }
   if (!workspace || !thread) throw new Error("Automation target workspace/thread was not found.");
   const threadState = await readThreadState(workspace, thread);
   const storedPrompt = String(automation.prompt || automation.trigger || "").trim();
@@ -8763,7 +8876,14 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     const permissionMode = automation.permissionMode === "agent" ? "agent" : "full";
     const taskRequest = automation.action === "error_remediation"
       ? request
-      : `这是已保存的定时任务，请直接执行下面的指令，不要再创建自动化任务，也不要处理压缩包路径。\n\n${request}`;
+      : scheduledAutomationRequest(request);
+    const installedSkillNames = automation.action === "error_remediation"
+      ? ["error-auto-remediation"]
+      : resolveAutomationSkillNames(request, [
+        ...(await readFeatureConfig()).skills,
+        ...await listProjectSkillNames(workspace.path)
+      ]);
+    delegationTurnStartedAt.set(thread.id, new Date().toISOString());
     const chatResult = await automationModelChatService.chat(mainWindowRef.webContents, {
       requestId: makeId("automation-run"),
       workspaceId: workspace.id,
@@ -8778,7 +8898,7 @@ async function runScheduledAutomation(automation: AutomationSpec) {
       disableResponseStorage: config.llm.disableResponseStorage,
       permissionMode,
       systemPrompt: config.llm.systemPrompt,
-      selectedSkillNames: automation.action === "error_remediation" ? ["error-auto-remediation"] : [],
+      selectedSkillNames: installedSkillNames,
       composerModes: ["goal"],
       messages: [
         ...(threadState.messages ?? []).map((message) => ({
@@ -8837,6 +8957,7 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     automations: markAutomationSucceeded(latestConfig.automations, automation.id, startedAt)
   });
 }
+const delegationTurnStartedAt = new Map<string, string>();
 let automationTickQueued = false;
 async function tickAutomations() {
   if (automationTickRunning) {
@@ -8884,6 +9005,25 @@ async function activateWorkspaceThreadUnlocked(input: { workspaceId: string; thr
   const catalog = await readWorkspaceCatalog();
   await ensureCatalogState(catalog);
   const { workspace, thread } = requireWorkspaceThreadSelection(catalog.workspaces, input.workspaceId, input.threadId);
+  if (thread.kind === "subagent") {
+    const parentId = String(thread.parentThreadId || "").trim();
+    const parentTask = parentId
+      ? [...concurrentModelTasks.values()].find((task) => task.workspaceId === workspace.id && task.threadId === parentId)
+      : undefined;
+    if (parentTask) {
+      const liveRuntime = parentTask.runtime ?? runtime;
+      const liveState = typeof liveRuntime.exportThreadState === "function"
+        ? liveRuntime.exportThreadState()
+        : await readThreadState(workspace, workspace.threads.find((item) => item.id === parentId) ?? thread);
+      return buildSnapshotWithThreadState(liveRuntime.getSnapshot(), liveState);
+    }
+    const parent = parentId
+      ? workspace.threads.find((item) => item.id === parentId && item.kind !== "subagent")
+      : undefined;
+    if (parent) {
+      return activateWorkspaceThreadUnlocked({ workspaceId: workspace.id, threadId: parent.id });
+    }
+  }
   await ensureActivatableWorkspaceDirectory(workspace);
   // Navigation is not activity. Persist the thread being left without making it
   // appear newly run; real messages and task events update updatedAt separately.
@@ -9011,6 +9151,9 @@ async function callModelApi(input: {
     throw new Error("Model name is required.");
   }
   const availableModels = ownedCustom ? [] : (await readAuthorizedDesktopModelConfig()).availableModels ?? [];
+  const parentSelectedModel = String(
+    (input as { parentSelectedModel?: string }).parentSelectedModel || ""
+  ).trim();
   // spring-app exposes only /v1/responses. Never downgrade to chat/completions.
   // Thinking models still use the responses wire; when the opaque reasoning trace
   // cannot be echoed (400), retry once on the same endpoint without thinking.
@@ -9018,7 +9161,7 @@ async function callModelApi(input: {
   const thinkingCapable = ownedCustom ? false : requiresThinkingWireProtocol({
     provider: input.provider,
     model,
-    routedModel: lastGatewayRoutedModel,
+    routedModel: parentSelectedModel || lastGatewayRoutedModel,
     candidateModels: availableModels
   });
   if (!ownedCustom && input.wireApi === "chat.completions") {
@@ -9028,9 +9171,6 @@ async function callModelApi(input: {
   await appendDesktopDebugLog(
     `model request auth=${authSelection.source} endpoint=${apiUrl} model=${model} thinkingCapable=${thinkingCapable} tokenPresent=${Boolean(bearerToken)} tokenLength=${bearerToken.length}`
   );
-  const parentSelectedModel = String(
-    (input as { parentSelectedModel?: string }).parentSelectedModel || ""
-  ).trim();
   const mainModelOption =
     availableModels.find((item) => item.model.toLowerCase() === model.toLowerCase())
     ?? (
@@ -9122,6 +9262,8 @@ async function callModelApi(input: {
         if (image.kind === "native") {
           parts.push({ type: "text", text: `${image.header}\nContent: image attached below.` });
           parts.push({ type: "image", imageUrl: image.dataUrl });
+        } else if (image.kind === "omitted") {
+          files.push(`${image.header}\n${image.text}`);
         } else {
           files.push(formatBridgedImageText(image));
         }
@@ -9179,8 +9321,10 @@ async function callModelApi(input: {
       enableThinking: !options.dropProviderReasoning
         && thinkingCapable
         && canContinueThinkingWithMessages(messages),
+      includeStore: !options.dropProviderReasoning,
+      includeThinkingField: !options.dropProviderReasoning,
       tools: formatToolDefinitions(input.tools ?? [], input.wireApi, {
-        webSearch: supportsNativeWebSearch(input.provider, model, input.wireApi)
+        webSearch: supportsNativeWebSearch(input.provider, parentSelectedModel || model, input.wireApi)
       })
     }));
   };
@@ -9232,11 +9376,12 @@ async function callModelApi(input: {
     return { response: httpResponse, responseBody: streamed, parsed: payload };
   };
   let attempt = await sendModelRequest(apiUrl, buildRequestBody({ dropProviderReasoning: false }));
-  if (isThinkingContextGatewayRejection(attempt.response.status, attempt.parsed, attempt.responseBody.rawText)) {
-    // The routed thinking model demands an opaque reasoning trace this history
-    // cannot supply. Retry once on the same /v1/responses wire without thinking.
+  if (shouldRetryModelRequestWithoutThinking(attempt.response.status, attempt.parsed, attempt.responseBody.rawText)) {
+    // Thinking models demand an opaque reasoning trace this history cannot
+    // supply; Hunyuan/MaaS instead 400s unknown OpenAI fields like `reasoning`.
+    // Retry once on the same wire without thinking / store extras.
     await appendDesktopDebugLog(
-      `model request thinking-context repair endpoint=${apiUrl} model=${model}`
+      `model request thinking-context repair endpoint=${apiUrl} model=${model} status=${attempt.response.status}`
     );
     attempt = await sendModelRequest(apiUrl, buildRequestBody({ dropProviderReasoning: true }));
   }
@@ -10188,6 +10333,7 @@ function registerIpc() {
     rewindThread: (input) => rewindWorkspaceThread(input),
     renameThread: async (input) => (await renameWorkspaceThread(input)).workspaces,
     archiveThread: async (input) => (await archiveWorkspaceThread(input)).workspaces,
+    moveThread: async (input) => (await moveWorkspaceThread(input)).workspaces,
     deleteThread: (input) => workspaceThreadService.delete(input),
     activateThread: activateWorkspaceThread,
     exportThreadHtml: exportWorkspaceThreadHtml,
@@ -10219,13 +10365,9 @@ function registerIpc() {
           return { ok: true, detail: `已保存到 ${selection.filePath}` };
         }
         if (input.action === "open-with") {
-          if (process.platform === "win32") {
-            await spawnDetachedAndConfirm("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", targetPath]);
-          } else {
-            const detail = await electronShell.openPath(targetPath);
-            if (detail) return { ok: false, detail };
-          }
-          return { ok: true, detail: "" };
+          const detail = await electronShell.openPath(targetPath);
+          if (detail) return { ok: false, detail };
+          return { ok: true, detail: "已用系统应用打开。" };
         }
         if (input.action === "open-tool") {
           const tool = getSystemTools().find((item) => item.id === input.toolId && item.available);
@@ -10248,12 +10390,16 @@ function registerIpc() {
           }
           return { ok: true, detail: "" };
         }
-        const locator = process.platform === "win32" ? "where.exe" : "which";
-        if (spawnSync(locator, ["code"], { encoding: "utf8", windowsHide: true }).status !== 0) {
-          return { ok: false, detail: "未检测到 Visual Studio Code。" };
+        const vscodeTool = getSystemTools().find((item) => item.id === "vscode");
+        const vscodeCommand = vscodeTool ? resolveSystemToolCommand(vscodeTool) : "";
+        if (!vscodeCommand) return { ok: false, detail: "未检测到 Visual Studio Code。" };
+        if (process.platform === "win32" && (!isAbsolute(vscodeCommand) || /\.(?:cmd|bat)$/i.test(vscodeCommand))) {
+          const commandLine = `"${vscodeCommand.replace(/"/g, "")}" "${targetPath.replace(/"/g, "")}"`;
+          await spawnDetachedAndConfirm(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", commandLine], { windowsHide: false });
+        } else {
+          await spawnDetachedAndConfirm(vscodeCommand, [targetPath], { windowsHide: false });
         }
-        await spawnDetachedAndConfirm("code", [targetPath]);
-        return { ok: true, detail: "" };
+        return { ok: true, detail: "已用 VS Code 打开。" };
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         if (input.action === "reveal" || input.action === "open-tool" || input.action === "open-with" || input.action === "open-vscode" || input.action === "save-as") {
@@ -10523,7 +10669,7 @@ function registerIpc() {
           hints.push(projectHint);
           continue;
         }
-        const userHint = await tryScope(name, [userSkillRoot], "user");
+        const userHint = await tryScope(name, managedUserSkillRoots(), "user");
         if (userHint) {
           hints.push(userHint);
           continue;
@@ -10552,7 +10698,7 @@ function registerIpc() {
         bearerToken = await refreshDesktopAccessTokenForGateway().catch(() => "");
       }
       if (!bearerToken) {
-        if (process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
+        if (!app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
           throw new Error(
             "E2E Auto 路由缺少凭证：请设置 NEWBRAIN_MODEL_BASE_URL，或启用 NEWBRAIN_E2E_REMOTE_DEBUG_PORT 远程调试会话。"
           );
@@ -11028,7 +11174,7 @@ function registerIpc() {
       // runtime, otherwise government-writing turns only see goal tools.
       registerOfficialGovernmentWebTools(targetRuntime, officialGovernmentWebService);
       // Spring-backed Search→Fetch tools. Greeting/short-chat paths must not call them
-      // (enforced by Auto companion SOP); researcher/Lead use news_search_free → web.fetch_page.
+      // (enforced by Auto companion SOP); web.search calls Spring /api/desktop/v1/web-search.
       registerDesktopWebSearchTools(targetRuntime, desktopWebSearchClient);
       // Search is routed by Spring; keep companion turns from inventing freshness without tools.
       await applyApplicationSkillPolicy(targetRuntime);
@@ -11348,7 +11494,13 @@ function registerIpc() {
   });
   automationModelChatService = modelChatService;
   registerHolonRuntime(runtimeCommandService, modelChatService);
-  registerModelChatIpcHandlers({ chat: (event, input) => modelChatService.chat(event.sender, input) });
+  registerModelChatIpcHandlers({
+    chat: (event, input) => {
+      const threadId = String(input?.threadId || "");
+      if (threadId) delegationTurnStartedAt.set(threadId, new Date().toISOString());
+      return modelChatService.chat(event.sender, input);
+    }
+  });
 }
 
 app.whenReady().then(async () => {

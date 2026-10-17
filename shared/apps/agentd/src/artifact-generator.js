@@ -132,6 +132,27 @@ function decodeBasicEntities(value) {
     .replace(/&amp;/gi, "&");
 }
 
+function stripHtmlTags(value) {
+  const text = String(value ?? "");
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === "<" && next && /[A-Za-z/!]/.test(next)) {
+      const close = text.indexOf(">", index + 1);
+      const newline = text.indexOf("\n", index + 1);
+      if (close !== -1 && (newline === -1 || close < newline)) {
+        index = close + 1;
+        continue;
+      }
+    }
+    result += char;
+    index += 1;
+  }
+  return result;
+}
+
 /**
  * Convert model-emitted HTML/XML chrome into plain text / Markdown headings.
  * PDFKit does not render HTML; leaving tags prints them literally in the PDF.
@@ -139,22 +160,18 @@ function decodeBasicEntities(value) {
 export function normalizeArtifactMarkup(content) {
   let source = String(content ?? "").replace(/\r\n/g, "\n");
   source = source
-    .replace(/<\/?(?:document|html|head|body|meta|style|script)\b[^>]*>/gi, "")
-    .replace(/<(?:font|margins)\b[^>]*\/?>/gi, "")
     .replace(/<hr\s*\/?>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n");
   source = source.replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_match, level, inner) => {
-    const heading = decodeBasicEntities(inner.replace(/<\/?[^>]+>/g, "")).trim();
+    const heading = decodeBasicEntities(stripHtmlTags(inner)).trim();
     if (!heading) return "\n";
     return `\n${"#".repeat(Math.min(Number(level) || 1, 6))} ${heading}\n`;
   });
   source = source.replace(/<(?:p|div)\b[^>]*>([\s\S]*?)<\/(?:p|div)>/gi, (_match, inner) => {
-    const body = decodeBasicEntities(inner.replace(/<\/?[^>]+>/g, "")).trim();
+    const body = decodeBasicEntities(stripHtmlTags(inner)).trim();
     return body ? `\n${body}\n` : "\n";
   });
-  source = source
-    .replace(/<\/?(?:b|strong)>/gi, "")
-    .replace(/<\/?[^>]+>/g, "");
+  source = stripHtmlTags(source);
   return decodeBasicEntities(source)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")

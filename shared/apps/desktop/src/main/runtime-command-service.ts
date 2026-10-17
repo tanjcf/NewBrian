@@ -93,8 +93,9 @@ export class RuntimeCommandService {
       }
     }
     // Approval-retained or orphaned tasks never hit finishTask; clear the slot now.
+    // Keep the canceled mark until ModelChatTaskService.finish()/start() clears it so
+    // the in-flight model-chat catch can still persistCancellation instead of failure.
     this.options.removeModelTask?.(requestId);
-    this.options.clearCanceledModelRequest?.(requestId);
     return { ok: true, detail: "已请求停止当前任务。" };
   }
 

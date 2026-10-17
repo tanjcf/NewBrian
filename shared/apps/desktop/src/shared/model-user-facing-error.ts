@@ -46,3 +46,12 @@ export function toUserFacingModelFailureMessage(error: unknown) {
   if (mapped) return mapped;
   return error instanceof Error ? error.message : String(error ?? "");
 }
+
+const USER_CANCELLED_MODEL_RE =
+  /this operation was aborted|aborterror|model request aborted|agent loop was cancelled|user requested cancellation|cancelled_by_user|the user cancelled the current task|user_stop|当前任务已停止|用户已请求停止|上一轮请求已被新消息取代或手动停止/i;
+
+/** Manual stop or a newer turn replacing the previous request — not an abnormal failure. */
+export function isUserCancelledModelError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return USER_CANCELLED_MODEL_RE.test(message);
+}

@@ -373,6 +373,7 @@ test("C10 Auto enables cascade when fallback chain exists", () => {
   assert.ok(decision.model.fallback_chain.length >= 1 || decision.model.selected === "frontier-strong");
   assert.equal(isAutoModelFallbackEnabled(decision), decision.model.fallback_chain.length > 0);
   assert.ok(isAbnormalModelStepError(new Error("HTTP 503")));
+  assert.ok(isAbnormalModelStepError(new Error("模型请求过于频繁，请稍后再试。")));
   assert.ok(isAutoModelFallbackBlocked(new Error("HTTP 401 unauthorized")));
 });
 
@@ -401,20 +402,21 @@ test("Optimize cost prefers cheaper eligible model than intelligence", () => {
     || cost.model.selected !== intel.model.selected);
 });
 
-test("Auto with images prefers vision-capable active model", () => {
+test("attached images do not change the Auto model", () => {
   assert.equal(messagesHaveImageAttachments([
     { attachments: [{ name: "docker.png", path: "C:/tmp/docker.png", url: "data:image/png;base64,abc" }] }
   ]), true);
-  const decision = resolveModelAutoDecision({
+  const base = {
     requestedModel: MODEL_AUTO_ID,
     availableModels: availableWithVision,
     latestUserText: "帮我用 Docker 启动这个项目",
-    hasImageAttachments: true,
     runId: "run-image",
     threadId: "thread-1"
-  });
-  assert.ok(isVisionCapableModel(availableWithVision.find((item) => item.model === decision.model.selected)!));
-  assert.ok(decision.model.reason_codes.includes("requires_vision"));
+  };
+  const withoutImage = resolveModelAutoDecision(base);
+  const withImage = resolveModelAutoDecision({ ...base, hasImageAttachments: true });
+  assert.equal(withImage.model.selected, withoutImage.model.selected);
+  assert.ok(!withImage.model.reason_codes.includes("requires_vision"));
 });
 
 test("latestUserMessageHasImageAttachments ignores older turns", () => {
@@ -437,7 +439,7 @@ test("latestUserMessageHasImageAttachments ignores older turns", () => {
   ]), true);
 });
 
-test("interrupt resume after an image turn still requires vision routing", () => {
+test("interrupt resume after an image turn does not switch later turns to vision routing", () => {
   assert.equal(looksLikeInterruptedTurnContinuation("从上次异常中断的位置继续执行，不要重复已完成的内容。"), true);
   assert.equal(looksLikeInterruptedTurnContinuation("继续写第二章"), false);
   const interruptedImageThread = [
@@ -451,7 +453,7 @@ test("interrupt resume after an image turn still requires vision routing", () =>
   ];
   assert.equal(priorUserMessageHasImageAttachments(interruptedImageThread), true);
   assert.equal(latestUserMessageHasImageAttachments(interruptedImageThread), false);
-  assert.equal(turnRequiresVisionRouting(interruptedImageThread), true);
+  assert.equal(turnRequiresVisionRouting(interruptedImageThread), false);
   assert.equal(turnRequiresVisionRouting([
     {
       role: "user",
@@ -462,16 +464,18 @@ test("interrupt resume after an image turn still requires vision routing", () =>
   ]), false);
 });
 
-test("Auto with images keeps text model when no vision eligible (bridge)", () => {
-  const decision = resolveModelAutoDecision({
+test("Auto with images keeps the same text model when none are vision-only", () => {
+  const base = {
     requestedModel: MODEL_AUTO_ID,
     availableModels,
     latestUserText: "看这张图",
-    hasImageAttachments: true,
     runId: "run-no-vision",
     threadId: "thread-1"
-  });
-  assert.ok(decision.model.reason_codes.includes("vision_unavailable_use_bridge"));
+  };
+  const withoutImage = resolveModelAutoDecision(base);
+  const decision = resolveModelAutoDecision({ ...base, hasImageAttachments: true });
+  assert.equal(decision.model.selected, withoutImage.model.selected);
+  assert.ok(!decision.model.reason_codes.includes("requires_vision"));
   assert.ok(filterAutoRoutingPool(availableModels).some((item) => item.model === decision.model.selected));
 });
 
@@ -493,26 +497,24 @@ test("kimi-k2.6 is treated as vision-capable by name", () => {
   }), false);
 });
 
-test("degraded Auto with images prefers kimi over deepseek flash", () => {
-  const decision = resolveModelAutoDecision({
+test("degraded Auto does not switch to kimi just because the turn has an image", () => {
+  const models = [
+    { model: "deepseek-v4-flash-BD", label: "deepseek-v4-flash-BD", provider: "百度" },
+    { model: "kimi-k2.6-BD", label: "kimi-k2.6-BD", provider: "百度" },
+    { model: "ernie-5.1", label: "ernie-5.1", provider: "百度" }
+  ];
+  const base = {
     requestedModel: MODEL_AUTO_ID,
-    availableModels: [
-      { model: "deepseek-v4-flash-BD", label: "deepseek-v4-flash-BD", provider: "百度" },
-      { model: "kimi-k2.6-BD", label: "kimi-k2.6-BD", provider: "百度" },
-      { model: "ernie-5.1", label: "ernie-5.1", provider: "百度" }
-    ],
+    availableModels: models,
     latestUserText: "每章节就这么几句话?",
-    hasImageAttachments: true,
     runId: "run-degraded-vision",
     threadId: "thread-1"
-  });
-  assert.equal(decision.model.selected, "kimi-k2.6-BD");
-  assert.ok(decision.model.reason_codes.includes("requires_vision"));
-  assert.ok(
-    decision.model.reason_codes.includes("routing_pool_empty")
-    || decision.model.reason_codes.includes("quality_first_cost_secondary")
-    || decision.model.reason_codes.includes("vision_capable")
-  );
+  };
+  const withoutImage = resolveModelAutoDecision(base);
+  const decision = resolveModelAutoDecision({ ...base, hasImageAttachments: true });
+  assert.equal(decision.model.selected, withoutImage.model.selected);
+  assert.notEqual(decision.model.selected, "kimi-k2.6-BD");
+  assert.ok(!decision.model.reason_codes.includes("requires_vision"));
 });
 
 test("video ask is not chat and does not pick kimi vision", () => {
