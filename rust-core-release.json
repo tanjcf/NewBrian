@@ -4,7 +4,31 @@
   "windows": {
     "fileName": "brain-core.exe",
     "url": "https://github.com/tanjcf/NewBrian/raw/main/dist/brain-core/windows/brain-core.exe",
-    "sha256": "933dd029f8ac5d1328a5056fb998d6b37110bf7e5e7e8453b4b787e4191c9300",
+    "sha256": "dade0e37a88819b41e76427704c5010045141068d658671f720e7195b2059617",
+    "signer": ""
+  },
+  "macos-arm64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
+  "macos-x64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
+    "signer": ""
+  },
+  "ubuntu-x64": {
+    "fileName": "brain-core",
+    "url": "https://github.com/tanjcf/NewBrian/raw/main/dist/brain-core/ubuntu-x64/brain-core",
+    "sha256": "4f41c31e6d571347f0729ee48d1aad8f48ce86b7788c040679ceab965366848d",
+    "signer": ""
+  },
+  "ubuntu-arm64": {
+    "fileName": "brain-core",
+    "url": "",
+    "sha256": "",
     "signer": ""
   },
   "unix": {
