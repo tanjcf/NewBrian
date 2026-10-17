@@ -4,6 +4,7 @@ import {
   type AddWorkspaceInput,
   type AddWorkspaceThreadInput,
   type ArchiveWorkspaceThreadInput,
+  type MoveWorkspaceThreadInput,
   type ChatMessage,
   type CreateBlankWorkspaceInput,
   type ExportWorkspaceThreadHtmlInput,
@@ -37,6 +38,7 @@ interface WorkspaceIpcServices {
   rewindThread: (input: RewindWorkspaceThreadInput) => MaybePromise<unknown>;
   renameThread: (input: RenameWorkspaceThreadInput) => MaybePromise<unknown>;
   archiveThread: (input: ArchiveWorkspaceThreadInput) => MaybePromise<unknown>;
+  moveThread: (input: MoveWorkspaceThreadInput) => MaybePromise<unknown>;
   deleteThread: (input: WorkspaceThreadInput) => MaybePromise<unknown>;
   activateThread: (input: WorkspaceThreadInput) => MaybePromise<unknown>;
   exportThreadHtml: (input: ExportWorkspaceThreadHtmlInput) => MaybePromise<unknown>;
@@ -141,6 +143,15 @@ function parseArchiveThread(input: unknown): ArchiveWorkspaceThreadInput {
   return { workspaceId: requireString(record, "workspaceId", "Archive workspace thread"), threadId: requireString(record, "threadId", "Archive workspace thread"), archived: record.archived, scope: record.scope };
 }
 
+function parseMoveThread(input: unknown): MoveWorkspaceThreadInput {
+  const record = requireRecord(input, "Move workspace thread");
+  return {
+    threadId: requireString(record, "threadId", "Move workspace thread"),
+    fromWorkspaceId: requireString(record, "fromWorkspaceId", "Move workspace thread"),
+    toWorkspaceId: requireString(record, "toWorkspaceId", "Move workspace thread")
+  };
+}
+
 function parseLiveMessages(value: unknown): ChatMessage[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw new TypeError("Export workspace thread HTML input is invalid.");
@@ -196,6 +207,7 @@ export function registerWorkspaceIpcHandlers(services: WorkspaceIpcServices) {
   ipcMain.handle(desktopIpcChannels.workspace.rewindThread, (_event, input: unknown) => services.rewindThread(parseRewindThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.renameThread, (_event, input: unknown) => services.renameThread(parseRenameThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.archiveThread, (_event, input: unknown) => services.archiveThread(parseArchiveThread(input)));
+  ipcMain.handle(desktopIpcChannels.workspace.moveThread, (_event, input: unknown) => services.moveThread(parseMoveThread(input)));
   ipcMain.handle(desktopIpcChannels.workspace.deleteThread, (_event, input: unknown) => services.deleteThread(parseWorkspaceThreadInput(input)));
   ipcMain.handle(desktopIpcChannels.workspace.activateThread, (_event, input: unknown) => services.activateThread(parseWorkspaceThreadInput(input)));
   ipcMain.handle(desktopIpcChannels.workspace.exportThreadHtml, (_event, input: unknown) => services.exportThreadHtml(parseExportThreadHtml(input)));

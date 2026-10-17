@@ -8,6 +8,7 @@ import { toRolloutThreadEvent, type ThreadEventRecord } from "./thread-event-pol
 import type { ThreadStateFile } from "./thread-state-factory.js";
 import type { NativeWebSearchProjection } from "./model-chat-step-service.js";
 import { ensureTurnAssistantMessage } from "./model-chat-success-policy.js";
+import { rememberExchangeSafely } from "./remember-exchange-safely.js";
 
 const MAX_REPLAYABLE_THREAD_EVENTS = 5_000;
 
@@ -130,11 +131,14 @@ export class ModelChatSuccessService {
           [toRolloutThreadEvent(input.thread.id, assistantEvent)]
         );
       }
-      const { memory, shadow } = await input.rememberExchange({
-        user: input.latestUserRequest,
-        assistant: input.result.content,
-        scope: "session"
-      });
+      const { memory, shadow } = await rememberExchangeSafely(
+        () => input.rememberExchange({
+          user: input.latestUserRequest,
+          assistant: input.result.content,
+          scope: "session"
+        }),
+        (detail) => this.dependencies.appendDiagnostics(`rememberExchange failed: ${detail}`)
+      );
       if (shadow.changed.length) {
         await this.dependencies.appendDiagnostics(`user shadow updated (${shadow.skillName}): ${shadow.changed.join(", ")}`);
         await this.dependencies.onShadowLearned?.({

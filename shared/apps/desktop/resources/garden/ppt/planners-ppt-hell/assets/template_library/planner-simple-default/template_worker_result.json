@@ -1,0 +1,10 @@
+{
+  "status": "completed",
+  "mode": "fidelity",
+  "approved_components": [
+    {"source_id": "builtin.bg_dark", "component_id": "bg_dark"},
+    {"source_id": "builtin.bg_light", "component_id": "bg_light"},
+    {"source_id": "builtin.accent_block", "component_id": "accent_block"},
+    {"source_id": "builtin.footer_bar", "component_id": "footer_bar"}
+  ]
+}

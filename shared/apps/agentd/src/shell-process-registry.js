@@ -5,6 +5,7 @@
 import { spawn } from "node:child_process";
 import { createBoundedStreamCollector, COMMAND_OUTPUT_LIMITS, truncateHeadTail } from "./command-output.js";
 import { decodeChildOutputBuffer } from "./windows-encoding.js";
+import { repairMojibakeTree } from "./workspace-fs.js";
 
 const DEFAULT_YIELD_MS = 10_000;
 /** Codex unified_exec: short commands return; longer ones yield a live session instead of being killed. */
@@ -126,12 +127,19 @@ function attachChildHandlers(session, child) {
     session.exitWaiters.clear();
   });
   child.on("close", (code, signal) => {
-    session.status = "exited";
     session.exitCode = typeof code === "number" ? code : (signal ? 1 : 0);
     session.endedAt = Date.now();
     if (signal) appendLog(session, `\n[killed by ${signal}]\n`);
-    session.exitWaiters.forEach((resolve) => resolve());
-    session.exitWaiters.clear();
+    const finish = () => {
+      session.status = "exited";
+      session.exitWaiters.forEach((resolve) => resolve());
+      session.exitWaiters.clear();
+    };
+    if (session.exitCode === 0 && session.cwd) {
+      repairMojibakeTree(session.cwd).then(finish, finish);
+      return;
+    }
+    finish();
   });
 }
 

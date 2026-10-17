@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { projectModelChatFailure } from "./model-chat-failure-projection.ts";
+import { projectModelChatCancellation, projectModelChatFailure } from "./model-chat-failure-projection.ts";
 
 test("projects a model failure as visible assistant content", () => {
   assert.deepEqual(projectModelChatFailure({
@@ -21,6 +21,25 @@ test("preserves partial model content when projecting a failure", () => {
   }, "provider timeout", "更长的流式部分回复"), {
     content: "更长的流式部分回复",
     reasoningSummary: "正在处理\n\n本轮在完成前发生异常：provider timeout",
+    excludeFromModelContext: true
+  });
+});
+
+test("manual cancellation preserves progress without failure wording", () => {
+  assert.deepEqual(projectModelChatCancellation({
+    content: "",
+    reasoningSummary: "正在处理"
+  }, "已写出一半"), {
+    content: "已写出一半",
+    reasoningSummary: "正在处理",
+    excludeFromModelContext: true
+  });
+  assert.deepEqual(projectModelChatCancellation({
+    content: "",
+    reasoningSummary: ""
+  }, ""), {
+    content: "",
+    reasoningSummary: "",
     excludeFromModelContext: true
   });
 });

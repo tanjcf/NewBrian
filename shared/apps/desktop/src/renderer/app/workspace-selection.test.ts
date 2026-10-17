@@ -129,9 +129,12 @@ test("never activates a conversation thread that belongs to the outgoing project
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /mappedThreadBelongsToWorkspace/);
   assert.match(source, /selectedWorkspace\?\.threads\?\.some/);
-  assert.match(source, /delete next\[selectedBrainConversationId\]/);
   const guard = source.indexOf("if (!mappedThreadBelongsToWorkspace)");
   const activation = source.indexOf("void api.activateWorkspaceThread", guard);
+  const guardSource = source.slice(guard, activation);
+  assert.match(guardSource, /delete next\[selectedBrainConversationId\]/);
+  assert.match(guardSource, /setSelectedBrainConversationId\(""\)/);
+  assert.match(guardSource, /setIsComposingNewThread\(true\)/);
   assert.ok(guard >= 0 && activation > guard);
 });
 

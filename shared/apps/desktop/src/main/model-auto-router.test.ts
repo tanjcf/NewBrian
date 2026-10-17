@@ -373,6 +373,7 @@ test("C10 Auto enables cascade when fallback chain exists", () => {
   assert.ok(decision.model.fallback_chain.length >= 1 || decision.model.selected === "frontier-strong");
   assert.equal(isAutoModelFallbackEnabled(decision), decision.model.fallback_chain.length > 0);
   assert.ok(isAbnormalModelStepError(new Error("HTTP 503")));
+  assert.ok(isAbnormalModelStepError(new Error("模型请求过于频繁，请稍后再试。")));
   assert.ok(isAutoModelFallbackBlocked(new Error("HTTP 401 unauthorized")));
 });
 

@@ -7701,7 +7701,7 @@ async function getWorkspaceHeaderStatus(workspaceId: string) {
   }
   const ghResult = spawnSync("gh", ["--version"], { encoding: "utf8", windowsHide: true });
   return {
-    branch: branchResult.stdout?.trim() || "main",
+    branch: branchResult.status === 0 ? (branchResult.stdout?.trim() || "") : "",
     changes: (statusResult.stdout || "").split(/\r?\n/).filter(Boolean).length,
     additions,
     deletions,

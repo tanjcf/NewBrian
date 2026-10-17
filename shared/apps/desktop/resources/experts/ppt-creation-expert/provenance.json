@@ -16,7 +16,7 @@
       "role": "ppt-native-producer",
       "adaptations": [
         "Native editable PPTX contract and same-geometry preview",
-        "Upstream scripts are not vendored"
+        "Skill tree vendored at resources/garden/ppt/ppt-master and installed to upstream/ppt-master"
       ]
     },
     {
@@ -26,7 +26,7 @@
       "role": "ppt-web-producer",
       "adaptations": [
         "HTML deck uses the same outline, theme id, and layouts",
-        "Upstream skill text is not vendored"
+        "Skill tree vendored at resources/garden/ppt/frontend-slides and installed to upstream/frontend-slides"
       ]
     },
     {
@@ -34,21 +34,30 @@
       "commit": "21dc7e5fc8c3a0d7f6a94948153dd1ee954f4e64",
       "license": "AGPL-3.0",
       "role": "ppt-layout-designer",
-      "adaptations": ["Role rewritten. Upstream repository is not packaged."]
+      "adaptations": [
+        "Role note kept for the team index",
+        "Upstream skill tree vendored at resources/garden/ppt/dashi-ppt with its AGPL-3.0 LICENSE and installed to upstream/dashi-ppt"
+      ]
     },
     {
       "repository": "https://github.com/op7418/guizang-ppt-skill",
       "commit": "c91369c449d34755d320a8b81d0734000d99d1ab",
       "license": "AGPL-3.0",
       "role": "ppt-visual-designer",
-      "adaptations": ["Role rewritten. Upstream templates and page scripts are not packaged."]
+      "adaptations": [
+        "Role note kept for the team index",
+        "Upstream skill tree vendored at resources/garden/ppt/guizang-ppt-skill with its AGPL-3.0 LICENSE and installed to upstream/guizang-ppt-skill"
+      ]
     },
     {
       "repository": "https://github.com/thePlannerIvan/planners-ppt-hell",
       "commit": "1cff0e32a540e670be666b93f2e57e570dc128c0",
       "license": "AGPL-3.0",
       "role": "ppt-deck-reviewer",
-      "adaptations": ["Role rewritten. Upstream scripts are not packaged."]
+      "adaptations": [
+        "Role note kept for the team index",
+        "Upstream skill tree vendored at resources/garden/ppt/planners-ppt-hell with its AGPL-3.0 LICENSE and installed to upstream/planners-ppt-hell"
+      ]
     }
   ]
 }

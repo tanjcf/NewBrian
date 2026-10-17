@@ -118,11 +118,19 @@ if ([string]::IsNullOrWhiteSpace($previewUrl)) {
 }
 $allowUnsigned = $AllowUnsigned -or ($env:NEWBRAIN_ALLOW_UNSIGNED -eq "true")
 $requireSignature = ($isProduction -or ($env:NEWBRAIN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned
-$hasSigningMaterial = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) `
+. (Join-Path $PSScriptRoot "ensure-newbrain-codesign.ps1")
+$projectCertificate = $null
+if ($isProduction) {
+  # Production is signed by the NewBrain certificate. Apple and Windows commercial certificates are not required.
+  $projectCertificate = Ensure-NewBrainCodeSignCertificate
+  Write-Host "Production signer: NewBrain certificate $($projectCertificate.Thumbprint)" -ForegroundColor Cyan
+}
+$hasSigningMaterial = $null -ne $projectCertificate `
+  -or -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) `
   -or -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK) `
   -or -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
 if ($requireSignature -and -not $hasSigningMaterial) {
-  throw "Production MSI requires Authenticode signing, but CSC_LINK / WINDOWS_CSC_LINK is not configured. Re-run with -AllowUnsigned to emit an unsigned production package, or configure a code-signing certificate."
+  throw "Production MSI requires the NewBrain code-signing certificate. Create it with scripts/ensure-newbrain-codesign.ps1."
 }
 
 foreach ($endpoint in @($gatewayBaseUrl, $previewUrl)) {
@@ -207,6 +215,74 @@ $prePackageSmokes = @(
   @{
     Id = "AUTOMATION-MISSING-THREAD-SMOKE-001"
     Path = Join-Path $desktopRoot "src\shared\automation-missing-thread-smoke.test.ts"
+  },
+  @{
+    Id = "AUTOMATION-VISIBLE-THREAD-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\automation-visible-thread-smoke.test.ts"
+  },
+  @{
+    Id = "GIT-CURRENT-BRANCH-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\git-current-branch-smoke.test.ts"
+  },
+  @{
+    Id = "THREAD-MOVE-PROJECT-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\sidebar-layout-smoke.test.ts"
+  },
+  @{
+    Id = "PROJECT-REORDER-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\sidebar-layout-smoke.test.ts"
+  },
+  @{
+    Id = "THREAD-PIN-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\sidebar-layout-smoke.test.ts"
+  },
+  @{
+    Id = "CHAT-TEXT-JITTER-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\chat-text-jitter-smoke.test.ts"
+  },
+  @{
+    Id = "CHAT-INPUT-HISTORY-ORDER-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\chat-input-history-order-smoke.test.ts"
+  },
+  @{
+    Id = "CHAT-NEW-INPUT-REPEAT-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\chat-new-input-repeat-smoke.test.ts"
+  },
+  @{
+    Id = "OUTPUT-PROJECT-ENCODING-SMOKE-001"
+    Path = Join-Path $repoRoot "apps\agentd\src\output-project-encoding-smoke.test.js"
+  },
+  @{
+    Id = "MODEL-STABILITY-FALLBACK-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\model-stability-fallback-smoke.test.ts"
+  },
+  @{
+    Id = "SCENE-SWITCH-GENERATION-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\scene-switch-generation-smoke.test.ts"
+  },
+  @{
+    Id = "XLSX-CHINESE-PREVIEW-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\xlsx-chinese-preview-smoke.test.ts"
+  },
+  @{
+    Id = "SUBAGENT-THREAD-SIDEBAR-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\subagent-thread-sidebar-smoke.test.ts"
+  },
+  @{
+    Id = "INSPECTION-DELEGATE-GUARD-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\inspection-delegate-guard-smoke.test.ts"
+  },
+  @{
+    Id = "MANUAL-CANCEL-NO-FAILURE-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\manual-cancel-no-failure-smoke.test.ts"
+  },
+  @{
+    Id = "UI-CHINESE-NO-MOJIBAKE-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\ui-chinese-no-mojibake-smoke.test.ts"
+  },
+  @{
+    Id = "MERMAID-MD-PREVIEW-STABLE-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\mermaid-md-preview-stable-smoke.test.ts"
   }
 )
 foreach ($smoke in $prePackageSmokes) {
@@ -552,6 +628,10 @@ process.stdout.write(asar.extractFile(archive, file));
           Set-NewBrainExecutableIcon -ExecutablePath $unpackedExe -IconPath $iconPath
           Write-Host "Applied NewBrain icon to unsigned executable via rcedit." -ForegroundColor DarkGray
         }
+        if ($null -ne $projectCertificate) {
+          Set-NewBrainAuthenticodeSignature -Path $unpackedExe -Certificate $projectCertificate.Certificate | Out-Null
+          Write-Host "Signed NewBrain.exe with the NewBrain certificate." -ForegroundColor DarkGray
+        }
 
         Write-Host "Verified packaged NewBrain executable and icon resource." -ForegroundColor DarkGray
 
@@ -619,18 +699,26 @@ if (Test-Path -LiteralPath $generatedMsi) {
     throw "Generated MSI is empty: $msiOut"
   }
   try {
-    $signature = Get-AuthenticodeSignature -LiteralPath $msiOut
+    if ($null -ne $projectCertificate) {
+      $signature = Set-NewBrainAuthenticodeSignature -Path $msiOut -Certificate $projectCertificate.Certificate
+    } else {
+      $signature = Get-AuthenticodeSignature -LiteralPath $msiOut
+    }
   } catch {
-    if ($requireSignature) {
-      throw "Unable to inspect MSI signature in Production channel: $($_.Exception.Message)"
+    if ($isProduction -or $requireSignature) {
+      throw "Unable to sign or inspect the Production MSI: $($_.Exception.Message)"
     }
     $signature = [pscustomobject]@{ Status = "Unavailable" }
     Write-Host "MSI signature inspection unavailable; retaining Test artifact as unsigned." -ForegroundColor Yellow
   }
-  if ($requireSignature -and $signature.Status -ne "Valid") {
+  $signedByProject = $null -ne $projectCertificate -and $signature.SignerCertificate -and $signature.SignerCertificate.Thumbprint -eq $projectCertificate.Thumbprint
+  if ($isProduction -and -not $signedByProject) {
+    throw "Production MSI signer is not the NewBrain certificate."
+  }
+  if ($requireSignature -and -not $signedByProject -and $signature.Status -ne "Valid") {
     throw "MSI signature gate failed: $($signature.Status). Configure a signing certificate before release."
   }
-  if (-not $requireSignature -and $signature.Status -ne "Valid") {
+  if (-not $signedByProject -and -not $requireSignature -and $signature.Status -ne "Valid") {
     $unsignedSuffix = if ($isProduction) { "production-unsigned" } else { "test-unsigned" }
     $unsignedPath = Join-Path $releaseRoot ("{0} {1}-{2}.msi" -f $productName, $desktopPackage.version, $unsignedSuffix)
     try {
@@ -661,13 +749,17 @@ if (Test-Path -LiteralPath $generatedMsi) {
   $nsisOut = $null
   if ($null -ne $generatedNsis) {
     $unsignedSuffix = if ($isProduction) { "production-unsigned" } else { "test-unsigned" }
-    $nsisName = if ($requireSignature) {
+    $nsisName = if ($requireSignature -or $null -ne $projectCertificate) {
       "{0} {1}-setup.exe" -f $productName, $desktopPackage.version
     } else {
       "{0} {1}-setup-{2}.exe" -f $productName, $desktopPackage.version, $unsignedSuffix
     }
     $nsisOut = Join-Path $releaseRoot $nsisName
     Copy-Item -LiteralPath $generatedNsis.FullName -Destination $nsisOut -Force
+    if ($null -ne $projectCertificate) {
+      Set-NewBrainAuthenticodeSignature -Path $nsisOut -Certificate $projectCertificate.Certificate | Out-Null
+      Write-Host "Signed NSIS setup with the NewBrain certificate." -ForegroundColor DarkGray
+    }
     $nsisHash = (Get-FileHash -LiteralPath $nsisOut -Algorithm SHA256).Hash.ToLowerInvariant()
     Write-Host "NSIS setup generated: $nsisOut" -ForegroundColor Green
     Write-Host "NSIS SHA-256: $nsisHash" -ForegroundColor Cyan

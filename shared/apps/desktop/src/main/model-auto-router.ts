@@ -1321,7 +1321,7 @@ export function isAutoModelFallbackBlocked(error: unknown): boolean {
 export function isAbnormalModelStepError(error: unknown): boolean {
   if (isAutoModelFallbackBlocked(error)) return false;
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return /HTTP\s+(?:429|500|502|503|504)\b|可重试|retry|timeout|timed out|aborted due to timeout|fetch failed|failed to fetch|econnreset|econnrefused|enotfound|eai_again|und_err_connect_timeout|und_err_headers_timeout|und_err_body_timeout|无法连接模型网关|连接模型网关超时|stream inactive|did not include assistant content or tool calls|stream ended before a terminal event|stream timed out before producing output|Model step did not return a response/i.test(
+  return /HTTP\s+(?:429|500|502|503|504)\b|模型请求过于频繁|可重试|retry|timeout|timed out|aborted due to timeout|fetch failed|failed to fetch|econnreset|econnrefused|enotfound|eai_again|und_err_connect_timeout|und_err_headers_timeout|und_err_body_timeout|无法连接模型网关|连接模型网关超时|stream inactive|did not include assistant content or tool calls|stream ended before a terminal event|stream timed out before producing output|Model step did not return a response/i.test(
     message
   );
 }

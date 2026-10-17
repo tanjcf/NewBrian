@@ -145,6 +145,15 @@ test("builds wire-specific model request payloads", () => {
   assert.equal("temperature" in thinkingChat, false);
   const plainResponses = protocol.buildModelRequestPayload({ ...common, wireApi: "responses", enableThinking: false });
   assert.equal(plainResponses.reasoning, undefined);
+  const maasSafe = protocol.buildModelRequestPayload({
+    ...common, wireApi: "responses", enableThinking: false, includeStore: false
+  });
+  assert.equal("store" in maasSafe, false);
+  assert.equal("reasoning" in maasSafe, false);
+  const chatNoThinkingField = protocol.buildModelRequestPayload({
+    ...common, wireApi: "chat.completions", enableThinking: false, includeThinkingField: false
+  });
+  assert.equal("thinking" in chatNoThinkingField, false);
 });
 
 test("serializes tool calls and outputs for both wire protocols", () => {
@@ -225,6 +234,12 @@ test("treats server-side Auto as thinking-capable when the catalog can route the
     provider: "百度智能云千帆", model: "auto", candidateModels: catalog
   }), true, "Auto must use the wire that can round-trip a thinking trace");
   assert.equal(protocol.requiresThinkingWireProtocol({
+    provider: "腾讯混元",
+    model: "auto",
+    routedModel: "hunyuan-t1-32k",
+    candidateModels: catalog
+  }), false, "a known Hunyuan Auto target must not inherit DeepSeek reasoning fields");
+  assert.equal(protocol.requiresThinkingWireProtocol({
     provider: "百度智能云千帆", model: "auto", candidateModels: [{ model: "ernie-5.1", provider: "百度智能云千帆" }]
   }), false);
   assert.equal(protocol.requiresThinkingWireProtocol({
@@ -246,6 +261,14 @@ test("detects the thinking-context rejection that must be repaired, not surfaced
   ), true);
   assert.equal(protocol.isThinkingContextGatewayRejection(400, { error: { message: "invalid model" } }), false);
   assert.equal(protocol.isThinkingContextGatewayRejection(200, payload), false);
+  assert.equal(protocol.isUnsupportedRequestShapeGatewayRejection(400, {
+    detail: "The request is invalid: the request was rejected by an internal MaaS component. Please check the request body, required fields, and request format."
+  }), true);
+  assert.equal(protocol.shouldRetryModelRequestWithoutThinking(400, {
+    detail: "The request is invalid: the request was rejected by an internal MaaS component. Please check the request body, required fields, and request format."
+  }), true);
+  assert.equal(protocol.shouldRetryModelRequestWithoutThinking(400, payload), true);
+  assert.equal(protocol.isUnsupportedRequestShapeGatewayRejection(400, { error: { message: "invalid model" } }), false);
 });
 
 test("streams response deltas through a terminal SSE event", async () => {

@@ -981,6 +981,7 @@ export const desktopIpcChannels = {
     rewindThread: "phase1:rewind-workspace-thread",
     renameThread: "phase1:rename-workspace-thread",
     archiveThread: "phase1:archive-workspace-thread",
+    moveThread: "phase1:move-workspace-thread",
     deleteThread: "phase1:delete-workspace-thread",
     activateThread: "phase1:activate-workspace-thread",
     exportThreadHtml: "phase1:export-workspace-thread-html"
@@ -1351,6 +1352,11 @@ export interface RenameWorkspaceThreadInput extends WorkspaceThreadInput { title
 export interface ArchiveWorkspaceThreadInput extends WorkspaceThreadInput {
   archived: boolean;
   scope?: "project" | "chat";
+}
+export interface MoveWorkspaceThreadInput {
+  threadId: string;
+  fromWorkspaceId: string;
+  toWorkspaceId: string;
 }
 export interface ExportWorkspaceThreadHtmlInput extends WorkspaceThreadInput {
   /** Optional live renderer messages; when present they override persisted thread state. */

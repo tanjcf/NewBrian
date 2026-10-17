@@ -1,0 +1,20 @@
+{
+  "schema": "planner.template-profile.v3",
+  "source_files": ["built-in-svg"],
+  "method": "built_in",
+  "pages_reviewed": [],
+  "design_direction": {
+    "overall_character": {"value": "简洁、克制、高对比的通用商业演示", "evidence_pages": [], "confidence": "high"},
+    "color_roles": [
+      {"role": "dark", "hex": "#17212B", "source": "built_in", "confidence": "high"},
+      {"role": "light", "hex": "#F5F7FA", "source": "built_in", "confidence": "high"},
+      {"role": "accent", "hex": "#E5484D", "source": "built_in", "confidence": "high"}
+    ],
+    "type_hierarchy": [
+      {"role": "heading", "font_family": "PingFang SC", "font_size_px": 56, "font_weight": "bold", "source": "built_in", "confidence": "high"},
+      {"role": "body", "font_family": "PingFang SC", "font_size_px": 28, "font_weight": "normal", "source": "built_in", "confidence": "high"}
+    ]
+  },
+  "structural_extraction": {"canvas": {"width": 1920, "height": 1080}, "assets": [], "native_shapes": [], "native_shape_groups": []},
+  "usage_policy": {"mode": "extraction_audit_only", "note": "Built-in visual direction is summarized into the task; the full profile is not an SVG runtime input."}
+}

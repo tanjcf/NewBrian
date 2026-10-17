@@ -95,8 +95,9 @@ test("previews staged changes before commit and cancels the selected model task"
     "save:提交前钩子：已生成 staged diff 摘要", "run:git commit -m test:full",
     "save:已提交命令: git commit -m test", "events:1",
     "canceled:request", "agent:User requested cancellation.", "metadata:Cancelled",
-    "remove:request", "clear-canceled:request"
+    "remove:request"
   ]);
+  assert.ok(!fixture.events.includes("clear-canceled:request"), "canceled mark must survive until model-chat finish");
 });
 
 test("cancelModelRequest stops locally before spring turn.cancel", async () => {
@@ -144,9 +145,9 @@ test("cancelModelRequest stops locally before spring turn.cancel", async () => {
     "agent:User requested cancellation.",
     "metadata",
     "spring-cancel",
-    "remove:active",
-    "clear-canceled:active"
+    "remove:active"
   ]);
+  assert.ok(!events.includes("clear-canceled:active"), "canceled mark must survive until model-chat finish");
   assert.deepEqual(springCalls, ["thread:trn_1:user_stop"]);
 });
 

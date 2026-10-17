@@ -17,7 +17,6 @@ export function DocumentAnnotationLayer(props: {
   onToggle: () => void;
   onMarkingToolChange: (tool: AnnotationMarkingTool) => void;
   onMarkingColorChange: (color: string) => void;
-  onSendToChat: (annotation: BrainAnnotationDto) => void;
   onPreviewChangeSet: (changeSet: BrainChangeSetDto) => void;
   onReviewChangeSet: (changeSet: BrainChangeSetDto, status: "ACCEPTED" | "REJECTED") => void;
   onExportChangeSet: (changeSet: BrainChangeSetDto) => void;
@@ -57,12 +56,6 @@ export function DocumentAnnotationLayer(props: {
               ) : null}
               <i>{annotation.geometry?.displayIndex || index + 1}</i>
               <span><strong>{annotation.instruction}</strong><small>{annotation.selectedText?.trim() || "标记区域"}</small></span>
-              <button
-                type="button"
-                disabled={!annotation.instruction.trim()}
-                title={annotation.instruction.trim() ? "将标记位置、截图与修改要求加入左侧对话" : "请先填写修改要求"}
-                onClick={() => props.onSendToChat(annotation)}
-              >加入对话</button>
             </article>
             );
           })}

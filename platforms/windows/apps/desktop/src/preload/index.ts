@@ -6,6 +6,7 @@ import type {
   AddWorkspaceInput,
   AddWorkspaceThreadInput,
   ArchiveWorkspaceThreadInput,
+  MoveWorkspaceThreadInput,
   AutomationSpec,
   BrainConversationCreateInput,
   BrainConversationDto,
@@ -587,6 +588,7 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.workspaceGit.createWorktree, input),
   renameWorkspaceThread: (input: RenameWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.renameThread, input),
   archiveWorkspaceThread: (input: ArchiveWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.archiveThread, input),
+  moveWorkspaceThread: (input: MoveWorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.moveThread, input),
   deleteWorkspaceThread: (input: WorkspaceThreadInput): Promise<WorkspaceCatalogItem[]> => ipcRenderer.invoke(desktopIpcChannels.workspace.deleteThread, input),
   activateWorkspaceThread: (input: ActivateWorkspaceThreadInput) => ipcRenderer.invoke(desktopIpcChannels.workspace.activateThread, input),
   exportWorkspaceThreadHtml: (input: ExportWorkspaceThreadHtmlInput): Promise<ExportWorkspaceThreadHtmlResult> =>

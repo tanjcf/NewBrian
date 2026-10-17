@@ -34,6 +34,8 @@ import {
   applyWorkspacePatch,
   editWorkspaceFile,
   readWorkspaceFile,
+  repairMojibakeTree,
+  repairOutputPath,
   resolveSafeWorkspacePath
 } from "./workspace-fs.js";
 import {
@@ -1023,9 +1025,9 @@ export function createBuiltinToolRegistry() {
       validate: requireCommand,
       async execute(input, context) {
         const shellCommand = process.platform === "win32" ? "powershell.exe" : "/bin/zsh";
-        const normalizedCommand = process.platform === "win32"
+        const normalizedCommand = repairOutputPath(process.platform === "win32"
           ? normalizeWindowsShellCommand(input.command)
-          : input.command;
+          : input.command);
         const blockedWrite = guardShellWholeFileWrite(normalizedCommand);
         if (blockedWrite) {
           return { ...blockedWrite, command: normalizedCommand, requestedCommand: input.command };
@@ -1074,6 +1076,13 @@ export function createBuiltinToolRegistry() {
           env: shellEnv,
           signal: context.abortSignal
         });
+        if (result.ok && cwd) {
+          try {
+            await repairMojibakeTree(cwd);
+          } catch {
+            // A name repair must not hide the command result.
+          }
+        }
         if (!result.ok) {
           const guidance = formatMissingHostToolGuidance(normalizedCommand, result.output || result.failureMessage || "");
           if (guidance) {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planner's PPT Hell"
+  short_description: "主 Agent 自主制作、看图修订与整套审阅的可编辑 PPT 工作流"
+  default_prompt: "使用 planners-ppt-hell 将我的材料制作成可编辑 PPT。保留轻量内容底稿，自主设计实际页面并逐页看图检查，整套审阅后导出。"

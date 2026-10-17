@@ -130,7 +130,7 @@ function buildSkillInstruction(skills: LoadedModelSkill[]) {
 export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
   const memoryInstruction = input.memories.length
     ? [
-        "Relevant durable memories (context only; explicit current instructions win):",
+        "Lasting memories already settled in conversation (context only; explicit current instructions win):",
         ...input.memories.map((memory) => `- [${memory.scope}] ${memory.summary}`)
       ].join("\n")
     : "";

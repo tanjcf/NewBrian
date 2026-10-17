@@ -1,7 +1,7 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { AnnotationGeometry, AnnotationMarkingTool, BrainAnnotationDto } from "@codex-forge/protocol";
 import type { DocumentCoordinateTransform, DocumentRect, DocumentViewport } from "@codex-forge/protocol/document-anchor";
-import { projectDocumentRect } from "@codex-forge/protocol/document-anchor";
+import { placeDocumentMarkPrompt } from "./document-mark-prompt-placement";
 
 export type DocumentMarkPrompt = {
   instruction: string;
@@ -48,11 +48,7 @@ function normalizeDragRect(drag: DragState): DocumentRect {
   return { x, y, width, height };
 }
 
-function projectable(annotation: BrainAnnotationDto) {
-  return Boolean(annotation.anchor.rect && annotation.anchor.transform);
-}
-
-/** Captures free-form drag marks and renders saved annotation overlays. */
+/** Captures a drag mark. The box stays only until the instruction is sent. */
 export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<DocumentViewport>({ width: 0, height: 0 });
@@ -73,13 +69,8 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
 
   const draftRect = drag ? normalizeDragRect(drag) : null;
   const markPrompt = useContext(DocumentMarkPromptContext);
-  const savedMarks = (props.savedAnnotations || []).filter((annotation) => {
-    if (!projectable(annotation)) return false;
-    if (props.pageFilter != null && "page" in annotation.anchor && typeof annotation.anchor.page === "number") {
-      return annotation.anchor.page === props.pageFilter;
-    }
-    return true;
-  });
+  // Submitted annotations stay in the record. The preview box is only for the mark that has not been sent yet.
+  void props.savedAnnotations;
 
   return (
     <div
@@ -131,31 +122,6 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
       }}
       onPointerCancel={() => setDrag(null)}
     >
-      {savedMarks.map((annotation) => {
-        const anchor = annotation.anchor;
-        if (!anchor.rect || !anchor.transform) return null;
-        let projected: DocumentRect;
-        try {
-          projected = projectDocumentRect(anchor.rect, anchor.transform, viewport);
-        } catch {
-          return null;
-        }
-        return (
-          <div
-            key={annotation.id}
-            className={`document-marking-saved${annotation.geometry.style.tool === "highlight" ? " highlight" : " select-rect"}`}
-            data-testid="document-marking-saved"
-            style={{
-              left: `${projected.x}px`,
-              top: `${projected.y}px`,
-              width: `${Math.max(4, projected.width)}px`,
-              height: `${Math.max(4, projected.height)}px`,
-              ["--mark-color" as string]: annotation.geometry.style.color
-            }}
-            title={annotation.instruction}
-          />
-        );
-      })}
       {draftRect && props.active ? (
         <div
           className={`document-marking-draft${props.tool === "highlight" ? " highlight" : " select-rect"}`}
@@ -180,13 +146,15 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
             height: `${Math.max(4, props.pendingMark.rect.height)}px`,
             ["--mark-color" as string]: props.pendingMark.color
           }}
-        />
+        >
+          {props.pendingMark.tool === "select-rect" ? <span className="document-marking-region-label">标记区域</span> : null}
+        </div>
       ) : null}
       {!draftRect && props.pendingMark && markPrompt && (markPrompt.page == null || props.pageFilter == null || markPrompt.page === props.pageFilter) ? (
         <form
           className="pptx-mark-prompt"
           data-testid="document-mark-prompt"
-          style={{ left: props.pendingMark.rect.x, top: props.pendingMark.rect.y + props.pendingMark.rect.height + 10, width: Math.max(props.pendingMark.rect.width, 240) }}
+          style={placeDocumentMarkPrompt(props.pendingMark.rect, viewport)}
           onSubmit={(event) => { event.preventDefault(); markPrompt.onSubmit(); }}
           onPointerDown={(event) => event.stopPropagation()}
         >

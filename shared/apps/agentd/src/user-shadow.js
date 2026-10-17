@@ -187,9 +187,7 @@ function distillPreferenceLines(user) {
 
 function distillProjectFacts(user, assistant) {
   const combined = `${user}\n${assistant}`;
-  if (!includesAny(combined, PROJECT_KNOWLEDGE_TERMS) && !includesAny(user, CORRECTION_MARKERS)) {
-    return [];
-  }
+  if (!includesAny(combined, PROJECT_KNOWLEDGE_TERMS)) return [];
   // Keep a short NEWBRAIN.md candidate index — architecture belongs in repo-root NEWBRAIN.md,
   // not as unbounded bullets in runtime project-knowledge.md.
   const facts = [];
@@ -214,7 +212,15 @@ function hasRelevantPreference(user, rulesText) {
   const durable = rules.split(/\r?\n/)
     .filter((line) => line.startsWith("- "))
     .map((line) => line.slice(2).trim())
-    .filter((line) => /^(规则|偏好|修正)[:：]/.test(line) || isCorrectionOrPreference(line) || isReusableRuleRequest(line));
+    .filter((line) => {
+      const status = bulletStatus(line);
+      if (status === "proposed" || status === "deprecated") return false;
+      const fact = bulletFact(line);
+      return status === "active"
+        || /^(规则|偏好|修正)[:：]/.test(fact)
+        || isCorrectionOrPreference(fact)
+        || isReusableRuleRequest(fact);
+    });
   if (!durable.length) return false;
   const userTokens = new Set(significantTokens(user).filter((token) =>
     !["帮我", "一下", "这个", "那个", "请", "the", "and", "for", "with"].includes(token)
@@ -281,16 +287,209 @@ function distillAnsweredOpenQuestion(user, openQuestions) {
   return cleanLine(`偏好: ${cleanLine(question, 180)} → 用户答复: ${cleanLine(user, 280)}`, 500);
 }
 
+const SECRET_PATTERN = /sk-[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:password|api[_-]?key|secret|token|私钥|密码)\s*[:=：为是]\s*(?!\[已省略\])\S+|bearer\s+[A-Za-z0-9._-]{12,}/i;
+const GENERIC_PHRASES = new Set(["用户要求", "输出格式", "中文回答", "项目架构", "功能细节"]);
+
+export function redactMemorySecrets(value) {
+  return String(value || "")
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[已省略私钥]")
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[已省略密钥]")
+    .replace(/(password|api[_-]?key|secret|token|私钥|密码)\s*[:=：为是]\s*(?!\[已省略\])\S+/gi, "$1: [已省略]")
+    .replace(/bearer\s+[A-Za-z0-9._-]{12,}/gi, "bearer [已省略]");
+}
+
+export function lineCarriesSecret(value) {
+  return SECRET_PATTERN.test(String(value || ""));
+}
+
+export function isExplicitActiveConfirmation(user) {
+  return /记住|记下来|给我记下|请记录|以后|今后|每次|不要再|始终|一直/.test(String(user || ""));
+}
+
+function isHedgedMemory(user) {
+  return /也许|或许|可能|考虑一下|考虑下|暂时|不确定|先看看|看看再说|大概|说不定/.test(String(user || ""));
+}
+
+function isSettledDecision(user) {
+  return /定了|就这么定|结论是|我们决定|决定用|就用|就按这个|采用/.test(String(user || ""));
+}
+
+export function sessionOnlyMemory(user) {
+  return isHedgedMemory(user) || isMemoryQuestion(user);
+}
+
+function isMemoryQuestion(user) {
+  const text = cleanLine(user, 240);
+  return /[?？]$/.test(text) || /^(什么|为啥|为什么|怎么|如何|哪个|哪些|是否|是不是)/.test(text);
+}
+
+function isSalientPersonal(user) {
+  return /我一直|我一般|我通常|我喜欢|我不喜欢|我讨厌|我习惯|我负责|受不了|千万|一定要|特别在意|对我来说/.test(String(user || ""));
+}
+
+/** A person writes this down: it states a habit, a correction, a decision, or an answer. */
+export function isStandingMemory(user, answered = false) {
+  if (answered) return true;
+  if (!cleanLine(user)) return false;
+  if (isHedgedMemory(user) || isMemoryQuestion(user)) return false;
+  if (isOneShotTask(user) && !isExplicitActiveConfirmation(user)) return false;
+  if (isExplicitActiveConfirmation(user) || isSettledDecision(user) || isSalientPersonal(user)) return true;
+  return isCorrectionOrPreference(user);
+}
+
+/** Said once, concretely: a person notices it, and remembers it if it comes back. */
+function isNoticedStatement(user) {
+  const text = cleanLine(user, 240);
+  if (text.length < 12) return false;
+  if (isHedgedMemory(text) || isMemoryQuestion(text) || isOneShotTask(text) || isStandingMemory(text)) return false;
+  if (!phraseWindows(text).length) return false;
+  return includesAny(text, PROJECT_KNOWLEDGE_TERMS) || /我/.test(text);
+}
+
+function extractBullets(source) {
+  return String(source || "")
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter(Boolean);
+}
+
+function bulletStatus(line) {
+  const match = String(line || "").match(/^\[(active|proposed|deprecated)\]/i);
+  return match ? match[1].toLowerCase() : "legacy";
+}
+
+function bulletFact(line) {
+  const match = String(line || "").match(/事实:\s*([^|]+)/);
+  return cleanLine(match ? match[1] : line, 240);
+}
+
+export function formatKnowledgeBullet(input) {
+  const status = input.status === "active" || input.status === "deprecated" ? input.status : "proposed";
+  const parts = [`[${status}] 事实: ${cleanLine(input.fact, 220)}`];
+  if (input.evidence) parts.push(`证据: ${cleanLine(input.evidence, 160)}`);
+  parts.push(`状态: ${status}`);
+  if (input.batch && status === "proposed") parts.push(`批次: ${input.batch}`);
+  if (input.supersedes) parts.push(`替代: ${cleanLine(input.supersedes, 80)}`);
+  return parts.join(" | ");
+}
+
+function phraseWindows(text) {
+  const compact = String(text || "").replace(/\s+/g, "");
+  const found = [];
+  for (let index = 0; index <= compact.length - 4; index += 1) {
+    const slice = compact.slice(index, index + 4);
+    if (/^[\u4e00-\u9fa5]{4}$/.test(slice) && !GENERIC_PHRASES.has(slice)) found.push(slice);
+  }
+  return found;
+}
+
+function sharesDistinctivePhrase(left, right) {
+  const rightWindows = new Set(phraseWindows(right));
+  return phraseWindows(left).some((item) => rightWindows.has(item));
+}
+
+function findSingleActiveConflict(lines, fact) {
+  if (!/修正:|不要再/.test(fact)) return -1;
+  const matches = [];
+  lines.forEach((line, index) => {
+    if (DEFAULT_OUTPUT_RULES.includes(line)) return;
+    const status = bulletStatus(line);
+    if (status === "deprecated" || status === "proposed") return;
+    if (sharesDistinctivePhrase(fact, bulletFact(line))) matches.push(index);
+  });
+  return matches.length === 1 ? matches[0] : -1;
+}
+
+function mergeKnowledgeAdditions(bullets, additions, deepenText = "") {
+  let next = bullets.slice();
+  if (deepenText) {
+    next = next.map((line) => (
+      bulletStatus(line) === "proposed" && sharesDistinctivePhrase(deepenText, bulletFact(line))
+        ? line.replace(/^\[proposed\]/i, "[active]").replace(/状态:\s*proposed/i, "状态: active")
+        : line
+    ));
+  }
+  const removedLegacy = new Set();
+  for (const addition of additions) {
+    const existingIndex = next.findIndex((line) => bulletStatus(line) !== "deprecated" && bulletFact(line) === addition.fact);
+    if (existingIndex >= 0) {
+      if (addition.status === "active" && bulletStatus(next[existingIndex]) === "proposed") {
+        next[existingIndex] = next[existingIndex]
+          .replace(/^\[proposed\]/i, "[active]")
+          .replace(/状态:\s*proposed/i, "状态: active");
+      }
+      continue;
+    }
+    let supersedes = "";
+    if (addition.status === "active" && addition.correction) {
+      const conflict = findSingleActiveConflict(next, addition.fact);
+      if (conflict >= 0) {
+        const old = next[conflict];
+        if (bulletStatus(old) === "legacy") removedLegacy.add(old);
+        supersedes = cleanLine(bulletFact(old), 80);
+        next[conflict] = formatKnowledgeBullet({
+          status: "deprecated",
+          fact: bulletFact(old),
+          evidence: "被新的已确认纠正替代",
+          supersedes: cleanLine(addition.fact, 80)
+        });
+      }
+    }
+    next.push(formatKnowledgeBullet({ ...addition, supersedes }));
+  }
+  return { bullets: next, removedLegacy };
+}
+
+async function mutateKnowledgeBullets(filePath, header, mutate) {
+  return withFileQueue(filePath, async () => {
+    const source = await readText(filePath);
+    const base = source || `${header}\n\n`;
+    const original = extractBullets(base);
+    let result;
+    try {
+      result = mutate(original.slice());
+    } catch {
+      return false;
+    }
+    const nextBullets = result?.bullets;
+    const removedLegacy = result?.removedLegacy || new Set();
+    if (!Array.isArray(nextBullets)) return false;
+    const nextSet = new Set(nextBullets.map((line) => cleanLine(line, 900)));
+    for (const line of original) {
+      if (bulletStatus(line) !== "legacy") continue;
+      const cleaned = cleanLine(line, 900);
+      if (nextSet.has(cleaned) || removedLegacy.has(line)) continue;
+      return false;
+    }
+    const cleaned = [];
+    const seen = new Set();
+    for (const line of nextBullets) {
+      const item = cleanLine(line, 900);
+      if (!item || seen.has(item) || lineCarriesSecret(item)) continue;
+      seen.add(item);
+      cleaned.push(item);
+    }
+    const next = [header, "", ...cleaned.map((line) => `- ${line}`), ""].join("\n");
+    if (source === next) return false;
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, next, "utf8");
+    return true;
+  });
+}
+
 function buildActiveSessionSummary(user, assistant, learned) {
+  const safeUser = redactMemorySecrets(user);
+  const safeAssistant = redactMemorySecrets(assistant);
   const parts = [
-    `用户: ${cleanLine(user, 320)}`,
-    `助手: ${cleanLine(assistant, 320)}`
+    `用户: ${cleanLine(safeUser, 320)}`,
+    `助手: ${cleanLine(safeAssistant, 320)}`
   ];
   if (learned.outputRules.length) {
-    parts.push(`主动学习规则: ${learned.outputRules.slice(0, 3).join(" | ")}`);
+    parts.push(`主动学习规则: ${learned.outputRules.slice(0, 3).map((line) => redactMemorySecrets(line)).join(" | ")}`);
   }
   if (learned.projectFacts.length) {
-    parts.push(`知识沉淀: ${learned.projectFacts.slice(0, 2).join(" | ")}`);
+    parts.push(`知识沉淀: ${learned.projectFacts.slice(0, 2).map((line) => redactMemorySecrets(line)).join(" | ")}`);
   }
   if (learned.openQuestions?.length) {
     parts.push(`待学习追问: ${learned.openQuestions.slice(0, 2).join(" | ")}`);
@@ -345,8 +544,10 @@ export function extractFacts(user, assistant, context = {}) {
     uniquePush(facts.requestedRules, user);
   }
 
-  for (const fact of distillProjectFacts(user, assistant)) {
-    uniquePush(facts.projectFacts, fact);
+  if (isStandingMemory(user, Boolean(answered)) && includesAny(`${user}\n${assistant}`, PROJECT_KNOWLEDGE_TERMS)) {
+    for (const fact of distillProjectFacts(user, assistant)) {
+      uniquePush(facts.projectFacts, fact);
+    }
   }
 
   const asked = extractAskedLearningQuestion(assistant);
@@ -354,7 +555,20 @@ export function extractFacts(user, assistant, context = {}) {
     uniquePush(facts.openQuestions, asked);
   }
 
+  const standing = isStandingMemory(user, Boolean(answered));
+  if (!standing && isNoticedStatement(user)) {
+    uniquePush(facts.outputRules, `留意: ${cleanLine(user, 180)}`);
+  } else if (standing && !facts.outputRules.length && !facts.requestedRules.length && !facts.projectFacts.length) {
+    uniquePush(facts.outputRules, `记住的事: ${cleanLine(user, 180)}`);
+  }
+
   facts.sessionSummary = buildActiveSessionSummary(user, assistant, facts);
+  const hasLearned = facts.outputRules.length > 0 || facts.requestedRules.length > 0 || facts.projectFacts.length > 0;
+  facts.knowledgeStatus = standing && hasLearned
+    ? "active"
+    : facts.outputRules.some((line) => String(line).startsWith("留意:"))
+      ? "noticed"
+      : "none";
   return facts;
 }
 
@@ -382,8 +596,9 @@ export function buildPersonalizationGuidance(input = {}) {
     "Personalization loop (Hermes/PAHF-style):",
     "1. Pre-Action: if the current request is ambiguous/subjective and injected preferences do not cover it, ask ONE clarifying question BEFORE acting. Do not guess lasting taste.",
     "2. Grounding: apply injected user-output-rules, delivery preferences, and repo Project OS (NEWBRAIN.md); once a preference exists, act directly and do not re-ask the same topic.",
-    "3. Post-Action: when the user corrects you or answers a learning question, treat it as durable preference learning (runtime will distill it).",
+    "3. Post-Action: when the user corrects you, states a habit, settles a decision, or answers a learning question, treat it as durable memory. Tentative talk, questions, and one-off tasks stay in the session summary.",
     "Ask at most one preference question per turn. Prefer executing when memory already answers the ambiguity.",
+    "Do not ask the user to say a confirmation code. A concrete point mentioned once is only noticed; when the user returns to it, explains it, or states a habit or correction, remember it.",
     "Durable architecture and project conventions belong in repo-root NEWBRAIN.md (agent may edit). Runtime preference files under .newbrain must not be edited with tools."
   ];
   if (openQuestions.length) {
@@ -427,16 +642,6 @@ async function upsertDeliveryRulesSummary(filePath, summaryLine) {
     await fs.writeFile(filePath, next, "utf8");
     return true;
   });
-}
-
-function isDurableLearnedRuleLine(line) {
-  const text = cleanLine(line);
-  if (!text) return false;
-  if (DEFAULT_OUTPUT_RULES.includes(text)) return true;
-  if (isReusableRuleRequest(text)) return true;
-  if (/^(规则|偏好|修正|交付版式)[:：]/.test(text)) return true;
-  if (isCorrectionOrPreference(text)) return true;
-  return false;
 }
 
 async function readText(filePath) {
@@ -611,12 +816,22 @@ async function writeOpenQuestionsFile(filePath, openQuestions) {
 async function sanitizeOutputRules(filePath) {
   return withFileQueue(filePath, async () => {
     const source = await readText(filePath);
-    const reusableRules = source.split(/\r?\n/)
-      .filter((line) => line.startsWith("- "))
-      .map((line) => line.slice(2).trim())
-      .filter((line) => isDurableLearnedRuleLine(line));
-    const uniqueRules = [...new Set([...DEFAULT_OUTPUT_RULES, ...reusableRules])];
-    const next = ["# User Output Rules", "", ...uniqueRules.map((line) => `- ${line}`), ""].join("\n");
+    if (!source.trim()) return false;
+    const sourceBullets = extractBullets(source);
+    const kept = [];
+    const seen = new Set();
+    const push = (line) => {
+      const item = cleanLine(line, 900);
+      if (!item || seen.has(item)) return;
+      seen.add(item);
+      kept.push(item);
+    };
+    for (const rule of DEFAULT_OUTPUT_RULES) push(rule);
+    for (const line of sourceBullets) push(line);
+    for (const line of sourceBullets) {
+      if (bulletStatus(line) === "legacy" && !kept.includes(cleanLine(line, 900))) return false;
+    }
+    const next = ["# User Output Rules", "", ...kept.map((line) => `- ${line}`), ""].join("\n");
     if (source === next) return false;
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, next, "utf8");
@@ -624,17 +839,25 @@ async function sanitizeOutputRules(filePath) {
   });
 }
 
-/** Keep project-knowledge as a short candidate index (header + latest bullets). */
+/** Keep project-knowledge as a short candidate index. Drop deprecated, then oldest proposed, before active lines. */
 async function trimProjectKnowledgeIndex(filePath) {
   return withFileQueue(filePath, async () => {
     const source = await readText(filePath);
     if (!source.trim()) return false;
-    const bullets = source.split(/\r?\n/)
-      .filter((line) => line.startsWith("- "))
-      .map((line) => line.slice(2).trim())
-      .filter(Boolean);
+    const bullets = extractBullets(source);
     if (bullets.length <= PROJECT_KNOWLEDGE_INDEX_LIMIT) return false;
-    const kept = bullets.slice(-PROJECT_KNOWLEDGE_INDEX_LIMIT);
+    const rank = (line) => {
+      const status = bulletStatus(line);
+      if (status === "deprecated") return 0;
+      if (status === "proposed") return 1;
+      return 2;
+    };
+    const kept = bullets
+      .map((line, index) => ({ line, index, rank: rank(line) }))
+      .sort((left, right) => left.rank - right.rank || left.index - right.index)
+      .slice(bullets.length - PROJECT_KNOWLEDGE_INDEX_LIMIT)
+      .sort((left, right) => left.index - right.index)
+      .map((item) => item.line);
     const next = ["# Project Knowledge", "", ...kept.map((line) => `- ${line}`), ""].join("\n");
     await fs.writeFile(filePath, next, "utf8");
     return true;
@@ -1005,26 +1228,67 @@ export class UserShadow {
     };
   }
 
+  async applyDurableKnowledge(input, facts, changed) {
+    if (facts.knowledgeStatus !== "active" && facts.knowledgeStatus !== "noticed") return;
+    const evidence = cleanLine(redactMemorySecrets(input?.user), 160);
+    const priorProposed = [
+      ...extractBullets(await readText(this.outputRulesPath())),
+      ...extractBullets(await readText(path.join(this.referencesPath, "project-knowledge.md")))
+    ].filter((line) => bulletStatus(line) === "proposed");
+    const deepen = priorProposed.some((line) => sharesDistinctivePhrase(input?.user, bulletFact(line)));
+    const status = facts.knowledgeStatus === "active" || deepen ? "active" : "proposed";
+    const deepenText = deepen ? String(input?.user || "") : "";
+    const ruleAdditions = [];
+    const seenFacts = new Set();
+    const coveredRequests = new Set((facts.outputRules || []).map((line) => cleanLine(line, 220)));
+    for (const line of [...(facts.outputRules || []), ...(facts.requestedRules || [])]) {
+      const fact = cleanLine(line, 220);
+      if (!fact || seenFacts.has(fact) || lineCarriesSecret(fact)) continue;
+      if ((facts.requestedRules || []).includes(line) && [...coveredRequests].some((rule) => rule.includes(fact))) continue;
+      seenFacts.add(fact);
+      ruleAdditions.push({
+        status,
+        fact,
+        evidence,
+        correction: /修正:|不要再/.test(fact)
+      });
+    }
+    const projectAdditions = [];
+    for (const line of (facts.projectFacts || []).slice(0, 2)) {
+      const fact = cleanLine(line, 220);
+      if (!fact || lineCarriesSecret(fact)) continue;
+      projectAdditions.push({ status, fact, evidence, correction: false });
+    }
+    if (ruleAdditions.length) {
+      const wrote = await mutateKnowledgeBullets(this.outputRulesPath(), "# User Output Rules", (bullets) => (
+        mergeKnowledgeAdditions(bullets, ruleAdditions, deepenText)
+      ));
+      if (wrote) changed.push("user-output-rules");
+    }
+    if (projectAdditions.length) {
+      const knowledgePath = path.join(this.referencesPath, "project-knowledge.md");
+      const wrote = await mutateKnowledgeBullets(knowledgePath, "# Project Knowledge", (bullets) => (
+        mergeKnowledgeAdditions(bullets, projectAdditions, deepenText)
+      ));
+      if (wrote) {
+        changed.push("project-knowledge");
+        await trimProjectKnowledgeIndex(knowledgePath);
+      }
+    }
+  }
+
   async absorbExchange(input) {
     await this.ensureProjectSkill();
     const priorOpen = await this.readOpenQuestions();
     const facts = extractFacts(input.user, input.assistant, { openQuestions: priorOpen });
     const changed = [];
-    if (await appendUnique(this.outputRulesPath(), "# User Output Rules", facts.outputRules)) {
-      changed.push("user-output-rules");
-    }
-    // Short NEWBRAIN candidate index only — avoid unbounded architecture dumps.
-    const knowledgePath = path.join(this.referencesPath, "project-knowledge.md");
-    const trimmedFacts = facts.projectFacts.slice(0, 2);
-    if (trimmedFacts.length && await appendUnique(knowledgePath, "# Project Knowledge", trimmedFacts)) {
-      changed.push("project-knowledge");
-      await trimProjectKnowledgeIndex(knowledgePath);
+    try {
+      await this.applyDurableKnowledge(input, facts, changed);
+    } catch {
+      // Status rewrite failed closed: leave the files already on disk and continue the turn.
     }
     if (await appendUnique(path.join(this.referencesPath, "session-digest.md"), "# Session Digest", [facts.sessionSummary])) {
       changed.push("session-digest");
-    }
-    if (await appendUnique(this.outputRulesPath(), "# User Output Rules", facts.requestedRules)) {
-      changed.push("requested-rules");
     }
 
     let nextOpen = priorOpen;
@@ -1038,11 +1302,13 @@ export class UserShadow {
       changed.push("learning-open-questions");
     }
 
-    const deliveryUpdate = extractDeliveryPreferenceUpdate({
-      user: input.user,
-      assistant: input.assistant,
-      openQuestions: priorOpen
-    });
+    const deliveryUpdate = sessionOnlyMemory(input.user)
+      ? null
+      : extractDeliveryPreferenceUpdate({
+        user: input.user,
+        assistant: input.assistant,
+        openQuestions: priorOpen
+      });
     let threadDeliveryPreferences = parseDeliveryPreferences(input.threadDeliveryPreferences);
     let projectDeliveryPreferences = await this.readDeliveryPreferences();
     if (deliveryUpdate?.clear) {
@@ -1094,7 +1360,8 @@ export class UserShadow {
       threadDeliveryPreferences,
       projectDeliveryPreferences,
       deliveryPreferencesText,
-      personalizationGuidance: buildPersonalizationGuidance({ openQuestions: nextOpen, deliveryPreferencesText })
+      personalizationGuidance: buildPersonalizationGuidance({ openQuestions: nextOpen, deliveryPreferencesText }),
+      knowledgeStatus: facts.knowledgeStatus
     };
   }
 }

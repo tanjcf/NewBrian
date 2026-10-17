@@ -63,6 +63,17 @@ test("normalizes workspace identity, thread order, and Conda defaults", () => {
   });
 });
 
+test("keeps a subagent thread attached to its parent", () => {
+  const thread = policy.normalizeWorkspaceThread({
+    id: "child",
+    title: "rhadoc 代码现状",
+    kind: "subagent",
+    parentThreadId: "parent"
+  }, context);
+  assert.equal(thread.kind, "subagent");
+  assert.equal(thread.parentThreadId, "parent");
+});
+
 test("drops incomplete Conda metadata", () => {
   assert.equal(policy.normalizeWorkspaceCondaConfig("workspace-1", { condaPath: " " }, context), undefined);
 });

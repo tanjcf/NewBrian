@@ -54,8 +54,10 @@ export class DelegatedAgentIpcService {
       const childThread = workspace.threads.find((thread) => thread.id === current.childThreadId);
       const childState = childThread ? await this.dependencies.readState(workspace, childThread) : undefined;
       const checkpointAwaiting = childState?.agentCheckpoint?.status === "awaiting-approval";
+      // Queued children are not abandoned. The run promise is registered after the
+      // task row exists, and a 2s sidebar poll must not fail them before start.
       if (
-        !terminal
+        status === "running"
         && !checkpointAwaiting
         && this.dependencies.hasActiveRun
         && !this.dependencies.hasActiveRun(current.childThreadId)

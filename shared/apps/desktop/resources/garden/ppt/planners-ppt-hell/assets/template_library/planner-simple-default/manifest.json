@@ -1,0 +1,34 @@
+{
+  "schema": "planner.template-library.v1",
+  "template_id": "planner-simple-default",
+  "name": "Planner 简洁默认模板",
+  "status": "approved",
+  "mode": "fidelity",
+  "is_default": true,
+  "published_at": "2026-07-16T00:00:00Z",
+  "source_files": [
+    "built-in-svg"
+  ],
+  "review_summary": "内置简洁模板；使用机器可校验的 SVG layout canvas。",
+  "preview": "",
+  "files": {
+    "fidelity_template/canvas_previews/full_deck_contact_sheet.png": "ab37ab16ed072c99ef180b2aa4b3cfa9ba0f07e3e20594466accfafb8e28d645",
+    "fidelity_template/canvas_previews/pages/closing_dark.png": "b1be196eba2f173e06c4d8163d886b5d5476cdb97c90a1bc17feabd29f47e6de",
+    "fidelity_template/canvas_previews/pages/content_base.png": "b54da76aa186eb9261e85afe10c3f96ce90d830b3157ab7f0051948eb30da1d3",
+    "fidelity_template/canvas_previews/pages/contents_light.png": "b54da76aa186eb9261e85afe10c3f96ce90d830b3157ab7f0051948eb30da1d3",
+    "fidelity_template/canvas_previews/pages/cover_dark.png": "b1be196eba2f173e06c4d8163d886b5d5476cdb97c90a1bc17feabd29f47e6de",
+    "fidelity_template/canvas_previews/pages/section_dark.png": "b1be196eba2f173e06c4d8163d886b5d5476cdb97c90a1bc17feabd29f47e6de",
+    "fidelity_template/canvas_previews/png_manifest.json": "08aeaf5c2c28ee763cd9c5788651fb98ba5d6e7da54784c32356736d98ac717e",
+    "fidelity_template/components.svg": "e66f827cd1ea405cd8dac83eeeacd3d258e46b2b3f2fc4d183fe32261285f2cd",
+    "fidelity_template/layout_canvases/closing_dark.svg": "9439a84c0accfb6ebd6e2c59efeab7a467eebf101a14ef28f0f49c3d10426ce0",
+    "fidelity_template/layout_canvases/content_base.svg": "9578393cf442683d3cf3da12686f33eaf094c7f51f7efaefa03ae8f848472373",
+    "fidelity_template/layout_canvases/contents_light.svg": "cf928b947b94757e7cb68dda125117477f975ca812337b7385582eaa1e7beb2c",
+    "fidelity_template/layout_canvases/cover_dark.svg": "28c944302b8c37595094f6b81889e0b5b1c154039b58e27d43da981da92c6e59",
+    "fidelity_template/layout_canvases/section_dark.svg": "f303c3a86174cd020fdb9355beffcd5f0b2f47e96a7908a21352839ecc17cc36",
+    "fidelity_template/template_registry.json": "5cf2dce356b3f958d31d5dc4da40186fd72f89e66b794260bf85e27b864d97be",
+    "template_asset_registry.json": "2b7c6948ce7a031ec305fefed6c1226801714f1fb3ffa0076eea838b132cb948",
+    "template_profile.json": "ebff720f9cb0d8936ab3b4c3a3068dc01477e614f2e647db61323ec374e51372",
+    "template_worker_result.json": "02a135a293f0042fce890c11b42c4779a81385398fc63ad91d2b0d27b6e3a86d"
+  },
+  "package_sha256": "553a50b5e7df6f752044e4b521d476becaadf3d15f2d754704d12d80d0dc0dbe"
+}

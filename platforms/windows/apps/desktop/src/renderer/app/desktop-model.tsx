@@ -835,6 +835,11 @@ declare global {
         archived: boolean;
         scope?: "project" | "chat";
       }) => Promise<WorkspaceCatalogItem[]>;
+      moveWorkspaceThread: (input: {
+        threadId: string;
+        fromWorkspaceId: string;
+        toWorkspaceId: string;
+      }) => Promise<WorkspaceCatalogItem[]>;
       deleteWorkspaceThread: (input: {
         workspaceId: string;
         threadId: string;

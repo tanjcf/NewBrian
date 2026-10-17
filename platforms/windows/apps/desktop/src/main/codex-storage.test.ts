@@ -128,6 +128,9 @@ test("creates Codex-style WAL databases and persists each core domain", async ()
     assert.equal(persistedThread?.lastEventSummary, "The user cancelled the current task.");
     assert.equal(persistedThread?.statusLabel, "Cancelled");
     assert.equal(storage.listThreads("workspace").find((thread) => thread.id === "thread-2")?.scope, "chat");
+    assert.equal(storage.listThreads("workspace").find((thread) => thread.id === "thread-2")?.kind, "subagent");
+    assert.equal(storage.listThreads("workspace").find((thread) => thread.id === "thread-2")?.parentThreadId, "thread-1");
+    assert.equal(storage.listThreads("workspace").find((thread) => thread.id === "thread-1")?.kind, "user");
     assert.equal(storage.setThreadArchived("thread-2", true, "archived_sessions/thread-2.rollout.jsonl"), true);
     assert.equal(storage.listThreads("workspace").some((thread) => thread.id === "thread-2"), false);
     const archivedThread = storage.state.prepare(
@@ -148,7 +151,7 @@ test("creates Codex-style WAL databases and persists each core domain", async ()
       "backfill_state", "external_agent_config_imports", "remote_control_enrollments", "delegated_agent_tasks",
       "remote_work_items", "remote_event_outbox"
     ]) assert.ok(stateTables.has(table), `missing state table ${table}`);
-    assert.equal(Number((stateDatabase.prepare("SELECT count(*) AS count FROM _sqlx_migrations").get() as any).count), 8);
+    assert.equal(Number((stateDatabase.prepare("SELECT count(*) AS count FROM _sqlx_migrations").get() as any).count), 9);
     stateDatabase.close();
 
     for (const [file, table] of [

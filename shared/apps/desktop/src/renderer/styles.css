@@ -4643,6 +4643,9 @@ textarea {
 .task-scroll {
   min-height: 0;
   overflow: auto;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  scroll-behavior: auto;
   padding: 28px clamp(28px, 4vw, 72px) 30px;
 }
 
@@ -7320,7 +7323,7 @@ textarea {
   max-height: 116px;
   overflow-x: hidden;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   scrollbar-width: thin;
 }
 
@@ -7537,6 +7540,12 @@ textarea {
   color: #20242b;
   font-size: 14px;
   line-height: 1.68;
+}
+
+/* Windows-only: Chromium scroll anchoring fights stick-to-bottom while streamed
+   markdown grows, so the answer text jumps up and down. */
+.markdown-message-streaming {
+  overflow-anchor: none;
 }
 
 .markdown-message > :first-child {
@@ -12963,10 +12972,16 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
   max-width: 100%;
   margin: 12px 0;
   overflow: auto;
+  overflow-anchor: none;
   border: 1px solid #e3e7ec;
   border-radius: 10px;
   background: #fff;
   padding: 16px;
+  contain: layout;
+}
+
+.markdown-mermaid {
+  min-height: 120px;
 }
 
 .markdown-mermaid svg {
@@ -15567,6 +15582,8 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 
 .conversation-turn.current {
   min-height: 0;
+  content-visibility: visible;
+  overflow-anchor: none;
 }
 
 .request-row {
@@ -15915,6 +15932,7 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 .assistant-activity-scroll {
   max-height: none;
   overflow: visible;
+  scroll-behavior: auto;
   width: 100%;
   min-width: 0;
 }
@@ -21591,14 +21609,14 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
 .document-annotation-list article {
   padding: 6px 0;
   display: grid;
-  grid-template-columns: auto 20px minmax(0, 1fr) auto;
+  grid-template-columns: auto 20px minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   border-top: 1px solid var(--border-subtle, #e5e7eb);
 }
 
 .document-annotation-list article:not(:has(.document-annotation-snapshot-thumb)) {
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr);
 }
 
 .document-annotation-list article > i {
@@ -21627,11 +21645,6 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
 
 .document-annotation-list small {
   color: var(--text-muted, #737982);
-}
-
-.document-annotation-list button {
-  padding: 4px 7px;
-  font-size: 11px;
 }
 
 .document-change-set-list {
@@ -21768,6 +21781,7 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 
 .workspace-artifact-markdown {
@@ -21778,6 +21792,10 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
 
 .workspace-artifact-markdown .markdown-message {
   max-width: 920px;
+}
+
+.markdown-message-file-preview {
+  overflow-anchor: none;
 }
 
 .workspace-artifact-text-shell pre {
@@ -21820,8 +21838,23 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
 .document-marking-draft.select-rect,
 .document-marking-pending.select-rect,
 .document-marking-saved.select-rect {
-  background: color-mix(in srgb, var(--mark-color, #ffeb3b) 18%, transparent);
-  border: 2px solid var(--mark-color, #ffeb3b);
+  background: transparent;
+  border: 2px dashed var(--mark-color, #ffeb3b);
+}
+
+.document-marking-region-label {
+  position: absolute;
+  left: 0;
+  top: -20px;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--mark-color, #ffeb3b);
+  color: #3f3a00;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .preview-line.document-marking-line.highlight {
@@ -21829,8 +21862,8 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
 }
 
 .preview-line.document-marking-line.select-rect {
-  outline: 2px solid var(--mark-color, #ffeb3b);
-  background: color-mix(in srgb, var(--mark-color, #ffeb3b) 12%, transparent);
+  outline: 2px dashed var(--mark-color, #ffeb3b);
+  background: transparent;
 }
 
 .brain-task-row {

@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { lineCarriesSecret, sessionOnlyMemory } from "./user-shadow.js";
 
 export const COMPANION_MEMORY_SKILL_NAME = "companion-memory";
 
@@ -67,7 +68,7 @@ export function extractCompanionMemoryUpdate(user, assistant) {
   const reply = String(assistant || "");
   const explicit = {};
   const inferred = {};
-  if (!source || GREETING.test(source)) return { explicit, inferred };
+  if (!source || GREETING.test(source) || sessionOnlyMemory(source)) return { explicit, inferred };
 
   const assistantName = take(
     /(?:你就叫|就叫你|叫你|你的名字(?:就)?(?:是|叫))\s*[「『"']?([\u4e00-\u9fa5A-Za-z0-9]{1,12})/,
@@ -96,7 +97,7 @@ export function extractCompanionMemoryUpdate(user, assistant) {
 
   const remember = take(/(?:请)?记住[:：]?\s*([^\n。]{2,80})/, source, 160)
     || take(/雷区(?:是|为)?[:：]?\s*([^\n。]{2,80})/, source, 160);
-  if (remember) explicit["要记住的事"] = remember;
+  if (remember && !lineCarriesSecret(remember)) explicit["要记住的事"] = remember;
 
   const opening = /长期设定/.test(reply) && /小满/.test(reply) && /城市/.test(reply);
   if (!opening && source.length <= 24) {

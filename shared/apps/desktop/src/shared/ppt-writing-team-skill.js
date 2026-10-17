@@ -1,12 +1,29 @@
 export const PPT_WRITING_TEAM_SKILL_NAME = "ppt-writing-team";
 export const PPT_WRITING_TEAM_SKILL_LABEL = "PPT写作团队";
 export const PPT_WRITING_TEAM_EXPERT_ID = "ppt-creation-expert";
-export const PPT_WRITING_TEAM_SKILL_REVISION = "ppt-writing-team-1";
+export const PPT_WRITING_TEAM_SKILL_REVISION = "ppt-writing-team-4";
 
 export const PPT_WRITING_TEAM_SKILL_SUMMARY =
-  "PPT写作团队。按视觉、版式、可编辑幻灯片和复核完成商业演示，默认交付可编辑 PPTX。";
+  "PPT写作团队。目录内封着 ppt-master、frontend-slides、dashi-ppt、guizang-ppt-skill、planners-ppt-hell 的原始 SKILL.md 和代码。";
 
-export const PPT_WRITING_TEAM_SKILL_MARKDOWN = `---
+export const PPT_WRITING_TEAM_PACKS = [
+  "ppt-master",
+  "frontend-slides",
+  "dashi-ppt",
+  "guizang-ppt-skill",
+  "planners-ppt-hell"
+];
+
+export function buildPptWritingTeamSkillMarkdown(packSources) {
+  const sections = PPT_WRITING_TEAM_PACKS.map((name) => {
+    const source = String(packSources?.[name] || "").trim();
+    return [
+      `# ${name}`,
+      `执行下面这份原文时，SKILL_DIR 是本技能目录下的 \`${name}/\`。该目录里的 scripts、templates、references、assets、workflows 和 LICENSE 是这份技能的代码和素材，路径按原文解析，不要改写。`,
+      source
+    ].join("\n\n");
+  }).filter((section) => !section.endsWith("\n\n"));
+  return `---
 name: ${PPT_WRITING_TEAM_SKILL_NAME}
 description: ${PPT_WRITING_TEAM_SKILL_SUMMARY}
 expert: ${PPT_WRITING_TEAM_EXPERT_ID}
@@ -16,23 +33,12 @@ metadata:
 
 # PPT写作团队
 
-用户在 Brain 技能里选中本技能，就是要求使用演示文稿技能团队 \`ppt-creation-expert\`。不要再询问要不要召唤专家。
+下面五段是封进本技能的原始技能全文。同一请求只执行其中一段，并使用该段对应目录里的代码。用户没有指明网页、杂志风、瑞士风、主题编号或视频画面时，执行 ppt-master。Windows 上没有 python3 时，用 python 运行同一条命令。
 
-## 开工
-1. 先调用 \`expert.summon\`，\`expertId\` 为 \`ppt-creation-expert\`。
-2. 主理人只负责受众、故事线和逐页大纲，不替成员画页、选主题或导出文件。
-3. 默认交付可编辑 PPTX。只有用户明确要求 HTML 翻页或把现有演示转成网页时，才改走网页成员。
+旧安装程序识别标记：ppt-writing-team-1
 
-## 默认链路
-写出大纲后，按顺序 \`agent.delegate\` 并 \`agent.wait\`：
-
-1. \`ppt-visual-designer\`：交出 theme id、字体、锚点色、墨色、底色。theme id 只能是 \`magazine\`、\`swiss\`、\`workplace\`。
-2. \`ppt-layout-designer\`：沿用成片引擎版式，为每一页指定一个 layout。
-3. \`ppt-native-producer\`：\`artifact.create\` 的 \`format\` 为 \`pptx\`，并传入同一个 \`theme.id\`。
-4. \`ppt-deck-reviewer\`：对照大纲检查溢出、遮挡和几何。未通过则退回成片成员，通过后再交付文件。
-
-用户明确要网页时，第 3 步改为 \`ppt-web-producer\`，\`format\` 为 \`html\`。复核仍然执行。
-
-## 完成标准
-交付说明写明文件位置、页数、故事线摘要和仍缺的素材。没有证据的数字和结论标为待确认，不补造。
+${sections.join("\n\n")}
 `;
+}
+
+export const PPT_WRITING_TEAM_SKILL_MARKDOWN = buildPptWritingTeamSkillMarkdown({});

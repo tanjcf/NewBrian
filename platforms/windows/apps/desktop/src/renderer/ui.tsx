@@ -12,7 +12,7 @@ import { useDesktopCore } from "./app/useDesktopCore";
 import { SidebarIcon } from "./app/SidebarIcon";
 import { markThreadActiveInCatalog } from "./app/thread-order";
 import { compactModelAttachment } from "./app/model-attachment-policy";
-import { isComposerThreadRunning, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { isComposerThreadRunning, keepNewInputBelowHistoricalOutput, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { snapshotToDisplayMessages } from "./app/thread-hydration";
 import { enqueueComposerDraft, takeNextComposerQueueItem } from "./app/composer-queue";
 import { markApprovalActivitiesSettling, mergeAssistantActivityItems } from "./app/assistant-activity-merge";
@@ -23,10 +23,11 @@ import {
 } from "./app/app-update-status-poll";
 import {
   isSubscriptionInactiveError,
+  isUserCancelledModelError,
   mapSubscriptionInactiveUserMessage
 } from "../shared/model-user-facing-error.ts";
 import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.ts";
-import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, userVisibleThreads } from "./app/workspace-visibility";
+import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, shouldRepairSelectedThread, userVisibleThreads } from "./app/workspace-visibility";
 import {
   cloneNewChatComposerDraft,
   createAndActivateNewChatThread,
@@ -83,7 +84,7 @@ import {
   shouldUseLoginCode,
   withTimeout
 } from "./app/desktop-model";
-import { projectModelChatFailure } from "./app/model-chat-failure-projection";
+import { projectModelChatCancellation, projectModelChatFailure } from "./app/model-chat-failure-projection";
 import type {
   BootstrapPayload,
   ComposerToolFieldValueMap,
@@ -256,6 +257,7 @@ export function App() {
   const activeModelRequestIdRef = useRef("");
   const activeThreadRequestsRef = useRef<Map<string, string>>(new Map());
   const awaitingApprovalRequestIdsRef = useRef<Set<string>>(new Set());
+  const userCancelledRequestIdsRef = useRef<Set<string>>(new Set());
   const streamLengthsByRequestRef = useRef<Map<string, number>>(new Map());
   const [activeThreadRequestVersion, setActiveThreadRequestVersion] = useState(0);
   const [liveModelContent, setLiveModelContent] = useState<Record<string, string>>({});
@@ -459,7 +461,7 @@ export function App() {
   const [showOpenLocationMenu, setShowOpenLocationMenu] = useState(false);
   const [showWorkspaceStatusMenu, setShowWorkspaceStatusMenu] = useState(false);
   const [workspaceHeaderStatus, setWorkspaceHeaderStatus] = useState({
-    branch: "main",
+    branch: "",
     changes: 0,
     additions: 0,
     deletions: 0,
@@ -613,7 +615,7 @@ export function App() {
       safeWorkspaceCatalog.find((item) => item.id === selectedWorkspaceId) ??
       safeWorkspaceCatalog[0];
     if (!workspace) return;
-    const repairKey = `${workspace.id}:${selectedWorkspaceId}:${selectedThreadId}:${isComposingStandaloneChat ? "compose" : "view"}`;
+    const repairKey = `${workspace.id}:${selectedWorkspaceId}:${selectedThreadId}:${isComposingNewThread ? "compose" : "view"}`;
     if (selectionRepairKeyRef.current === repairKey) return;
     selectionRepairKeyRef.current = repairKey;
 
@@ -621,13 +623,16 @@ export function App() {
       setSelectedWorkspaceId(workspace.id);
     }
     const visible = userVisibleThreads(workspace.threads);
-    if (!isComposingStandaloneChat && visible.length > 0) {
-      const resolved = resolveUserVisibleThreadSelection(workspace.threads, selectedThreadId);
-      if (resolved && resolved.id !== selectedThreadId) {
-        setSelectedThreadId(resolved.id);
-      }
+    const resolved = resolveUserVisibleThreadSelection(workspace.threads, selectedThreadId);
+    if (shouldRepairSelectedThread({
+      isComposingNewThread,
+      visibleThreadCount: visible.length,
+      selectedThreadId,
+      resolvedThreadId: resolved?.id || ""
+    })) {
+      setSelectedThreadId(resolved!.id);
     }
-  }, [isComposingStandaloneChat, selectedThreadId, selectedWorkspaceId, safeWorkspaceCatalog]);
+  }, [isComposingNewThread, selectedThreadId, selectedWorkspaceId, safeWorkspaceCatalog]);
 
   const refreshWorkspaceHeaderStatus = async () => {
     if (!api || !selectedWorkspace?.id) return;
@@ -661,6 +666,7 @@ export function App() {
   useEffect(() => {
     if (!api || !selectedWorkspace?.id) return;
     let canceled = false;
+    setWorkspaceHeaderStatus((current) => ({ ...current, branch: "" }));
     api.getWorkspaceHeaderStatus(selectedWorkspace.id)
       .then((status) => {
         if (!canceled) setWorkspaceHeaderStatus(status);
@@ -1103,8 +1109,9 @@ export function App() {
     }
 
     const turns: ConversationTurn[] = [];
+    const orderedMessages = keepNewInputBelowHistoricalOutput(chatMessages);
 
-    for (const message of chatMessages) {
+    for (const message of orderedMessages) {
       if (message.role === "user") {
         turns.push({ id: message.id, user: message });
         continue;
@@ -2033,22 +2040,39 @@ export function App() {
       }
       await refreshCatalog();
     } catch (error) {
-      requestFailed = true;
-      const message = normalizeModelErrorMessage(error);
-      setChatStatus(isSubscriptionInactiveError(message) ? "订阅未激活或已过期。" : "模型请求失败。");
-      setErrorMessage(message);
-      setGenerationFailure({ threadId: targetThreadId, message });
-      // Codex keeps the already streamed progress visible when a provider or
-      // tool fails. Freeze live deltas into the assistant message, and exclude
-      // this incomplete turn from later model context so a retry stays clean.
       const livePartial = String(liveModelContentRef.current[streamRequestId] ?? "");
-      updateThreadMessages(targetThreadId, (current) => current.map((item) => {
-        if (item.id !== streamRequestId) return item;
-        return {
-          ...item,
-          ...projectModelChatFailure(item, message, livePartial)
-        };
-      }));
+      const userCancelled = userCancelledRequestIdsRef.current.has(streamRequestId)
+        || isUserCancelledModelError(error);
+      userCancelledRequestIdsRef.current.delete(streamRequestId);
+      if (userCancelled) {
+        // Manual stop is a normal end of turn — keep streamed progress, no failure card.
+        setChatStatus("已停止生成。");
+        setErrorMessage("");
+        setGenerationFailure(null);
+        updateThreadMessages(targetThreadId, (current) => current.map((item) => {
+          if (item.id !== streamRequestId) return item;
+          return {
+            ...item,
+            ...projectModelChatCancellation(item, livePartial)
+          };
+        }));
+      } else {
+        requestFailed = true;
+        const message = normalizeModelErrorMessage(error);
+        setChatStatus(isSubscriptionInactiveError(message) ? "订阅未激活或已过期。" : "模型请求失败。");
+        setErrorMessage(message);
+        setGenerationFailure({ threadId: targetThreadId, message });
+        // Codex keeps the already streamed progress visible when a provider or
+        // tool fails. Freeze live deltas into the assistant message, and exclude
+        // this incomplete turn from later model context so a retry stays clean.
+        updateThreadMessages(targetThreadId, (current) => current.map((item) => {
+          if (item.id !== streamRequestId) return item;
+          return {
+            ...item,
+            ...projectModelChatFailure(item, message, livePartial)
+          };
+        }));
+      }
     } finally {
       setLastAssistantElapsedSeconds(Math.max(1, Math.round((Date.now() - requestStartedAt) / 1000)));
       setAssistantStartedAt(null);
@@ -2253,15 +2277,24 @@ export function App() {
   }
 
   async function cancelCurrentModelRequest() {
-    const requestId = selectedThread?.id
-      ? activeThreadRequestsRef.current.get(selectedThread.id) || ""
-      : activeModelRequestIdRef.current;
+    // Prefer the thread map, but always fall back to the live request id — a
+    // missing map entry must not skip the cancel mark or IPC stop.
+    const requestId = (
+      (selectedThread?.id ? activeThreadRequestsRef.current.get(selectedThread.id) : "")
+      || activeModelRequestIdRef.current
+      || ""
+    ).trim();
     if (!api?.cancelModelRequest || !requestId) {
       setChatStatus("当前没有可停止的任务。");
+      setGenerationFailure(null);
+      setErrorMessage("");
       return;
     }
+    userCancelledRequestIdsRef.current.add(requestId);
+    setGenerationFailure(null);
+    setErrorMessage("");
     const result = await api.cancelModelRequest({ requestId });
-    setChatStatus(result.detail);
+    setChatStatus(result.ok ? "已停止生成。" : result.detail);
     if (result.ok) {
       streamingAssistantRef.current = { id: "", contentLength: 0 };
       awaitingApprovalRequestIdsRef.current.delete(requestId);
@@ -2275,6 +2308,8 @@ export function App() {
       }
       activeModelRequestIdRef.current = "";
     }
+    // Keep the cancel mark until askModel's catch consumes it. Clearing on
+    // !ok raced with late AbortError/429 replies and reopened the failure card.
   }
 
   function renderFeaturePanel() {
@@ -2841,9 +2876,11 @@ export function App() {
                   <button type="button" className={workspaceStatusSubmenu === "local" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("local")}>
                     <SidebarIcon name="computer" /><span>本地</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
+                  {workspaceHeaderStatus.branch ? (
                   <button type="button" className={workspaceStatusSubmenu === "branch" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("branch")}>
                     <SidebarIcon name="branch" /><span>{workspaceHeaderStatus.branch}</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={async () => {
@@ -2877,7 +2914,7 @@ export function App() {
                   {workspaceStatusSubmenu === "branch" ? (
                     <div className="workspace-status-submenu branch-status-submenu">
                       <label>⌕<input value={branchSearch} onChange={(event) => setBranchSearch(event.target.value)} placeholder="搜索分支" /></label>
-                      <span className="workspace-status-subtitle">分支</span>
+                      <span className="workspace-status-subtitle">{workspaceBranches.current ? `当前分支：${workspaceBranches.current}` : "当前分支：(detached HEAD)"}</span>
                       <div className="branch-status-list">
                         {workspaceBranches.branches.filter((branch) => branch.toLowerCase().includes(branchSearch.toLowerCase())).map((branch) => (
                           <button key={branch} type="button" onClick={async () => { if (!api || !selectedWorkspace || branch === workspaceBranches.current) return; try { const next = await api.switchWorkspaceBranch({ workspaceId: selectedWorkspace.id, branch }); setWorkspaceBranches(next); await refreshWorkspaceHeaderStatus(); setWorkspaceStatusSubmenu(null); } catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)); } }}><SidebarIcon name="branch" /><span><strong>{branch}</strong>{branch === workspaceBranches.current ? <small>未提交：{workspaceBranches.changedFiles} 个文件</small> : null}</span><em>{branch === workspaceBranches.current ? "✓" : ""}</em></button>

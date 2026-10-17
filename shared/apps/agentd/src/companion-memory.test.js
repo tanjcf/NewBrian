@@ -29,6 +29,13 @@ test("one reply can fill the address, city, and current work", () => {
   assert.equal(update.explicit["助手名字"], "小满");
 });
 
+test("a hedged aside and a secret do not enter the long-term archive", () => {
+  const hedged = extractCompanionMemoryUpdate("也许我在杭州，先看看。", "好。");
+  assert.deepEqual(hedged.explicit, {});
+  const secret = extractCompanionMemoryUpdate("记住密码: hunter2-secret", "好。");
+  assert.equal(secret.explicit["要记住的事"], undefined);
+});
+
 test("an existing archive is updated in place and is not recreated over user text", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "companion-memory-"));
   const dir = await ensureCompanionMemorySkill(root);
