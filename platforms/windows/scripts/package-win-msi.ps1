@@ -111,10 +111,10 @@ $previewUrl = if ($isProduction) { $env:NEWBRAIN_PRODUCTION_PREVIEW_URL } else {
 # Test keeps the known-live Spring IP. Production uses separate API and web domains;
 # retired *.wangjietech.com hosts stay in rewrite lists for legacy asar cleanup only.
 if ([string]::IsNullOrWhiteSpace($gatewayBaseUrl)) {
-  $gatewayBaseUrl = if ($isProduction) { "https://api.sinnauze.cn/v1" } else { "http://203.0.113.10:8790/v1" }
+  $gatewayBaseUrl = if ($isProduction) { "https://api.sinnauze.cn/v1" } else { "http://120.48.151.202:8790/v1" }
 }
 if ([string]::IsNullOrWhiteSpace($previewUrl)) {
-  $previewUrl = if ($isProduction) { "https://www.sinnauze.cn" } else { "http://203.0.113.10:3000" }
+  $previewUrl = if ($isProduction) { "https://www.sinnauze.cn" } else { "http://120.48.151.202:3000" }
 }
 $allowUnsigned = $AllowUnsigned -or ($env:NEWBRAIN_ALLOW_UNSIGNED -eq "true")
 $requireSignature = ($isProduction -or ($env:NEWBRAIN_REQUIRE_SIGNATURE -eq "true")) -and -not $allowUnsigned
@@ -283,6 +283,10 @@ $prePackageSmokes = @(
   @{
     Id = "MERMAID-MD-PREVIEW-STABLE-SMOKE-001"
     Path = Join-Path $desktopRoot "src\renderer\app\mermaid-md-preview-stable-smoke.test.ts"
+  },
+  @{
+    Id = "SMS-LOGIN-CODE-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\sms-login-code-smoke.test.ts"
   }
 )
 foreach ($smoke in $prePackageSmokes) {
@@ -489,20 +493,20 @@ try {
         $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
         $utf8 = [System.Text.Encoding]::UTF8
         $text = $utf8.GetString($bytes)
-        if ($text.Contains("127.0.0.1") -or $text.Contains("203.0.113.10") -or $text.Contains("wangjietech.com") -or $text.Contains("sinnauze.cn")) {
+        if ($text.Contains("127.0.0.1") -or $text.Contains("120.48.151.202") -or $text.Contains("wangjietech.com") -or $text.Contains("sinnauze.cn")) {
           # Tokenize gateway URLs first so later preview host rewrites cannot turn
           # https://api.sinnauze.cn/v1 into https://www.sinnauze.cn/v1.
           $gatewayToken = "__NEWBRAIN_GATEWAY_BASE_URL__"
           $updated = $text.
             Replace("http://127.0.0.1:8790/v1", $gatewayToken).
-            Replace("http://203.0.113.10:8790/v1", $gatewayToken).
+            Replace("http://120.48.151.202:8790/v1", $gatewayToken).
             Replace("https://api.sinnauze.cn/v1", $gatewayToken).
             Replace("https://test.wangjietech.com/v1", $gatewayToken).
             Replace("https://api.wangjietech.com/v1", $gatewayToken).
             Replace("http://test.wangjietech.com/v1", $gatewayToken).
             Replace("http://api.wangjietech.com/v1", $gatewayToken).
             Replace("http://127.0.0.1:3000", $previewUrl).
-            Replace("http://203.0.113.10:3000", $previewUrl).
+            Replace("http://120.48.151.202:3000", $previewUrl).
             Replace("https://www.sinnauze.cn", $previewUrl).
             Replace("https://api.sinnauze.cn", $previewUrl).
             Replace("https://test.wangjietech.com", $previewUrl).

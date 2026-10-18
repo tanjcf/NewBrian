@@ -66,6 +66,7 @@ import {
 } from "./openai-wire.js";
 import { reconcileThreadMessages } from "./thread-message-reconciliation.js";
 import { builtinPluginCatalog, builtinPluginUri } from "../shared/builtin-plugins.js";
+import { loginCodeSendRequest, loginCodeVerifyFields } from "../shared/login-code-channel";
 import {
   resolveLoginCeremonyAuthFields,
   shouldInvalidateLocalAuthForLoginCeremony
@@ -1792,6 +1793,11 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
       identifier: email,
       password: loginWithCode ? undefined : password,
       code: loginWithCode ? captcha : undefined,
+      ...loginCodeVerifyFields({
+        identifier: email,
+        captcha,
+        loginWithCode
+      }),
       agreement_accepted: input.agreement_accepted,
       device
     })
@@ -1877,31 +1883,24 @@ function normalizeDesktopLoginError(payload: unknown, status: number, loginWithC
 }
 
 async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
-  const phone = input.phone?.trim() || "";
-  const email = input.email?.trim().toLowerCase() || "";
-  const identifier = phone || email;
   const device = collectDesktopDeviceFingerprint();
   const gatewayOrigin = await readGatewayOrigin();
-  if (!identifier) {
-    throw new Error(phone ? "手机号不能为空。" : "邮箱或手机号不能为空。");
-  }
-  if (phone && !/^1\d{10}$/.test(phone)) {
-    throw new Error("请填写 11 位手机号。");
-  }
+  const request = loginCodeSendRequest({
+    phone: input.phone,
+    email: input.email,
+    deviceId: device.device_id,
+    deviceName: device.device_name
+  });
 
   let response: Response;
   try {
-    response = await fetch(`${gatewayOrigin}/api/desktop/auth/login-code/send`, {
+    response = await fetch(`${gatewayOrigin}${request.path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         ...createDesktopAuthHeaders({ device })
       },
-      body: JSON.stringify({
-        identifier,
-        device_id: device.device_id,
-        device_name: device.device_name
-      })
+      body: JSON.stringify(request.body)
     });
   } catch (error) {
     const message = `无法连接登录服务 ${gatewayOrigin}，请确认 newbrain.config.json 的 llm.baseUrl 可访问。`;
