@@ -229,6 +229,8 @@ test("requires pre-package smoke cases before MSI packaging", () => {
   assert.match(packageScript, /ui-chinese-no-mojibake-smoke\.test\.ts/);
   assert.match(packageScript, /MERMAID-MD-PREVIEW-STABLE-SMOKE-001/);
   assert.match(packageScript, /mermaid-md-preview-stable-smoke\.test\.ts/);
+  assert.match(packageScript, /SMS-LOGIN-CODE-SMOKE-001/);
+  assert.match(packageScript, /sms-login-code-smoke\.test\.ts/);
   assert.match(packageScript, /Pre-package smoke \$\(\$smoke\.Id\) failed\. Packaging stopped\./);
 });
 

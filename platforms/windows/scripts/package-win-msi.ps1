@@ -283,6 +283,10 @@ $prePackageSmokes = @(
   @{
     Id = "MERMAID-MD-PREVIEW-STABLE-SMOKE-001"
     Path = Join-Path $desktopRoot "src\renderer\app\mermaid-md-preview-stable-smoke.test.ts"
+  },
+  @{
+    Id = "SMS-LOGIN-CODE-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\sms-login-code-smoke.test.ts"
   }
 )
 foreach ($smoke in $prePackageSmokes) {

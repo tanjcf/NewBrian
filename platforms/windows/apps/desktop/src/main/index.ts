@@ -96,6 +96,7 @@ import {
   type DesktopAuthApiUser
 } from "./desktop-auth-policy.js";
 import { resolveLoginCeremonyAuthFields, shouldInvalidateLocalAuthForLoginCeremony } from "../shared/login-ceremony-policy";
+import { loginCodeSendRequest, loginCodeVerifyFields } from "../shared/login-code-channel";
 import {
   createLocalRuntime,
   createStructuredAgentResult,
@@ -2962,6 +2963,11 @@ async function attemptDesktopAuthLogin(input: {
       identifier: input.email,
       password: input.loginWithCode ? undefined : input.password,
       code: input.loginWithCode ? input.captcha : undefined,
+      ...loginCodeVerifyFields({
+        identifier: input.email,
+        captcha: input.captcha,
+        loginWithCode: input.loginWithCode
+      }),
       agreement_accepted: input.agreementAccepted,
       ...(isE2eEmailCaptchaBypassEnabled() ? { e2e_skip_email_code: true } : {}),
       device: input.device
@@ -3248,30 +3254,23 @@ function normalizeDesktopLoginError(payload: unknown, status: number, loginWithC
   return extractDesktopAuthErrorMessage(payload, status);
 }
 async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
-  const phone = input.phone?.trim() || "";
-  const email = input.email?.trim().toLowerCase() || "";
-  const identifier = phone || email;
   const device = collectDesktopDeviceFingerprint();
   const gatewayOrigin = await readGatewayOrigin();
-  if (!identifier) {
-    throw new Error(phone ? "手机号不能为空。" : "邮箱或手机号不能为空。");
-  }
-  if (phone && !/^1\d{10}$/.test(phone)) {
-    throw new Error("请填写 11 位手机号。");
-  }
+  const request = loginCodeSendRequest({
+    phone: input.phone,
+    email: input.email,
+    deviceId: device.device_id,
+    deviceName: device.device_name
+  });
   let response: Response;
   try {
-    response = await fetch(`${gatewayOrigin}/api/desktop/auth/login-code/send`, {
+    response = await fetch(`${gatewayOrigin}${request.path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         ...createDesktopAuthHeaders({ device })
       },
-      body: JSON.stringify({
-        identifier,
-        device_id: device.device_id,
-        device_name: device.device_name
-      })
+      body: JSON.stringify(request.body)
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
