@@ -35,6 +35,9 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: platforms/windows/pnpm-lock.yaml
+      - name: Install Rust
+        if: hashFiles('rust/brain-core/Cargo.toml') != ''
+        uses: dtolnay/rust-toolchain@stable
       - name: Materialize Windows workspace
         run: node scripts/materialize.mjs windows
       - name: Install dependencies
