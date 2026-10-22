@@ -199,7 +199,10 @@ interface DesktopPolicyRule {
   [key: string]: unknown;
 }
 
-export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): { modelChatService: ModelChatService } {
+export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): {
+  modelChatService: ModelChatService;
+  modelChatTaskService: ModelChatTaskService<LocalRuntime, ThreadStateFile, DesktopPolicyRule>;
+} {
   const modelChatPreparationService = new ModelChatPreparationService({
     isRequestActive: (requestId) => deps.concurrentModelTasks.has(requestId),
     isThreadActive: (workspaceId, threadId) => [...deps.concurrentModelTasks.values()].some(
@@ -715,12 +718,20 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
             turnId: task.springTurnId
           }).catch(() => undefined);
         }
-        await deps.updateThreadMetadata({
+        // Do not await catalog persistence here. A blocked git/catalog write on macOS
+        // kept chatWithModel open and left the renderer stuck on “正在思考”.
+        void deps.updateThreadMetadata({
           workspaceId: task.workspaceId,
           threadId: task.threadId,
           status: "idle",
           statusLabel: "",
           lastEventSummary: "模型处理完成"
+        }).catch((error) => {
+          void deps.appendDesktopDebugLog(
+            `model task metadata update failed request=${requestId} error=${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
         });
       }
     },
@@ -729,8 +740,18 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
   });
 
   registerModelChatIpcHandlers({
-    chat: (event, input) => modelChatService.chat(event.sender as WebContents, input)
+    chat: async (event, input) => {
+      try {
+        return await modelChatService.chat(event.sender as WebContents, input);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        void deps.appendDesktopDebugLog(
+          `model chat failed request=${input.requestId || "-"} workspace=${input.workspaceId || "-"} thread=${input.threadId || "-"} error=${message}`
+        );
+        throw error;
+      }
+    }
   });
 
-  return { modelChatService };
+  return { modelChatService, modelChatTaskService };
 }

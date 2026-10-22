@@ -76,7 +76,12 @@ export class EngineDiscoveryService {
     if (engineId === "ffmpeg") return this.deps.platform === "win32" ? join(root, "ffmpeg", "bin", "ffmpeg.exe") : join(root, "ffmpeg", "bin", "ffmpeg");
     if (engineId === "ffprobe") return this.deps.platform === "win32" ? join(root, "ffmpeg", "bin", "ffprobe.exe") : join(root, "ffmpeg", "bin", "ffprobe");
     if (engineId === "node") return this.deps.platform === "win32" ? join(root, "node", "node.exe") : join(root, "node", "bin", "node");
-    if (engineId === "godot") return this.deps.platform === "win32" ? join(root, "godot", "Godot_v4.4-stable_win64.exe") : join(root, "godot", "Godot_v4.4-stable_linux.x86_64");
+    if (engineId === "godot") {
+      if (this.deps.platform === "win32") return join(root, "godot", "Godot_v4.4-stable_win64.exe");
+      // Official Godot 4.4 mac builds use macos.universal; do not reuse the linux binary name on darwin.
+      if (this.deps.platform === "darwin") return join(root, "godot", "Godot_v4.4-stable_macos.universal");
+      return join(root, "godot", "Godot_v4.4-stable_linux.x86_64");
+    }
     if (engineId === "epic-launcher") return this.deps.platform === "win32"
       ? "C:\\Program Files (x86)\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe"
       : "";
@@ -90,7 +95,17 @@ export class EngineDiscoveryService {
     if (engineId === "node") return this.deps.platform === "win32" ? ["node.exe", "node"] : ["node"];
     if (engineId === "godot") {
       const local = process.env.BRAIN_GODOT_EXECUTABLE?.trim();
-      return local ? [local] : this.deps.platform === "win32" ? ["godot.exe", "Godot.exe"] : ["godot", "Godot"];
+      if (local) return [local];
+      if (this.deps.platform === "win32") return ["godot.exe", "Godot.exe"];
+      if (this.deps.platform === "darwin") {
+        return [
+          "godot",
+          "Godot",
+          "/Applications/Godot.app/Contents/MacOS/Godot",
+          "/Applications/Godot_mono.app/Contents/MacOS/Godot"
+        ];
+      }
+      return ["godot", "Godot"];
     }
     if (engineId === "epic-launcher") {
       const custom = process.env.BRAIN_EPIC_LAUNCHER_EXECUTABLE?.trim();

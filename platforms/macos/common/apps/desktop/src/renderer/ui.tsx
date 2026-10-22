@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { LoginScreen } from "./app/LoginScreen";
 import { WorkspaceModules } from "./app/WorkspaceModules";
 import { FeaturePanel } from "./app/FeaturePanel";
@@ -122,6 +122,67 @@ type QueuedComposerDraft = {
   images: Array<{ name: string; path: string; url: string }>;
   createdAt: string;
 };
+
+type ThreadComposerSkill = {
+  id?: string;
+  name: string;
+  summary?: string;
+  status?: string;
+  icon?: string;
+  [key: string]: unknown;
+};
+
+const THREAD_COMPOSER_SKILL_STORAGE_KEY = "newbrain.threadComposerSkills.v1";
+
+function composerSkillContextAfterReset(pendingWrite: string | null, resetTo = ""): string {
+  return pendingWrite !== null ? pendingWrite : resetTo;
+}
+
+function readThreadComposerSkills(): Record<string, ThreadComposerSkill> {
+  try {
+    const raw = localStorage.getItem(THREAD_COMPOSER_SKILL_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const result: Record<string, ThreadComposerSkill> = {};
+    for (const [threadId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!threadId || !value || typeof value !== "object" || Array.isArray(value)) continue;
+      const name = String((value as { name?: unknown }).name ?? "").trim();
+      if (!name) continue;
+      result[threadId] = { ...(value as ThreadComposerSkill), name };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function writeThreadComposerSkills(skills: Record<string, ThreadComposerSkill>) {
+  localStorage.setItem(THREAD_COMPOSER_SKILL_STORAGE_KEY, JSON.stringify(skills));
+}
+
+function upsertThreadComposerSkill(
+  skills: Record<string, ThreadComposerSkill>,
+  threadId: string | null | undefined,
+  skill: ThreadComposerSkill | null | undefined
+): Record<string, ThreadComposerSkill> {
+  if (!threadId) return skills;
+  const next = { ...skills };
+  const name = String(skill?.name ?? "").trim();
+  if (!skill || !name) {
+    delete next[threadId];
+    return next;
+  }
+  next[threadId] = { ...skill, name };
+  return next;
+}
+
+function skillForThread(
+  skills: Record<string, ThreadComposerSkill>,
+  threadId: string | null | undefined
+): ThreadComposerSkill | null {
+  if (!threadId) return null;
+  return skills[threadId] ?? null;
+}
 
 export function App() {
   const [bootstrapState, setBootstrapState] = useState("正在连接本地 runtime...");
@@ -291,6 +352,7 @@ export function App() {
   const sideBrowserFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [sideFileFilter, setSideFileFilter] = useState("");
   const [previewPlacement, setPreviewPlacement] = useState<PreviewPlacement>("hidden");
+  const [searchFilePreview, setSearchFilePreview] = useState<any>(null);
   const [reviewOptionsOpen, setReviewOptionsOpen] = useState(false);
   const [reviewDiffCollapsed, setReviewDiffCollapsed] = useState(false);
   const [reviewSideBySide, setReviewSideBySide] = useState(false);
@@ -370,6 +432,55 @@ export function App() {
   const [systemTools, setSystemTools] = useState<SystemToolState[]>([]);
   const [showMcpToolPicker, setShowMcpToolPicker] = useState(false);
   const [selectedComposerTools, setSelectedComposerTools] = useState<ComposerToolChip[]>([]);
+  const [selectedComposerSkill, setSelectedComposerSkill] = useState<SkillSpec | null>(null);
+  const [composerSkillContext, setComposerSkillContextState] = useState("");
+  const pendingComposerSkillContextRef = useRef<string | null>(null);
+  const setComposerSkillContext = useCallback((value: string) => {
+    pendingComposerSkillContextRef.current = value;
+    setComposerSkillContextState(value);
+  }, []);
+  const [threadComposerSkills, setThreadComposerSkills] = useState<Record<string, ThreadComposerSkill>>(() => readThreadComposerSkills());
+  const [composerModes, setComposerModes] = useState<Array<"goal" | "plan">>([]);
+
+  useLayoutEffect(() => {
+    if (!isComposingNewThread) return;
+    const pendingWrite = pendingComposerSkillContextRef.current;
+    setSelectedComposerSkill(null);
+    setSelectedComposerTools([]);
+    setComposerModes([]);
+    setComposerSkillContextState(composerSkillContextAfterReset(pendingWrite));
+  }, [isComposingNewThread]);
+
+  useLayoutEffect(() => {
+    if (isComposingNewThread) return;
+    const nextContext = composerSkillContextAfterReset(pendingComposerSkillContextRef.current);
+    if (!selectedThreadId) {
+      setSelectedComposerSkill(null);
+      setComposerSkillContextState(nextContext);
+      return;
+    }
+    const bound = skillForThread(threadComposerSkills, selectedThreadId);
+    setSelectedComposerSkill(bound ? { ...bound } as SkillSpec : null);
+    setComposerSkillContextState(nextContext);
+  }, [selectedThreadId, isComposingNewThread]);
+
+  useEffect(() => {
+    pendingComposerSkillContextRef.current = null;
+  });
+
+  function bindThreadComposerSkill(threadId: string | null | undefined, skill: SkillSpec | ThreadComposerSkill | null) {
+    if (!threadId) {
+      setSelectedComposerSkill(skill ? { ...skill } as SkillSpec : null);
+      return;
+    }
+    setThreadComposerSkills((current) => {
+      const next = upsertThreadComposerSkill(current, threadId, skill ? { ...skill, name: String(skill.name || "").trim() } : null);
+      writeThreadComposerSkills(next);
+      return next;
+    });
+    setSelectedComposerSkill(skill ? { ...skill } as SkillSpec : null);
+  }
+
   const [authStatus, setAuthStatus] = useState<DesktopAuthStatusState>(initialDesktopAuthStatus);
   const [appUpdateStatus, setAppUpdateStatus] = useState<null | {
     currentVersion: string;
@@ -1036,6 +1147,7 @@ export function App() {
     handleRetryCondaBootstrap
   } = useDesktopCore({
     api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds,
+    isComposingNewThread,
     selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu,
     bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownSeconds,
     activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath,
@@ -1050,7 +1162,7 @@ export function App() {
     setSystemTools, setAuthStatus, setDesktopBootstrapStatus, setLoginForm, setIsRetryingCondaBootstrap,
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
     setShowRenameThreadDialog,
-    setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary,
+    setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary, setIsComposingNewThread,
     setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
     initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad,
@@ -1303,6 +1415,11 @@ export function App() {
       if (nextAuthStatus.authenticated) {
         const nextBootstrapStatus = await api.startDesktopBootstrap();
         setDesktopBootstrapStatus(nextBootstrapStatus);
+        try {
+          setModelConfig(await api.getModelConfig());
+        } catch {
+          // Login already succeeded. The model picker stays on the last config if the catalog request fails.
+        }
       }
       setLoginForm((current) => ({
         ...current,
@@ -2637,6 +2754,8 @@ export function App() {
         title={title}
         previewPlacement={previewPlacement}
         setPreviewPlacement={setPreviewPlacement}
+        searchFilePreview={searchFilePreview}
+        setSearchFilePreview={setSearchFilePreview}
         renderPreviewHeaderActions={renderPreviewHeaderActions}
         errorMessage={errorMessage}
         setErrorMessage={setErrorMessage}
@@ -2658,6 +2777,14 @@ export function App() {
         activeThreadRequestIds={Object.fromEntries(activeThreadRequestsRef.current.entries())}
         forkCurrentAnswer={forkCurrentAnswer}
         selectedComposerTools={selectedComposerTools}
+        setSelectedComposerTools={setSelectedComposerTools}
+        selectedComposerSkill={selectedComposerSkill}
+        setSelectedComposerSkill={setSelectedComposerSkill}
+        bindThreadComposerSkill={bindThreadComposerSkill}
+        composerSkillContext={composerSkillContext}
+        setComposerSkillContext={setComposerSkillContext}
+        composerModes={composerModes}
+        setComposerModes={setComposerModes}
         handleRemoveComposerTool={handleRemoveComposerTool}
         renderComposerToolFields={renderComposerToolFields}
         question={question}
@@ -2767,7 +2894,7 @@ export function App() {
         />
       }
     >
-      <div className={`workspace-frame${isSettingsFeature ? " settings-mode" : ""}${!isSettingsFeature && (previewPlacement === "hidden" || isFullPageFeature) ? " preview-hidden" : ""}${!isSettingsFeature && !isFullPageFeature && previewPlacement === "center" ? " preview-centered" : ""}`}>
+      <div className={`workspace-frame${isSettingsFeature ? " settings-mode" : ""}${!isSettingsFeature && (previewPlacement === "hidden" || isFullPageFeature) ? " preview-hidden" : ""}${!isSettingsFeature && !isFullPageFeature && previewPlacement === "center" ? " preview-centered" : ""}${!isSettingsFeature && previewPlacement === "side" && searchFilePreview ? " artifact-workbench" : ""}`}>
         {renderWorkspaceModules()}
       </div>
     </AppShell>
