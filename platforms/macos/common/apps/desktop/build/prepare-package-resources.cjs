@@ -66,13 +66,35 @@ function resolveChannelEndpoints(channel) {
   const isProduction = channel === "production";
   const gatewayBaseUrl = (
     (isProduction ? process.env.NEWBRAIN_PRODUCTION_GATEWAY_BASE_URL : process.env.NEWBRAIN_TEST_GATEWAY_BASE_URL) ||
-    "http://203.0.113.10:8790/v1"
+    (isProduction ? "https://api.sinnauze.cn/v1" : "http://203.0.113.10:8790/v1")
   ).trim();
   const previewUrl = (
     (isProduction ? process.env.NEWBRAIN_PRODUCTION_PREVIEW_URL : process.env.NEWBRAIN_TEST_PREVIEW_URL) ||
-    "http://203.0.113.10:3000"
+    (isProduction ? "https://www.sinnauze.cn" : "http://203.0.113.10:3000")
   ).trim();
   return { gatewayBaseUrl, previewUrl };
+}
+
+function rewriteEndpointText(original, gatewayBaseUrl, previewUrl) {
+  const gatewayToken = "__NEWBRAIN_GATEWAY_BASE_URL__";
+  const gatewayOrigin = String(gatewayBaseUrl).replace(/\/v1\/?$/u, "");
+  return String(original)
+    .replaceAll("http://127.0.0.1:8790/v1", gatewayToken)
+    .replaceAll("http://203.0.113.10:8790/v1", gatewayToken)
+    .replaceAll("https://api.sinnauze.cn/v1", gatewayToken)
+    .replaceAll("https://test.wangjietech.com/v1", gatewayToken)
+    .replaceAll("https://api.wangjietech.com/v1", gatewayToken)
+    .replaceAll("http://test.wangjietech.com/v1", gatewayToken)
+    .replaceAll("http://api.wangjietech.com/v1", gatewayToken)
+    .replaceAll("http://127.0.0.1:8790", gatewayOrigin)
+    .replaceAll("http://localhost:8790", gatewayOrigin)
+    .replaceAll("http://127.0.0.1:3000", previewUrl)
+    .replaceAll("http://203.0.113.10:3000", previewUrl)
+    .replaceAll("https://www.sinnauze.cn", previewUrl)
+    .replaceAll("https://api.sinnauze.cn", previewUrl)
+    .replaceAll("https://test.wangjietech.com", previewUrl)
+    .replaceAll("https://api.wangjietech.com", previewUrl)
+    .replaceAll(gatewayToken, gatewayBaseUrl);
 }
 
 function applyChannelEndpoints(config, channel) {
@@ -96,7 +118,13 @@ function preparePackageResources(channel = process.env.NEWBRAIN_PACKAGE_CHANNEL 
   return config;
 }
 
-module.exports = { preparePackageResources, sanitizeConfig, applyChannelEndpoints, resolveChannelEndpoints };
+module.exports = {
+  preparePackageResources,
+  sanitizeConfig,
+  applyChannelEndpoints,
+  resolveChannelEndpoints,
+  rewriteEndpointText
+};
 
 if (require.main === module) {
   preparePackageResources();

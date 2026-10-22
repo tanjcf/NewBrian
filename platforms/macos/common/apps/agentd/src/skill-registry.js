@@ -1,6 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+function normalizeNameSet(names) {
+  return new Set(Array.from(names ?? []).map((name) => String(name).toLowerCase()));
+}
+
 function unquote(value) {
   const trimmed = value.trim();
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
@@ -77,6 +81,7 @@ async function readReferenceContents(skillPath) {
 export class SkillRegistry {
   constructor(input = {}) {
     this.roots = [...new Set((input.roots ?? []).filter(Boolean).map((root) => path.resolve(root)))];
+    this.disabledNames = normalizeNameSet(input.disabledNames);
     this.skills = new Map();
   }
 
@@ -93,7 +98,7 @@ export class SkillRegistry {
           throw error;
         }
         const metadata = parseSkillFrontmatter(source, path.basename(skillPath));
-        if (!discovered.has(metadata.name)) {
+        if (!this.disabledNames.has(String(metadata.name).toLowerCase()) && !discovered.has(metadata.name)) {
           discovered.set(metadata.name, {
             name: metadata.name,
             description: metadata.description,
@@ -138,6 +143,10 @@ export class SkillRegistry {
       resources: await listOptionalResources(skill.path),
       referenceContents: await readReferenceContents(skill.path)
     };
+  }
+
+  setDisabledNames(names) {
+    this.disabledNames = normalizeNameSet(names);
   }
 }
 

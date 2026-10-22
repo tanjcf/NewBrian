@@ -853,13 +853,19 @@ export const desktopIpcChannels = {
   auth: {
     getStatus: "phase1:get-auth-status",
     getBillingSubscription: "phase1:get-billing-subscription",
+    getSubscriptionCatalog: "phase1:get-subscription-catalog",
+    rechargeWallet: "phase1:recharge-wallet",
+    purchasePlan: "phase1:purchase-plan",
     openWalletPayment: "phase1:open-wallet-payment",
+    setWalletOverageEnabled: "phase1:set-wallet-overage-enabled",
+    redeemCode: "phase1:redeem-code",
     claimNationalDayGift: "phase1:claim-national-day-gift",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
     loadRememberedLogin: "phase1:load-remembered-login",
     saveRememberedLogin: "phase1:save-remembered-login",
     clearRememberedLogin: "phase1:clear-remembered-login",
+    loginWithAlipayQr: "phase1:login-with-alipay-qr",
     changePassword: "phase1:change-auth-password",
     changeEmail: "phase1:change-auth-email",
     logout: "phase1:logout-auth"
@@ -879,6 +885,11 @@ export const desktopIpcChannels = {
     approveCandidate: "phase1:learning-approve-candidate",
     rejectCandidate: "phase1:learning-reject-candidate",
     rollbackPrivateSkill: "phase1:learning-rollback-private-skill"
+  },
+  quantMarket: {
+    queryBars: "desktop:quant-market:bars-query",
+    queryOverview: "desktop:quant-market:overview-query",
+    queryScreener: "desktop:quant-market:screener-query"
   },
   plugins: {
     list: "plugins:list",
@@ -903,6 +914,7 @@ export const desktopIpcChannels = {
     installClawHub: "phase1:install-openclaw-skill-clawhub",
     installPath: "phase1:install-openclaw-skill-path",
     selectAndInstall: "phase1:select-install-openclaw-skill",
+    importZipToProject: "phase1:import-openclaw-skill-zip-to-project",
     inspectPath: "phase1:inspect-openclaw-skill-path",
     exportZip: "phase1:export-openclaw-skill-zip",
     uninstallWritingSkills: "phase1:uninstall-writing-skills"
@@ -1004,6 +1016,10 @@ export const desktopIpcChannels = {
     assistantActivity: "phase1:assistant-activity",
     modelReasoningDelta: "phase1:model-reasoning-delta",
     snapshotUpdate: "phase1:snapshot-update",
+    quantMarketUpdated: "phase1:quant-market-updated",
+    quantScreenerUpdated: "phase1:quant-screener-updated",
+    quantPortfolioUpdated: "phase1:quant-portfolio-updated",
+    dataWorkspaceUpdated: "phase1:data-workspace-updated",
     openWorkspaceFilePreview: "phase1:open-workspace-file-preview"
   },
   system: {

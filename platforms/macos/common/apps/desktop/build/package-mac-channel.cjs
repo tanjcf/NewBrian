@@ -1,7 +1,7 @@
 const { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const { join, resolve } = require("node:path");
-const { preparePackageResources, resolveChannelEndpoints } = require("./prepare-package-resources.cjs");
+const { preparePackageResources, resolveChannelEndpoints, rewriteEndpointText } = require("./prepare-package-resources.cjs");
 
 const desktopRoot = resolve(__dirname, "..");
 const repoRoot = resolve(desktopRoot, "..", "..");
@@ -41,7 +41,6 @@ function parseArgs(argv) {
 }
 
 function rewriteCompiledEndpoints(gatewayBaseUrl, previewUrl) {
-  const gatewayOrigin = gatewayBaseUrl.replace(/\/v1\/?$/u, "");
   const outRoot = join(desktopRoot, "out");
   if (!existsSync(outRoot)) return 0;
   const pending = [outRoot];
@@ -56,19 +55,7 @@ function rewriteCompiledEndpoints(gatewayBaseUrl, previewUrl) {
       }
       if (!/\.(js|cjs|mjs|html|json|css|map)$/u.test(entry.name)) continue;
       const original = readFileSync(target, "utf8");
-      const updated = original
-        .replaceAll("http://127.0.0.1:8790/v1", gatewayBaseUrl)
-        .replaceAll("http://203.0.113.10:8790/v1", gatewayBaseUrl)
-        .replaceAll("https://test.wangjietech.com/v1", gatewayBaseUrl)
-        .replaceAll("https://api.wangjietech.com/v1", gatewayBaseUrl)
-        .replaceAll("http://test.wangjietech.com/v1", gatewayBaseUrl)
-        .replaceAll("http://api.wangjietech.com/v1", gatewayBaseUrl)
-        .replaceAll("http://127.0.0.1:8790", gatewayOrigin)
-        .replaceAll("http://localhost:8790", gatewayOrigin)
-        .replaceAll("http://127.0.0.1:3000", previewUrl)
-        .replaceAll("http://203.0.113.10:3000", previewUrl)
-        .replaceAll("https://test.wangjietech.com", previewUrl)
-        .replaceAll("https://api.wangjietech.com", previewUrl);
+      const updated = rewriteEndpointText(original, gatewayBaseUrl, previewUrl);
       if (updated !== original) {
         writeFileSync(target, updated, "utf8");
         rewritten += 1;
