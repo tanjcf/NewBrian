@@ -77,8 +77,10 @@ export class LocalAgentRuntime {
     this.turnDeliveryPreferences = null;
     this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
     this.configuredSkillRoots = Array.isArray(input.skillRoots) ? input.skillRoots : null;
+    this.disabledSkillNames = new Set();
     this.skillRegistry = new SkillRegistry({
-      roots: this.configuredSkillRoots ?? defaultSkillRoots(this.workspacePath)
+      roots: this.configuredSkillRoots ?? defaultSkillRoots(this.workspacePath),
+      disabledNames: this.disabledSkillNames
     });
     this.agentLoop = null;
     this.orchestrator = new MultiAgentOrchestrator({
@@ -210,15 +212,22 @@ export class LocalAgentRuntime {
 
   async addSkillRoots(roots) {
     const nextRoots = [...new Set([...this.skillRegistry.roots, ...roots.map((root) => path.resolve(root))])];
-    this.skillRegistry = new SkillRegistry({ roots: nextRoots });
+    this.skillRegistry = new SkillRegistry({ roots: nextRoots, disabledNames: this.disabledSkillNames });
     return this.skillRegistry.discover();
   }
 
   async removeSkillRoots(roots) {
     const removing = new Set(roots.map((root) => path.resolve(root)));
     this.skillRegistry = new SkillRegistry({
-      roots: this.skillRegistry.roots.filter((root) => !removing.has(path.resolve(root)))
+      roots: this.skillRegistry.roots.filter((root) => !removing.has(path.resolve(root))),
+      disabledNames: this.disabledSkillNames
     });
+    return this.skillRegistry.discover();
+  }
+
+  async setDisabledSkills(names) {
+    this.disabledSkillNames = new Set((names ?? []).map((name) => String(name).toLowerCase()));
+    this.skillRegistry.setDisabledNames(this.disabledSkillNames);
     return this.skillRegistry.discover();
   }
 
@@ -548,7 +557,10 @@ export class LocalAgentRuntime {
     this.workspacePath = path.resolve(nextWorkspacePath);
     this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
     if (!this.configuredSkillRoots) {
-      this.skillRegistry = new SkillRegistry({ roots: defaultSkillRoots(this.workspacePath) });
+      this.skillRegistry = new SkillRegistry({
+        roots: defaultSkillRoots(this.workspacePath),
+        disabledNames: this.disabledSkillNames
+      });
     }
     this.pendingApprovalAction = null;
     this.pendingPatchState = null;

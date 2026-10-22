@@ -11,10 +11,8 @@ export function durableBackupPath(filePath: string) {
 async function replaceTextFile(filePath: string, content: string) {
   await fs.mkdir(dirname(filePath), { recursive: true });
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  const stagedOldPath = `${filePath}.${process.pid}.${randomUUID()}.old`;
   const lastGoodPath = durableBackupPath(filePath);
   let handle: Awaited<ReturnType<typeof fs.open>> | null = null;
-  let movedAside = false;
   try {
     handle = await fs.open(temporaryPath, "wx");
     await handle.writeFile(content, "utf8");
@@ -26,20 +24,16 @@ async function replaceTextFile(filePath: string, content: string) {
       if (current.size > 0) {
         await fs.copyFile(filePath, lastGoodPath);
       }
-      await fs.rename(filePath, stagedOldPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    // Rename-over is atomic on the same volume and never leaves the primary path missing.
+    // The previous move-aside + rename-in sequence created an ENOENT window that made
+    // readWorkspaceCatalog recreate/write the catalog in a loop.
     await fs.rename(temporaryPath, filePath);
-    if (movedAside) await fs.unlink(stagedOldPath).catch(() => undefined);
-    movedAside = false;
-  } catch (error) {
-    if (movedAside) await fs.rename(stagedOldPath, filePath).catch(() => undefined);
-    throw error;
   } finally {
     await handle?.close().catch(() => undefined);
     await fs.unlink(temporaryPath).catch(() => undefined);
-    await fs.unlink(stagedOldPath).catch(() => undefined);
   }
 }
 
@@ -58,7 +52,6 @@ export async function restoreTextFile(filePath: string, content: string) {
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.restore.tmp`;
   await fs.writeFile(temporaryPath, content, "utf8");
   try {
-    await fs.unlink(filePath).catch(() => undefined);
     await fs.rename(temporaryPath, filePath);
   } catch (error) {
     await fs.unlink(temporaryPath).catch(() => undefined);

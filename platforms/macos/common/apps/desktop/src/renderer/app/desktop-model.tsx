@@ -70,6 +70,12 @@ export interface ModelConfigState {
   reasoningEffort: "low" | "medium" | "high" | "xhigh";
   disableResponseStorage: boolean;
   systemPrompt: string;
+  availableModels?: Array<{
+    id: string;
+    model: string;
+    label: string;
+    provider: string;
+  }>;
 }
 
 export interface DesktopPreferencesState {
@@ -563,6 +569,14 @@ declare global {
         kind: ManagedFeatureKind;
         id: string;
       }) => Promise<FeatureConfigPayload>;
+      listExperts?: () => Promise<Array<Record<string, unknown>>>;
+      installExpert?: (input: { expertId: string }) => Promise<Record<string, unknown>>;
+      setExpertEnabled?: (input: { expertId: string; enabled: boolean }) => Promise<Array<Record<string, unknown>>>;
+      summonExpert?: (input: { threadId: string; expertId: string; userConfirmed?: boolean }) => Promise<Record<string, unknown>>;
+      clearExpertSummon?: (input: { threadId: string }) => Promise<{ ok: boolean }>;
+      getExpertSummon?: (input: { threadId: string }) => Promise<Record<string, unknown> | null>;
+      resolveExpertFromSkill?: (input: { skillName: string; skillNames?: string[] }) => Promise<{ expertId: string; skillName: string } | null>;
+      summonExpertFromSkill?: (input: { threadId: string; skillName: string }) => Promise<Record<string, unknown> | null>;
       searchWorkspaces: (query: string) => Promise<SearchResultSpec[]>;
       readWorkspaceFile: (input: { workspaceId: string; filePath: string }) => Promise<{
         path: string;
@@ -855,7 +869,8 @@ export const initialModelConfig: ModelConfigState = {
   reviewModel: "gpt-5.4-mini",
   reasoningEffort: "low",
   disableResponseStorage: true,
-  systemPrompt: "You are a helpful coding assistant for the NewBrain desktop workspace."
+  systemPrompt: "You are a helpful coding assistant for the NewBrain desktop workspace.",
+  availableModels: []
 };
 
 export const initialDesktopPreferences: DesktopPreferencesState = {
