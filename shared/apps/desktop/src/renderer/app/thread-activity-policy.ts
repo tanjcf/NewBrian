@@ -10,6 +10,18 @@ export function isComposerThreadRunning(input: {
 }
 
 /**
+ * Like / dislike / branch / copy / TTS belong after the live turn settles.
+ * While streaming, keep the generating affordance (thinking panel + streaming
+ * markdown) and do not mount the action toolbar — CSS `display:flex` on
+ * `.message-actions` also overrides the HTML `hidden` attribute.
+ */
+export function shouldShowAssistantMessageActions(input: {
+  isLiveTurn: boolean;
+}): boolean {
+  return !input.isLiveTurn;
+}
+
+/**
  * Live stream / activity request for the selected thread only.
  * Never fall back to another thread's in-flight request — that bleeds
  * running-tab UI (thinking, approvals, tool cards) into the selected thread.

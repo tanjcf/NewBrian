@@ -8831,7 +8831,7 @@ async function runScheduledAutomation(automation: AutomationSpec) {
       const created = await workspaceThreadLifecycleService.add({
         workspaceId: workspace.id,
         title: String(automation.title || "自动化任务").slice(0, 36),
-        summary: "绑定的对话不存在，已新建线程执行。",
+        summary: "绑定的对话不存在，已新建对话执行。",
         scope,
         ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
       });
@@ -10888,7 +10888,8 @@ function registerIpc() {
             baseUrl = await readGatewayBaseUrl();
           }
           return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
-        }
+        },
+        refreshAccessToken: refreshDesktopAccessTokenForGateway
       });
       if (workspace.brainWorkspaceKey === "game") {
         registerGameRuntimeTools(targetRuntime, workspace.id, workspace.path);

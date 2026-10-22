@@ -28,7 +28,7 @@ export interface ModelChatRuntimeSetupDependencies {
   userSkillRoot: string;
   readFeatureSkills: () => Promise<Array<{ name: string; status: string }>>;
   officialGovernmentWebService: OfficialGovernmentWebService;
-  desktopWebSearchClient: Pick<DesktopWebSearchClient, "search" | "fetchPage">;
+  desktopWebSearchClient: Pick<DesktopWebSearchClient, "search" | "searchMarketNews" | "fetchPage">;
   readWorkspaceCatalog: () => Promise<{ workspaces: WorkspaceCatalogItem[] }>;
   getActiveWorkspaceId: () => string;
   publishWorkspaceFilePreview: (event: { workspaceId: string; filePath: string; kind: WorkspaceMediaKind }) => void;

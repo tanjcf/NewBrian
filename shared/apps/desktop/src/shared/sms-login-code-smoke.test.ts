@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { isCnMobileIdentifier, loginCodeSendRequest, loginCodeVerifyFields } from "./login-code-channel.ts";
+import { isCnMobileIdentifier, loginCodeSendRequest, loginCodeVerifyFields, maskCnMobile } from "./login-code-channel.ts";
 
 export const CASE_ID = "SMS-LOGIN-CODE-SMOKE-001";
 
@@ -49,6 +49,15 @@ test(`${CASE_ID} a phone login asks for SMS and an email login asks for mail`, (
   assert.equal(isCnMobileIdentifier("13800138000"), true);
   assert.equal(isCnMobileIdentifier("user@example.com"), false);
   assert.throws(() => loginCodeSendRequest({ phone: "12345", deviceId: "d", deviceName: "n" }), /11 位手机号/);
+
+  const recovered = loginCodeSendRequest({
+    email: "13800138000",
+    deviceId: "device-1",
+    deviceName: "desk"
+  });
+  assert.equal(recovered.path, "/api/auth/login/sms-code");
+  assert.equal(recovered.body.phone, "13800138000");
+  assert.equal(maskCnMobile("18516901898"), "185****1898");
 });
 
 function sliceUntil(source: string, start: string, ends: string[]) {
@@ -91,6 +100,66 @@ test(`${CASE_ID} desktop login code send uses the SMS channel for a phone`, () =
       "function normalizeDesktopLoginError"
     ]);
     assert.match(login, /loginCodeVerifyFields/);
+  }
+});
+
+test(`${CASE_ID} renderer phone send only posts the phone field`, () => {
+  const sources = [
+    readIfPresent([
+      // Materialized desktop tree keeps ui next to shared/.
+      new URL("../renderer/ui.tsx", import.meta.url),
+      // Source tree: BRAIN/shared/... → platforms overlays.
+      new URL("../../../../../platforms/windows/apps/desktop/src/renderer/ui.tsx", import.meta.url)
+    ]),
+    readIfPresent([
+      new URL("../../../../../platforms/macos/common/apps/desktop/src/renderer/ui.tsx", import.meta.url)
+    ]),
+    readIfPresent([
+      new URL("../../../../../platforms/ubuntu/common/apps/desktop/src/renderer/ui.tsx", import.meta.url)
+    ])
+  ].filter(Boolean);
+  assert.ok(sources.length > 0, "login UI source must be present");
+  for (const source of sources) {
+    const send = sliceUntil(source, "async function handleSendLoginCode", [
+      "async function handleAlipayQrLogin",
+      "async function handleLoginSubmit"
+    ]);
+    assert.match(
+      send,
+      /channel === "phone"\s*\?\s*\{\s*phone:\s*loginForm\.phone\.trim\(\)\s*\}\s*:\s*\{\s*email:\s*loginForm\.email\.trim\(\)\s*\}/
+    );
+    assert.match(send, /请查收短信/);
+    assert.match(send, /验证码已发送至手机/);
+  }
+});
+
+test(`${CASE_ID} login success clears the verification-code resend cooldown`, () => {
+  const sources = [
+    readIfPresent([
+      new URL("../renderer/ui.tsx", import.meta.url),
+      new URL("../../../../../platforms/windows/apps/desktop/src/renderer/ui.tsx", import.meta.url)
+    ]),
+    readIfPresent([
+      new URL("../../../../../platforms/macos/common/apps/desktop/src/renderer/ui.tsx", import.meta.url)
+    ]),
+    readIfPresent([
+      new URL("../../../../../platforms/ubuntu/common/apps/desktop/src/renderer/ui.tsx", import.meta.url)
+    ])
+  ].filter(Boolean);
+  assert.ok(sources.length > 0, "login UI source must be present");
+  for (const source of sources) {
+    const login = sliceUntil(source, "async function handleLoginSubmit", [
+      "async function handleSendLoginCode",
+      "async function handleAlipayQrLogin"
+    ]);
+    assert.match(login, /setLoginCodeCooldownByChannel\(clearLoginCodeCooldowns\(\)\)/);
+    const send = sliceUntil(source, "async function handleSendLoginCode", [
+      "async function handleAlipayQrLogin",
+      "async function handleLoginSubmit",
+      "function handleLoginFormChange"
+    ]);
+    assert.match(send, /setChannelLoginCodeCooldown\(current, channel,/);
+    assert.match(send, /loginCodeCooldownForChannel\(loginCodeCooldownByChannel, channel\)/);
   }
 });
 

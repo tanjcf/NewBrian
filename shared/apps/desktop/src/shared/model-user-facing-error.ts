@@ -38,12 +38,34 @@ export function mapWalletBillingUserMessage(error: unknown): string | null {
   return null;
 }
 
+/**
+ * Cloudflare/origin gateway wait timeout (524) or upstream gateway timeout (504).
+ * Common on long media jobs (video/music); not a local crash and not a manual cancel.
+ */
+export const MODEL_GATEWAY_TIMEOUT_USER_MESSAGE =
+  "模型网关等待上游响应超时（HTTP 超时，常见于视频等长任务）。当前进度已保存，可安全重试；若仍失败，请拆分步骤或稍后重试。";
+
+const MODEL_GATEWAY_TIMEOUT_RE =
+  /HTTP\s*(?:504|524)\b|模型网关请求失败\s*[（(]\s*HTTP\s*(?:504|524)\s*[）)]|cloudflare.*524|a timeout occurred|gateway.?timeout|连接模型网关超时/i;
+
+/** True when the gateway/proxy timed out waiting for the upstream model/media job. */
+export function isModelGatewayTimeoutError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return MODEL_GATEWAY_TIMEOUT_RE.test(message);
+}
+
+export function mapModelGatewayTimeoutUserMessage(error: unknown): string | null {
+  return isModelGatewayTimeoutError(error) ? MODEL_GATEWAY_TIMEOUT_USER_MESSAGE : null;
+}
+
 /** Prefer a user-facing subscription message when applicable; otherwise return the original text. */
 export function toUserFacingModelFailureMessage(error: unknown) {
   const walletMapped = mapWalletBillingUserMessage(error);
   if (walletMapped) return walletMapped;
   const mapped = mapSubscriptionInactiveUserMessage(error);
   if (mapped) return mapped;
+  const gatewayTimeoutMapped = mapModelGatewayTimeoutUserMessage(error);
+  if (gatewayTimeoutMapped) return gatewayTimeoutMapped;
   return error instanceof Error ? error.message : String(error ?? "");
 }
 

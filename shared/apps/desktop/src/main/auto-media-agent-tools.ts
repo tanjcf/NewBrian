@@ -9,9 +9,13 @@ import { copyFile, mkdir, readFile, realpath, stat, writeFile } from "node:fs/pr
 import { basename, extname, isAbsolute, resolve, sep } from "node:path";
 import type { BrainWorkspaceKey } from "@codex-forge/protocol";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import { executeWithMediaAuthenticationRetry } from "./media-auth-retry.ts";
 import {
   extractMediaUrlsFromResult,
   formatGenerationJobProgress,
+  mapMediaGenerationAuthUserMessage,
+  mapMediaGenerationMissingModelUserMessage,
+  MEDIA_GENERATION_AUTH_USER_MESSAGE,
   runAutoMediaTool,
   type AutoMediaToolName,
   type GenerationJobSnapshot,
@@ -37,6 +41,11 @@ export type AutoMediaAgentToolDependencies = {
    */
   attachmentRoots?: string[];
   resolveGateway: () => Promise<{ baseUrl: string; bearerToken: string }>;
+  /**
+   * Refresh the desktop access token once after a media 401.
+   * Scene/video paths already retry; Auto chat tools must do the same.
+   */
+  refreshAccessToken?: () => Promise<string>;
   /** Open a workspace-relative image/video in the side panel after download. */
   openLocalMedia?: (input: { kind: "image" | "video"; relativePath: string }) => Promise<void> | void;
   /** When set, downloaded media is registered into BRAIN 文件/产物/任务. */
@@ -403,7 +412,7 @@ async function executeAutoMediaTool(
   }
   const { baseUrl, bearerToken } = await deps.resolveGateway();
   if (!bearerToken) {
-    return { ok: false, output: "媒体生成需要已登录的网关凭证。" };
+    return { ok: false, output: MEDIA_GENERATION_AUTH_USER_MESSAGE };
   }
   if (!baseUrl) {
     return { ok: false, output: "媒体生成需要已配置的模型网关地址。" };
@@ -446,29 +455,36 @@ async function executeAutoMediaTool(
     ? `${Math.round(width)}x${Math.round(height)}`
     : "";
   const size = text(input.size) || sizeFromDims || undefined;
+  const invokeTool = (activeBearerToken: string) => runAutoMediaTool({
+    gatewayBaseUrl: baseUrl,
+    bearerToken: activeBearerToken,
+    toolName,
+    prompt,
+    model: text(input.model) || undefined,
+    imageUrl,
+    lastFrameImageUrl,
+    style: text(input.style) || undefined,
+    duration: typeof input.duration === "number" ? input.duration : Number(input.duration) || undefined,
+    size,
+    wait: false,
+    pollIntervalMs: DEFAULT_AUTO_MEDIA_POLL_INTERVAL_MS,
+    signal: deps.resolveAbortSignal?.(),
+    requestId,
+    workspaceId: deps.workspaceId,
+    threadId: deps.threadId,
+    fetchImpl: deps.fetchImpl,
+    onProgress: (job) => {
+      deps.onProgress?.(`任务 ${job.id} · ${formatGenerationJobProgress(job.progress, job.state)}`);
+    }
+  });
   try {
-    const result = await runAutoMediaTool({
-      gatewayBaseUrl: baseUrl,
-      bearerToken,
-      toolName,
-      prompt,
-      model: text(input.model) || undefined,
-      imageUrl,
-      lastFrameImageUrl,
-      style: text(input.style) || undefined,
-      duration: typeof input.duration === "number" ? input.duration : Number(input.duration) || undefined,
-      size,
-      wait: false,
-      pollIntervalMs: DEFAULT_AUTO_MEDIA_POLL_INTERVAL_MS,
-      signal: deps.resolveAbortSignal?.(),
-      requestId,
-      workspaceId: deps.workspaceId,
-      threadId: deps.threadId,
-      fetchImpl: deps.fetchImpl,
-      onProgress: (job) => {
-        deps.onProgress?.(`任务 ${job.id} · ${formatGenerationJobProgress(job.progress, job.state)}`);
-      }
-    });
+    const result = deps.refreshAccessToken
+      ? await executeWithMediaAuthenticationRetry({
+        initialToken: bearerToken,
+        refreshAccessToken: deps.refreshAccessToken,
+        execute: invokeTool
+      })
+      : await invokeTool(bearerToken);
     const mediaJobId = text(result.job.id);
     if (mediaJobId) deps.onJobId?.(mediaJobId);
     const remoteUrls = extractMediaUrlsFromResult(result.job.resultJson);
@@ -519,6 +535,10 @@ async function executeAutoMediaTool(
       })
     };
   } catch (error) {
+    const authMapped = mapMediaGenerationAuthUserMessage(error);
+    if (authMapped) return { ok: false, output: authMapped };
+    const missingModelMapped = mapMediaGenerationMissingModelUserMessage(error);
+    if (missingModelMapped) return { ok: false, output: missingModelMapped };
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, output: message };
   }

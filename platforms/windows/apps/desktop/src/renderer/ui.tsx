@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { LoginScreen } from "./app/LoginScreen";
+import {
+  clearLoginCodeCooldowns,
+  initialLoginCodeCooldownByChannel,
+  loginCodeCooldownForChannel,
+  setChannelLoginCodeCooldown
+} from "./app/login-code-cooldown";
 import { WorkspaceModules } from "./app/WorkspaceModules";
 import { FeaturePanel } from "./app/FeaturePanel";
 import { coerceValueBySchema, createSchemaFieldRenderer, setValueAtPath } from "./app/schema-fields";
@@ -24,9 +30,11 @@ import {
 import {
   isSubscriptionInactiveError,
   isUserCancelledModelError,
+  mapModelGatewayTimeoutUserMessage,
   mapSubscriptionInactiveUserMessage
 } from "../shared/model-user-facing-error.ts";
 import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.ts";
+import { codexAutomationSendPlan } from "../shared/automation-run-history.ts";
 import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, shouldRepairSelectedThread, userVisibleThreads } from "./app/workspace-visibility";
 import {
   cloneNewChatComposerDraft,
@@ -122,6 +130,8 @@ function normalizeModelErrorMessage(error: unknown) {
     .trim();
   const subscriptionMessage = mapSubscriptionInactiveUserMessage(message);
   if (subscriptionMessage) return subscriptionMessage;
+  const gatewayTimeoutMessage = mapModelGatewayTimeoutUserMessage(message);
+  if (gatewayTimeoutMessage) return gatewayTimeoutMessage;
   if (/fetch failed|failed to fetch|econnrefused|econnreset|enotfound|eai_again/i.test(message)) {
     return "无法连接模型服务，请检查网络或模型网关地址后重试。";
   }
@@ -513,7 +523,9 @@ export function App() {
   const [loginForm, setLoginForm] = useState<LoginFormState>(initialLoginForm);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [isSendingLoginCode, setIsSendingLoginCode] = useState(false);
-  const [loginCodeCooldownSeconds, setLoginCodeCooldownSeconds] = useState(0);
+  const [loginCodeCooldownByChannel, setLoginCodeCooldownByChannel] = useState(initialLoginCodeCooldownByChannel);
+  const loginCodeChannel = loginForm.channel === "phone" ? "phone" : "email";
+  const loginCodeCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, loginCodeChannel);
   const [agreementDialog, setAgreementDialog] = useState<null | "tos" | "policy">(null);
   const [desktopBootstrapStatus, setDesktopBootstrapStatus] = useState<DesktopBootstrapStatusState>({
     overall: {
@@ -1220,7 +1232,7 @@ export function App() {
     api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds,
     activeThreadRequestIds,
     selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu,
-    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownSeconds,
+    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownByChannel,
     activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath,
     newThreadTitle, newThreadSummary, forkThreadTitle, editingThreadTitle, editingThreadSummary,
     skillDraft, pluginDraft, automationDraft, editingFeatureId, environmentEnvText, authStatus, loginForm,
@@ -1234,7 +1246,7 @@ export function App() {
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
     setShowRenameThreadDialog,
     setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary, setIsComposingNewThread,
-    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
+    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownByChannel, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
     initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad,
     formatEnvText, parseEnvText, buildWorkspaceTree, collectDirectoryKeys, coerceValueBySchema, settingsFeatureItem
@@ -1551,6 +1563,7 @@ export function App() {
         password: "",
         captcha: ""
       }));
+      setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
       return nextAuthStatus.authenticated === true;
@@ -1563,11 +1576,12 @@ export function App() {
   }
 
   async function handleSendLoginCode() {
-    if (!api || isSendingLoginCode || loginCodeCooldownSeconds > 0) {
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const channelCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, channel);
+    if (!api || isSendingLoginCode || channelCooldownSeconds > 0) {
       return;
     }
 
-    const channel = loginForm.channel === "phone" ? "phone" : "email";
     if (channel === "phone") {
       if (!isCnMobile(loginForm.phone)) {
         setErrorMessage("请先填写 11 位手机号。");
@@ -1590,8 +1604,14 @@ export function App() {
         typeof (result.data as Record<string, unknown> | undefined)?.resend_after_seconds === "number"
           ? Number((result.data as Record<string, unknown>).resend_after_seconds)
           : 60;
-      setLoginCodeCooldownSeconds(Math.max(1, resendAfter));
-      setChatStatus(channel === "phone" ? "验证码已发送，请查收短信。" : "验证码已发送，请查收邮箱。");
+      setLoginCodeCooldownByChannel((current) =>
+        setChannelLoginCodeCooldown(current, channel, Math.max(1, resendAfter))
+      );
+      setChatStatus(
+        channel === "phone"
+          ? `验证码已发送至手机 ${loginForm.phone.trim().replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2")}，请查收短信。`
+          : `验证码已发送至邮箱 ${loginForm.email.trim()}，请查收邮件。`
+      );
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
@@ -1612,6 +1632,7 @@ export function App() {
     try {
       const nextAuthStatus = await api.loginWithAlipayQr({ agreement_accepted: agreementAccepted });
       setAuthStatus(nextAuthStatus);
+      setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("支付宝扫码登录成功，已接入真实会话。");
       setErrorMessage("");
     } catch (error) {
@@ -1631,6 +1652,7 @@ export function App() {
     forceProjectThread?: boolean;
     targetWorkspaceId?: string;
     targetThreadId?: string;
+    pinnedThreadEnsured?: boolean;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
     keepComposer?: boolean;
   }) {
@@ -1762,6 +1784,7 @@ export function App() {
       (targetWorkspaceId === currentWorkspaceId ? currentWorkspace : undefined);
     let targetThread = targetWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
       (targetWorkspaceId === currentWorkspaceId ? currentThread : undefined);
+    let appendToBoundThread = false;
     if (pinnedWorkspaceId && pinnedThreadId) {
       targetWorkspaceId = pinnedWorkspaceId;
       targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
@@ -1773,14 +1796,20 @@ export function App() {
         threadExists: Boolean(targetThread?.id),
         fallbackWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID
       });
-      if (threadPlan.createThread) {
+      appendToBoundThread = codexAutomationSendPlan({
+        boundWorkspaceId: pinnedWorkspaceId,
+        boundThreadId: pinnedThreadId,
+        snapshotHasThread: Boolean(targetThread?.id),
+        threadJustEnsured: Boolean(draftOverride?.pinnedThreadEnsured)
+      }).appendToBoundThread;
+      if (threadPlan.createThread && !appendToBoundThread) {
         targetWorkspaceId = threadPlan.workspaceId;
         targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
         composingNewThread = true;
         composingThreadScope = targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID ? "chat" : "project";
         targetThread = undefined;
         setErrorMessage("");
-        setChatStatus("绑定的对话不存在，正在新建线程并执行任务。");
+        setChatStatus("绑定的对话不存在，正在新建对话并执行任务。");
       } else {
         composingNewThread = false;
         setSelectedWorkspaceId(targetWorkspaceId);
@@ -1790,17 +1819,26 @@ export function App() {
     }
     // A selected-thread object can be stale after switching from a project to the
     // internal chat workspace. Validate against the resolved target workspace.
-    if (!targetThread?.id) composingNewThread = true;
+    if (appendToBoundThread && pinnedThreadId) {
+      composingNewThread = false;
+      targetWorkspaceId = pinnedWorkspaceId;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId)
+        ?? ({ id: pinnedThreadId, title: "自动化任务", scope: "chat" } as NonNullable<typeof targetThread>);
+      setSelectedWorkspaceId(pinnedWorkspaceId);
+      setSelectedThreadId(pinnedThreadId);
+      setIsComposingNewThread(false);
+    }
+    if (!targetThread?.id && !appendToBoundThread) composingNewThread = true;
     let targetThreadTitle = selectedThread?.title || "新对话";
     if (composingNewThread) {
       if (!targetWorkspaceId) {
-        setErrorMessage("请先选择一个项目，再新建线程。");
+        setErrorMessage("请先选择一个项目，再新建对话。");
         return;
       }
 
-      const titleText = draftQuestion.trim().slice(0, 36) || "新线程";
+      const titleText = draftQuestion.trim().slice(0, 36) || "新对话";
       try {
-        setChatStatus("正在创建新线程...");
+        setChatStatus("正在创建新对话...");
         const existingThreadIds = new Set(targetWorkspace?.threads.map((thread) => thread.id) ?? []);
         const createdThread = await createAndActivateNewChatThread({
           workspaceId: targetWorkspaceId,
@@ -1810,7 +1848,7 @@ export function App() {
           addWorkspaceThread: () => api.addWorkspaceThread({
             workspaceId: targetWorkspaceId,
             title: titleText,
-            summary: composingThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新线程。",
+            summary: composingThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新对话。",
             scope: composingThreadScope,
             ...(targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID && draftOverride?.brainWorkspaceKey
               ? { brainWorkspaceKey: draftOverride.brainWorkspaceKey }
@@ -1851,7 +1889,7 @@ export function App() {
           return;
         }
         setErrorMessage(message);
-        setChatStatus("新线程创建失败。");
+        setChatStatus("新对话创建失败。");
         return;
       }
     }
@@ -1908,7 +1946,7 @@ export function App() {
       ].filter(Boolean).join("\n\n");
     }
     if (composerWorkspaceContext && composingNewThread) {
-      toolContext = [toolContext, `当前新线程：${contextThreadTitle}`].filter(Boolean).join("\n\n");
+      toolContext = [toolContext, `当前新对话：${contextThreadTitle}`].filter(Boolean).join("\n\n");
     }
     const userMessage: ModelChatMessage = {
       id: `local-user-${Date.now()}`,

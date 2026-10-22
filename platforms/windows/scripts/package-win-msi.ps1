@@ -201,6 +201,10 @@ $prePackageSmokes = @(
     Path = Join-Path $desktopRoot "src\renderer\app\preview-expand-smoke.test.ts"
   },
   @{
+    Id = "PREVIEW-STALE-RELOAD-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\preview-stale-reload-smoke.test.ts"
+  },
+  @{
     Id = "SOFTWARE-LINK-SMOKE-001"
     Path = Join-Path $desktopRoot "src\renderer\app\software-link-smoke.test.ts"
   },
@@ -287,6 +291,46 @@ $prePackageSmokes = @(
   @{
     Id = "SMS-LOGIN-CODE-SMOKE-001"
     Path = Join-Path $desktopRoot "src\shared\sms-login-code-smoke.test.ts"
+  },
+  @{
+    Id = "LOGIN-CODE-COOLDOWN-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\login-code-cooldown.test.ts"
+  },
+  @{
+    Id = "EMPTY-CHAT-PLACEHOLDER-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\empty-chat-placeholder-smoke.test.ts"
+  },
+  @{
+    Id = "COMPOSER-PROJECT-DRAFT-CLEAR-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\composer-project-select.test.ts"
+  },
+  @{
+    Id = "COMPOSER-FOOTER-CONTROLS-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\composer-footer-controls-smoke.test.ts"
+  },
+  @{
+    Id = "ASSISTANT-MESSAGE-ACTIONS-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\assistant-message-actions-smoke.test.ts"
+  },
+  @{
+    Id = "NEW-CHAT-LABEL-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\new-chat-label-smoke.test.ts"
+  },
+  @{
+    Id = "MEDIA-AUTH-401-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\main\media-auth-401-smoke.test.ts"
+  },
+  @{
+    Id = "AUTOMATION-HISTORY-RUN-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\automation-history-run-smoke.test.ts"
+  },
+  @{
+    Id = "GATEWAY-TIMEOUT-FAILURE-CARD-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\gateway-timeout-failure-card-smoke.test.ts"
+  },
+  @{
+    Id = "MARKDOWN-MESSAGE-SELECT-COPY-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\markdown-message-select-copy-smoke.test.ts"
   }
 )
 foreach ($smoke in $prePackageSmokes) {

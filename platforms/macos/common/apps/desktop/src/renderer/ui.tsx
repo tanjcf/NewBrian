@@ -9,7 +9,7 @@ import { ThreadContextMenu } from "./app/ThreadContextMenu";
 import { AuthLoadingScreen, BootstrapBlockingScreen } from "./app/BootstrapScreens";
 import { createMcpServerActions } from "./app/mcp-server-actions";
 import { useDesktopCore } from "./app/useDesktopCore";
-import { keepNewInputBelowHistoricalOutput, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { snapshotToDisplayMessages } from "./app/thread-hydration";
 import { SidebarIcon } from "./app/SidebarIcon";
 import type {
@@ -23,7 +23,8 @@ import type {
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
 import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
-import { isUserCancelledModelError, mapSubscriptionInactiveUserMessage } from "../shared/model-user-facing-error.ts";
+import { codexAutomationSendPlan } from "../shared/automation-run-history.ts";
+import { mapSubscriptionInactiveUserMessage } from "../shared/model-user-facing-error.ts";
 import {
   SettingsNavIcon,
   SettingsSwitch,
@@ -402,7 +403,7 @@ export function App() {
   const [showOpenLocationMenu, setShowOpenLocationMenu] = useState(false);
   const [showWorkspaceStatusMenu, setShowWorkspaceStatusMenu] = useState(false);
   const [workspaceHeaderStatus, setWorkspaceHeaderStatus] = useState({
-    branch: "",
+    branch: "main",
     changes: 0,
     additions: 0,
     deletions: 0,
@@ -658,7 +659,6 @@ export function App() {
   useEffect(() => {
     if (!api || !selectedWorkspace?.id) return;
     let canceled = false;
-    setWorkspaceHeaderStatus((current) => ({ ...current, branch: "" }));
     api.getWorkspaceHeaderStatus(selectedWorkspace.id)
       .then((status) => {
         if (!canceled) setWorkspaceHeaderStatus(status);
@@ -1042,9 +1042,8 @@ export function App() {
     }
 
     const turns: ConversationTurn[] = [];
-    const orderedMessages = keepNewInputBelowHistoricalOutput(chatMessages);
 
-    for (const message of orderedMessages) {
+    for (const message of chatMessages) {
       if (message.role === "user") {
         turns.push({ id: message.id, user: message });
         continue;
@@ -1485,6 +1484,9 @@ export function App() {
   async function askModel(draftOverride?: QueuedComposerDraft & {
     forceStandaloneChat?: boolean;
     forceProjectThread?: boolean;
+    targetWorkspaceId?: string;
+    targetThreadId?: string;
+    pinnedThreadEnsured?: boolean;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
   }) {
     const draftQuestion = draftOverride?.question ?? question;
@@ -1524,7 +1526,18 @@ export function App() {
       return;
     }
 
-    const composingNewThread = forceStandaloneChat || isComposingNewThread;
+    const pinnedWorkspaceId = String(draftOverride?.targetWorkspaceId || "").trim();
+    const pinnedThreadId = String(draftOverride?.targetThreadId || "").trim();
+    const snapshotHasThread = Boolean(workspaceCatalog
+      .find((workspace) => workspace.id === pinnedWorkspaceId)
+      ?.threads?.some((thread) => thread.id === pinnedThreadId));
+    const appendToBoundThread = codexAutomationSendPlan({
+      boundWorkspaceId: pinnedWorkspaceId,
+      boundThreadId: pinnedThreadId,
+      snapshotHasThread,
+      threadJustEnsured: Boolean(draftOverride?.pinnedThreadEnsured)
+    }).appendToBoundThread;
+    const composingNewThread = appendToBoundThread ? false : (forceStandaloneChat || isComposingNewThread);
     const composingThreadScope = forceStandaloneChat ? "chat" : (forceProjectThread ? "project" : newThreadScope);
     const effectiveChatUsesProject = forceStandaloneChat ? false : (forceProjectThread ? true : chatUsesProject);
     if (forceStandaloneChat) {
@@ -1545,6 +1558,16 @@ export function App() {
       : currentWorkspace;
     let targetThread = forceStandaloneChat ? undefined : currentThread;
     let targetThreadTitle = selectedThread?.title || "新对话";
+    if (appendToBoundThread && pinnedThreadId) {
+      targetWorkspaceId = pinnedWorkspaceId;
+      targetWorkspace = workspaceCatalog.find((workspace) => workspace.id === pinnedWorkspaceId) ?? targetWorkspace;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId)
+        ?? ({ id: pinnedThreadId, title: "自动化任务", scope: "chat" } as NonNullable<typeof targetThread>);
+      targetThreadTitle = targetThread?.title || "自动化任务";
+      setSelectedWorkspaceId(pinnedWorkspaceId);
+      setSelectedThreadId(pinnedThreadId);
+      setIsComposingNewThread(false);
+    }
     if (composingNewThread) {
       if (!targetWorkspaceId) {
         setErrorMessage("请先选择一个项目，再新建线程。");
@@ -1723,18 +1746,12 @@ export function App() {
       }
       await refreshCatalog();
     } catch (error) {
-      if (isUserCancelledModelError(error)) {
-        setChatStatus("已停止生成。");
-        setErrorMessage("");
-        updateThreadMessages(targetThreadId, (current) => current.filter((item) => item.id !== streamRequestId));
-      } else {
-        const message = normalizeModelErrorMessage(error);
-        setChatStatus("模型请求失败。");
-        setErrorMessage(message);
-        // The error panel owns request failures. Keeping a synthetic assistant
-        // message here would feed it back into the next request as conversation.
-        updateThreadMessages(targetThreadId, (current) => current.filter((item) => item.id !== streamRequestId));
-      }
+      const message = normalizeModelErrorMessage(error);
+      setChatStatus("模型请求失败。");
+      setErrorMessage(message);
+      // The error panel owns request failures. Keeping a synthetic assistant
+      // message here would feed it back into the next request as conversation.
+      updateThreadMessages(targetThreadId, (current) => current.filter((item) => item.id !== streamRequestId));
     } finally {
       setLastAssistantElapsedSeconds(Math.max(1, Math.round((Date.now() - requestStartedAt) / 1000)));
       setAssistantStartedAt(null);
@@ -1771,9 +1788,8 @@ export function App() {
       setChatStatus("当前没有可停止的任务。");
       return;
     }
-    setErrorMessage("");
     const result = await api.cancelModelRequest({ requestId });
-    setChatStatus(result.ok ? "已停止生成。" : result.detail);
+    setChatStatus(result.detail);
     if (result.ok) {
       streamingAssistantRef.current = { id: "", contentLength: 0 };
       setIsAskingModel(false);
@@ -2474,11 +2490,9 @@ export function App() {
                   <button type="button" className={workspaceStatusSubmenu === "local" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("local")}>
                     <SidebarIcon name="computer" /><span>本地</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
-                  {workspaceHeaderStatus.branch ? (
                   <button type="button" className={workspaceStatusSubmenu === "branch" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("branch")}>
                     <SidebarIcon name="branch" /><span>{workspaceHeaderStatus.branch}</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
-                  ) : null}
                   <button
                     type="button"
                     onClick={async () => {
@@ -2512,7 +2526,7 @@ export function App() {
                   {workspaceStatusSubmenu === "branch" ? (
                     <div className="workspace-status-submenu branch-status-submenu">
                       <label>⌕<input value={branchSearch} onChange={(event) => setBranchSearch(event.target.value)} placeholder="搜索分支" /></label>
-                      <span className="workspace-status-subtitle">{workspaceBranches.current ? `当前分支：${workspaceBranches.current}` : "当前分支：(detached HEAD)"}</span>
+                      <span className="workspace-status-subtitle">分支</span>
                       <div className="branch-status-list">
                         {workspaceBranches.branches.filter((branch) => branch.toLowerCase().includes(branchSearch.toLowerCase())).map((branch) => (
                           <button key={branch} type="button" onClick={async () => { if (!api || !selectedWorkspace || branch === workspaceBranches.current) return; try { const next = await api.switchWorkspaceBranch({ workspaceId: selectedWorkspace.id, branch }); setWorkspaceBranches(next); await refreshWorkspaceHeaderStatus(); setWorkspaceStatusSubmenu(null); } catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)); } }}><SidebarIcon name="branch" /><span><strong>{branch}</strong>{branch === workspaceBranches.current ? <small>未提交：{workspaceBranches.changedFiles} 个文件</small> : null}</span><em>{branch === workspaceBranches.current ? "✓" : ""}</em></button>

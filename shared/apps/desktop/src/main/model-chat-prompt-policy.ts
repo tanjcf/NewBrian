@@ -192,7 +192,8 @@ export function buildModelChatSystemPrompt(input: ModelChatPromptInput) {
       "- After a successful tool result, tell the user the local relative path (`.newbrain/generated-media/` or scene `media/stems/` / `media/clips/`). Prefer side-panel / right Tools preview when already opened by the tool.",
       "- NEVER curl tokenhub.tencentmaas.com, NEVER search env/files for API keys, NEVER invent wand endpoints.",
       "- Provider credentials and TokenHub wand paths live only in spring-app Admin model config.",
-      "- If a media tool fails because no model is available, tell the user to enable the matching model in Admin (混元生图/hy-image-v3 for images, a video model for video, a music-generation model for music) — do not fake media locally.",
+      "- If a media tool fails with HTTP 401/Unauthorized / 认证失败 / 请重新登录, tell the user to re-login (session/gateway auth). Do NOT blame Admin「模型配置」or hy-image for a 401.",
+      "- If a media tool fails because no model is available (404 / generation model is not available / 没有可用的…模型), tell the user to ask Admin to enable the matching model (混元生图/hy-image-v3 for images, a video model for video, a music-generation model for music) — do not fake media locally.",
       input.brainWorkspaceKey === "music"
         ? "- You DO have music scene tools (`music.song.generate` etc.) for real audio. Do not deny music capability or redirect to Suno/Udio unless those tools failed."
         : "- You DO have `music_generate` in this chat when the user wants an actual audio file (outside music scene Tools). Do not deny music capability or redirect to Suno/Udio unless the tool failed."

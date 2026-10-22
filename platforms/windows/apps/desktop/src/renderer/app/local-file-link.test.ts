@@ -29,7 +29,9 @@ test("routes local-file clicks directly without a duplicate global event bus", (
   assert.match(workspace, /classifyTextPreviewPayload/);
   assert.match(workspace, /findMatchingArtifactTab/);
   assert.match(workspace, /artifactPathsReferToSameFile/);
-  assert.match(workspace, /isReusableArtifactPreview/);
+  assert.match(workspace, /shouldReuseOpenArtifactPreview/);
+  assert.match(workspace, /withArtifactPreviewCacheBust/);
+  assert.match(workspace, /forceReload:\s*true/);
 });
 
 test("routes restored local links through the preview callback even before workspace metadata is ready", () => {

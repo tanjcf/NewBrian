@@ -9,10 +9,19 @@ const {
   resolveActiveReasoningRequestId,
   resolvePendingApprovalThreadKey,
   resolveSelectedThreadOwnsLiveApproval,
+  shouldShowAssistantMessageActions,
   threadStillNeedsApproval
 } = await import(
   new URL("./thread-activity-policy.ts", import.meta.url).href
 ) as typeof import("./thread-activity-policy.js");
+
+test("assistant message actions stay hidden while the live turn is generating", () => {
+  assert.equal(shouldShowAssistantMessageActions({ isLiveTurn: true }), false);
+});
+
+test("assistant message actions appear after the live turn settles", () => {
+  assert.equal(shouldShowAssistantMessageActions({ isLiveTurn: false }), true);
+});
 
 test("a running selected thread does not make the new-thread composer busy", () => {
   assert.equal(isComposerThreadRunning({

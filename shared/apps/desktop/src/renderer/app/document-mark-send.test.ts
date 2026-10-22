@@ -19,6 +19,7 @@ test("mark prompt sends the revision straight into the conversation", () => {
   const sendSource = modules.slice(sendStart, sendEnd);
   assert.ok(sendStart > 0 && sendEnd > sendStart);
   assert.match(sendSource, /clearPendingDocumentMark\(\)/);
+  assert.match(sendSource, /resolveAnnotatedMarkImages/);
   assert.match(sendSource, /submitComposerRequest\(\{[\s\S]*keepComposer:\s*true/);
   assert.doesNotMatch(marking, /data-testid="document-marking-saved"/);
   assert.doesNotMatch(sendSource, /setQuestion\(/);
@@ -27,6 +28,8 @@ test("mark prompt sends the revision straight into the conversation", () => {
   assert.match(marking, /aria-label="发送修改"/);
   assert.match(marking, /markPrompt\.onSubmit\(\)/);
   assert.match(modules, /<DocumentMarkPromptProvider value=\{documentMarkPrompt\}>/);
+  assert.match(modules, /documentAnnotationSnapshotPromiseRef/);
+  assert.match(modules, /mark:\s*\{\s*rect:\s*input\.rect/);
   assert.doesNotMatch(modules, /saveDocumentAnnotation/);
 });
 

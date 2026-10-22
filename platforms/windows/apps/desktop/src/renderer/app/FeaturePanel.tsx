@@ -13,17 +13,17 @@ function renderFeaturePanel() {
           <input
             value={newThreadTitle}
             onChange={(event) => setNewThreadTitle(event.target.value)}
-            placeholder="新线程标题"
+            placeholder="新对话标题"
           />
           <textarea
             value={newThreadSummary}
             onChange={(event) => setNewThreadSummary(event.target.value)}
-            placeholder="线程摘要"
+            placeholder="对话摘要"
             rows={2}
           />
           <div className="inline-actions">
             <button disabled={!api || !selectedWorkspace} type="button" onClick={() => void createThread()}>
-              新建线程
+              新建对话
             </button>
             <button disabled={!api || !selectedThread} type="button" onClick={() => void forkThread()}>
               分叉当前线程

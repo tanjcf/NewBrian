@@ -260,7 +260,9 @@ function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreamin
   const streamingSnapshot = useStreamingSnapshot(content, isStreaming);
   const renderableContent = useMemo(() => normalizeStreamingMarkdown(streamingSnapshot, isStreaming), [streamingSnapshot, isStreaming]);
   const components = useMemo(() => markdownComponents(workspaceId, onOpenLocalFile), [workspaceId, onOpenLocalFile]);
-  const useFlatDocument = isStreaming || !collapsible;
+  // Always render a flat document. Collapsible <details>/<summary> sections make
+  // drag-selecting characters unreliable on Chromium (selection clears or jumps).
+  const useFlatDocument = true;
 
   return <div className={`markdown-message${isStreaming ? " markdown-message-streaming" : ""}${!collapsible ? " markdown-message-file-preview" : ""}`} onContextMenu={(event) => {
     const link = (event.target as HTMLElement).closest<HTMLElement>("[data-local-file-path]");

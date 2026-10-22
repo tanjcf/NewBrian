@@ -22,6 +22,7 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       const command = (event as CustomEvent<{ command?: string }>).detail?.command;
       if (command === "expand-sidebar") setSidebarCollapsed(false);
       if (command === "collapse-sidebar") setSidebarCollapsed(true);
+      if (command === "toggle-sidebar-local") setSidebarCollapsed((current) => !current);
     };
     window.addEventListener("newbrain:app-command", onAppCommand as EventListener);
     return () => window.removeEventListener("newbrain:app-command", onAppCommand as EventListener);
@@ -78,7 +79,9 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
           0
         );
       }
-      if (command === "toggle-sidebar") setSidebarCollapsed((current) => !current);
+      if (command === "toggle-sidebar") {
+        window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "sidebar-button-click" } }));
+      }
       if (command === "toggle-bottom-panel" || command === "toggle-side-panel") clickSelector(".preview-panel-toggle");
       if (command === "toggle-file-tree") clickSelector(".fold-trigger");
       if (command === "open-browser") clickText(".preview-launcher button", "浏览器");
@@ -124,7 +127,9 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
           aria-label={sidebarCollapsed ? "展开左侧功能栏" : "收起左侧功能栏"}
           title={sidebarCollapsed ? "展开左侧功能栏 (Ctrl+B)" : "收起左侧功能栏 (Ctrl+B)"}
           aria-pressed={sidebarCollapsed}
-          onClick={() => setSidebarCollapsed((current) => !current)}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "sidebar-button-click" } }));
+          }}
         >
           <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
             <rect x="2.5" y="3" width="15" height="14" rx="2.5" />

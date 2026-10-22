@@ -1,4 +1,4 @@
-import { Component, isValidElement, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, isValidElement, memo, useEffect, useId, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -7,12 +7,6 @@ import "katex/dist/katex.min.css";
 import { isArtifactFilePath, isLocalFileLink, parseLocalFileReference, resolveLocalFileLinkTarget, type LocalFileReference } from "./local-file-link";
 import { normalizeStreamingMarkdown, safeMarkdownUrl } from "./streaming-markdown";
 import { LocalFileContextMenu, positionLocalFileMenu, type LocalFileMenuState } from "./LocalFileContextMenu";
-import {
-  createMermaidDiagramId,
-  loadMermaidOnce,
-  peekMermaidSvgCache,
-  rememberMermaidSvg
-} from "./mermaid-diagram-stability.ts";
 
 type OpenLocalFile = (filePath: string, location?: Omit<LocalFileReference, "filePath">) => void;
 
@@ -44,59 +38,28 @@ function openLocalFile(workspaceId: string, reference: LocalFileReference, onOpe
   else window.dispatchEvent(new CustomEvent("newbrain:open-local-file", { detail: { workspaceId, ...reference } }));
 }
 
-const MermaidDiagram = memo(function MermaidDiagram({ source }: { source: string }) {
+function MermaidDiagram({ source }: { source: string }) {
   const reactId = useId();
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const renderAttemptRef = useRef(0);
-  const [svg, setSvg] = useState(() => peekMermaidSvgCache(source));
+  const [svg, setSvg] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const cached = peekMermaidSvgCache(source);
-    if (cached) {
-      setSvg(cached);
-      setError("");
-      return;
-    }
     let active = true;
-    renderAttemptRef.current += 1;
-    const diagramId = createMermaidDiagramId(reactId, renderAttemptRef.current);
-    void loadMermaidOnce().then(async ({ default: mermaid }) => {
+    const diagramId = `newbrain-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    void import("mermaid").then(async ({ default: mermaid }) => {
+      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, theme: "neutral" });
       const result = await mermaid.render(diagramId, source);
-      if (!active) return;
-      rememberMermaidSvg(source, result.svg);
-      setSvg(result.svg);
-      setError("");
+      if (active) { setSvg(result.svg); setError(""); }
     }).catch((reason: unknown) => {
-      if (!active) return;
-      setSvg("");
-      setError(reason instanceof Error ? reason.message : "Mermaid 图表无法渲染");
+      if (active) { setSvg(""); setError(reason instanceof Error ? reason.message : "Mermaid 图表无法渲染"); }
     });
     return () => { active = false; };
   }, [reactId, source]);
 
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host || !svg) return;
-    const height = Math.ceil(host.getBoundingClientRect().height);
-    if (height > 0) host.style.minHeight = `${height}px`;
-  }, [svg]);
-
-  if (error) {
-    return <div className="markdown-mermaid-error" role="alert" data-testid="markdown-mermaid-error">
-      <strong>Mermaid 图表无法渲染</strong><span>{error}</span><pre>{source}</pre>
-    </div>;
-  }
-  if (!svg) {
-    return <div className="markdown-mermaid-loading" data-testid="markdown-mermaid-loading">正在渲染图表…</div>;
-  }
-  return <div
-    ref={hostRef}
-    className="markdown-mermaid"
-    data-testid="markdown-mermaid"
-    dangerouslySetInnerHTML={{ __html: svg }}
-  />;
-});
+  if (error) return <div className="markdown-mermaid-error" role="alert"><strong>Mermaid 图表无法渲染</strong><span>{error}</span><pre>{source}</pre></div>;
+  if (!svg) return <div className="markdown-mermaid-loading">正在渲染图表…</div>;
+  return <div className="markdown-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
 
 function CodeBlock({ children }: { children?: ReactNode }) {
   const child = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children : null;
@@ -247,22 +210,23 @@ function useStreamingSnapshot(content: string, isStreaming: boolean) {
   return isStreaming ? snapshot : content;
 }
 
-function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreaming = false, collapsible = true }: {
+function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreaming = false }: {
   content: string;
   workspaceId?: string;
   onOpenLocalFile?: OpenLocalFile;
   priorOrderedItemCount?: number;
   isStreaming?: boolean;
-  collapsible?: boolean;
 }) {
   const [fileMenu, setFileMenu] = useState<LocalFileMenuState | null>(null);
   const [showSource, setShowSource] = useState(false);
   const streamingSnapshot = useStreamingSnapshot(content, isStreaming);
   const renderableContent = useMemo(() => normalizeStreamingMarkdown(streamingSnapshot, isStreaming), [streamingSnapshot, isStreaming]);
   const components = useMemo(() => markdownComponents(workspaceId, onOpenLocalFile), [workspaceId, onOpenLocalFile]);
-  const useFlatDocument = isStreaming || !collapsible;
+  // Always render a flat document. Collapsible <details>/<summary> sections make
+  // drag-selecting characters unreliable on Chromium (selection clears or jumps).
+  const useFlatDocument = true;
 
-  return <div className={`markdown-message${isStreaming ? " markdown-message-streaming" : ""}${!collapsible ? " markdown-message-file-preview" : ""}`} onContextMenu={(event) => {
+  return <div className={`markdown-message${isStreaming ? " markdown-message-streaming" : ""}`} onContextMenu={(event) => {
     const link = (event.target as HTMLElement).closest<HTMLElement>("[data-local-file-path]");
     const filePath = link?.dataset.localFilePath;
     if (!filePath || !workspaceId) return;
