@@ -12,7 +12,6 @@ on:
       - ".github/workflows/seven-workspace-l2.yml"
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
@@ -24,9 +23,8 @@ jobs:
     runs-on: ${{ matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'macos-x64' && 'macos-latest' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
+      # Let package.json packageManager (pnpm@10.0.0) win; do not also pin version: 10.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -56,9 +54,8 @@ jobs:
       BRAIN_ENGINE_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@v4
+      # Let package.json packageManager (pnpm@10.0.0) win; do not also pin version: 10.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
