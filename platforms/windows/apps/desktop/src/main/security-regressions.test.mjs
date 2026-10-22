@@ -189,6 +189,8 @@ test("requires pre-package smoke cases before MSI packaging", () => {
   assert.match(packageScript, /preview-file-menu-smoke\.test\.ts/);
   assert.match(packageScript, /PREVIEW-EXPAND-SMOKE-001/);
   assert.match(packageScript, /preview-expand-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-STALE-RELOAD-SMOKE-001/);
+  assert.match(packageScript, /preview-stale-reload-smoke\.test\.ts/);
   assert.match(packageScript, /SOFTWARE-LINK-SMOKE-001/);
   assert.match(packageScript, /software-link-smoke\.test\.ts/);
   assert.match(packageScript, /AUTOMATION-RUN-SMOKE-001/);
@@ -231,6 +233,8 @@ test("requires pre-package smoke cases before MSI packaging", () => {
   assert.match(packageScript, /mermaid-md-preview-stable-smoke\.test\.ts/);
   assert.match(packageScript, /SMS-LOGIN-CODE-SMOKE-001/);
   assert.match(packageScript, /sms-login-code-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-HISTORY-RUN-SMOKE-001/);
+  assert.match(packageScript, /automation-history-run-smoke\.test\.ts/);
   assert.match(packageScript, /Pre-package smoke \$\(\$smoke\.Id\) failed\. Packaging stopped\./);
 });
 

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { LoginScreen } from "./app/LoginScreen";
+import {
+  clearLoginCodeCooldowns,
+  initialLoginCodeCooldownByChannel,
+  loginCodeCooldownForChannel,
+  setChannelLoginCodeCooldown
+} from "./app/login-code-cooldown";
 import { WorkspaceModules } from "./app/WorkspaceModules";
 import { FeaturePanel } from "./app/FeaturePanel";
 import { coerceValueBySchema, createSchemaFieldRenderer, setValueAtPath } from "./app/schema-fields";
@@ -12,6 +18,7 @@ import { useDesktopCore } from "./app/useDesktopCore";
 import { keepNewInputBelowHistoricalOutput, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { snapshotToDisplayMessages } from "./app/thread-hydration";
 import { SidebarIcon } from "./app/SidebarIcon";
+import { codexAutomationSendPlan } from "../shared/automation-run-history.ts";
 import type {
   AutomationSpec,
   PhaseOneSnapshot,
@@ -23,7 +30,11 @@ import type {
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
 import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
-import { isUserCancelledModelError, mapSubscriptionInactiveUserMessage } from "../shared/model-user-facing-error.ts";
+import {
+  isUserCancelledModelError,
+  mapModelGatewayTimeoutUserMessage,
+  mapSubscriptionInactiveUserMessage
+} from "../shared/model-user-facing-error.ts";
 import {
   SettingsNavIcon,
   SettingsSwitch,
@@ -88,6 +99,8 @@ function normalizeModelErrorMessage(error: unknown) {
     .trim();
   const subscriptionMessage = mapSubscriptionInactiveUserMessage(message);
   if (subscriptionMessage) return subscriptionMessage;
+  const gatewayTimeoutMessage = mapModelGatewayTimeoutUserMessage(message);
+  if (gatewayTimeoutMessage) return gatewayTimeoutMessage;
   if (/this operation was aborted|aborterror|model request aborted|agent loop was cancelled/i.test(message)) {
     return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
   }
@@ -377,7 +390,9 @@ export function App() {
   const [loginForm, setLoginForm] = useState<LoginFormState>(initialLoginForm);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [isSendingLoginCode, setIsSendingLoginCode] = useState(false);
-  const [loginCodeCooldownSeconds, setLoginCodeCooldownSeconds] = useState(0);
+  const [loginCodeCooldownByChannel, setLoginCodeCooldownByChannel] = useState(initialLoginCodeCooldownByChannel);
+  const loginCodeChannel = loginForm.channel === "phone" ? "phone" : "email";
+  const loginCodeCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, loginCodeChannel);
   const [agreementDialog, setAgreementDialog] = useState<null | "tos" | "policy">(null);
   const [desktopBootstrapStatus, setDesktopBootstrapStatus] = useState<DesktopBootstrapStatusState>({
     overall: {
@@ -814,7 +829,7 @@ export function App() {
   } = useDesktopCore({
     api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds,
     selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu,
-    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownSeconds,
+    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownByChannel,
     activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath,
     newThreadTitle, newThreadSummary, forkThreadTitle, editingThreadTitle, editingThreadSummary,
     skillDraft, pluginDraft, automationDraft, editingFeatureId, environmentEnvText, authStatus, loginForm,
@@ -828,7 +843,7 @@ export function App() {
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
     setShowRenameThreadDialog,
     setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary,
-    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
+    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownByChannel, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
     initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad,
     formatEnvText, parseEnvText, buildWorkspaceTree, collectDirectoryKeys, coerceValueBySchema, settingsFeatureItem
@@ -1086,6 +1101,7 @@ export function App() {
         password: "",
         captcha: ""
       }));
+      setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
       return nextAuthStatus.authenticated === true;
@@ -1098,11 +1114,12 @@ export function App() {
   }
 
   async function handleSendLoginCode() {
-    if (!api || isSendingLoginCode || loginCodeCooldownSeconds > 0) {
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const channelCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, channel);
+    if (!api || isSendingLoginCode || channelCooldownSeconds > 0) {
       return;
     }
 
-    const channel = loginForm.channel === "phone" ? "phone" : "email";
     if (channel === "phone") {
       if (!isCnMobile(loginForm.phone)) {
         setErrorMessage("请先填写 11 位手机号。");
@@ -1125,8 +1142,14 @@ export function App() {
         typeof (result.data as Record<string, unknown> | undefined)?.resend_after_seconds === "number"
           ? Number((result.data as Record<string, unknown>).resend_after_seconds)
           : 60;
-      setLoginCodeCooldownSeconds(Math.max(1, resendAfter));
-      setChatStatus(channel === "phone" ? "验证码已发送，请查收短信。" : "验证码已发送，请查收邮箱。");
+      setLoginCodeCooldownByChannel((current) =>
+        setChannelLoginCodeCooldown(current, channel, Math.max(1, resendAfter))
+      );
+      setChatStatus(
+        channel === "phone"
+          ? `验证码已发送至手机 ${loginForm.phone.trim().replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2")}，请查收短信。`
+          : `验证码已发送至邮箱 ${loginForm.email.trim()}，请查收邮件。`
+      );
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
@@ -1143,6 +1166,9 @@ export function App() {
   async function askModel(draftOverride?: QueuedComposerDraft & {
     forceStandaloneChat?: boolean;
     forceProjectThread?: boolean;
+    targetWorkspaceId?: string;
+    targetThreadId?: string;
+    pinnedThreadEnsured?: boolean;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
   }) {
     const draftQuestion = draftOverride?.question ?? question;
@@ -1182,7 +1208,18 @@ export function App() {
       return;
     }
 
-    const composingNewThread = forceStandaloneChat || isComposingNewThread;
+    const pinnedWorkspaceId = String(draftOverride?.targetWorkspaceId || "").trim();
+    const pinnedThreadId = String(draftOverride?.targetThreadId || "").trim();
+    const snapshotHasThread = Boolean(workspaceCatalog
+      .find((workspace) => workspace.id === pinnedWorkspaceId)
+      ?.threads?.some((thread) => thread.id === pinnedThreadId));
+    const appendToBoundThread = codexAutomationSendPlan({
+      boundWorkspaceId: pinnedWorkspaceId,
+      boundThreadId: pinnedThreadId,
+      snapshotHasThread,
+      threadJustEnsured: Boolean(draftOverride?.pinnedThreadEnsured)
+    }).appendToBoundThread;
+    const composingNewThread = appendToBoundThread ? false : (forceStandaloneChat || isComposingNewThread);
     const composingThreadScope = forceStandaloneChat ? "chat" : (forceProjectThread ? "project" : newThreadScope);
     const effectiveChatUsesProject = forceStandaloneChat ? false : (forceProjectThread ? true : chatUsesProject);
     if (forceStandaloneChat) {
@@ -1203,19 +1240,29 @@ export function App() {
       : currentWorkspace;
     let targetThread = forceStandaloneChat ? undefined : currentThread;
     let targetThreadTitle = selectedThread?.title || "新对话";
+    if (appendToBoundThread && pinnedThreadId) {
+      targetWorkspaceId = pinnedWorkspaceId;
+      targetWorkspace = workspaceCatalog.find((workspace) => workspace.id === pinnedWorkspaceId) ?? targetWorkspace;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId)
+        ?? ({ id: pinnedThreadId, title: "自动化任务", scope: "chat" } as NonNullable<typeof targetThread>);
+      targetThreadTitle = targetThread?.title || "自动化任务";
+      setSelectedWorkspaceId(pinnedWorkspaceId);
+      setSelectedThreadId(pinnedThreadId);
+      setIsComposingNewThread(false);
+    }
     if (composingNewThread) {
       if (!targetWorkspaceId) {
-        setErrorMessage("请先选择一个项目，再新建线程。");
+        setErrorMessage("请先选择一个项目，再新建对话。");
         return;
       }
 
-      const titleText = draftQuestion.trim().slice(0, 36) || "新线程";
+      const titleText = draftQuestion.trim().slice(0, 36) || "新对话";
       try {
-        setChatStatus("正在创建新线程...");
+        setChatStatus("正在创建新对话...");
         const nextCatalog = await api.addWorkspaceThread({
           workspaceId: targetWorkspaceId,
           title: titleText,
-          summary: effectiveThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新线程。",
+          summary: effectiveThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新对话。",
           scope: effectiveThreadScope,
           ...(targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID && draftOverride?.brainWorkspaceKey
             ? { brainWorkspaceKey: draftOverride.brainWorkspaceKey }
@@ -1224,7 +1271,7 @@ export function App() {
         const nextWorkspace = nextCatalog.find((workspace) => workspace.id === targetWorkspaceId);
         const newestThread = nextWorkspace?.threads[0];
         if (!newestThread || newestThread.scope !== effectiveThreadScope) {
-          throw new Error("新线程创建后未返回线程记录。");
+          throw new Error("新对话创建后未返回对话记录。");
         }
         targetWorkspaceId = nextWorkspace?.id ?? targetWorkspaceId;
         targetWorkspace = nextWorkspace ?? currentWorkspace;
@@ -1252,7 +1299,7 @@ export function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setErrorMessage(message);
-        setChatStatus("新线程创建失败。");
+        setChatStatus("新对话创建失败。");
         return;
       }
     }
@@ -1303,7 +1350,7 @@ export function App() {
       ].filter(Boolean).join("\n\n");
     }
     if (composerWorkspaceContext && composingNewThread) {
-      toolContext = [toolContext, `当前新线程：${contextThreadTitle}`].filter(Boolean).join("\n\n");
+      toolContext = [toolContext, `当前新对话：${contextThreadTitle}`].filter(Boolean).join("\n\n");
     }
 
     const userMessage: ModelChatMessage = {

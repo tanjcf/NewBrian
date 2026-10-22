@@ -356,14 +356,14 @@ export class CodexStorage {
     migrate(this.state, 5, "repair known mojibake thread labels", `
       UPDATE threads SET title = '默认线程' WHERE title IN ('榛樿绾跨▼', '姒涙顓荤痪璺ㄢ柤');
       UPDATE threads SET title = '未命名线程' WHERE title = '鏈懡鍚嶇嚎绋?';
-      UPDATE threads SET title = '新线程' WHERE title = '鏂扮嚎绋?';
+      UPDATE threads SET title = '新对话' WHERE title = '鏂扮嚎绋?';
       UPDATE threads SET title = '新对话' WHERE title = '鏂板璇?';
       UPDATE threads SET preview = replace(preview, '榛樿绾跨▼', '默认线程');
       UPDATE threads SET preview = replace(preview, '姒涙顓荤痪璺ㄢ柤', '默认线程');
       UPDATE threads SET preview = replace(preview, '鏈懡鍚嶇嚎绋?', '未命名线程');
       UPDATE threads SET preview = replace(preview, '鏆傛棤绾跨▼鎽樿銆?', '暂无线程摘要。');
       UPDATE threads SET preview = replace(preview, '绾跨▼宸插垱寤?', '线程已创建');
-      UPDATE threads SET preview = replace(preview, '鏂扮嚎绋?', '新线程');
+      UPDATE threads SET preview = replace(preview, '鏂扮嚎绋?', '新对话');
       UPDATE threads SET preview = replace(preview, '鏂板璇?', '新对话');
     `);
     migrate(this.state, 6, "persist desktop thread presentation metadata", `

@@ -15,6 +15,8 @@ import {
   isStaleFilePreviewRequest,
   isWorkspaceArtifactPreviewPath,
   patchArtifactTabsForRequest,
+  shouldReuseOpenArtifactPreview,
+  withArtifactPreviewCacheBust,
   withFilePreviewTimeout
 } from "./file-preview-policy.ts";
 
@@ -149,4 +151,25 @@ test("times out hung preview reads", async () => {
     withFilePreviewTimeout(new Promise(() => {}), 20),
     /文件读取超时/
   );
+});
+
+test("chat reopen and refresh do not reuse stale artifact preview tabs", () => {
+  const existing = { tabPath: "Docs/arch.svg", path: "Docs/arch.svg", name: "arch.svg", kind: "image", previewUrl: "newbrain-artifact://preview/ws/Docs/arch.svg", size: 7000 };
+  assert.equal(shouldReuseOpenArtifactPreview({ existing }), false);
+  assert.equal(shouldReuseOpenArtifactPreview({ existing, forceReload: true }), false);
+  assert.equal(shouldReuseOpenArtifactPreview({ existing, reuseCached: true, forceReload: true }), false);
+  assert.equal(shouldReuseOpenArtifactPreview({ existing, reuseCached: true }), true);
+  assert.equal(shouldReuseOpenArtifactPreview({ existing, reuseCached: true, line: 12 }), false);
+});
+
+test("cache-busts stable artifact preview URLs after rewrite", () => {
+  assert.equal(
+    withArtifactPreviewCacheBust("newbrain-artifact://preview/ws/Docs/arch.svg", "7675-1"),
+    "newbrain-artifact://preview/ws/Docs/arch.svg?v=7675-1"
+  );
+  assert.equal(
+    withArtifactPreviewCacheBust("newbrain-artifact://preview/ws/Docs/arch.svg?v=old", "9000-2"),
+    "newbrain-artifact://preview/ws/Docs/arch.svg?v=9000-2"
+  );
+  assert.equal(withArtifactPreviewCacheBust("", 1), "");
 });

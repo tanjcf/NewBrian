@@ -42,7 +42,7 @@ test(`${CASE_ID} a missing automation thread is recreated and the task still run
   const pinned = ui.slice(ui.indexOf("if (pinnedWorkspaceId && pinnedThreadId)"), ui.indexOf("A selected-thread object can be stale"));
   assert.match(pinned, /planAutomationThreadTarget\(/);
   assert.match(pinned, /composingNewThread = true/);
-  assert.match(pinned, /正在新建线程并执行任务/);
+  assert.match(pinned, /正在新建对话并执行任务/);
   assert.doesNotMatch(pinned, /自动化绑定的对话线程不存在/);
   assert.doesNotMatch(pinned, /return "missing-thread"/);
 

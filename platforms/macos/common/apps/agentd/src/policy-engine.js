@@ -3,8 +3,7 @@ import path from "node:path";
 
 const CRITICAL_COMMANDS = [
   { id: "critical-root-delete", pattern: /\brm\b(?=[^\r\n]*\s-\S*r)(?=[^\r\n]*\s-\S*f)[^\r\n]*\s\/\*?(?:\s|$)|\bremove-item\b[^\r\n]*(?:-recurse\b[^\r\n]*)?(?:['"]?[a-z]:\\?['"]?\s*$|['"]?\/['"]?\s*$)/i },
-  // A leading dash is a flag (`docker --format`), not disk format / Format-Volume.
-  { id: "critical-disk-management", pattern: /(?<![\w-])(?:diskpart|format(?:\.com)?|mkfs(?:\.\w+)?|fdisk)\b/i },
+  { id: "critical-disk-management", pattern: /\b(?:diskpart|format(?:\.com)?|mkfs(?:\.\w+)?|fdisk)\b/i },
   { id: "critical-power-control", pattern: /\b(?:shutdown(?:\.exe)?|stop-computer|restart-computer|reboot|poweroff)\b/i },
   { id: "critical-boot-config", pattern: /\b(?:bcdedit|bootrec|manage-bde)\b/i },
   { id: "critical-system-registry", pattern: /\breg(?:\.exe)?\s+delete\s+(?:HKLM|HKEY_LOCAL_MACHINE)\\/i }

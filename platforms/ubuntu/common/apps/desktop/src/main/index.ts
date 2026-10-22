@@ -3534,12 +3534,13 @@ function normalizeThread(input: Partial<WorkspaceThreadRecord>): WorkspaceThread
       .replaceAll("鏆傛棤绾跨▼鎽樿銆?", "暂无线程摘要。")
       .replaceAll("绾跨▼宸插垱寤?", "线程已创建")
       .replaceAll("姒涙顓荤痪璺ㄢ柤", "默认线程")
-      .replaceAll("鏂扮嚎绋?", "新线程")
+      .replaceAll("鏂扮嚎绋?", "新对话")
       .replaceAll("鏂板璇?", "新对话");
   };
+  const repairedTitle = repairKnownMojibakeText(input.title?.trim()) || "未命名线程";
   return {
     id: input.id?.trim() || makeId("thread"),
-    title: repairKnownMojibakeText(input.title?.trim()) || "未命名线程",
+    title: repairedTitle === "新线程" ? "新对话" : repairedTitle,
     summary: repairKnownMojibakeText(input.summary?.trim()) || "暂无线程摘要。",
     scope: input.scope === "chat" ? "chat" : "project",
     ...(isBrainWorkspaceKey(input.brainWorkspaceKey) ? { brainWorkspaceKey: input.brainWorkspaceKey } : {}),

@@ -39,7 +39,7 @@ fn handle(
         "conversation.thread.create" => {
             let fallback_id = request.request_id.clone();
             let id = request.payload.get("thread_id").and_then(Value::as_str).unwrap_or(fallback_id.as_str());
-            let title = request.payload.get("title").and_then(Value::as_str).unwrap_or("新线程");
+            let title = request.payload.get("title").and_then(Value::as_str).unwrap_or("新对话");
             Response::completed(request.request_id, conversations.create(id, &request.project_id, title))
         }
         "conversation.thread.get" => match conversations.get(request.payload.get("thread_id").and_then(Value::as_str).unwrap_or_default()) { Some(v) => Response::completed(request.request_id, v), None => Response::failed(request.request_id, "BRAIN_THREAD_NOT_FOUND") },

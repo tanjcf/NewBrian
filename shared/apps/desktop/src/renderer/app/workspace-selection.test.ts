@@ -219,7 +219,8 @@ test("uses the Claude Code projects-section as the scene-bound left catalog", ()
   assert.match(source, /setNewThreadScope\("project"\)/);
   assert.match(source, /brainWorkspaceKey:\s*selectedBrainWorkspaceKey/);
   assert.match(source, /新建空白项目/);
-  assert.match(source, /暂无聊天/);
+  assert.doesNotMatch(source, /暂无聊天/);
+  assert.match(source, /visibleSidebarTaskEntries\.map\(renderSidebarTaskEntry\)/);
   assert.match(source, /project-hover-actions/);
   assert.match(source, /project-list/);
 });

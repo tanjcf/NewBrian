@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1060" role="img" aria-labelledby="title desc">
+  <title id="title">NewBrain 每轮记忆闭环</title>
+  <desc id="desc">从恢复线程记忆、回合前召回、注入提示词，到成功后按 knowledgeStatus 决定是否写入 MemoryIndex。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.2 L 9 5 L 0 8.8 Z" fill="#1c2430"/>
+    </marker>
+  </defs>
+  <style>
+    .title { font: 600 22px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #17202a; }
+    .legend { font: 400 13px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #52606d; }
+    .h { font: 600 16px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #17202a; }
+    .s { font: 400 13px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #52606d; }
+    .lab { font: 600 13px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1a5fad; }
+    .n { font: 600 12px "Segoe UI", sans-serif; fill: #ffffff; }
+    .box { fill: #ffffff; stroke: #1c2430; stroke-width: 1.5; }
+    .memory { fill: #e8f2fc; stroke: #1a5fad; stroke-width: 1.5; }
+    .line { fill: none; stroke: #1c2430; stroke-width: 1.5; }
+    .sep { fill: none; stroke: #c5ced6; stroke-width: 1; }
+  </style>
+  <text class="title" x="36" y="42">每轮记忆闭环</text>
+  <circle cx="548" cy="36" r="6" fill="#1a5fad"/>
+  <text class="legend" x="562" y="41">记忆操作</text>
+  <g>
+    <rect class="box" x="210" y="68" width="380" height="72" rx="10"/>
+    <circle cx="242" cy="104" r="12" fill="#1c2430"/>
+    <text class="n" x="242" y="108" text-anchor="middle">1</text>
+    <text class="h" x="424" y="97" text-anchor="middle">激活线程</text>
+    <text class="s" x="424" y="120" text-anchor="middle">恢复已有 memories</text>
+  </g>
+  <path class="line" d="M400 140 V176" marker-end="url(#arrow)"/>
+  <g>
+    <rect class="memory" x="210" y="180" width="380" height="72" rx="10"/>
+    <circle cx="242" cy="216" r="12" fill="#1a5fad"/>
+    <text class="n" x="242" y="220" text-anchor="middle">2</text>
+    <text class="h" x="424" y="209" text-anchor="middle">回合前召回</text>
+    <text class="s" x="424" y="232" text-anchor="middle">最多返回 5 条</text>
+  </g>
+  <path class="line" d="M400 252 V288" marker-end="url(#arrow)"/>
+  <g>
+    <rect class="box" x="210" y="292" width="380" height="72" rx="10"/>
+    <circle cx="242" cy="328" r="12" fill="#1c2430"/>
+    <text class="n" x="242" y="332" text-anchor="middle">3</text>
+    <text class="h" x="424" y="321" text-anchor="middle">注入提示词</text>
+    <text class="s" x="424" y="344" text-anchor="middle">进入 system prompt</text>
+  </g>
+  <path class="line" d="M400 364 V400" marker-end="url(#arrow)"/>
+  <g>
+    <rect class="box" x="210" y="404" width="380" height="72" rx="10"/>
+    <circle cx="242" cy="440" r="12" fill="#1c2430"/>
+    <text class="n" x="242" y="444" text-anchor="middle">4</text>
+    <text class="h" x="424" y="433" text-anchor="middle">Agent 执行</text>
+    <text class="s" x="424" y="456" text-anchor="middle">推理、工具与审批</text>
+  </g>
+  <path class="line" d="M400 476 V512" marker-end="url(#arrow)"/>
+  <text class="lab" x="418" y="500">成功且非审批</text>
+  <g>
+    <rect class="memory" x="210" y="516" width="380" height="72" rx="10"/>
+    <circle cx="242" cy="552" r="12" fill="#1a5fad"/>
+    <text class="n" x="242" y="556" text-anchor="middle">5</text>
+    <text class="h" x="424" y="545" text-anchor="middle">写入判定</text>
+    <text class="s" x="424" y="568" text-anchor="middle">knowledgeStatus</text>
+  </g>
+  <path class="line" d="M400 588 V620 H210 V652" marker-end="url(#arrow)"/>
+  <path class="line" d="M400 620 H590 V652" marker-end="url(#arrow)"/>
+  <text class="lab" x="236" y="612">active</text>
+  <text class="lab" x="470" y="612">其他</text>
+  <g>
+    <rect class="memory" x="40" y="656" width="340" height="84" rx="10"/>
+    <text class="h" x="210" y="690" text-anchor="middle">新建线程记忆</text>
+    <text class="s" x="210" y="714" text-anchor="middle">去重并 prune</text>
+  </g>
+  <g>
+    <rect class="box" x="420" y="656" width="340" height="84" rx="10"/>
+    <text class="h" x="590" y="690" text-anchor="middle">不新增记录</text>
+    <text class="s" x="590" y="714" text-anchor="middle">noticed 或 none</text>
+  </g>
+  <path class="line" d="M210 740 V772 H400 V804" marker-end="url(#arrow)"/>
+  <path class="line" d="M590 740 V772 H400"/>
+  <g>
+    <rect class="box" x="160" y="808" width="480" height="72" rx="10"/>
+    <text class="h" x="400" y="837" text-anchor="middle">持久化线程状态</text>
+    <text class="s" x="400" y="860" text-anchor="middle">rollout JSONL 与 stage1</text>
+  </g>
+  <path class="sep" d="M36 916 H764"/>
+  <text class="title" x="36" y="952">并行记忆</text>
+  <g>
+    <rect class="box" x="36" y="972" width="230" height="72" rx="10"/>
+    <text class="h" x="151" y="1000" text-anchor="middle">项目知识</text>
+    <text class="s" x="151" y="1022" text-anchor="middle">UserShadow</text>
+  </g>
+  <g>
+    <rect class="box" x="285" y="972" width="230" height="72" rx="10"/>
+    <text class="h" x="400" y="1000" text-anchor="middle">长期信息</text>
+    <text class="s" x="400" y="1022" text-anchor="middle">memory.md</text>
+  </g>
+  <g>
+    <rect class="box" x="534" y="972" width="230" height="72" rx="10"/>
+    <text class="h" x="649" y="1000" text-anchor="middle">用户知识</text>
+    <text class="s" x="649" y="1022" text-anchor="middle">每轮直接注入</text>
+  </g>
+</svg>

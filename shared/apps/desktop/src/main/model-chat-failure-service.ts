@@ -2,6 +2,7 @@ import type { WorkspaceCatalogItem, WorkspaceThreadRecord } from "@codex-forge/p
 import type { ThreadStateFile } from "./thread-state-factory.js";
 import type { ThreadEventRecord } from "./thread-event-policy.js";
 import {
+  isModelGatewayTimeoutError,
   isSubscriptionInactiveError,
   toUserFacingModelFailureMessage
 } from "../shared/model-user-facing-error.ts";
@@ -81,6 +82,8 @@ export class ModelChatFailureService {
       ? "subscription_inactive"
       : httpStatus === 403
       ? "model_forbidden"
+      : isModelGatewayTimeoutError(input.error)
+      ? "gateway_timeout"
       : /Agent loop stalled|no tool progress across/i.test(rawFailureMessage)
         ? "agent_loop_stalled"
       : input.error instanceof Error && "code" in input.error

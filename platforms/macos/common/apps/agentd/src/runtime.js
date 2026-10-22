@@ -488,11 +488,11 @@ export class LocalAgentRuntime {
   }
 
   async rememberExchangeWithShadow(input) {
+    const memory = this.rememberExchange(input);
     const shadow = await this.userShadow.absorbExchange({
       ...input,
       threadDeliveryPreferences: this.threadDeliveryPreferences
     });
-    const memory = shadow.knowledgeStatus === "active" ? this.rememberExchange(input) : null;
     if (shadow.threadDeliveryPreferences) {
       this.threadDeliveryPreferences = parseDeliveryPreferences(shadow.threadDeliveryPreferences);
       this.sessionMachine.snapshot.deliveryPreferences = clone(this.threadDeliveryPreferences);

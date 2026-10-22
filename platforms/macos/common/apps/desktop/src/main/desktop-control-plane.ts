@@ -48,9 +48,9 @@ export function isTestEnvironmentGatewayBaseUrl(value: unknown): boolean {
   const raw = String(value ?? "").trim();
   if (!raw) return false;
   try {
-    return new URL(raw).hostname.toLowerCase() === "120.48.151.202";
+    return new URL(raw).hostname.toLowerCase() === "203.0.113.10";
   } catch {
-    return raw.includes("120.48.151.202");
+    return raw.includes("203.0.113.10");
   }
 }
 

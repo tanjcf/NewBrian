@@ -51,6 +51,7 @@ test(`${CASE_ID} keeps the send click on the button and out of the marking drag`
   const sendSource = modules.slice(sendStart, sendEnd);
   assert.match(sendSource, /planDocumentMarkSend\(/);
   assert.match(sendSource, /action === "chat"/);
+  assert.match(sendSource, /resolveAnnotatedMarkImages/);
   assert.match(sendSource, /submitComposerRequest\(\{[\s\S]*question: instruction[\s\S]*keepComposer:\s*true/);
   assert.doesNotMatch(sendSource, /if \(!activeBrainFile \|\| !selectedBrainProjectId \|\| !documentAnnotationCandidate \|\| !documentAnnotationInstruction\.trim\(\)\) return;/);
 });

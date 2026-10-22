@@ -810,13 +810,13 @@ declare global {
 }
 
 export const featureItems: FeatureItem[] = [
-  { id: "new-chat", label: "新建对话", icon: "+", description: "创建新线程或从当前线程分叉上下文。" },
+  { id: "new-chat", label: "新建对话", icon: "+", description: "创建新对话或从当前对话分叉上下文。" },
   { id: "experts", label: "专家市场", icon: "◎", description: "浏览并安装专家包；召唤仅由全局/项目 Skill 自行 expert.summon。" },
   { id: "extensions", label: "扩展", icon: "◇", description: "管理 GitHub、Jira、Slack 等外部服务集成。" },
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
   { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" },
-  { id: "mcp", label: "软件联动", icon: "↔", description: "开箱控制本机窗口；MCP 仅作高级扩展。" }
+  { id: "mcp", label: "软件联动", icon: "↔", description: "键鼠控制本机窗口；MCP 仅作高级扩展。" }
 ];
 
 export const settingsFeatureItem: FeatureItem = {

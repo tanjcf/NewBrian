@@ -1,7 +1,6 @@
 import type { AnnotationMarkingTool, BrainAnnotationDto, BrainChangeSetDto, BrainChangeSetPreviewResult, BrainFileDto } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import { currentDocumentAnnotations } from "./document-annotation-policy";
-import { resolveAnnotationSnapshotPreview } from "./document-annotation-snapshot";
 import { DocumentMarkingToolbar } from "./DocumentMarkingToolbar";
 
 export function DocumentAnnotationLayer(props: {
@@ -43,24 +42,6 @@ export function DocumentAnnotationLayer(props: {
         />
         <span>{statusHint}</span>
       </div>
-      {current.length ? (
-        <div className="document-annotation-list">
-          {current.map((annotation, index) => {
-            const snapshotUrl = resolveAnnotationSnapshotPreview(annotation.geometry);
-            return (
-            <article key={annotation.id} data-status={annotation.status.toLowerCase()}>
-              {snapshotUrl ? (
-                <div className="document-annotation-snapshot-thumb" aria-hidden="true">
-                  <img src={snapshotUrl} alt="" />
-                </div>
-              ) : null}
-              <i>{annotation.geometry?.displayIndex || index + 1}</i>
-              <span><strong>{annotation.instruction}</strong><small>{annotation.selectedText?.trim() || "标记区域"}</small></span>
-            </article>
-            );
-          })}
-        </div>
-      ) : null}
       {props.changeSets.length ? (
         <div className="document-change-set-list" aria-label="修改方案">
           <strong>修改方案</strong>

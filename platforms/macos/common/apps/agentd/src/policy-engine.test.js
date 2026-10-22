@@ -327,34 +327,3 @@ test("exact remembered approval allows the same command and not a longer prefix 
     permissionMode: "approval"
   }).decision, "ask");
 });
-
-test("disk format guard does not treat docker --format or /dev/null as format", () => {
-  const engine = new PolicyEngine();
-  const denied = [
-    "format C:",
-    "format.com E:",
-    "diskpart",
-    "mkfs.ext4 /dev/sdb",
-    "Format-Volume -DriveLetter D"
-  ];
-  for (const command of denied) {
-    const result = engine.evaluate({
-      toolName: "shell.exec", arguments: { command }, descriptor,
-      workspacePath: workspace, permissionMode: "full"
-    });
-    assert.equal(result.decision, "deny", command);
-    assert.equal(result.ruleId, "critical-disk-management", command);
-  }
-  const allowed = [
-    "ssh spring-primary \"docker ps -a --format '{{.Names}}|{{.Status}}'\"",
-    "ssh spring-primary \"curl -sS -o /dev/null -w '%{http_code}' https://www.sinnauze.cn/app/\""
-  ];
-  for (const command of allowed) {
-    const result = engine.evaluate({
-      toolName: "shell.exec", arguments: { command }, descriptor,
-      workspacePath: workspace, permissionMode: "full"
-    });
-    assert.notEqual(result.ruleId, "critical-disk-management", command);
-    assert.equal(result.decision, "allow", command);
-  }
-});

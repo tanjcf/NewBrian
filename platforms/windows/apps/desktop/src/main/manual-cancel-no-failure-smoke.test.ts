@@ -48,6 +48,11 @@ test(`${CASE_ID} treats abort and manual stop as normal cancellation`, () => {
   );
   assert.equal(isUserCancelledModelError("无法连接模型服务"), false);
   assert.equal(isUserCancelledModelError("模型请求过于频繁，请稍后再试。"), false);
+  assert.equal(
+    isUserCancelledModelError("模型网关请求失败（HTTP 524）"),
+    false,
+    "gateway timeout must remain a visible failure, not a cancel"
+  );
 
   const cancelled = projectModelChatCancellation({
     content: "",

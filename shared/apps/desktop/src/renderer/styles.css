@@ -7536,10 +7536,23 @@ textarea {
 }
 
 .markdown-message {
+  position: relative;
   max-width: min(860px, 100%);
   color: #20242b;
   font-size: 14px;
   line-height: 1.68;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.markdown-message button,
+.markdown-message input,
+.markdown-message .markdown-view-toolbar,
+.markdown-message .markdown-code-toolbar {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
 
 /* Windows-only: Chromium scroll anchoring fights stick-to-bottom while streamed
@@ -7725,6 +7738,12 @@ textarea {
   bottom: 16px;
   display: flex;
   gap: 14px;
+}
+
+/* Author `display:flex` overrides the UA `[hidden] { display:none }` rule. */
+.message-actions[hidden],
+.answer-group.streaming .message-actions {
+  display: none !important;
 }
 
 .message-actions button {
@@ -12904,8 +12923,12 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 .markdown-code-block .diff-hunk { background: #eef4ff; color: #3538cd; }
 
 .markdown-view-toolbar {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  z-index: 2;
   display: flex;
-  height: 0;
+  height: auto;
   justify-content: flex-end;
   opacity: 0;
   pointer-events: none;
@@ -15776,11 +15799,13 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
   width: 100%;
   max-width: 960px;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
   color: #171a1f;
   font-size: 14px;
   line-height: 1.65;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .markdown-message p,
@@ -15789,9 +15814,11 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 .markdown-message a,
 .markdown-message :not(pre) > code {
   max-width: 100%;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
   white-space: normal;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .markdown-message ul,
@@ -18061,22 +18088,25 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 }
 
 .new-chat-task .new-chat-composer-slot .composer-tools {
-  min-height: 42px !important;
-  gap: 7px !important;
-  padding: 0 8px 7px 10px !important;
+  min-height: 36px !important;
+  gap: 5px !important;
+  padding: 5px 10px 3px !important;
 }
 
 .new-chat-task .new-chat-project-row {
   width: min(728px, 100%) !important;
-  height: 42px !important;
+  height: auto !important;
+  min-height: 34px !important;
   margin: -1px auto 0 !important;
   justify-content: flex-start !important;
   border: 1px solid #e1e3e7 !important;
   border-top: 0 !important;
   border-radius: 0 0 18px 18px !important;
-  background: #f4f4f4 !important;
+  background: #f7f8fa !important;
   box-shadow: 0 18px 34px rgba(24, 31, 42, 0.07) !important;
-  padding: 0 14px !important;
+  padding: 2px 10px 8px !important;
+  gap: 2px 4px !important;
+  flex-wrap: wrap !important;
 }
 
 .new-chat-task .new-chat-project-row.chat-scope {
@@ -18084,33 +18114,41 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 }
 
 .new-chat-task .new-chat-project-row button {
-  min-height: 30px !important;
-  gap: 7px !important;
-  color: #8d97a3 !important;
+  min-height: 28px !important;
+  gap: 5px !important;
+  border-radius: 7px !important;
+  color: #6b7280 !important;
   font-size: 12px !important;
   padding: 0 6px !important;
 }
 
+.new-chat-task .new-chat-project-row button:hover {
+  background: #eef0f3 !important;
+  color: #374151 !important;
+}
+
 .new-chat-task .new-chat-project-row button svg {
-  width: 15px !important;
-  height: 15px !important;
+  width: 14px !important;
+  height: 14px !important;
 }
 
 .new-chat-task .new-chat-project-row strong {
   font-size: 12px !important;
-  font-weight: 600 !important;
+  font-weight: 500 !important;
 }
 
 .new-chat-task .new-chat-project-row em {
-  font-size: 14px !important;
+  font-size: 12px !important;
+  opacity: 0.72;
 }
 
-/* Fuse composer + project/mode/branch strip into one card (fixes floating gray bar). */
+/* One cohesive composer card: action chips + project/mode/branch share a single footer band. */
 .new-chat-task .new-chat-composer-shell {
   width: min(728px, 100%) !important;
   margin: 0 auto !important;
   display: flex !important;
   flex-direction: column !important;
+  border: 1px solid #e1e3e7 !important;
   border-radius: 18px !important;
   background: #fff !important;
   box-shadow: 0 16px 34px rgba(24, 31, 42, 0.09) !important;
@@ -18128,8 +18166,7 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
   width: 100% !important;
   max-width: none !important;
   margin: 0 !important;
-  border: 1px solid #e1e3e7 !important;
-  border-bottom-color: transparent !important;
+  border: 0 !important;
   border-radius: 17px 17px 0 0 !important;
   box-shadow: none !important;
   background: #fff !important;
@@ -18137,20 +18174,37 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 
 .new-chat-task .new-chat-composer-shell .new-chat-composer-slot .composer-card::before,
 .new-chat-task .new-chat-composer-shell .composer-card::before {
-  border-radius: 18px 18px 0 0 !important;
-  border-bottom-color: transparent !important;
+  display: none !important;
+}
+
+.new-chat-task .new-chat-composer-shell .composer-tools,
+.new-chat-task .new-chat-composer-shell .new-chat-composer-slot .composer-tools,
+.new-chat-task .new-chat-composer-shell .new-chat-composer .composer-tools {
+  background: #f7f8fa !important;
+  border-top: 1px solid #eceef1 !important;
+  min-height: 36px !important;
+  height: auto !important;
+  gap: 5px !important;
+  padding: 5px 10px 2px !important;
+}
+
+.new-chat-task .new-chat-composer-shell .composer-modern-controls {
+  gap: 4px !important;
 }
 
 .new-chat-task .new-chat-composer-shell .new-chat-project-row {
   width: 100% !important;
-  height: 42px !important;
+  height: auto !important;
+  min-height: 32px !important;
   margin: 0 !important;
-  border: 1px solid #e1e3e7 !important;
-  border-top: 1px solid #eceef1 !important;
-  border-radius: 0 0 18px 18px !important;
-  background: #f4f4f4 !important;
+  border: 0 !important;
+  border-top: 0 !important;
+  border-radius: 0 0 17px 17px !important;
+  background: #f7f8fa !important;
   box-shadow: none !important;
-  padding: 0 14px !important;
+  padding: 0 10px 7px !important;
+  gap: 2px 4px !important;
+  flex-wrap: wrap !important;
 }
 
 .new-chat-task .new-chat-integrations {
@@ -19397,6 +19451,118 @@ html[data-theme="dark"] .delivery-preference-chip__scope {
 .workspace-frame.artifact-workbench .task-scroll {
   padding-right: clamp(18px, 2vw, 30px);
   padding-left: clamp(18px, 2vw, 30px);
+}
+
+/* Narrow chat column in document/preview workbench: re-balance composer type and toolbar. */
+.workspace-frame.artifact-workbench .composer-area:not(.new-chat-composer),
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-area:not(.new-chat-composer),
+.workspace-frame:has(> .brain-resource-panel.center) .composer-area:not(.new-chat-composer) {
+  padding: 0 12px 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 36%);
+}
+
+.workspace-frame.artifact-workbench .composer-card,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-card,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-card {
+  max-width: none;
+  margin: 0;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06);
+}
+
+.workspace-frame.artifact-workbench .composer-card:not(:has(.composer-context-chips)):not(:has(.composer-image-strip)):not(:has(> .delegated-agent-strip)),
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-card:not(:has(.composer-context-chips)):not(:has(.composer-image-strip)):not(:has(> .delegated-agent-strip)),
+.workspace-frame:has(> .brain-resource-panel.center) .composer-card:not(:has(.composer-context-chips)):not(:has(.composer-image-strip)):not(:has(> .delegated-agent-strip)) {
+  height: 108px;
+  min-height: 108px;
+  grid-template-rows: 62px 46px;
+}
+
+.workspace-frame.artifact-workbench .composer-card textarea,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-card textarea,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-card textarea,
+.workspace-frame.artifact-workbench .brain-chat-composer-slot .composer-area.brain-chat-composer .composer-card textarea,
+.workspace-frame.preview-centered:has(> .preview-center-module) .brain-chat-composer-slot .composer-area.brain-chat-composer .composer-card textarea {
+  padding: 14px 14px 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+}
+
+.workspace-frame.artifact-workbench .composer-card textarea::placeholder,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-card textarea::placeholder,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-card textarea::placeholder {
+  color: #8b929c;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+.workspace-frame.artifact-workbench .composer-tools,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-tools,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-tools,
+.workspace-frame.artifact-workbench .new-chat-composer .composer-tools,
+.workspace-frame.preview-centered:has(> .preview-center-module) .new-chat-composer .composer-tools {
+  height: 46px;
+  min-height: 46px;
+  gap: 4px;
+  padding: 0 8px 8px 10px;
+}
+
+.workspace-frame.artifact-workbench .composer-modern-controls,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls,
+.workspace-frame.artifact-workbench .brain-chat-composer-slot .composer-area.brain-chat-composer .composer-modern-controls,
+.workspace-frame.preview-centered:has(> .preview-center-module) .brain-chat-composer-slot .composer-area.brain-chat-composer .composer-modern-controls {
+  flex-wrap: nowrap;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspace-frame.artifact-workbench .composer-modern-controls::-webkit-scrollbar,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls::-webkit-scrollbar,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-frame.artifact-workbench .composer-modern-controls button,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls button,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls button {
+  min-height: 26px;
+  font-size: 11.5px;
+  padding: 0 5px;
+}
+
+.workspace-frame.artifact-workbench .composer-modern-controls .composer-permission-button,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls .composer-permission-button,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls .composer-permission-button {
+  gap: 3px;
+  padding: 0 6px;
+}
+
+.workspace-frame.artifact-workbench .composer-modern-controls .composer-skill-button > span:not(.composer-builtin-plugin-icon),
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls .composer-skill-button > span:not(.composer-builtin-plugin-icon),
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls .composer-skill-button > span:not(.composer-builtin-plugin-icon),
+.workspace-frame.artifact-workbench .composer-modern-controls .composer-permission-button > span,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls .composer-permission-button > span,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls .composer-permission-button > span {
+  max-width: 4.8em;
+  font-size: 11.5px;
+}
+
+.workspace-frame.artifact-workbench .composer-modern-controls .composer-reasoning-button,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-modern-controls .composer-reasoning-button,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-modern-controls .composer-reasoning-button {
+  max-width: 7.5em;
+  overflow: hidden;
+}
+
+.workspace-frame.artifact-workbench .composer-tools .send-btn,
+.workspace-frame.preview-centered:has(> .preview-center-module) .composer-tools .send-btn,
+.workspace-frame:has(> .brain-resource-panel.center) .composer-tools .send-btn {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
 }
 
 .workspace-frame.artifact-workbench .preview-header {

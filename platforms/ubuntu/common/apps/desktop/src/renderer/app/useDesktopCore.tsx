@@ -10,11 +10,15 @@ import {
   scaleAppearanceFontSizes,
   shouldHandleFontZoomWheel
 } from "./font-zoom-policy";
+import {
+  hasActiveLoginCodeCooldown,
+  tickLoginCodeCooldowns
+} from "./login-code-cooldown";
 
 export function useDesktopCore(ctx: any) {
 const setPreviewMode = ctx.setPreviewMode;
 const setPreviewPlacement = ctx.setPreviewPlacement;
-const { api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds, activeThreadRequestIds = {}, selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu, bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownSeconds, activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath, newThreadTitle, newThreadSummary, isComposingNewThread, forkThreadTitle, editingThreadTitle, editingThreadSummary, skillDraft, pluginDraft, automationDraft, editingFeatureId, environmentEnvText, authStatus, loginForm, isSubmittingLogin, isSendingLoginCode, question, selectedComposerTools, chatMessages, isAskingModel, latestAssistantMessage, shouldAutoOpenPreview, setErrorMessage, setChatStatus, setWorkspaceCatalog, setSelectedWorkspaceId, setSelectedThreadId, setExpandedWorkspaceIds, setExpandedThreadListWorkspaceIds, setArchivedThreadIds, setUnreadThreadIds, setPinnedThreadIds, setThreadContextMenu, setSnapshot, setChatMessages, updateThreadMessages, setExpandedPaths, setEditingFeatureId, setSkillDraft, setPluginDraft, setAutomationDraft, setSearchResults, setBootstrapState, setModelConfig, setDesktopPreferences, setShellCommand, setEnvironmentEnvText, setFeatureConfig, setMcpServers, setMcpDiscoveredTools, setSystemTools, setAuthStatus, setDesktopBootstrapStatus, setLoginForm, setIsRetryingCondaBootstrap, setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary, setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary, setIsComposingNewThread, setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin, setIsSendingLoginCode, setActiveSettingsSection, initialDraft, initialMcpServer, initialDesktopAuthStatus, initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad, formatEnvText, parseEnvText, buildWorkspaceTree, collectDirectoryKeys, coerceValueBySchema, settingsFeatureItem } = ctx;
+const { api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds, activeThreadRequestIds = {}, selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu, bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownByChannel, activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath, newThreadTitle, newThreadSummary, isComposingNewThread, forkThreadTitle, editingThreadTitle, editingThreadSummary, skillDraft, pluginDraft, automationDraft, editingFeatureId, environmentEnvText, authStatus, loginForm, isSubmittingLogin, isSendingLoginCode, question, selectedComposerTools, chatMessages, isAskingModel, latestAssistantMessage, shouldAutoOpenPreview, setErrorMessage, setChatStatus, setWorkspaceCatalog, setSelectedWorkspaceId, setSelectedThreadId, setExpandedWorkspaceIds, setExpandedThreadListWorkspaceIds, setArchivedThreadIds, setUnreadThreadIds, setPinnedThreadIds, setThreadContextMenu, setSnapshot, setChatMessages, updateThreadMessages, setExpandedPaths, setEditingFeatureId, setSkillDraft, setPluginDraft, setAutomationDraft, setSearchResults, setBootstrapState, setModelConfig, setDesktopPreferences, setShellCommand, setEnvironmentEnvText, setFeatureConfig, setMcpServers, setMcpDiscoveredTools, setSystemTools, setAuthStatus, setDesktopBootstrapStatus, setLoginForm, setIsRetryingCondaBootstrap, setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary, setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary, setIsComposingNewThread, setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownByChannel, setIsSubmittingLogin, setIsSendingLoginCode, setActiveSettingsSection, initialDraft, initialMcpServer, initialDesktopAuthStatus, initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad, formatEnvText, parseEnvText, buildWorkspaceTree, collectDirectoryKeys, coerceValueBySchema, settingsFeatureItem } = ctx;
 const window = globalThis.window;
 const document = window?.document ?? globalThis.document;
 const navigator = window?.navigator ?? globalThis.navigator;
@@ -814,16 +818,16 @@ useEffect(() => {
 }, [api, searchQuery]);
 
 useEffect(() => {
-  if (loginCodeCooldownSeconds <= 0) {
+  if (!hasActiveLoginCodeCooldown(loginCodeCooldownByChannel)) {
     return;
   }
 
   const timer = window.setTimeout(() => {
-    setLoginCodeCooldownSeconds((current) => (current > 0 ? current - 1 : 0));
+    setLoginCodeCooldownByChannel((current) => tickLoginCodeCooldowns(current));
   }, 1000);
 
   return () => window.clearTimeout(timer);
-}, [loginCodeCooldownSeconds]);
+}, [loginCodeCooldownByChannel]);
 
 useEffect(() => {
   applyVisualPreferences(desktopPreferences);
@@ -1059,8 +1063,8 @@ async function createThread() {
     return;
   }
 
-  const titleText = newThreadTitle.trim() || "新线程";
-  const summaryText = newThreadSummary.trim() || "从当前项目空间创建的新上下文线程。";
+  const titleText = newThreadTitle.trim() || "新对话";
+  const summaryText = newThreadSummary.trim() || "从当前项目空间创建的新对话。";
 
   try {
     const nextCatalog = await api.addWorkspaceThread({

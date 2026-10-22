@@ -30,7 +30,7 @@ test("synchronizes the authenticated v1 control plane without persisting credent
   };
 
   const state = await syncDesktopControlPlane({
-    gatewayOrigin: "http://120.48.151.202:8790/v1",
+    gatewayOrigin: "http://203.0.113.10:8790/v1",
     accessToken: "secret-token",
     clientVersion: "0.1.0",
     fetchImpl,
@@ -39,7 +39,7 @@ test("synchronizes the authenticated v1 control plane without persisting credent
 
   assert.equal(requested.length, 3);
   assert.ok(requested.every((request) => request.authorization === "Bearer secret-token"));
-  assert.equal(state.gateway_origin, "http://120.48.151.202:8790");
+  assert.equal(state.gateway_origin, "http://203.0.113.10:8790");
   assert.equal(state.protocol_version, "1.0");
   assert.equal(JSON.stringify(state).includes("secret-token"), false);
 });
@@ -52,7 +52,7 @@ test("accepts the current pre-1.0 desktop release against a 1.0.0 server floor",
   }), { status: 200 });
 
   const state = await syncDesktopControlPlane({
-    gatewayOrigin: "http://120.48.151.202:8790",
+    gatewayOrigin: "http://203.0.113.10:8790",
     accessToken: "token",
     clientVersion: "0.1.9",
     fetchImpl
@@ -70,7 +70,7 @@ test("rejects an incompatible minimum client version", async () => {
 
   await assert.rejects(
     syncDesktopControlPlane({
-      gatewayOrigin: "http://120.48.151.202:8790",
+      gatewayOrigin: "http://203.0.113.10:8790",
       accessToken: "token",
       clientVersion: "0.1.0",
       fetchImpl
