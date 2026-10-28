@@ -1,13 +1,15 @@
 import type { MarketDataQuery, PortfolioSnapshot, QuantBar, SimulatedFill, SimulatedOrder, SkillPerformance } from "@codex-forge/protocol/quant-types";
 import type { BrainTaskRecord } from "./brain-workspace-storage.ts";
 import { QuantSkillSignalError, quantSkillSignal } from "./quant-skill-signal.ts";
+import { validateQuantStrategyRules, type QuantStrategyRules } from "./quant-strategy-rules.ts";
 
 interface StrategyTaskConfig {
   exchange: "SSE" | "SZSE" | "BSE";
   tradingDate: string;
   symbol: string;
   quantity: number;
-  strategyId: "trend-following" | "mean-reversion";
+  strategyId: string;
+  rules?: QuantStrategyRules;
   simulationOnly: true;
 }
 
@@ -41,11 +43,16 @@ function parseConfig(value: string): StrategyTaskConfig {
     || typeof config.tradingDate !== "string" || Number.isNaN(Date.parse(config.tradingDate))
     || typeof config.symbol !== "string" || !config.symbol.trim()
     || !Number.isInteger(config.quantity) || Number(config.quantity) <= 0
-    || (config.strategyId !== "trend-following" && config.strategyId !== "mean-reversion")
+    || typeof config.strategyId !== "string" || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(config.strategyId)
     || config.simulationOnly !== true) {
     throw new QuantStrategyTaskError("QUANT_TASK_CONFIG_INVALID", "Strategy task configuration is invalid");
   }
-  return { exchange: config.exchange as StrategyTaskConfig["exchange"], tradingDate: config.tradingDate, symbol: config.symbol.trim(), quantity: Number(config.quantity), strategyId: config.strategyId, simulationOnly: true };
+  const strategyId = config.strategyId;
+  const rules = config.rules === undefined ? undefined : validateQuantStrategyRules(config.rules);
+  if (strategyId !== "trend-following" && strategyId !== "mean-reversion" && !rules) {
+    throw new QuantStrategyTaskError("QUANT_TASK_CONFIG_INVALID", "Custom strategy task requires declarative rules");
+  }
+  return { exchange: config.exchange as StrategyTaskConfig["exchange"], tradingDate: config.tradingDate, symbol: config.symbol.trim(), quantity: Number(config.quantity), strategyId, ...(rules ? { rules } : {}), simulationOnly: true };
 }
 
 function startDate(tradingDate: string): string {
@@ -84,9 +91,9 @@ export class QuantStrategyTaskRunner {
         startDate: startDate(config.tradingDate), endDate: config.tradingDate
       })).sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
       if (this.options.store.getTask(ownerId, task.id).status === "CANCELLED") return;
-      let signal: "buy" | "sell";
+      let signal: "buy" | "sell" | "hold";
       try {
-        signal = quantSkillSignal(config.strategyId, bars);
+        signal = quantSkillSignal(config.strategyId, bars, config.rules);
       } catch (error) {
         if (error instanceof QuantSkillSignalError) throw new QuantStrategyTaskError(error.code, error.message);
         throw error;

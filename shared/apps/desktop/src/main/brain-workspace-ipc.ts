@@ -27,6 +27,7 @@ import {
 import type { BrainFlowDefinition } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import type { QuantStrategyRules } from "./quant-strategy-rules.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
 import { createDocumentRevisionProposal, syncDocumentRevisionTask } from "./document-revision-task.js";
 import { inspectGameProject } from "./game-project-inspector.js";
@@ -1767,7 +1768,9 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       const symbol = requireString(input.symbol, "symbol");
       const requestedStrategy = typeof input.strategyId === "string" ? input.strategyId.trim() : "";
       const strategyId = requestedStrategy || (skillId === "trend-following" || skillId === "mean-reversion" ? skillId : "");
-      if (strategyId && strategyId !== "trend-following" && strategyId !== "mean-reversion") {
+      const rules = input.rules as QuantStrategyRules | undefined;
+      const builtin = strategyId === "trend-following" || strategyId === "mean-reversion";
+      if (strategyId && !builtin && !rules) {
         throw new TypeError("strategyId is invalid");
       }
       if (strategyId) {
@@ -1778,7 +1781,8 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
             skillId,
             title,
             symbol,
-            strategyId
+            strategyId,
+            ...(rules ? { rules } : {})
           });
         }
       }
@@ -1788,7 +1792,8 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
         quantity,
         query: query as any,
         reset: input.reset !== false,
-        ...(strategyId ? { strategyId } : {})
+        ...(strategyId ? { strategyId } : {}),
+        ...(rules ? { rules } : {})
       });
     });
     ipcMain.handle(brainWorkspaceIpcChannels.quantSkillActivity, async (_event, value: unknown) => {
@@ -1811,7 +1816,9 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       if (!Number.isInteger(quantity) || quantity <= 0) throw new TypeError("quantity must be a positive integer");
       return dependencies.storage.createQuantStrategySchedule({
         ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"),
-        skillId: requireString(input.skillId, "skillId"), exchange, runAt: requireString(input.runAt, "runAt"),
+        skillId: requireString(input.skillId, "skillId"), strategyId: typeof input.strategyId === "string" ? input.strategyId : undefined,
+        rules: input.rules as import("./quant-strategy-rules.ts").QuantStrategyRules | undefined,
+        exchange, runAt: requireString(input.runAt, "runAt"),
         symbol: requireString(input.symbol, "symbol"), quantity
       });
     });

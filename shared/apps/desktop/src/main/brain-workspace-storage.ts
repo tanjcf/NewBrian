@@ -12,6 +12,7 @@ import {
 } from "@codex-forge/protocol";
 import { validateDocumentAnchor, type DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { ChinaExchange, QuantStrategyExecution, QuantStrategyRun, QuantStrategySchedule, QuantStrategyScheduleStore } from "./quant-strategy-scheduler.ts";
+import { validateQuantStrategyRules, type QuantStrategyRules } from "./quant-strategy-rules.ts";
 import type { BrainVideoClip, BrainVideoTimeline } from "@codex-forge/protocol";
 import type { BrainMusicClip, BrainMusicTimeline } from "@codex-forge/protocol/music-types";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
@@ -529,6 +530,10 @@ ALTER TABLE brain_quant_strategy_schedule ADD COLUMN strategy_id TEXT NOT NULL D
   CHECK(strategy_id IN ('trend-following', 'mean-reversion'));
 `; }
 
+function migrationTwentySql() { return `
+ALTER TABLE brain_quant_strategy_schedule ADD COLUMN rules_json TEXT NOT NULL DEFAULT '';
+`; }
+
 function mapWorkspace(row: Record<string, unknown>): BrainWorkspaceRecord {
   return {
     workspaceKey: requireWorkspaceKey(String(row.workspace_key)),
@@ -678,6 +683,7 @@ export class BrainWorkspaceStorage {
       applyMigration(this.database, 17, "Track artifact source workspace for cross-scene lineage", migrationSeventeenSql());
       applyMigration(this.database, 18, "Persist managed and discovered engine runtimes", migrationEighteenSql());
       applyMigration(this.database, 19, "Separate quantitative portfolio Skill identity from signal strategy", migrationNineteenSql());
+      applyMigration(this.database, 20, "Persist declarative rules for quant automations", migrationTwentySql());
       this.seedWorkspaces();
     } catch (error) {
       this.database.close();
@@ -1884,35 +1890,43 @@ export class BrainWorkspaceStorage {
     `).run(normalizedProjectId, normalizedState, nowIso());
   }
 
-  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; strategyId?: "trend-following" | "mean-reversion"; exchange: ChinaExchange; runAt: string; symbol: string; quantity: number }): QuantStrategySchedule {
+  createQuantStrategySchedule(input: { ownerId: string; projectId: string; skillId: string; strategyId?: string; rules?: QuantStrategyRules; exchange: ChinaExchange; runAt: string; symbol: string; quantity: number }): QuantStrategySchedule {
     this.getProject(input.ownerId, input.projectId);
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(input.runAt)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "runAt must use HH:mm");
     if (!(["SSE", "SZSE", "BSE"] as const).includes(input.exchange)) throw new BrainStorageError("BRAIN_INPUT_INVALID", "exchange is invalid");
     const skillId = requireText(input.skillId, "skillId");
-    const strategyId = input.strategyId ?? (skillId === "mean-reversion" ? "mean-reversion" : "trend-following");
     const symbol = requireText(input.symbol, "symbol");
     if (!Number.isInteger(input.quantity) || input.quantity <= 0) throw new BrainStorageError("BRAIN_INPUT_INVALID", "quantity must be a positive integer");
     const existing = this.database.prepare(`SELECT * FROM brain_quant_strategy_schedule
       WHERE project_id = ? AND skill_id = ? AND exchange = ? AND run_at = ?`)
       .get(input.projectId, skillId, input.exchange, input.runAt) as Record<string, unknown> | undefined;
+    const savedRules = !input.rules && typeof existing?.rules_json === "string" && existing.rules_json
+      ? JSON.parse(existing.rules_json) as unknown : input.rules;
+    const rules = savedRules ? validateQuantStrategyRules(savedRules) : undefined;
+    const requestedStrategyId = input.strategyId ?? (typeof existing?.strategy_id === "string" ? existing.strategy_id : undefined)
+      ?? (skillId === "mean-reversion" ? "mean-reversion" : "trend-following");
+    const strategyId = requestedStrategyId === "mean-reversion" ? "mean-reversion" : "trend-following";
+    if (input.strategyId && input.strategyId !== "trend-following" && input.strategyId !== "mean-reversion" && !rules) {
+      throw new BrainStorageError("BRAIN_INPUT_INVALID", "Custom strategy automation requires declarative rules");
+    }
     if (existing) {
-      this.database.prepare("UPDATE brain_quant_strategy_schedule SET symbol = ?, quantity = ?, strategy_id = ?, updated_at = ? WHERE id = ?")
-        .run(symbol, input.quantity, strategyId, nowIso(), String(existing.id));
+      this.database.prepare("UPDATE brain_quant_strategy_schedule SET symbol = ?, quantity = ?, strategy_id = ?, rules_json = ?, updated_at = ? WHERE id = ?")
+        .run(symbol, input.quantity, strategyId, rules ? JSON.stringify(rules) : "", nowIso(), String(existing.id));
       return {
         id: String(existing.id), projectId: String(existing.project_id), skillId: String(existing.skill_id), strategyId,
         exchange: String(existing.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(existing.run_at),
-        enabled: Number(existing.enabled) === 1, symbol, quantity: input.quantity
+        enabled: Number(existing.enabled) === 1, symbol, quantity: input.quantity, ...(rules ? { rules } : {})
       };
     }
     const timestamp = nowIso();
     const record: QuantStrategySchedule = {
       id: `quant_schedule_${randomUUID()}`, projectId: input.projectId, skillId, strategyId,
-      exchange: input.exchange, timezone: "Asia/Shanghai", runAt: input.runAt, enabled: true, symbol, quantity: input.quantity
+      exchange: input.exchange, timezone: "Asia/Shanghai", runAt: input.runAt, enabled: true, symbol, quantity: input.quantity, ...(rules ? { rules } : {})
     };
     this.database.prepare(`
-      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, strategy_id, exchange, timezone, run_at, enabled, symbol, quantity, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-    `).run(record.id, record.projectId, record.skillId, record.strategyId, record.exchange, record.timezone, record.runAt, record.symbol, record.quantity, timestamp, timestamp);
+      INSERT INTO brain_quant_strategy_schedule(id, project_id, skill_id, strategy_id, exchange, timezone, run_at, enabled, symbol, quantity, rules_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+    `).run(record.id, record.projectId, record.skillId, record.strategyId, record.exchange, record.timezone, record.runAt, record.symbol, record.quantity, rules ? JSON.stringify(rules) : "", timestamp, timestamp);
     return record;
   }
 
@@ -1922,7 +1936,8 @@ export class BrainWorkspaceStorage {
       .all(projectId) as Record<string, unknown>[]).map((row) => ({
         id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id), strategyId: String(row.strategy_id || "trend-following") as QuantStrategySchedule["strategyId"],
         exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: Number(row.enabled) === 1,
-        symbol: String(row.symbol), quantity: Number(row.quantity)
+        symbol: String(row.symbol), quantity: Number(row.quantity),
+        ...(typeof row.rules_json === "string" && row.rules_json ? { rules: validateQuantStrategyRules(JSON.parse(row.rules_json)) } : {})
       }));
   }
 
@@ -1959,8 +1974,10 @@ export class BrainWorkspaceStorage {
           WHERE schedule.enabled = 1 AND project.owner_id = ? ORDER BY schedule.id`)
         .all(requireText(ownerId, "ownerId")) as Record<string, unknown>[]).map((row) => ({
           id: String(row.id), projectId: String(row.project_id), skillId: String(row.skill_id),
+          strategyId: String(row.strategy_id || "trend-following"),
           exchange: String(row.exchange) as ChinaExchange, timezone: "Asia/Shanghai", runAt: String(row.run_at), enabled: true,
-          symbol: String(row.symbol), quantity: Number(row.quantity)
+          symbol: String(row.symbol), quantity: Number(row.quantity),
+          ...(typeof row.rules_json === "string" && row.rules_json ? { rules: validateQuantStrategyRules(JSON.parse(row.rules_json)) } : {})
         })),
       claim: (scheduleId, tradingDate, idempotencyKey) => {
         const timestamp = nowIso();
@@ -1999,7 +2016,7 @@ export class BrainWorkspaceStorage {
       requestId: input.idempotencyKey,
       idempotencyKey: input.idempotencyKey,
       maxAttempts: 3,
-      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, symbol: input.symbol, quantity: input.quantity, strategyId: input.strategyId, simulationOnly: true })
+      resourceLimitsJson: JSON.stringify({ exchange: input.exchange, tradingDate: input.tradingDate, symbol: input.symbol, quantity: input.quantity, strategyId: input.strategyId, ...(input.rules ? { rules: input.rules } : {}), simulationOnly: true })
     });
   }
 

@@ -1,3 +1,4 @@
+import type { NewbrainApi } from "../../preload/index.js";
 import type {
   AutomationSpec,
   AddFeatureItemInput,
@@ -277,7 +278,7 @@ export type SettingsNavIconName =
 
 declare global {
   interface Window {
-    newbrain?: {
+    newbrain?: NewbrainApi & {
       windowControl: DesktopWindowControlApi;
       listBrainWorkspaces: () => Promise<BrainWorkspaceDto[]>;
       listBrainProjects: (input?: BrainProjectListInput) => Promise<BrainProjectDto[]>;

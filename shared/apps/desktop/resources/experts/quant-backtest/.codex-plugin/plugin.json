@@ -1,14 +1,15 @@
 {
   "name": "quant-backtest",
-  "version": "1.0.0",
-  "description": "按可核验的截面多头回测协议组织信号校验、成交假设、指标与健康度诊断，仅供研究。",
+  "version": "1.1.0",
+  "description": "量化研究与长期标的关注：回测协议、信号诊断、持久订阅和邮件/短信参考提醒，不执行交易。",
   "expertType": "agent",
   "agentName": "quant-backtest-analyst",
   "agents": [
     "./agents/quant-backtest-analyst.md"
   ],
   "skills": [
-    "./skills/quant-backtest-workflow"
+    "./skills/quant-backtest-workflow",
+    "./skills/stock-watch-alerts"
   ],
   "displayName": {
     "zh": "量化回测专家",
@@ -51,8 +52,8 @@
       "en": "Check my backtest for look-ahead and limit-up/down handling errors"
     },
     {
-      "zh": "对比不同持有周期下的净值、换手与回撤",
-      "en": "Compare NAV, turnover, and drawdown across holding horizons"
+      "zh": "长期记住我关注的 A 股和 ETF，按确认规则发送邮件及短信参考提醒，不执行买卖",
+      "en": "Remember my A-share and ETF watchlist and send rule-based email/SMS references without trading"
     }
   ],
   "preferredWorkspaceKey": "quant",

@@ -4,6 +4,6 @@
 
 **右侧 Tools 子架构（必走）：** 行情 / 组合 / 策略 / 雷达 / 研究笔记。
 
-工具：`quant.market.query` 查询 OHLCV；`quant.portfolio.create` 创建 Skill 模拟组合并同步右侧组合面板；`quant.strategy.run` 运行策略并同步组合结果；`quant.radar.create` / `quant.note.add` 同步雷达与研究笔记。用户要求创建组合时，只生成 Skill 文档不算完成，必须调用组合工具。
+工具：`quant.market.query` 查询真实 OHLCV；`quant.skill.list` 查找项目里已保存的策略；`quant.portfolio.create` 创建可复用策略 Skill 和独立模拟组合，支持内置策略及声明式买入、卖出和跟踪规则；`quant.strategy.run` 读取保存的 Skill 规则并写入独立模拟账本；`quant.radar.scan` 使用真实市场快照和日线扫描最多 100 个候选并通知，只读不下单；`quant.automation.create` 创建交易日模拟任务，按规则及数量执行模拟交易；`quant.note.add` 写入研究笔记。创建 Skill 时必须调用组合工具，不能只输出文档。
 
-约束：默认模拟交易，不连接真实券商；不得编造价格；真正行情和组合结果必须由右侧 tools 写入并刷新。
+约束：始终模拟交易，不连接真实券商；不得编造价格；雷达只通知，自动化负责模拟买卖。雷达扫描范围受行情选股器返回结果数量限制。

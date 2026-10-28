@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { QuantSkillPackageService } from "./quant-skill-package-service.ts";
+import type { QuantStrategyRules } from "./quant-strategy-rules.ts";
 
 test("creates and removes a project-scoped managed quantitative Skill package", async () => {
   const workspacePath = await mkdtemp(join(tmpdir(), "newbrain-quant-skill-"));
@@ -26,6 +27,26 @@ test("creates and removes a project-scoped managed quantitative Skill package", 
 
     assert.equal((await service.remove("sany-trend-verify")).removed, true);
     assert.equal((await service.remove("sany-trend-verify")).removed, false);
+  } finally {
+    await rm(workspacePath, { recursive: true, force: true });
+  }
+});
+
+test("creates reusable custom strategies only with validated buy and sell rules", async () => {
+  const workspacePath = await mkdtemp(join(tmpdir(), "newbrain-quant-skill-"));
+  try {
+    const service = new QuantSkillPackageService(workspacePath);
+    const rules: QuantStrategyRules = {
+      buy: { all: [{ left: { metric: "close" }, comparison: "above", right: { metric: "sma", period: 5 } }] },
+      sell: { all: [{ left: { metric: "close" }, comparison: "below", right: { metric: "sma", period: 5 } }] },
+      tracking: { any: [{ left: { metric: "volume" }, comparison: "above", right: { value: 100_000 } }] }
+    };
+    await assert.rejects(() => service.create({ skillId: "my-rules", title: "自定义均线策略", symbol: "600519", strategyId: "ma-cross" }), /rules/);
+    assert.equal((await service.create({ skillId: "my-rules", title: "自定义均线策略", symbol: "600519", strategyId: "ma-cross", rules })).created, true);
+    const stored = await service.read("my-rules");
+    assert.deepEqual(stored?.rules, rules);
+    assert.equal(stored?.simulationOnly, true);
+    assert.deepEqual((await service.list()).map((skill) => skill.skillId), ["my-rules"]);
   } finally {
     await rm(workspacePath, { recursive: true, force: true });
   }

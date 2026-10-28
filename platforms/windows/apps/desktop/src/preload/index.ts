@@ -177,7 +177,7 @@ import {
   type DesktopWindowTypeTextInput
 } from "../shared/desktop-window-control-contract.js";
 
-contextBridge.exposeInMainWorld("newbrain", {
+const newbrainApi = {
   windowControl: {
     list: (): Promise<DesktopWindowInfo[]> => ipcRenderer.invoke(desktopWindowControlIpcChannels.list),
     activate: (input: DesktopWindowTarget): Promise<{ activated: true; targetWindow: number }> =>
@@ -760,4 +760,8 @@ contextBridge.exposeInMainWorld("newbrain", {
   chatWithModel: (input: ModelChatInput) => ipcRenderer.invoke(desktopIpcChannels.model.chat, input),
   cancelModelRequest: (input?: CancelModelRequestInput) => ipcRenderer.invoke(desktopIpcChannels.model.cancelRequest, input),
   guideModelRequest: (input: GuideModelRequestInput) => ipcRenderer.invoke(desktopIpcChannels.model.guideRequest, input)
-});
+};
+
+contextBridge.exposeInMainWorld("newbrain", newbrainApi);
+
+export type NewbrainApi = typeof newbrainApi;

@@ -23282,3 +23282,44 @@ dialog.experts-detail { position: fixed; inset: 0; top: 0; width: min(560px, cal
   max-width: none !important;
   min-width: 0 !important;
 }
+
+.brain-quant-subscribe-button { background:#287c62 !important;color:#fff !important;border-color:#287c62 !important; }
+.brain-quant-stock-watch { margin:0 28px 16px;padding:16px;border:1px solid var(--border-subtle,#ddd);border-radius:10px;background:var(--surface-raised,#fff); }
+.brain-quant-stock-watch .brain-quant-section-title { align-items:flex-start; }
+.brain-quant-stock-watch .brain-quant-section-title h3 { margin:0 0 4px; }
+.brain-quant-stock-watch .brain-quant-section-title small,.brain-quant-watch-card small,.brain-quant-watch-alerts small { color:var(--text-secondary,#777);font-size:11px;line-height:1.5; }
+.brain-quant-watch-count { padding:5px 9px;border-radius:999px;background:#edf7f2;color:#287c62;font-size:11px;white-space:nowrap; }
+.brain-quant-watch-list { display:grid;gap:8px;margin-top:12px; }
+.brain-quant-watch-card { display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border-subtle,#ddd);border-radius:8px; }
+.brain-quant-watch-card-main { display:grid;gap:3px;min-width:0; }
+.brain-quant-watch-card-main>strong { display:flex;align-items:baseline;gap:8px; }
+.brain-quant-watch-card-main>strong small { font-weight:400; }
+.brain-quant-watch-card-main>span { color:var(--text-primary,#202020);font-size:12px; }
+.brain-quant-watch-actions { display:flex;flex-shrink:0;gap:6px; }
+.brain-quant-watch-actions button,.brain-quant-watch-dialog footer button { border:1px solid var(--border-subtle,#ddd);border-radius:7px;background:var(--surface-base,#fff);padding:7px 11px;cursor:pointer; }
+.brain-quant-watch-actions button.danger { color:#a54138; }
+.brain-quant-watch-empty { margin:12px 0 2px;color:var(--text-secondary,#777);font-size:12px; }
+.brain-quant-watch-alerts { display:grid;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-subtle,#ddd); }
+.brain-quant-watch-alerts>div { display:grid;gap:3px;padding:8px 10px;border-radius:7px;background:var(--surface-base,#fafafa);font-size:12px; }
+.brain-quant-watch-channel-note,.brain-quant-watch-dialog-note { padding:9px 11px;border-radius:7px;background:#fff8e6;color:#80651e;font-size:11px;line-height:1.6; }
+.brain-quant-watch-overlay { position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:#11182766; }
+.brain-quant-watch-dialog { display:grid;gap:13px;width:min(520px,100%);max-height:min(90vh,760px);overflow:auto;padding:20px;border:1px solid var(--border-subtle,#ddd);border-radius:14px;background:var(--surface-raised,#fff);box-shadow:0 20px 70px #0003; }
+.brain-quant-watch-dialog>header { display:flex;align-items:flex-start;justify-content:space-between;gap:16px; }
+.brain-quant-watch-dialog h3 { margin:0 0 5px;font-size:18px; }
+.brain-quant-watch-dialog header p { margin:0;color:var(--text-secondary,#777);font-size:12px;line-height:1.5; }
+.brain-quant-watch-dialog>header button { border:0;background:transparent;color:var(--text-secondary,#777);font-size:24px;cursor:pointer; }
+.brain-quant-watch-dialog>label,.brain-quant-watch-dialog-grid>label { display:grid;gap:6px;font-size:12px; }
+.brain-quant-watch-dialog input:not([type=checkbox]),.brain-quant-watch-dialog select { min-width:0;padding:9px 10px;border:1px solid var(--border-subtle,#ccc);border-radius:7px;background:var(--surface-base,#fff);color:var(--text-primary,#202020); }
+.brain-quant-watch-dialog-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.brain-quant-watch-dialog fieldset { display:flex;flex-wrap:wrap;gap:14px;border:1px solid var(--border-subtle,#ddd);border-radius:8px;padding:9px 12px; }
+.brain-quant-watch-dialog legend { padding:0 5px;color:var(--text-secondary,#777);font-size:12px; }
+.brain-quant-watch-dialog fieldset label { display:flex;align-items:center;gap:6px;font-size:12px; }
+.brain-quant-watch-form-error { margin:0;color:#b3261e;font-size:12px; }
+.brain-quant-watch-dialog footer { display:flex;justify-content:flex-end;gap:8px; }
+.brain-quant-watch-dialog footer .primary { border-color:#287c62;background:#287c62;color:white; }
+@media (max-width:700px) {
+  .brain-quant-stock-watch { margin:0 12px 12px;padding:12px; }
+  .brain-quant-watch-card { align-items:flex-start; }
+  .brain-quant-watch-actions { flex-direction:column; }
+  .brain-quant-watch-dialog-grid { grid-template-columns:1fr; }
+}
