@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { initialDesktopPreferences } from "./desktop-model";
 import { projectWorkspaces } from "./workspace-visibility";
 import { WalletSettingsPage } from "./WalletSettingsPage";
+import {
+  formatAccountAppUpdateNotice,
+  mapAppUpdateVerifyError
+} from "./app-update-progress-copy";
 
 const FEATURE_UNDER_DEVELOPMENT_MESSAGE = "该接口处于开发中，暂时无法使用。";
 
@@ -125,10 +129,14 @@ export function SettingsWorkspace(ctx: any) {
         releaseId: appUpdateStatus?.releaseId,
         ok: true
       });
-      setAppUpdateMessage(result.detail || "验证已提交");
-      setChatStatus?.(result.detail || "验证已提交");
+      const detail = String(result?.detail || "").trim() || (result?.ok === false ? "提交更新验证失败" : "验证已提交");
+      setAppUpdateMessage(detail);
+      setChatStatus?.(detail);
+      if (result?.ok === false) {
+        setErrorMessage?.(detail);
+      }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = mapAppUpdateVerifyError(error);
       setAppUpdateMessage(detail);
       setErrorMessage?.(detail);
     } finally {
@@ -703,11 +711,11 @@ function renderSettingsWorkspace() {
                   </div>
                   {appUpdateStatus ? (
                     <p className="account-password-notice">
-                      {appUpdateMessage || appUpdateStatus.detail}
-                      {appUpdateStatus.channel ? `（${appUpdateStatus.channel}）` : ""}
-                      {!String(appUpdateMessage || appUpdateStatus.detail || "").includes("不会删除")
-                        ? " 更新仅替换程序文件，不会删除聊天记录、项目与本地历史。"
-                        : ""}
+                      {formatAccountAppUpdateNotice({
+                        message: appUpdateMessage,
+                        detail: appUpdateStatus.detail,
+                        channel: appUpdateStatus.channel
+                      })}
                     </p>
                   ) : null}
                   {appUpdateStatus?.releaseId

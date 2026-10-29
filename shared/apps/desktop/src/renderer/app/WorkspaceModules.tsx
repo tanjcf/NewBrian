@@ -68,6 +68,7 @@ import {
   readStoredComposerTextareaHeight
 } from "./composer-resize.ts";
 import { SidebarIcon } from "./SidebarIcon";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { buildResearchWritingSources, defaultResearchWritingSession, researchWritingStorageKey, type DynamicResearchIntakeQuestion, type DynamicResearchPlanStep, type ResearchWritingSession } from "./research-writing";
 import { isCustomModelSelection } from "../../shared/custom-model-endpoint";
 import { CustomModelEndpointMenu } from "./CustomModelEndpointMenu";
@@ -90,6 +91,7 @@ import {
   shouldShowAssistantMessageActions,
   threadStillNeedsApproval
 } from "./thread-activity-policy";
+import { resolveGoalOwnerConversationTurnId } from "./goal-owner-turn.ts";
 import { stripApprovalWaitNotice } from "../../shared/approval-wait-notice.ts";
 import { sortCodexSidebarThreads, type CodexSidebarSortMode } from "./codex-sidebar-model";
 import {
@@ -217,7 +219,9 @@ import { clearStaleThreadApprovalInCatalog, markThreadApprovalSettlingInCatalog 
 import {
   findLivePendingApprovalActivity,
   markApprovalActivitiesSettling,
-  resolveEffectiveApproval
+  resolveEffectiveApproval,
+  shouldRetainSettledApprovalGuard,
+  stripSettledApprovalFromSnapshot
 } from "./assistant-activity-merge";
 import { recoverActiveThreadRetry } from "./generation-failure-recovery";
 import { GovernmentWritingSpecification } from "./GovernmentWritingSpecification";
@@ -1933,6 +1937,8 @@ export function WorkspaceModules(ctx: any) {
   const wasAskingForScrollRef = useRef(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const synchronizedCompletedGoalRef = useRef("");
+  /** Keeps a completed goal card on its owning turn across later user messages. */
+  const pinnedCompleteGoalTurnRef = useRef<{ goalId: string; turnId: string } | null>(null);
   const researchIntakeGenerationRef = useRef(0);
   const researchIntakeDraftRef = useRef<any>(null);
   const skipResearchPersistRef = useRef(false);
@@ -2012,7 +2018,30 @@ export function WorkspaceModules(ctx: any) {
     activeThreadRequestIds: activeThreadRequestIds || {}
   });
   const activeStreamContent = activeReasoningRequestId ? String(liveModelContent[activeReasoningRequestId] || "") : "";
-  const goalOwnerTurnId = goalExecution?.goal?.turnId || conversationTurns.at(-1)?.id || "";
+  const goalStatus = String(goalExecution?.goal?.status || "");
+  const goalId = String(goalExecution?.goal?.goalId || "");
+  if (goalStatus !== "complete" || !goalId) {
+    pinnedCompleteGoalTurnRef.current = null;
+  }
+  const mappedGoalOwnerTurnId = resolveGoalOwnerConversationTurnId({
+    goalTurnId: goalExecution?.goal?.turnId,
+    goalStatus,
+    conversationTurns,
+    events: snapshot?.events,
+    pinnedCompleteTurnId:
+      pinnedCompleteGoalTurnRef.current?.goalId === goalId
+        ? pinnedCompleteGoalTurnRef.current.turnId
+        : ""
+  });
+  if (
+    goalStatus === "complete"
+    && goalId
+    && mappedGoalOwnerTurnId
+    && pinnedCompleteGoalTurnRef.current?.goalId !== goalId
+  ) {
+    pinnedCompleteGoalTurnRef.current = { goalId, turnId: mappedGoalOwnerTurnId };
+  }
+  const goalOwnerTurnId = mappedGoalOwnerTurnId;
   const showGovernmentSpecification = Boolean(
     RESEARCH_WRITING_PRODUCT_ENABLED
     && governmentSpecification
@@ -4449,28 +4478,47 @@ export function WorkspaceModules(ctx: any) {
     }
     try {
       const approvalId = decidedApprovalId === "pending" ? "" : decidedApprovalId;
-      const nextSnapshot = await api.respondApproval({
+      const nextSnapshotRaw = await api.respondApproval({
         approved,
         ...(composerPermission === "full" ? { permissionMode: "full" as const } : {}),
         ...(requestId ? { requestId } : {}),
         ...(approvalId ? { approvalId } : {})
       });
+      const returnedApprovalId = String(nextSnapshotRaw?.approval?.id || "").trim();
+      const retainSettledGuard = shouldRetainSettledApprovalGuard({
+        settledApprovalId: decidedApprovalId,
+        returnedApprovalId
+      });
+      // Field bug: clearing settledApprovalId when the same id was replayed put the
+      //「等待批准」card / sidebar badge /「处理中」busy state back after 批准并继续.
+      if (!retainSettledGuard) {
+        setSettledApprovalId("");
+      }
+      const nextSnapshot = retainSettledGuard
+        ? stripSettledApprovalFromSnapshot(nextSnapshotRaw, decidedApprovalId, {
+          forceClearApproval: !returnedApprovalId || returnedApprovalId === decidedApprovalId
+        })
+        : nextSnapshotRaw;
       if (selectedThread?.id && typeof syncSnapshot === "function") {
         syncSnapshot(nextSnapshot, selectedThread.id);
       } else {
         setSnapshot(nextSnapshot);
       }
-      const returnedApprovalId = nextSnapshot?.approval?.id || "";
-      if (returnedApprovalId && returnedApprovalId === decidedApprovalId) {
-        setSettledApprovalId("");
-      } else if (returnedApprovalId && returnedApprovalId !== decidedApprovalId) {
-        setSettledApprovalId("");
-      }
       if (typeof settleApprovalRequest === "function") {
         settleApprovalRequest(requestId, selectedThread?.id || "", nextSnapshot);
       }
       const nextCatalog = normalizeWorkspaceCatalog(await api.listWorkspaces());
-      setWorkspaceCatalog(nextCatalog);
+      // listWorkspaces can reintroduce sticky awaiting-approval before metadata settles.
+      setWorkspaceCatalog(
+        retainSettledGuard && selectedWorkspace?.id && selectedThread?.id
+          ? markThreadApprovalSettlingInCatalog(
+            nextCatalog,
+            selectedWorkspace.id,
+            selectedThread.id,
+            approved
+          )
+          : nextCatalog
+      );
       if (selectedWorkspace?.id && selectedThread?.id) {
         setIsComposingNewThread(false);
         // Avoid setSelectedThreadId(same id): that re-activates and used to hard-replace
@@ -4480,15 +4528,27 @@ export function WorkspaceModules(ctx: any) {
         // Approval persistence and task cleanup happen in the main process before
         // respondApproval resolves. Re-activate the thread so stale
         // `awaiting-approval` metadata cannot overwrite the canonical snapshot.
-        const settledSnapshot = await api.activateWorkspaceThread({
+        const settledSnapshotRaw = await api.activateWorkspaceThread({
           workspaceId: selectedWorkspace.id,
           threadId: selectedThread.id
         });
+        const settledSnapshot = retainSettledGuard
+          ? stripSettledApprovalFromSnapshot(settledSnapshotRaw, decidedApprovalId, {
+            forceClearApproval: true
+          })
+          : settledSnapshotRaw;
         if (typeof syncSnapshot === "function") syncSnapshot(settledSnapshot, selectedThread.id);
         // activateWorkspaceThread can return a snapshot whose session.status is still
         // dirty; settle again from the authoritative post-activate snapshot.
         if (typeof settleApprovalRequest === "function") {
           settleApprovalRequest(requestId, selectedThread.id, settledSnapshot);
+        }
+        if (!settledSnapshot?.approval) {
+          setWorkspaceCatalog((current: any) => clearStaleThreadApprovalInCatalog(
+            current,
+            selectedWorkspace.id,
+            selectedThread.id
+          ));
         }
       }
     } catch (error) {
@@ -6053,6 +6113,8 @@ function renderSidebarModule() {
             force: true
           });
         }
+        // Codex: leave workspace/thread empty so main allocates a dedicated chat
+        // thread. Never inherit selectedThread — that dumps runs into unrelated chats.
         const item = {
           title: parsed.title || "新自动化任务",
           trigger: parsed.trigger || text,
@@ -6063,8 +6125,8 @@ function renderSidebarModule() {
           rrule: parsed.rrule || "",
           action: parsed.action === "thread_follow_up" ? "workspace_scan" : parsed.action,
           status: "scheduled",
-          workspaceId: selectedWorkspace?.id || "",
-          threadId: selectedThread?.id || "",
+          workspaceId: "",
+          threadId: "",
           model: modelConfig?.model || "",
           reasoning: modelConfig?.reasoningEffort || "low",
           runtime: "worktree",
@@ -6075,7 +6137,16 @@ function renderSidebarModule() {
           item
         });
         setFeatureConfig(nextConfig);
-        if (typeof setChatStatus === "function") setChatStatus(`已创建自动化「${parsed.title || "新自动化任务"}」，并继续在对话中确认细节`);
+        if (typeof api.listWorkspaces === "function") {
+          try {
+            setWorkspaceCatalog(normalizeWorkspaceCatalog(await api.listWorkspaces()));
+          } catch {
+            // Catalog refresh is best-effort; the automation is already bound.
+          }
+        }
+        if (typeof setChatStatus === "function") {
+          setChatStatus(`已创建自动化「${parsed.title || "新自动化任务"}」，并绑定专用对话；定时执行不会写入其他线程`);
+        }
         return parsed;
       }
       if (creatorLabel === "Skill Creator") {
@@ -6710,17 +6781,6 @@ function renderChatModule() {
             </div>
           ) : (
           <div className="conversation-history" ref={conversationHistoryRef}>
-            {goalExecution?.runtime?.selectedSkillNames?.length ? (
-              <div className="goal-skill-record" data-testid="goal-skill-record">
-                本轮使用 Skill：{goalExecution.runtime.selectedSkillNames.map((name: string) => composerSkillLabel(name)).join("、")}
-              </div>
-            ) : null}
-            {goalExecution?.goal?.status === "complete" && goalExecution?.plan?.length ? (
-              <section className="goal-context-card completed" aria-label="已完成的目标步骤" data-testid="goal-runtime-panel-complete">
-                <header className="goal-context-header"><div><strong>已完成的目标</strong><span>{goalExecution.goal.objective}</span></div><div className="goal-context-actions"><span>{goalExecution.plan.length}/{goalExecution.plan.length} 步</span></div></header>
-                <ol>{goalExecution.plan.map((step: any) => <li key={`completed-goal-${step.stepId}`} className={step.status}><span>✓</span><div><strong>{step.title}</strong><small>{step.result || step.description}</small></div></li>)}</ol>
-              </section>
-            ) : null}
             {conversationTurns.map((turn, index) => {
               const turnAssistantActivities = dedupeActivities(
                 persistedActivitiesByUserMessage.get(turn.user?.id || "") ?? []
@@ -7550,20 +7610,16 @@ function renderChatModule() {
               </div>
             )
             : null}
-          {showJumpToLatest ? (
-            <button
-              type="button"
-              className="chat-jump-latest"
-              data-testid="chat-jump-latest"
-              onClick={() => {
-                stickToBottomRef.current = true;
-                setShowJumpToLatest(false);
-                scrollTaskToBottom("smooth");
-              }}
-            >
-              ↓ 回到底部
-            </button>
-          ) : null}
+          <ScrollToBottomButton
+            show={showJumpToLatest}
+            showWorkingDots={Boolean(isAskingModel || isGlobalModelBusy || brainMessageBusy)}
+            label="回到底部"
+            onClick={() => {
+              stickToBottomRef.current = true;
+              setShowJumpToLatest(false);
+              scrollTaskToBottom("smooth");
+            }}
+          />
           <div
             className={`composer-card${isGlobalModelBusy || brainMessageBusy ? " busy" : ""}${composerDragActive ? " drag-active" : ""}${composerTextareaHeight > COMPOSER_TEXTAREA_DEFAULT_HEIGHT || String(composerLayoutDraft || question || "").includes("\n") || String(composerLayoutDraft || question || "").length > 80 ? " composer-card--expanded" : ""}${composerTextareaHeight !== COMPOSER_TEXTAREA_DEFAULT_HEIGHT ? " composer-card--manual-height" : ""}`}
             style={{
@@ -11295,17 +11351,34 @@ function renderWorkspaceModules() {
             notes={appUpdateStatus?.notes || appUpdateProgress?.notes}
             progress={appUpdateProgress}
             busy={Boolean(appUpdateBusy)}
-            onClose={() => dismissAppUpdateProgress?.()}
+            onClose={() => {
+              // Error/done close: same as cancel — do not re-prompt this version.
+              const version = String(
+                appUpdateStatus?.latestVersion
+                  || appUpdateProgress?.latestVersion
+                  || ""
+              );
+              setDismissedAppUpdateVersion(version);
+              void skipDesktopAppUpdate?.(version);
+            }}
             onLater={() => {
-              dismissAppUpdateProgress?.();
-              dismissAppUpdateDiscover?.();
-              setDismissedAppUpdateVersion(String(appUpdateStatus?.latestVersion || ""));
+              // 「取消 / 稍后」必须持久跳过当前 latest，否则轮询会没完没了重弹。
+              const version = String(
+                appUpdateStatus?.latestVersion
+                  || appUpdateProgress?.latestVersion
+                  || ""
+              );
+              setDismissedAppUpdateVersion(version);
+              void skipDesktopAppUpdate?.(version);
             }}
             onSkip={() => {
-              void skipDesktopAppUpdate?.();
-              dismissAppUpdateProgress?.();
-              dismissAppUpdateDiscover?.();
-              setDismissedAppUpdateVersion(String(appUpdateStatus?.latestVersion || ""));
+              const version = String(
+                appUpdateStatus?.latestVersion
+                  || appUpdateProgress?.latestVersion
+                  || ""
+              );
+              setDismissedAppUpdateVersion(version);
+              void skipDesktopAppUpdate?.(version);
             }}
             onUpdateNow={() => void startDesktopAppUpdate?.()}
             onRestartNow={() => void applyDesktopAppUpdate?.()}

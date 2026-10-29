@@ -5156,13 +5156,14 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
     input.status === "paused"
       ? input.status
       : "idle";
-  const nextAutomation: AutomationSpec = {
+  let nextAutomation: AutomationSpec = {
     id: input.id?.trim() || makeId("automation"),
     title: input.title?.trim() || "未命名自动化",
     status: nextStatus,
     trigger: input.trigger?.trim() || "待配置触发说明",
-    workspaceId: input.workspaceId?.trim() || activeWorkspaceId || undefined,
-    threadId: input.threadId?.trim() || activeThreadId || undefined,
+    // Codex: do not inherit active thread; allocate a dedicated bind below when empty.
+    workspaceId: input.workspaceId?.trim() || undefined,
+    threadId: input.threadId?.trim() || undefined,
     action:
       input.action === "git_status" || input.action === "workspace_scan"
         ? input.action
@@ -5173,6 +5174,35 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
         ? computeNextRunAt(parsedInterval)
         : undefined
   };
+  if (!String(nextAutomation.workspaceId || "").trim() || !String(nextAutomation.threadId || "").trim()) {
+    const catalog = await readWorkspaceCatalog();
+    const preferredWorkspaceId = String(input.workspaceId || "").trim();
+    const workspace =
+      catalog.workspaces.find((item) => item.id === preferredWorkspaceId)
+      ?? catalog.workspaces[0];
+    if (!workspace) {
+      throw new Error("无法为自动化创建专用对话：没有可用工作区。");
+    }
+    const title = String(nextAutomation.title || "自动化任务").trim().slice(0, 36) || "自动化任务";
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const created = await addWorkspaceThread({
+      workspaceId: workspace.id,
+      title,
+      summary: "自动化任务专用对话；定时执行只写入此对话。",
+      scope: "chat"
+    });
+    const thread = created.workspaces
+      .find((item) => item.id === workspace.id)
+      ?.threads.find((item) => !before.has(item.id));
+    if (!thread?.id) {
+      throw new Error("无法为自动化创建专用对话。");
+    }
+    nextAutomation = {
+      ...nextAutomation,
+      workspaceId: workspace.id,
+      threadId: thread.id
+    };
+  }
 
   return writeFeatureConfig({
     ...config,

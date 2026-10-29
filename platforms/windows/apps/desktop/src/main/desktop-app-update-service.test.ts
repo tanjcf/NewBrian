@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const {
   DesktopAppUpdateService,
+  applySkippedVersionToUpdateStatus,
   buildDeferredSilentMsiexecScript,
   buildDeferredSilentNsisScript,
   buildSilentDesktopMsiUpgradeArgs,
@@ -85,10 +86,44 @@ test("parses and compares app_release offers for click-to-upgrade", () => {
     currentVersion: "0.1.61",
     release: offer
   }).available, false);
+  const staleBehind = resolveDesktopAppUpdateStatus({
+    currentVersion: "1.4.43",
+    release: {
+      latest_version: "1.4.34",
+      download_url: "https://example.com/NewBrain-1.4.34-setup.exe",
+      sha256: "abc",
+      notes: "stale"
+    }
+  });
+  assert.equal(staleBehind.available, false);
+  assert.equal(staleBehind.latestVersion, undefined);
+  assert.match(staleBehind.detail, /已是最新/);
   assert.deepEqual(
     controlPlaneCacheRelease({ bootstrap: { app_release: offer } }),
     offer
   );
+});
+
+test("skipped version suppresses available until a newer release", () => {
+  const available = resolveDesktopAppUpdateStatus({
+    currentVersion: "1.4.41",
+    release: {
+      latest_version: "1.4.42",
+      download_url: "https://example.test/NewBrain-1.4.42-setup.exe",
+      sha256: "abc"
+    }
+  });
+  assert.equal(available.available, true);
+  const skipped = applySkippedVersionToUpdateStatus({ ...available }, "v1.4.42");
+  assert.equal(skipped.available, false);
+  assert.equal(skipped.skippedVersion, "v1.4.42");
+  assert.match(skipped.detail, /已跳过版本/);
+  const mandatory = applySkippedVersionToUpdateStatus({
+    ...available,
+    mandatory: true
+  }, "1.4.42");
+  assert.equal(mandatory.available, true);
+  assert.equal(mandatory.skippedVersion, "1.4.42");
 });
 
 test("builds silent per-user msiexec args matching LocalAppData installs", () => {
@@ -105,7 +140,7 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     [
       "/i",
       "C:\\updates\\NewBrain-1.2.1.msi",
-      "/qn",
+      "/passive",
       "/norestart",
       "REBOOT=ReallySuppress",
       "MSIINSTALLPERUSER=1",
@@ -119,7 +154,7 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     [
       "/i",
       "C:\\updates\\NewBrain-1.2.1.msi",
-      "/qn",
+      "/passive",
       "/norestart",
       "REBOOT=ReallySuppress",
       "ALLUSERS=1",
@@ -140,7 +175,7 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     processImageName: "NewBrain.exe",
     maxWaitSeconds: 30
   });
-  assert.match(deferred, /msiexec\.exe \/i .* \/qn \/norestart REBOOT=ReallySuppress MSIINSTALLPERUSER=1 ALLUSERS=/);
+  assert.match(deferred, /msiexec\.exe \/i .* \/passive \/norestart REBOOT=ReallySuppress MSIINSTALLPERUSER=1 ALLUSERS=/);
   assert.match(deferred, /Get-Process -Name/);
   assert.match(deferred, /WindowStyle Hidden/);
   assert.match(deferred, /Stop-Process -Force/);
@@ -148,7 +183,7 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
   assert.doesNotMatch(deferred, /tasklist/i);
   assert.match(deferred, /if errorlevel 1 \(/);
   assert.match(deferred, /start ""/);
-  assert.doesNotMatch(deferred, /\/qb\b/);
+  assert.doesNotMatch(deferred, /\/qn\b/);
 });
 
 test("deferred NSIS script installs into the running executable directory", () => {
@@ -160,13 +195,21 @@ test("deferred NSIS script installs into the running executable directory", () =
     maxWaitSeconds: 30,
     resultPath: "C:\\updates\\last-nsis-update.json"
   });
-  assert.match(script, /\/S \/D=C:\\Users\\Ada\\AppData\\Local\\.newbrain/);
+  // Cockpit-like progress: --updated without /S, UseShellExecute so UI shows; /D= last
+  assert.match(script, /Arguments = '--updated \/D=' \+ \$installRoot/);
+  assert.doesNotMatch(script, /Arguments = '--updated \/S/);
+  assert.match(script, /UseShellExecute = \$true/);
   assert.match(script, /WaitForExit\(30000\)/);
-  assert.match(script, /NEWBRAIN_NSIS_EXIT/);
+  assert.match(script, /NewBrain\.exe missing after silent setup/);
+  assert.match(script, /Repair-NewBrainShortcuts/);
+  assert.match(script, /Restore-NewBrainFromTempOldInstall/);
+  assert.match(script, /old-install/);
   assert.match(script, /Programs\\@codex-forgedesktop/);
   assert.match(script, /last-nsis-update\.json/);
   assert.match(script, /Start-Process -FilePath \$target\.FullName/);
-  assert.doesNotMatch(script, /start "" C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain\.exe/);
+  assert.doesNotMatch(script, /@echo off/);
+  assert.doesNotMatch(script, /title NewBrain update/);
+  assert.doesNotMatch(script, /cmd\.exe/);
 });
 
 test("getStatus clears staged state when pending apply did not change version", async () => {
@@ -313,17 +356,17 @@ test("downloads MSI and runs silent install after the user clicks update", async
     assert.deepEqual(silentCalls[0]?.args, [
       "/i",
       silentCalls[0]!.msiPath,
-      "/qn",
+      "/passive",
       "/norestart",
       "REBOOT=ReallySuppress",
       "MSIINSTALLPERUSER=1",
       "APPLICATIONFOLDER=C:\\Users\\Ada\\AppData\\Local\\.newbrain",
       "ALLUSERS="
     ]);
-    assert.match(applied.detail, /即将退出并安装/);
+    assert.match(applied.detail, /安装进度窗口/);
     assert.equal(afterSilent, 1);
     assert.ok(progress.some((item) => item.phase === "installing"));
-    assert.ok(progress.some((item) => item.phase === "done" && /即将退出并安装/.test(item.detail)));
+    assert.ok(progress.some((item) => item.phase === "done" && /安装进度窗口/.test(item.detail)));
     assert.deepEqual(await readFile(silentCalls[0]!.msiPath), payload);
     const verify = await service.verifyUpdate({ ok: true });
     assert.equal(verify.ok, true);

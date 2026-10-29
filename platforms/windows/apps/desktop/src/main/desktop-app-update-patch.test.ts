@@ -127,5 +127,5 @@ test("deferred wait uses hidden Get-Process and never find /I", () => {
   assert.match(script, /Get-Process -Name/);
   assert.doesNotMatch(script, /find \/I/i);
   assert.match(script, /Local\\.newbrain/);
-  assert.match(script, /title NewBrain update/);
+  assert.doesNotMatch(script, /title NewBrain update/);
 });

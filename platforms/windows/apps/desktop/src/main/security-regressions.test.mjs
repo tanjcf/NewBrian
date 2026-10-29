@@ -235,6 +235,19 @@ test("requires pre-package smoke cases before MSI packaging", () => {
   assert.match(packageScript, /sms-login-code-smoke\.test\.ts/);
   assert.match(packageScript, /AUTOMATION-HISTORY-RUN-SMOKE-001/);
   assert.match(packageScript, /automation-history-run-smoke\.test\.ts/);
+  assert.match(packageScript, /GOAL-COMPLETED-CARD-ANCHOR-SMOKE-001/);
+  assert.match(packageScript, /LOGIN-FAILURE-PROMPT-SMOKE-001/);
+  assert.match(packageScript, /AUTOMATION-DEDICATED-THREAD-SMOKE-001/);
+  assert.match(packageScript, /NSIS-SILENT-UPGRADE-SMOKE-001/);
+  assert.match(packageScript, /installer-nsh-silent-upgrade\.test\.cjs/);
+  assert.match(packageScript, /APP-UPDATE-SILENT-UPGRADE-SMOKE-001/);
+  assert.match(packageScript, /app-update-silent-upgrade-smoke\.test\.ts/);
+  assert.match(packageScript, /APP-UPDATE-SKIP-CANCEL-SMOKE-001/);
+  assert.match(packageScript, /app-update-skip-cancel-smoke\.test\.ts/);
+  assert.match(packageScript, /APP-UPDATE-VERIFY-NOTICE-SMOKE-001/);
+  assert.match(packageScript, /app-update-verify-notice-smoke\.test\.ts/);
+  assert.match(packageScript, /APP-UPDATE-SKIP-PROMPT-SMOKE-001/);
+  assert.match(packageScript, /app-update-progress-copy\.test\.ts/);
   assert.match(packageScript, /Pre-package smoke \$\(\$smoke\.Id\) failed\. Packaging stopped\./);
 });
 

@@ -4,8 +4,10 @@ import {
   findLivePendingApprovalActivity,
   markApprovalActivitiesSettling,
   mergeAssistantActivityItems,
-  resolveEffectiveApproval
-} from "./assistant-activity-merge.ts";
+  resolveEffectiveApproval,
+  shouldRetainSettledApprovalGuard,
+  stripSettledApprovalFromSnapshot
+} from "../../../../../../../shared/apps/desktop/src/renderer/app/assistant-activity-merge.ts";
 
 test("merge replaces 等待批准 with the same callId result", () => {
   const pending = {
@@ -199,4 +201,18 @@ test("markApprovalActivitiesSettling replaces sticky 等待批准 after approve"
   assert.equal(settled[0]?.title, "正在执行命令");
   assert.equal(settled[0]?.status, "running");
   assert.equal(findLivePendingApprovalActivity(settled), undefined);
+});
+
+test("same approval id after approve retains guard and strips sticky snapshot", () => {
+  assert.equal(shouldRetainSettledApprovalGuard({
+    settledApprovalId: "apr-1",
+    returnedApprovalId: "apr-1"
+  }), true);
+  const stripped = stripSettledApprovalFromSnapshot({
+    approval: { id: "apr-1" },
+    pendingTool: { kind: "shell" },
+    session: { status: "awaiting-approval" }
+  }, "apr-1", { forceClearApproval: true });
+  assert.equal(stripped.approval, null);
+  assert.equal(stripped.session?.status, "running");
 });

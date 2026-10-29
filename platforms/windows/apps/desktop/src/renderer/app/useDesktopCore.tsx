@@ -444,8 +444,9 @@ function resetFeatureDraft(kind: ManagedFeatureKind) {
   setAutomationDraft({
     ...initialDraft,
     status: "idle",
-    workspaceId: selectedWorkspace?.id ?? "",
-    threadId: selectedThread?.id ?? "",
+    // Empty bind → main creates a dedicated automation thread on save.
+    workspaceId: "",
+    threadId: "",
     runtime: "worktree",
     targetType: "project",
     schedule: "daily",
@@ -491,8 +492,8 @@ function loadFeatureDraft(kind: ManagedFeatureKind, item: SkillSpec | PluginSpec
     title: automation.title,
     trigger: automation.trigger,
     status: automation.status,
-    workspaceId: automation.workspaceId ?? selectedWorkspace?.id ?? "",
-    threadId: automation.threadId ?? selectedThread?.id ?? "",
+    workspaceId: automation.workspaceId ?? "",
+    threadId: automation.threadId ?? "",
     action: automation.action ?? "workspace_scan",
     intervalMinutes: String(automation.intervalMinutes ?? 30),
     dailyTime: automation.dailyTime ?? "",

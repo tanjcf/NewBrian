@@ -85,6 +85,16 @@ export function normalizeDesktopUpdateVersionLabel(version: string): string {
     .replace(/[^0-9A-Za-z.+_-]+/g, "");
 }
 
+function compareDesktopUpdateVersions(left: string, right: string): number {
+  const leftParts = normalizeDesktopUpdateVersionLabel(left).split("-", 1)[0].split(".").map((part) => Number.parseInt(part, 10));
+  const rightParts = normalizeDesktopUpdateVersionLabel(right).split("-", 1)[0].split(".").map((part) => Number.parseInt(part, 10));
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (leftParts[index] || 0) - (rightParts[index] || 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
 export function parseDesktopAppRelease(payload: unknown): ResolvedDesktopAppRelease | null {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
@@ -124,9 +134,7 @@ export function resolveDesktopAppUpdateStatus(input: {
       detail: "当前已是最新版本。"
     };
   }
-  const current = normalizeDesktopUpdateVersionLabel(currentVersion);
-  const latest = normalizeDesktopUpdateVersionLabel(release.latestVersion);
-  if (current === latest) {
+  if (compareDesktopUpdateVersions(currentVersion, release.latestVersion) >= 0) {
     return {
       currentVersion,
       available: false,
@@ -134,7 +142,7 @@ export function resolveDesktopAppUpdateStatus(input: {
       releaseId: release.releaseId || undefined,
       channel: release.channel || undefined,
       notes: release.notes || undefined,
-      detail: "当前已是最新版本。"
+      detail: `当前版本 ${currentVersion} 已是最新。`
     };
   }
   return {
@@ -148,6 +156,30 @@ export function resolveDesktopAppUpdateStatus(input: {
     downloadUrl: release.downloadUrl,
     detail: `发现新版本 ${release.latestVersion}。`
   };
+}
+
+/**
+ * Persist "跳过此版本": do not prompt again until latestVersion moves past the skip.
+ * Mandatory releases still prompt.
+ */
+export function applySkippedVersionToUpdateStatus(
+  status: DesktopAppUpdateStatus,
+  skippedVersion: string | null | undefined
+): DesktopAppUpdateStatus {
+  const skipped = String(skippedVersion || "").trim();
+  if (!skipped) return status;
+  status.skippedVersion = skipped;
+  if (
+    status.available
+    && status.latestVersion
+    && !status.mandatory
+    && normalizeDesktopUpdateVersionLabel(skipped)
+      === normalizeDesktopUpdateVersionLabel(status.latestVersion)
+  ) {
+    status.available = false;
+    status.detail = `已跳过版本 ${status.latestVersion}。有更新版本时再提醒。`;
+  }
+  return status;
 }
 
 function emitProgress(
@@ -211,12 +243,16 @@ export class DesktopAppUpdateService {
       status.detail = failedApplyDetail;
     }
     const staged = await this.loadStagedState();
-    if (!failedApplyDetail && staged && status.available && staged.latestVersion === status.latestVersion) {
+    if (staged && compareDesktopUpdateVersions(status.currentVersion, staged.latestVersion) >= 0) {
+      await rm(staged.path, { force: true }).catch(() => undefined);
+      await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+      this.staged = null;
+    } else if (!failedApplyDetail && staged && status.available && staged.latestVersion === status.latestVersion) {
       status.staged = true;
       status.stagedPath = staged.path;
       status.detail = `v${staged.latestVersion} 已就绪，重启后生效。`;
     }
-    if (skippedVersion) status.skippedVersion = skippedVersion;
+    applySkippedVersionToUpdateStatus(status, skippedVersion);
     this.lastStatus = status;
     return status;
   }
@@ -292,21 +328,37 @@ export class DesktopAppUpdateService {
     if (!releaseId) {
       return { ok: false, detail: "缺少 release_id，无法回传验证结果。" };
     }
-    const payload = await this.dependencies.verifyUpdate({
-      releaseId,
-      ok: input?.ok !== false,
-      appVersion: this.dependencies.getCurrentVersion()
-    });
-    return {
-      ok: payload.ok !== false,
-      releaseId: String(payload.release_id ?? releaseId),
-      verificationCount: Number(payload.verification_count ?? 0) || undefined,
-      threshold: Number(payload.threshold ?? 0) || undefined,
-      promotedToStable: payload.promoted_to_stable === true,
-      detail: payload.promoted_to_stable === true
-        ? "验证已提交，服务端已放行全员更新。"
-        : "验证已提交，感谢反馈。"
-    };
+    const appVersion = this.dependencies.getCurrentVersion();
+    try {
+      const payload = await this.dependencies.verifyUpdate({
+        releaseId,
+        ok: input?.ok !== false,
+        appVersion
+      });
+      return {
+        ok: payload.ok !== false,
+        releaseId: String(payload.release_id ?? releaseId),
+        verificationCount: Number(payload.verification_count ?? 0) || undefined,
+        threshold: Number(payload.threshold ?? 0) || undefined,
+        promotedToStable: payload.promoted_to_stable === true,
+        detail: payload.promoted_to_stable === true
+          ? "验证已提交，服务端已放行全员更新。"
+          : "验证已提交，感谢反馈。"
+      };
+    } catch (error) {
+      // Never throw across IPC: Settings was concatenating the raw English error
+      // with the data-preservation sentence and showing it as "更新说明".
+      const raw = error instanceof Error ? error.message : String(error || "");
+      let detail = "提交更新验证失败，请稍后重试。";
+      if (/desktop app release was not found/i.test(raw)) {
+        detail = "服务端未找到对应更新记录，无法提交验证。若软件已升级成功，可忽略此提示。";
+      } else if (/desktop session required|unauthorized|401/i.test(raw)) {
+        detail = "登录状态已失效，请重新登录后再提交验证。";
+      } else if (raw.trim()) {
+        detail = raw.replace(/^Error invoking remote method ['"][^'"]+['"]:\s*(?:Error:\s*)*/i, "").trim() || detail;
+      }
+      return { ok: false, releaseId, detail };
+    }
   }
 
   private async clearFailedPendingApply(currentVersion: string): Promise<string | null> {
@@ -393,7 +445,16 @@ export class DesktopAppUpdateService {
     this.lastStatus = status;
     const fresh = parseDesktopAppRelease(releasePayload);
     if (!status.available || !fresh) {
-      report("error", 0, status.detail || "没有可安装的更新。");
+      const obsolete = await this.loadStagedState();
+      if (obsolete && compareDesktopUpdateVersions(status.currentVersion, obsolete.latestVersion) >= 0) {
+        await rm(obsolete.path, { force: true }).catch(() => undefined);
+        await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+        this.staged = null;
+      }
+      report("error", 0, status.detail || "没有可安装的更新。", undefined, {
+        latestVersion: undefined,
+        notes: undefined
+      });
       return { ok: false, detail: status.detail || "没有可安装的更新。" };
     }
     if (!fresh.sha256) {

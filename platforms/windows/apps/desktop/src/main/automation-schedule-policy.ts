@@ -116,7 +116,13 @@ function resolveAction(value?: string): AutomationSpec["action"] {
 
 export function createAutomationSpec(
   input: FeatureItemInput,
-  context: { makeId: () => string; activeWorkspaceId?: string; activeThreadId?: string; nowMs?: number }
+  context: {
+    makeId: () => string;
+    /** @deprecated Never inherit the UI/main active thread — leave unset for a dedicated bind. */
+    activeWorkspaceId?: string;
+    activeThreadId?: string;
+    nowMs?: number;
+  }
 ): AutomationSpec {
   const intervalMinutes = parsePositiveInterval(input.intervalMinutes);
   const dailyTime = /^\d{2}:\d{2}$/.test(input.dailyTime ?? "") ? input.dailyTime : undefined;
@@ -133,6 +139,9 @@ export function createAutomationSpec(
   const permissionMode = input.permissionMode === "full" || input.permissionMode === "agent"
     ? input.permissionMode
     : undefined;
+  // Codex: one automation ↔ one dedicated thread. Do not fall back to active*.
+  void context.activeWorkspaceId;
+  void context.activeThreadId;
   const spec: AutomationSpec = {
     id: input.id?.trim() || context.makeId(),
     title: input.title?.trim() || "未命名自动化",
@@ -144,8 +153,8 @@ export function createAutomationSpec(
     model: optionalTrimmed(input.model),
     reasoning: optionalTrimmed(input.reasoning),
     rrule,
-    workspaceId: input.workspaceId?.trim() || context.activeWorkspaceId || undefined,
-    threadId: input.threadId?.trim() || context.activeThreadId || undefined,
+    workspaceId: optionalTrimmed(input.workspaceId),
+    threadId: optionalTrimmed(input.threadId),
     action: resolveAction(input.action),
     intervalMinutes,
     dailyTime,

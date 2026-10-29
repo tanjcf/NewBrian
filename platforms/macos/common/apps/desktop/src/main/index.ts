@@ -5554,11 +5554,40 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
     });
   }
 
-  const nextAutomation = createAutomationSpec(input, {
-    makeId: () => makeId("automation"),
-    activeWorkspaceId,
-    activeThreadId
+  let nextAutomation = createAutomationSpec(input, {
+    makeId: () => makeId("automation")
   });
+  if (!String(nextAutomation.workspaceId || "").trim() || !String(nextAutomation.threadId || "").trim()) {
+    const catalog = await readWorkspaceCatalog();
+    const preferredWorkspaceId = String(input.workspaceId || "").trim();
+    const workspace =
+      catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID)
+      ?? catalog.workspaces.find((item) => item.id === preferredWorkspaceId)
+      ?? catalog.workspaces[0];
+    if (!workspace) {
+      throw new Error("无法为自动化创建专用对话：没有可用工作区。");
+    }
+    const title = String(nextAutomation.title || "自动化任务").trim().slice(0, 36) || "自动化任务";
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const created = await addWorkspaceThread({
+      workspaceId: workspace.id,
+      title,
+      summary: "自动化任务专用对话；定时执行只写入此对话。",
+      scope: "chat",
+      ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
+    });
+    const thread = created.workspaces
+      .find((item) => item.id === workspace.id)
+      ?.threads.find((item) => !before.has(item.id));
+    if (!thread?.id) {
+      throw new Error("无法为自动化创建专用对话。");
+    }
+    nextAutomation = {
+      ...nextAutomation,
+      workspaceId: workspace.id,
+      threadId: thread.id
+    };
+  }
 
   return writeFeatureConfig({
     ...config,

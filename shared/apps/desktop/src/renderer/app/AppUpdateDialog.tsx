@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   formatAppUpdateSuccessLine,
   formatAppUpdateVersionLine,
+  resolveAppUpdateDialogHeroVersion,
   resolveAppUpdateProgressLabel,
   resolveAppUpdateProgressTitle,
   type AppUpdateProgressPhase
@@ -36,12 +37,15 @@ export interface AppUpdateDialogProps {
 }
 
 function NotesBlock({ notes }: { notes?: string }) {
-  const text = String(notes || "").trim();
+  // Keep author line breaks; only trim outer edges so empty leading/trailing lines do not pad the card.
+  const text = String(notes || "").replace(/^\uFEFF/, "").replace(/^\n+|\n+$/g, "");
   if (!text) return null;
   return (
     <div className="app-update-notes">
       <strong>更新内容</strong>
-      <div className="app-update-notes-body">{text}</div>
+      <div className="app-update-notes-body" style={{ whiteSpace: "pre-wrap" }}>
+        {text}
+      </div>
     </div>
   );
 }
@@ -102,9 +106,26 @@ export function AppUpdateDialog(props: AppUpdateDialogProps): ReactNode {
   const title = progress
     ? resolveAppUpdateProgressTitle(progress)
     : "发现新版本";
-  const version = String(progress?.latestVersion || latestVersion || "").trim();
   const current = String(progress?.currentVersion || currentVersion || "").trim();
+  const offered = String(progress?.latestVersion || latestVersion || "").trim();
+  const version = resolveAppUpdateDialogHeroVersion({
+    phase,
+    detail: progress?.detail,
+    latestVersion: offered,
+    currentVersion: current
+  });
   const bodyNotes = String(progress?.notes || notes || "").trim();
+  const versionLine = formatAppUpdateVersionLine({
+    currentVersion: current,
+    latestVersion: offered,
+    phase,
+    detail: progress?.detail
+  });
+  const errorDetail = String(progress?.detail || "").trim();
+  const hideDuplicateErrorDetail = isError
+    && Boolean(errorDetail)
+    && (errorDetail === versionLine
+      || /已是最新|没有可安装的更新|尚未发布更新包/.test(errorDetail));
 
   return (
     <div
@@ -134,7 +155,7 @@ export function AppUpdateDialog(props: AppUpdateDialogProps): ReactNode {
         </header>
 
         {version ? <p className="app-update-version-hero">v{version}</p> : null}
-        <p>{formatAppUpdateVersionLine({ currentVersion: current, latestVersion: version })}</p>
+        <p>{versionLine}</p>
 
         {isReady ? (
           <div className="app-update-ready-banner" role="status">
@@ -168,7 +189,9 @@ export function AppUpdateDialog(props: AppUpdateDialogProps): ReactNode {
           </div>
         ) : null}
 
-        {isError ? <p className="app-update-error">{progress?.detail}</p> : null}
+        {isError && errorDetail && !hideDuplicateErrorDetail ? (
+          <p className="app-update-error">{errorDetail}</p>
+        ) : null}
 
         <NotesBlock notes={bodyNotes} />
 

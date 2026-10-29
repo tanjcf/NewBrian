@@ -39,17 +39,18 @@ export function resolveDesktopMsiInstallScope(executablePath: string): DesktopMs
 }
 
 /**
- * Build silent msiexec upgrade args matching the existing install scope.
+ * Build Cockpit-style msiexec upgrade args (passive progress bar, no wizard).
  * Packaged installs default to LocalAppData/.newbrain (per-user).
  * Dual-purpose MSIs (WixUI Install Scope) need MSIINSTALLPERUSER=1 + ALLUSERS=
- * so /qn never surfaces the Installation Scope wizard.
+ * so Installation Scope is not prompted under /passive.
  */
 export function buildSilentDesktopMsiUpgradeArgs(
   msiPath: string,
   scope: DesktopMsiInstallScope = "per-user",
   options?: { applicationFolder?: string }
 ): string[] {
-  const args = ["/i", msiPath, "/qn", "/norestart", "REBOOT=ReallySuppress"];
+  // /passive = progress UI like Cockpit/Tauri; /qn would hide all feedback.
+  const args = ["/i", msiPath, "/passive", "/norestart", "REBOOT=ReallySuppress"];
   if (scope === "per-machine") {
     args.push("ALLUSERS=1");
   } else {
@@ -66,7 +67,7 @@ export function buildSilentDesktopMsiUpgradeArgs(
     args.push(`APPLICATIONFOLDER=${applicationFolder}`);
   }
   if (scope === "per-user") {
-    // Empty ALLUSERS forces per-user for dual-purpose packages under /qn.
+    // Empty ALLUSERS forces per-user for dual-purpose packages under /passive.
     // Keep this LAST so it cannot steal APPLICATIONFOLDER.
     args.push("ALLUSERS=");
   }
@@ -84,7 +85,7 @@ export function quoteCmdArgument(value: string): string {
 
 /**
  * Build a deferred silent-upgrade .cmd that waits for NewBrain.exe to exit,
- * then runs msiexec /qn. On msiexec failure it opens the MSI as a last resort.
+ * then runs msiexec /passive. On failure it opens the MSI as a last resort.
  * Quitting the app before msiexec avoids locked-file races with StopRunningNewbrain.
  * Never uses `tasklist | find /I` (blank console titled find /I).
  */
@@ -117,7 +118,15 @@ export function buildDeferredSilentMsiexecScript(input: {
   ].join("\r\n");
 }
 
-/** Deferred NSIS silent install after the app exits, then relaunch. */
+/**
+ * Cockpit-style deferred NSIS install (hidden waiter + visible installer progress).
+ * Flow: wait for app exit → setup.exe --updated /D=<root> (no /S) → verify exe → relaunch.
+ *
+ * `--updated` is required (same as electron-updater): without it the oneClick
+ * uninstaller treats the replace as a real uninstall (RMDir + shortcut removal).
+ * No `/S` so electron-builder oneClick shows its install progress bar (Cockpit passive).
+ * `/D=` stays last/unquoted.
+ */
 export function buildDeferredSilentNsisScript(input: {
   setupPath: string;
   executablePath: string;
@@ -127,84 +136,173 @@ export function buildDeferredSilentNsisScript(input: {
   resultPath?: string;
 }): string {
   const installRoot = dirnameOfExecutable(input.executablePath);
-  const waitLine = buildDeferredProcessExitWaitPowerShell({
-    processImageName: input.processImageName,
-    processId: input.processId,
-    maxWaitSeconds: input.maxWaitSeconds,
-    forceKillOnTimeout: true
-  });
-  // /D= must be last and unquoted (NSIS rule) so upgrades land in the running install dir.
-  const setupLine = `${quoteCmdArgument(input.setupPath)} /S /D=${installRoot}`;
-  const resultPath = String(input.resultPath || "").trim();
-  const relaunchPs = buildNsisRelaunchPowerShell({
-    installRoot,
-    executablePath: input.executablePath,
-    resultPath
-  });
-  return [
-    "@echo off",
-    "setlocal EnableExtensions",
-    "title NewBrain update",
-    "echo NewBrain update: waiting for app exit...",
-    waitLine,
-    "title NewBrain update: installing",
-    setupLine,
-    "set NEWBRAIN_NSIS_EXIT=%ERRORLEVEL%",
-    "if not \"%NEWBRAIN_NSIS_EXIT%\"==\"0\" (",
-    "  echo NSIS silent install failed.",
-    relaunchPs.writeFailure,
-    "  exit /B 1",
-    ")",
-    "timeout /t 3 /nobreak >nul",
-    relaunchPs.writeSuccessAndStart,
-    "exit /B 0",
-    ""
-  ].join("\r\n");
-}
-
-/**
- * After NSIS returns, start the newest NewBrain.exe among the intended install
- * root and the two historical layouts (MSI LocalAppData\\.newbrain vs NSIS Programs).
- */
-export function buildNsisRelaunchPowerShell(input: {
-  installRoot: string;
-  executablePath: string;
-  resultPath?: string;
-}): { writeFailure: string; writeSuccessAndStart: string } {
-  const installRoot = escapePsSingle(input.installRoot);
+  const image = String(input.processImageName || "NewBrain.exe").replace(/['"`]/g, "");
+  const processName = image.replace(/\.exe$/i, "") || "NewBrain";
+  const maxWait = Math.max(15, Math.min(300, Number(input.maxWaitSeconds) || 90));
+  const pid = Number(input.processId);
+  const hasPid = Number.isFinite(pid) && pid > 0;
+  const setupPath = escapePsSingle(input.setupPath);
+  const installRootPs = escapePsSingle(installRoot);
   const preferred = escapePsSingle(input.executablePath);
   const resultPath = escapePsSingle(String(input.resultPath || "").trim());
-  const resolveBlock =
-    `$ErrorActionPreference='SilentlyContinue'; `
-    + `$roots=@('${installRoot}', (Join-Path $env:LOCALAPPDATA 'Programs\\@codex-forgedesktop'), (Join-Path $env:LOCALAPPDATA '.newbrain')); `
-    + `$candidates=@(); `
-    + `foreach ($root in $roots) { `
-    + `if (-not $root) { continue }; `
-    + `foreach ($name in @('NewBrain.exe','newbrain.exe')) { `
-    + `$p=Join-Path $root $name; if (Test-Path -LiteralPath $p) { $candidates += Get-Item -LiteralPath $p } } }; `
-    + `$preferred='${preferred}'; `
-    + `if (Test-Path -LiteralPath $preferred) { $candidates += Get-Item -LiteralPath $preferred }; `
-    + `$target=($candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1); `;
-  const writeJson = (status: string, extra: string) =>
-    resultPath
-      ? `if ('${resultPath}') { `
-        + `$payload=[ordered]@{ status='${status}'; exitCode=$env:NEWBRAIN_NSIS_EXIT; `
-        + `installRoot='${installRoot}'; preferred='${preferred}'; ${extra} `
-        + `detail=''; at=(Get-Date).ToString('o') }; `
-        + `[IO.File]::WriteAllText('${resultPath}', ($payload | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false)) }`
-      : "";
-  const failureCmd =
-    `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `
-    + `"${resolveBlock}${writeJson("error", "relaunchPath=$null;")} "`;
-  const successCmd =
-    `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `
-    + `"${resolveBlock}`
-    + `if ($target) { Start-Process -FilePath $target.FullName -WorkingDirectory $target.DirectoryName }; `
-    + `${writeJson("installed", "relaunchPath=($(if($target){$target.FullName}else{$null}));")} "`;
-  return {
-    writeFailure: `  ${failureCmd}`,
-    writeSuccessAndStart: successCmd
-  };
+  const waitBlock = hasPid
+    ? `$proc = Get-Process -Id ${pid} -ErrorAction SilentlyContinue
+if ($proc) {
+  if (-not $proc.WaitForExit(${maxWait * 1000})) {
+    Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+  }
+}
+Get-Process -Name '${processName}' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+`
+    : `$name = '${processName}'
+$deadline = (Get-Date).AddSeconds(${maxWait})
+while ((Get-Date) -lt $deadline) {
+  if (-not (Get-Process -Name $name -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep -Seconds 1
+}
+Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+`;
+  return `$ErrorActionPreference = 'SilentlyContinue'
+${waitBlock}
+$setupPath = '${setupPath}'
+$installRoot = '${installRootPs}'
+$preferred = '${preferred}'
+$resultPath = '${resultPath}'
+$exitCode = 1
+$detail = ''
+function Stop-NewBrainOldInstallProcesses {
+  # Kill any NewBrain still running from Temp\\ns[nms]*\\old-install so --updated can finish.
+  Get-Process -Name '${processName}' -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      $path = $_.Path
+      if ($path -and ($path -match '(?i)\\Temp\\ns[nms][^\\]*\\[^\\]*\\old-install\\|\\old-install\\')) {
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+}
+Stop-NewBrainOldInstallProcesses
+try {
+  # --updated keeps upgrade semantics; no /S so oneClick shows progress (Cockpit-like).
+  # /D= must be last and must not gain quotes (NSIS rule).
+  # UseShellExecute=$true so the installer UI is visible (CreateNoWindow would hide it).
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $setupPath
+  $psi.Arguments = '--updated /D=' + $installRoot
+  $psi.UseShellExecute = $true
+  $installer = [Diagnostics.Process]::Start($psi)
+  if (-not $installer) { throw 'failed to start NSIS setup' }
+  $installer.WaitForExit()
+  $exitCode = $installer.ExitCode
+} catch {
+  $exitCode = 1
+  $detail = [string]$_.Exception.Message
+}
+function Test-NewBrainInstallExe([string]$path) {
+  if (-not $path) { return $false }
+  if ($path -match '(?i)\\Temp\\ns[nms][^\\]*\\[^\\]*\\old-install\\|\\old-install\\') { return $false }
+  return (Test-Path -LiteralPath $path)
+}
+function Find-NewBrainInstallExe {
+  $roots = @(
+    $installRoot,
+    (Join-Path $env:LOCALAPPDATA '.newbrain'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\\@codex-forgedesktop')
+  )
+  $candidates = @()
+  foreach ($root in $roots) {
+    if (-not $root) { continue }
+    foreach ($name in @('NewBrain.exe', 'newbrain.exe')) {
+      $p = Join-Path $root $name
+      if (Test-NewBrainInstallExe $p) { $candidates += Get-Item -LiteralPath $p }
+    }
+  }
+  if (Test-NewBrainInstallExe $preferred) { $candidates += Get-Item -LiteralPath $preferred }
+  return ($candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+}
+function Restore-NewBrainFromTempOldInstall {
+  # --updated rename can leave the only surviving tree under %TEMP%\\ns[nms]*\\old-install.
+  if (-not $installRoot) { return $null }
+  if (-not (Test-Path -LiteralPath $env:TEMP)) { return $null }
+  $orphan = Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '(?i)^ns[nms].*\\.tmp$' -or $_.Name -match '(?i)^ns[nms]' } |
+    ForEach-Object {
+      foreach ($name in @('NewBrain.exe', 'newbrain.exe')) {
+        $p = Join-Path $_.FullName (Join-Path 'old-install' $name)
+        if (Test-Path -LiteralPath $p) { Get-Item -LiteralPath $p }
+      }
+    } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if (-not $orphan) { return $null }
+  $srcRoot = $orphan.DirectoryName
+  try {
+    New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+    Copy-Item -LiteralPath (Join-Path $srcRoot '*') -Destination $installRoot -Recurse -Force -ErrorAction Stop
+  } catch {
+    return $null
+  }
+  return (Find-NewBrainInstallExe)
+}
+function Repair-NewBrainShortcuts([string]$exePath) {
+  if (-not (Test-NewBrainInstallExe $exePath)) { return }
+  $folder = Split-Path -Parent $exePath
+  $w = New-Object -ComObject WScript.Shell
+  $desk = [Environment]::GetFolderPath('Desktop')
+  $menu = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'
+  foreach ($p in @((Join-Path $desk 'NewBrain.lnk'), (Join-Path $menu 'NewBrain.lnk'))) {
+    try {
+      $dir = Split-Path -Parent $p
+      if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+      $s = $w.CreateShortcut($p)
+      $s.TargetPath = $exePath
+      $s.WorkingDirectory = $folder
+      $s.Description = 'NewBrain'
+      $s.IconLocation = $exePath + ',0'
+      $s.Save()
+    } catch {}
+  }
+}
+$target = $null
+$findDeadline = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $findDeadline) {
+  $target = Find-NewBrainInstallExe
+  if ($target) { break }
+  Start-Sleep -Seconds 1
+}
+if (-not $target) {
+  $target = Restore-NewBrainFromTempOldInstall
+  if ($target) {
+    $detail = 'restored install from Temp nsn old-install after incomplete upgrade'
+    $exitCode = 0
+  }
+}
+# Installer exit 0 is not enough: a failed reinstall can leave only a tracked temp shortcut.
+if (-not $target) {
+  $exitCode = 1
+  if (-not $detail) { $detail = 'NewBrain.exe missing after silent setup; install did not complete' }
+}
+$status = if ($exitCode -eq 0 -and $target) { 'installed' } else { 'error' }
+if ($target) { Repair-NewBrainShortcuts $target.FullName }
+if ($resultPath) {
+  $payload = [ordered]@{
+    status = $status
+    exitCode = $exitCode
+    installRoot = $installRoot
+    preferred = $preferred
+    relaunchPath = $(if ($target) { $target.FullName } else { $null })
+    detail = $detail
+    at = (Get-Date).ToString('o')
+  }
+  [IO.File]::WriteAllText($resultPath, ($payload | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+}
+if ($exitCode -eq 0 -and $target) {
+  Start-Process -FilePath $target.FullName -WorkingDirectory $target.DirectoryName
+}
+exit $exitCode
+`;
 }
 
 function escapePsSingle(value: string): string {
@@ -339,6 +437,30 @@ export function resolveDesktopAppUpdateStatus(input: {
     downloadUrl: release.downloadUrl,
     detail: `发现新版本 ${release.latestVersion}。更新仅替换程序文件，不会删除聊天记录、项目与本地历史。`
   };
+}
+
+/**
+ * Persist "跳过此版本": do not prompt again until latestVersion moves past the skip.
+ * Mandatory releases still prompt.
+ */
+export function applySkippedVersionToUpdateStatus(
+  status: DesktopAppUpdateStatus,
+  skippedVersion: string | null | undefined
+): DesktopAppUpdateStatus {
+  const skipped = String(skippedVersion || "").trim();
+  if (!skipped) return status;
+  status.skippedVersion = skipped;
+  if (
+    status.available
+    && status.latestVersion
+    && !status.mandatory
+    && normalizeDesktopUpdateVersionLabel(skipped)
+      === normalizeDesktopUpdateVersionLabel(status.latestVersion)
+  ) {
+    status.available = false;
+    status.detail = `已跳过版本 ${status.latestVersion}。有更新版本时再提醒。`;
+  }
+  return status;
 }
 
 function safeReleaseFileName(version: string, release?: ResolvedDesktopAppRelease | null) {
@@ -503,7 +625,15 @@ export class DesktopAppUpdateService {
       status.detail = failedApplyDetail;
     }
     const staged = await this.loadStagedState();
-    if (!failedApplyDetail && staged && status.available && staged.latestVersion === status.latestVersion) {
+    if (
+      staged
+      && compareVersions(status.currentVersion, staged.latestVersion) >= 0
+    ) {
+      // Drop obsolete staged packages (e.g. 1.4.34 left behind after 1.4.43).
+      await rm(staged.path, { force: true }).catch(() => undefined);
+      await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+      this.staged = null;
+    } else if (!failedApplyDetail && staged && status.available && staged.latestVersion === status.latestVersion) {
       // A downloaded package is never discarded here: applyPackage installs either
       // kind into the running install root, and deleting between "已就绪" and
       // "立即重启" left the restart click with nothing to apply.
@@ -511,7 +641,7 @@ export class DesktopAppUpdateService {
       status.stagedPath = staged.path;
       status.detail = `v${staged.latestVersion} 已就绪，重启后生效。`;
     }
-    if (skippedVersion) status.skippedVersion = skippedVersion;
+    applySkippedVersionToUpdateStatus(status, skippedVersion);
     this.lastStatus = status;
     return status;
   }
@@ -587,21 +717,36 @@ export class DesktopAppUpdateService {
       return { ok: false, detail: "缺少 release_id，无法回传验证结果。" };
     }
     const appVersion = this.dependencies.getCurrentVersion();
-    const payload = await this.dependencies.verifyUpdate({
-      releaseId,
-      ok: input?.ok !== false,
-      appVersion
-    });
-    return {
-      ok: payload.ok !== false,
-      releaseId: String(payload.release_id ?? releaseId),
-      verificationCount: Number(payload.verification_count ?? 0) || undefined,
-      threshold: Number(payload.threshold ?? 0) || undefined,
-      promotedToStable: payload.promoted_to_stable === true,
-      detail: payload.promoted_to_stable === true
-        ? "验证已提交，服务端已放行全员更新。"
-        : "验证已提交，感谢反馈。"
-    };
+    try {
+      const payload = await this.dependencies.verifyUpdate({
+        releaseId,
+        ok: input?.ok !== false,
+        appVersion
+      });
+      return {
+        ok: payload.ok !== false,
+        releaseId: String(payload.release_id ?? releaseId),
+        verificationCount: Number(payload.verification_count ?? 0) || undefined,
+        threshold: Number(payload.threshold ?? 0) || undefined,
+        promotedToStable: payload.promoted_to_stable === true,
+        detail: payload.promoted_to_stable === true
+          ? "验证已提交，服务端已放行全员更新。"
+          : "验证已提交，感谢反馈。"
+      };
+    } catch (error) {
+      // Never throw across IPC: Settings was concatenating the raw English error
+      // with the data-preservation sentence and showing it as "更新说明".
+      const raw = error instanceof Error ? error.message : String(error || "");
+      let detail = "提交更新验证失败，请稍后重试。";
+      if (/desktop app release was not found/i.test(raw)) {
+        detail = "服务端未找到对应更新记录，无法提交验证。若软件已升级成功，可忽略此提示。";
+      } else if (/desktop session required|unauthorized|401/i.test(raw)) {
+        detail = "登录状态已失效，请重新登录后再提交验证。";
+      } else if (raw.trim()) {
+        detail = raw.replace(/^Error invoking remote method ['"][^'"]+['"]:\s*(?:Error:\s*)*/i, "").trim() || detail;
+      }
+      return { ok: false, releaseId, detail };
+    }
   }
 
   private resolveScope(): DesktopMsiInstallScope {
@@ -733,7 +878,16 @@ export class DesktopAppUpdateService {
     this.lastStatus = status;
     const fresh = parseDesktopAppRelease(releasePayload);
     if (!status.available || !fresh) {
-      report("error", 0, status.detail || "没有可安装的更新。");
+      const obsolete = await this.loadStagedState();
+      if (obsolete && compareVersions(status.currentVersion, obsolete.latestVersion) >= 0) {
+        await rm(obsolete.path, { force: true }).catch(() => undefined);
+        await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+        this.staged = null;
+      }
+      report("error", 0, status.detail || "没有可安装的更新。", undefined, {
+        latestVersion: undefined,
+        notes: undefined
+      });
       return { ok: false, detail: status.detail || "没有可安装的更新。" };
     }
     if (!fresh.sha256) {
@@ -917,7 +1071,7 @@ export class DesktopAppUpdateService {
       reportWithMode(
         "installing",
         96,
-        "即将退出并安装更新。聊天、项目与历史数据会保留。",
+        "即将退出应用；安装程序将显示进度条，完成后自动启动。聊天、项目与历史数据会保留。",
         "nsis"
       );
       const nsisResult = await this.dependencies.runSilentNsisInstall({
@@ -925,7 +1079,7 @@ export class DesktopAppUpdateService {
         executablePath
       });
       if (isSilentDesktopMsiSuccess(nsisResult.exitCode) && !nsisResult.error) {
-        const detail = `更新包已就绪，即将退出并安装（${staged.latestVersion}）。`;
+        const detail = `即将退出；请在安装进度窗口完成后等待自动启动（${staged.latestVersion}）。`;
         reportWithMode("done", 100, detail, "nsis");
         try {
           this.dependencies.afterSilentSuccess?.();
@@ -934,7 +1088,7 @@ export class DesktopAppUpdateService {
         }
         return { ok: true, path: staged.path, detail };
       }
-      const detail = `静默安装失败：${nsisResult.error || `exit ${nsisResult.exitCode}`}。将打开安装程序作为后备。`;
+      const detail = `安装启动失败：${nsisResult.error || `exit ${nsisResult.exitCode}`}。将打开安装程序作为后备。`;
       reportWithMode("opening", 97, detail, "wizard");
       const openError = await this.dependencies.openInstallerFallback(staged.path);
       if (openError) {
@@ -966,9 +1120,7 @@ export class DesktopAppUpdateService {
     reportWithMode(
       "installing",
       96,
-      packageKind === "ulit-msi"
-        ? "正在安装升级补丁。安装完成后将自动重启；聊天、项目与历史数据会保留。"
-        : "即将退出并安装更新。聊天、项目与历史数据会保留。",
+      "即将退出应用；安装程序将显示进度条，完成后自动启动。聊天、项目与历史数据会保留。",
       "silent"
     );
 
@@ -980,7 +1132,7 @@ export class DesktopAppUpdateService {
       scope
     });
     if (isSilentDesktopMsiSuccess(silentResult.exitCode) && !silentResult.error) {
-      const detail = `更新包已就绪，即将退出并安装（${staged.latestVersion}）。`;
+      const detail = `即将退出；请在安装进度窗口完成后等待自动启动（${staged.latestVersion}）。`;
       reportWithMode("done", 100, detail, "silent");
       try {
         this.dependencies.afterSilentSuccess?.();

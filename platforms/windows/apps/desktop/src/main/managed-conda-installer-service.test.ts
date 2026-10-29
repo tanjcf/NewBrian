@@ -2,16 +2,34 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const { buildBoundedCommandEnv, ManagedCondaInstallerService, resolveBoundedSpawnCommand, runBoundedEnvironmentCommand } = await import(
+const {
+  buildBoundedCommandEnv,
+  ManagedCondaInstallerService,
+  resolveBoundedSpawnCommand,
+  resolveTrustedWindowsSystemRoot,
+  runBoundedEnvironmentCommand,
+  sanitizeWindowsPathEnv
+} = await import(
   new URL("./managed-conda-installer-service.ts", import.meta.url).href
 );
 
-test("routes Windows cmd and bat shims through cmd.exe", () => {
+test("routes Windows cmd and bat shims through literal cmd.exe with env-held command line", () => {
   const resolved = resolveBoundedSpawnCommand({ executable: "C:\\Program Files\\nodejs\\npm.cmd", args: ["--version"] }, "win32");
-  assert.match(resolved.executable, /(?:cmd\.exe|cmd)$/i);
+  assert.equal(resolved.executable, "C:\\Windows\\System32\\cmd.exe");
   assert.deepEqual(resolved.args.slice(0, 3), ["/d", "/s", "/c"]);
-  assert.match(resolved.args[3], /^""C:\\Program Files\\nodejs\\npm\.cmd" "--version""$/);
+  assert.equal(resolved.args[3], "call %NEWBRAIN_BOUNDED_CMDLINE%");
+  assert.match(String(resolved.envExtra?.NEWBRAIN_BOUNDED_CMDLINE), /^"C:\\Program Files\\nodejs\\npm\.cmd" "--version"$/);
   assert.equal(resolved.windowsVerbatimArguments, true);
+});
+
+test("rejects bare cmd.exe /c concatenated shell lines", () => {
+  assert.throws(
+    () => resolveBoundedSpawnCommand({
+      executable: "cmd.exe",
+      args: ["/d", "/s", "/c", "\"C:\\\\tools\\\\conda.bat\" create --yes"]
+    }, "win32"),
+    /must not invoke cmd\.exe \/c/
+  );
 });
 
 test("restores required Windows process variables without discarding the task environment", () => {
@@ -25,6 +43,26 @@ test("restores required Windows process variables without discarding the task en
   assert.equal(env.ComSpec, "C:\\Windows\\System32\\cmd.exe");
   assert.equal(env.PATH, "C:\\tools");
   assert.equal(env.CUSTOM_VALUE, "ready");
+});
+
+test("rejects hostile SystemRoot and ComSpec from the host environment", () => {
+  assert.equal(resolveTrustedWindowsSystemRoot("C:\\Windows&calc.exe"), "C:\\Windows");
+  assert.equal(resolveTrustedWindowsSystemRoot("D:\\Windows"), "D:\\Windows");
+  const env = buildBoundedCommandEnv(
+    { PATH: "C:\\safe;C:\\bad&calc;C:\\ok" },
+    "win32",
+    {
+      SystemRoot: "C:\\Windows\" & calc.exe",
+      ComSpec: "C:\\evil\\cmd.exe",
+      PATH: "C:\\host&evil;C:\\Windows\\System32",
+      SECRET_TOKEN: "should-not-copy"
+    }
+  );
+  assert.equal(env.SystemRoot, "C:\\Windows");
+  assert.equal(env.ComSpec, "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(env.PATH, "C:\\safe;C:\\ok");
+  assert.equal(env.SECRET_TOKEN, undefined);
+  assert.equal(sanitizeWindowsPathEnv("C:\\a&b;C:\\c"), "C:\\c");
 });
 
 test("executes the installed npm.cmd shim on Windows", { skip: process.platform !== "win32" }, async () => {
@@ -67,8 +105,9 @@ test("rejects a file path used as the command working directory", async () => {
   }), /Command working directory is not a directory/);
 });
 
-test("downloads and installs managed Conda through bounded commands", async () => {
-  const commands: Array<{ executable: string }> = [];
+test("downloads and installs managed Conda through bounded commands without shell downloaders", async () => {
+  const commands: Array<{ executable: string; args: string[] }> = [];
+  const downloads: Array<{ url: string; path: string }> = [];
   let installed = false;
   const service = new ManagedCondaInstallerService({
     workspacePath: "C:\\newbrain",
@@ -91,7 +130,10 @@ test("downloads and installs managed Conda through bounded commands", async () =
     canReachPublicUrl: async () => true,
     ensureDirectory: async () => undefined,
     quoteShellArgument: (value: string) => `"${value}"`,
-    runCommand: async (input: { executable: string }) => {
+    downloadFile: async (url: string, destinationPath: string) => {
+      downloads.push({ url, path: destinationPath });
+    },
+    runCommand: async (input: { executable: string; args: string[] }) => {
       commands.push(input);
       if (input.executable.endsWith("miniconda.exe")) installed = true;
       return { status: 0, stdout: "", stderr: "" };
@@ -99,7 +141,9 @@ test("downloads and installs managed Conda through bounded commands", async () =
   });
 
   assert.equal(await service.ensureInstalled(), "C:\\state\\conda\\Scripts\\conda.exe");
-  assert.deepEqual(commands.map((command) => command.executable), ["powershell.exe", "C:\\newbrain\\install\\miniconda.exe"]);
+  assert.deepEqual(downloads, [{ url: "https://example.test/miniconda.exe", path: "C:\\newbrain\\install\\miniconda.exe" }]);
+  assert.deepEqual(commands.map((command) => command.executable), ["C:\\newbrain\\install\\miniconda.exe"]);
+  assert.deepEqual(commands[0]?.args, ["/S", "/D=C:\\state\\conda"]);
   assert.ok(commands.every((command) => !("timeoutMs" in command)));
 });
 

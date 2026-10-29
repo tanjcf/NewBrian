@@ -36,6 +36,10 @@ import {
   mapSubscriptionInactiveUserMessage
 } from "../shared/model-user-facing-error.ts";
 import {
+  LOGIN_FAILURE_FALLBACK,
+  normalizeLoginErrorMessage
+} from "./app/login-error-message.ts";
+import {
   SettingsNavIcon,
   SettingsSwitch,
   WorkspaceTree,
@@ -105,16 +109,6 @@ function normalizeModelErrorMessage(error: unknown) {
     return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
   }
   return message;
-}
-
-function normalizeLoginErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(/^Error invoking remote method 'phase1:login-auth': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:login-auth": Error:\s*/i, "")
-    .replace(/^Error invoking remote method 'phase1:send-login-code': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:send-login-code": Error:\s*/i, "")
-    .trim();
 }
 
 type ReviewChangeFile = {
@@ -1092,10 +1086,14 @@ export function App() {
         agreement_accepted: authStatus.agreement?.enabled ? agreementChecked : true
       });
       setAuthStatus(nextAuthStatus);
-      if (nextAuthStatus.authenticated) {
-        const nextBootstrapStatus = await api.startDesktopBootstrap();
-        setDesktopBootstrapStatus(nextBootstrapStatus);
+      if (!nextAuthStatus.authenticated) {
+        setErrorMessage(
+          String(nextAuthStatus.last_error || "").trim() || LOGIN_FAILURE_FALLBACK
+        );
+        return false;
       }
+      const nextBootstrapStatus = await api.startDesktopBootstrap();
+      setDesktopBootstrapStatus(nextBootstrapStatus);
       setLoginForm((current) => ({
         ...current,
         password: "",
@@ -1104,7 +1102,7 @@ export function App() {
       setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
-      return nextAuthStatus.authenticated === true;
+      return true;
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
       return false;

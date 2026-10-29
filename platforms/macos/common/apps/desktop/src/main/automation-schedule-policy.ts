@@ -97,8 +97,9 @@ export function createAutomationSpec(
     model: optionalTrimmed(input.model),
     reasoning: optionalTrimmed(input.reasoning),
     rrule,
-    workspaceId: input.workspaceId?.trim() || context.activeWorkspaceId || undefined,
-    threadId: input.threadId?.trim() || context.activeThreadId || undefined,
+    // Codex: one automation ↔ one dedicated thread. Do not fall back to active*.
+    workspaceId: optionalTrimmed(input.workspaceId),
+    threadId: optionalTrimmed(input.threadId),
     action: resolveAction(input.action),
     intervalMinutes,
     dailyTime,

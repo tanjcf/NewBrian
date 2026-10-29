@@ -192,10 +192,7 @@ export function buildDeferredUlitZipApplyScript(input: {
   return [
     "@echo off",
     "setlocal EnableExtensions",
-    "title NewBrain update",
-    "echo NewBrain update: waiting for app exit...",
     waitLine,
-    "title NewBrain update: applying patch",
     `if exist ${stagingDir} rmdir /S /Q ${stagingDir}`,
     `mkdir ${stagingDir} >NUL 2>&1`,
     `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${escapePsSingle(input.zipPath)}' -DestinationPath '${escapePsSingle(input.stagingDir)}' -Force"`,

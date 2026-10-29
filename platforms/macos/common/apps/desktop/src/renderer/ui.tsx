@@ -26,6 +26,10 @@ import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
 import { codexAutomationSendPlan } from "../shared/automation-run-history.ts";
 import { mapSubscriptionInactiveUserMessage } from "../shared/model-user-facing-error.ts";
 import {
+  LOGIN_FAILURE_FALLBACK,
+  normalizeLoginErrorMessage
+} from "./app/login-error-message.ts";
+import {
   SettingsNavIcon,
   SettingsSwitch,
   WorkspaceTree,
@@ -57,6 +61,11 @@ import {
   APP_UPDATE_STATUS_POLL_MS,
   shouldRefreshAppUpdateOnWindowSignal
 } from "./app/app-update-status-poll";
+import {
+  buildAppUpdateErrorProgress,
+  isSameAppUpdateVersion,
+  shouldAutoOpenAppUpdateDiscover
+} from "./app/app-update-progress-copy";
 import type {
   BootstrapPayload,
   ComposerToolFieldValueMap,
@@ -97,16 +106,6 @@ function normalizeModelErrorMessage(error: unknown) {
     return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
   }
   return message;
-}
-
-function normalizeLoginErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(/^Error invoking remote method 'phase1:login-auth': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:login-auth": Error:\s*/i, "")
-    .replace(/^Error invoking remote method 'phase1:send-login-code': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:send-login-code": Error:\s*/i, "")
-    .trim();
 }
 
 type ReviewChangeFile = {
@@ -499,6 +498,8 @@ export function App() {
   }>(null);
   const [appUpdateBusy, setAppUpdateBusy] = useState(false);
   const [appUpdateDiscoverOpen, setAppUpdateDiscoverOpen] = useState(false);
+  /** Same-session cancel/skip before persisted skippedVersion is refreshed. */
+  const [appUpdateSuppressedVersion, setAppUpdateSuppressedVersion] = useState<string | null>(null);
   const [appUpdateApplied, setAppUpdateApplied] = useState<null | {
     fromVersion: string;
     toVersion: string;
@@ -831,7 +832,17 @@ export function App() {
   useEffect(() => {
     if (!api?.onAppUpdateProgress) return;
     return api.onAppUpdateProgress((progress) => {
-      setAppUpdateProgress(progress);
+      setAppUpdateProgress(
+        progress.phase === "error"
+          ? buildAppUpdateErrorProgress({
+            detail: progress.detail,
+            latestVersion: progress.latestVersion,
+            currentVersion: progress.currentVersion,
+            notes: progress.notes,
+            preservesUserData: progress.preservesUserData
+          })
+          : progress
+      );
       setAppUpdateDiscoverOpen(false);
       if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
         setAppUpdateBusy(false);
@@ -848,21 +859,28 @@ export function App() {
     }).catch(() => undefined);
   }, [api]);
   useEffect(() => {
-    if (!appUpdateStatus?.available) return;
-    if (appUpdateStatus.skippedVersion && appUpdateStatus.skippedVersion === appUpdateStatus.latestVersion) return;
-    if (appUpdateApplied) return;
+    if (!shouldAutoOpenAppUpdateDiscover({
+      available: Boolean(appUpdateStatus?.available),
+      latestVersion: appUpdateStatus?.latestVersion,
+      currentVersion: appUpdateStatus?.currentVersion,
+      skippedVersion: appUpdateStatus?.skippedVersion,
+      suppressedVersion: appUpdateSuppressedVersion,
+      appliedVisible: Boolean(appUpdateApplied)
+    })) {
+      return;
+    }
     if (
       appUpdateProgress?.phase === "ready"
-      && !appUpdateStatus.staged
+      && !appUpdateStatus?.staged
       && appUpdateProgress.latestVersion
-      && appUpdateProgress.latestVersion === appUpdateStatus.latestVersion
+      && isSameAppUpdateVersion(appUpdateProgress.latestVersion, appUpdateStatus?.latestVersion)
     ) {
       setAppUpdateProgress(null);
       setAppUpdateDiscoverOpen(true);
       return;
     }
     if (appUpdateProgress || appUpdateDiscoverOpen) return;
-    if (appUpdateStatus.staged) {
+    if (appUpdateStatus?.staged) {
       setAppUpdateProgress({
         phase: "ready",
         percent: 100,
@@ -881,6 +899,9 @@ export function App() {
     appUpdateStatus?.staged,
     appUpdateStatus?.skippedVersion,
     appUpdateStatus?.detail,
+    appUpdateStatus?.currentVersion,
+    appUpdateStatus?.notes,
+    appUpdateSuppressedVersion,
     appUpdateProgress?.phase,
     appUpdateProgress?.latestVersion,
     appUpdateDiscoverOpen,
@@ -930,17 +951,13 @@ export function App() {
       const result = await api.startAppUpdate();
       setChatStatus(result.detail || "");
       if (!result.ok) {
-        setAppUpdateProgress((current) => current ? {
-          ...current,
-          phase: "error",
-          percent: 0,
-          detail: result.detail || "更新失败"
-        } : {
-          phase: "error",
-          percent: 0,
+        setAppUpdateProgress(buildAppUpdateErrorProgress({
           detail: result.detail || "更新失败",
+          latestVersion: appUpdateStatus?.latestVersion,
+          currentVersion: appUpdateStatus?.currentVersion,
+          notes: appUpdateStatus?.notes,
           preservesUserData: true
-        });
+        }));
         setErrorMessage(result.detail || "更新失败");
       } else if (result.staged) {
         setAppUpdateProgress((current) => ({
@@ -957,12 +974,12 @@ export function App() {
       if (status) setAppUpdateStatus(status);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setAppUpdateProgress({
-        phase: "error",
-        percent: 0,
+      setAppUpdateProgress(buildAppUpdateErrorProgress({
         detail,
+        latestVersion: appUpdateStatus?.latestVersion,
+        currentVersion: appUpdateStatus?.currentVersion,
         preservesUserData: true
-      });
+      }));
       setErrorMessage(detail);
     } finally {
       setAppUpdateBusy(false);
@@ -975,35 +992,49 @@ export function App() {
       const result = await api.applyAppUpdate();
       setChatStatus(result.detail || "");
       if (!result.ok) {
-        setAppUpdateProgress({
-          phase: "error",
-          percent: 0,
+        setAppUpdateProgress(buildAppUpdateErrorProgress({
           detail: result.detail || "安装失败",
           latestVersion: appUpdateStatus?.latestVersion,
           currentVersion: appUpdateStatus?.currentVersion,
           notes: appUpdateStatus?.notes,
           preservesUserData: true
-        });
+        }));
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setAppUpdateProgress({
-        phase: "error",
-        percent: 0,
+      setAppUpdateProgress(buildAppUpdateErrorProgress({
         detail,
         latestVersion: appUpdateStatus?.latestVersion,
         currentVersion: appUpdateStatus?.currentVersion,
         notes: appUpdateStatus?.notes,
         preservesUserData: true
-      });
+      }));
     } finally {
       setAppUpdateBusy(false);
     }
   }
-  async function skipDesktopAppUpdate() {
-    const version = appUpdateStatus?.latestVersion;
+  async function skipDesktopAppUpdate(versionHint?: string) {
+    const version = String(
+      versionHint
+        || appUpdateStatus?.latestVersion
+        || appUpdateProgress?.latestVersion
+        || ""
+    ).trim();
+    setAppUpdateSuppressedVersion(version || null);
+    setAppUpdateDiscoverOpen(false);
+    setAppUpdateProgress(null);
+    if (version) {
+      setAppUpdateStatus((current) => current ? {
+        ...current,
+        skippedVersion: version,
+        available: current.mandatory ? current.available : false,
+        detail: current.mandatory
+          ? current.detail
+          : `已跳过版本 ${version}。有更新版本时再提醒。`
+      } : current);
+    }
     if (api?.skipAppUpdateVersion) {
-      await api.skipAppUpdateVersion(version).catch(() => undefined);
+      await api.skipAppUpdateVersion(version || undefined).catch(() => undefined);
     }
     const status = await api?.getAppUpdateStatus?.().catch(() => null);
     if (status) setAppUpdateStatus(status);
@@ -1012,7 +1043,8 @@ export function App() {
     setAppUpdateProgress(null);
   }
   function dismissAppUpdateDiscover() {
-    setAppUpdateDiscoverOpen(false);
+    // 「取消 / 稍后」与跳过同语义：本版本不再自动弹，等更新的版本。
+    void skipDesktopAppUpdate();
   }
   async function dismissAppliedAppUpdate() {
     setAppUpdateApplied(null);
@@ -1413,14 +1445,18 @@ export function App() {
         agreement_accepted: authStatus.agreement?.enabled ? agreementChecked : true
       });
       setAuthStatus(nextAuthStatus);
-      if (nextAuthStatus.authenticated) {
-        const nextBootstrapStatus = await api.startDesktopBootstrap();
-        setDesktopBootstrapStatus(nextBootstrapStatus);
-        try {
-          setModelConfig(await api.getModelConfig());
-        } catch {
-          // Login already succeeded. The model picker stays on the last config if the catalog request fails.
-        }
+      if (!nextAuthStatus.authenticated) {
+        setErrorMessage(
+          String(nextAuthStatus.last_error || "").trim() || LOGIN_FAILURE_FALLBACK
+        );
+        return false;
+      }
+      const nextBootstrapStatus = await api.startDesktopBootstrap();
+      setDesktopBootstrapStatus(nextBootstrapStatus);
+      try {
+        setModelConfig(await api.getModelConfig());
+      } catch {
+        // Login already succeeded. The model picker stays on the last config if the catalog request fails.
       }
       setLoginForm((current) => ({
         ...current,
@@ -1429,7 +1465,7 @@ export function App() {
       }));
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
-      return nextAuthStatus.authenticated === true;
+      return true;
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
       return false;

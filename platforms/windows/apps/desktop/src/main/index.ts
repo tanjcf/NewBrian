@@ -54,6 +54,10 @@ import type {
 } from "@codex-forge/protocol";
 import { desktopIpcChannels, isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { normalizeDesktopBillingPayload } from "./desktop-billing-policy.js";
+import {
+  isTempNsisOldInstallPath,
+  resolveCanonicalNewBrainExecutable
+} from "./desktop-install-path.js";
 import { buildWalletPaymentUrl } from "./wallet-payment-url.js";
 import {
   createBootstrapTaskDefinitions,
@@ -231,6 +235,10 @@ import {
   resolveInternalChatPath
 } from "./internal-chat-workspace.js";
 import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.js";
+import {
+  automationDedicatedThreadTitle,
+  automationNeedsDedicatedThread
+} from "../shared/automation-dedicated-thread.js";
 import { moveThreadBetweenProjects } from "../shared/sidebar-layout.js";
 import { ensureInternalChatWorkspaceCatalog } from "./internal-chat-workspace-catalog-service.js";
 import { ensureWorkspaceCatalogConda as ensureWorkspaceCatalogCondaValue } from "./workspace-catalog-conda-service.js";
@@ -870,6 +878,27 @@ const defaultGatewayBaseUrl = app.isPackaged
   : "http://127.0.0.1:8790/v1";
 const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
+// NSIS --updated can leave a Temp\\nsm*\\old-install copy running. If that copy
+// holds the single-instance lock, Desktop shortcuts to the real install appear dead.
+if (
+  app.isPackaged
+  && process.platform === "win32"
+  && isTempNsisOldInstallPath(process.execPath)
+) {
+  const canonical = resolveCanonicalNewBrainExecutable({
+    execPath: process.execPath,
+    localAppData: process.env.LOCALAPPDATA
+  });
+  if (canonical) {
+    spawn(canonical, [], {
+      detached: true,
+      stdio: "ignore",
+      cwd: dirname(canonical)
+    }).unref();
+  }
+  app.quit();
+  process.exit(0);
+}
 // Acquire process ownership before opening or migrating any shared SQLite database.
 const singleInstanceLockAcquired = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT
   ? true
@@ -5235,11 +5264,39 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
       plugins: [nextItem, ...config.plugins.filter((item) => item.id !== nextItem.id)]
     });
   }
-  const nextAutomation = createAutomationSpec(input, {
-    makeId: () => makeId("automation"),
-    activeWorkspaceId,
-    activeThreadId
+  let nextAutomation = createAutomationSpec(input, {
+    makeId: () => makeId("automation")
   });
+  if (automationNeedsDedicatedThread(nextAutomation)) {
+    const catalog = await readWorkspaceCatalog();
+    const preferredWorkspaceId = String(input.workspaceId || "").trim();
+    const workspace =
+      catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID)
+      ?? catalog.workspaces.find((item) => item.id === preferredWorkspaceId)
+      ?? catalog.workspaces[0];
+    if (!workspace) {
+      throw new Error("无法为自动化创建专用对话：没有可用工作区。");
+    }
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const created = await workspaceThreadLifecycleService.add({
+      workspaceId: workspace.id,
+      title: automationDedicatedThreadTitle(nextAutomation.title),
+      summary: "自动化任务专用对话；定时执行只写入此对话。",
+      scope: "chat",
+      ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
+    });
+    const thread = created.workspaces
+      .find((item) => item.id === workspace.id)
+      ?.threads.find((item) => !before.has(item.id));
+    if (!thread?.id) {
+      throw new Error("无法为自动化创建专用对话。");
+    }
+    nextAutomation = {
+      ...nextAutomation,
+      workspaceId: workspace.id,
+      threadId: thread.id
+    };
+  }
   return writeFeatureConfig({
     ...config,
     automations: [nextAutomation, ...config.automations.filter((item) => item.id !== nextAutomation.id)]
@@ -6314,12 +6371,9 @@ async function ensureWorkspaceCondaConfig(workspace: WorkspaceCatalogItem): Prom
   const envExists = await pathExists(envPath);
   if (!envExists) {
     const createArgs = ["create", "--yes", "--prefix", envPath, `python=${pythonVersion}`];
-    const createResult = await runBoundedEnvironmentCommand(condaPath.toLowerCase().endsWith(".bat") ? {
-      executable: "cmd.exe",
-      args: ["/d", "/s", "/c", `"${condaPath}" ${createArgs.map((item) => quoteShellArgument(item)).join(" ")}`],
-      cwd: workspace.path,
-      signal: desktopBootstrapAbortController?.signal
-    } : {
+    // Pass conda.bat/conda.exe directly — runBoundedEnvironmentCommand uses shell:true
+    // for .bat/.cmd and never builds a cmd.exe /c string from absolute paths (CodeQL).
+    const createResult = await runBoundedEnvironmentCommand({
       executable: condaPath,
       args: createArgs,
       cwd: workspace.path,
@@ -8850,42 +8904,39 @@ async function runScheduledAutomation(automation: AutomationSpec) {
   let workspace = automation.action === "error_remediation"
     ? catalog.workspaces.find((item) => resolve(item.path) === resolve(workspacePath)) ?? catalog.workspaces[0]
     : catalog.workspaces.find((item) => item.id === automation.workspaceId);
-  let thread = automation.action === "error_remediation"
-    ? workspace?.threads.find((item) => item.id === automation.threadId) ?? workspace?.threads[0]
-    : workspace?.threads.find((item) => item.id === automation.threadId);
-  if (automation.action !== "error_remediation") {
-    const fallbackWorkspace = catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID) ?? catalog.workspaces[0];
-    const threadPlan = planAutomationThreadTarget({
-      boundWorkspaceId: workspace?.id || automation.workspaceId,
-      boundThreadId: thread?.id || automation.threadId,
-      workspaceExists: Boolean(workspace),
-      threadExists: Boolean(thread),
-      fallbackWorkspaceId: fallbackWorkspace?.id || ""
+  // Never fall back to threads[0] — that dumps runs into unrelated chats.
+  let thread = workspace?.threads.find((item) => item.id === automation.threadId);
+  const fallbackWorkspace = catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID) ?? catalog.workspaces[0];
+  const threadPlan = planAutomationThreadTarget({
+    boundWorkspaceId: workspace?.id || automation.workspaceId,
+    boundThreadId: thread?.id || automation.threadId,
+    workspaceExists: Boolean(workspace),
+    threadExists: Boolean(thread),
+    fallbackWorkspaceId: fallbackWorkspace?.id || ""
+  });
+  if (threadPlan.createThread) {
+    workspace = catalog.workspaces.find((item) => item.id === threadPlan.workspaceId) ?? fallbackWorkspace;
+    if (!workspace) throw new Error("Automation target workspace/thread was not found.");
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const scope = "chat" as const;
+    const created = await workspaceThreadLifecycleService.add({
+      workspaceId: workspace.id,
+      title: automationDedicatedThreadTitle(automation.title),
+      summary: "绑定的对话不存在，已新建专用对话执行。",
+      scope,
+      ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
     });
-    if (threadPlan.createThread) {
-      workspace = catalog.workspaces.find((item) => item.id === threadPlan.workspaceId) ?? fallbackWorkspace;
-      if (!workspace) throw new Error("Automation target workspace/thread was not found.");
-      const before = new Set(workspace.threads.map((item) => item.id));
-      const scope = "chat" as const;
-      const created = await workspaceThreadLifecycleService.add({
-        workspaceId: workspace.id,
-        title: String(automation.title || "自动化任务").slice(0, 36),
-        summary: "绑定的对话不存在，已新建对话执行。",
-        scope,
-        ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
+    thread = created.workspaces.find((item) => item.id === workspace.id)?.threads.find((item) => !before.has(item.id));
+    const createdThread = thread;
+    const reboundWorkspaceId = workspace.id;
+    if (createdThread) {
+      const rebound = await readFeatureConfig();
+      await writeFeatureConfig({
+        ...rebound,
+        automations: rebound.automations.map((item) => item.id === automation.id
+          ? { ...item, workspaceId: reboundWorkspaceId, threadId: createdThread.id }
+          : item)
       });
-      thread = created.workspaces.find((item) => item.id === workspace.id)?.threads.find((item) => !before.has(item.id));
-      const createdThread = thread;
-      const reboundWorkspaceId = workspace.id;
-      if (createdThread) {
-        const rebound = await readFeatureConfig();
-        await writeFeatureConfig({
-          ...rebound,
-          automations: rebound.automations.map((item) => item.id === automation.id
-            ? { ...item, workspaceId: reboundWorkspaceId, threadId: createdThread.id }
-            : item)
-        });
-      }
     }
   }
   if (!workspace || !thread) throw new Error("Automation target workspace/thread was not found.");
@@ -10431,9 +10482,19 @@ function registerIpc() {
         const vscodeTool = getSystemTools().find((item) => item.id === "vscode");
         const vscodeCommand = vscodeTool ? resolveSystemToolCommand(vscodeTool) : "";
         if (!vscodeCommand) return { ok: false, detail: "未检测到 Visual Studio Code。" };
-        if (process.platform === "win32" && (!isAbsolute(vscodeCommand) || /\.(?:cmd|bat)$/i.test(vscodeCommand))) {
+        // For .cmd/.bat shims: literal cmd.exe + fixed `call %VAR%` line; paths live only in env
+        // (CodeQL js/shell-command-injection-from-environment).
+        if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(vscodeCommand)) {
           const commandLine = `"${vscodeCommand.replace(/"/g, "")}" "${targetPath.replace(/"/g, "")}"`;
-          await spawnDetachedAndConfirm(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", commandLine], { windowsHide: false });
+          await spawnDetachedAndConfirm(
+            "C:\\Windows\\System32\\cmd.exe",
+            ["/d", "/s", "/c", "call %NEWBRAIN_BOUNDED_CMDLINE%"],
+            {
+              windowsHide: false,
+              windowsVerbatimArguments: true,
+              env: { ...process.env, NEWBRAIN_BOUNDED_CMDLINE: commandLine }
+            }
+          );
         } else {
           await spawnDetachedAndConfirm(vscodeCommand, [targetPath], { windowsHide: false });
         }

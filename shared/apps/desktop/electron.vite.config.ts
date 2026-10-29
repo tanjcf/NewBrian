@@ -1,10 +1,33 @@
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import path, { resolve } from "node:path";
 import type { Plugin } from "vite";
 import { mainRollupOutput } from "./build-output-policy";
 import { repairMainBundleDir } from "./scripts/repair-bundle-cjs-shim.mjs";
+
+/**
+ * Windows junction/subst (e.g. C:\\workrpase\\BRAIN → I:\\…中文…) can make
+ * path.relative(viteRoot, index.html) return an absolute path. Rollup then
+ * rejects vite:build-html emitFile fileName. Prefer realpath alignment; for
+ * .html fall back to basename so packaging still succeeds.
+ */
+(() => {
+  const origRelative = path.relative.bind(path);
+  path.relative = ((from: string, to: string) => {
+    let out = origRelative(from, to);
+    if (!path.isAbsolute(out)) return out;
+    try {
+      out = origRelative(realpathSync(from), realpathSync(to));
+    } catch {
+      // keep first result
+    }
+    if (path.isAbsolute(out) && /\.html$/i.test(String(to))) {
+      return path.basename(to).replace(/\\/g, "/");
+    }
+    return out;
+  }) as typeof path.relative;
+})();
 
 const skipMainEsbuildTranspile = (): Plugin => ({
   name: "skip-main-esbuild-transpile",

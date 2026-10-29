@@ -71,13 +71,7 @@ async function scheduleDeferredSilentMsiexec(input: {
       error: error instanceof Error ? error.message : String(error)
     };
   }
-  return await new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], {
-      windowsHide: true, detached: true, stdio: "ignore"
-    });
-    child.once("error", error => resolve({ exitCode: null, error: error.message }));
-    child.once("spawn", () => { child.unref(); resolve({ exitCode: 0 }); });
-  });
+  return await spawnDetachedHiddenPowerShell(scriptPath);
 }
 
 async function scheduleDeferredSilentNsis(input: {
@@ -85,7 +79,8 @@ async function scheduleDeferredSilentNsis(input: {
   executablePath: string;
   downloadDir: string;
 }): Promise<{ exitCode: number | null; error?: string }> {
-  const scriptPath = join(input.downloadDir, `nsis-upgrade-${Date.now()}.cmd`);
+  // Hidden PowerShell — never cmd.exe (avoids the black console flash after quit).
+  const scriptPath = join(input.downloadDir, `nsis-upgrade-${Date.now()}.ps1`);
   const imageName = basename(input.executablePath) || "NewBrain.exe";
   const script = buildDeferredSilentNsisScript({
     setupPath: input.setupPath,
@@ -103,7 +98,7 @@ async function scheduleDeferredSilentNsis(input: {
       error: error instanceof Error ? error.message : String(error)
     };
   }
-  return await spawnDetachedCmd(scriptPath);
+  return await spawnDetachedHiddenPowerShell(scriptPath);
 }
 
 async function scheduleDeferredUlitZipApply(input: {
@@ -128,12 +123,35 @@ async function scheduleDeferredUlitZipApply(input: {
       error: error instanceof Error ? error.message : String(error)
     };
   }
-  return await spawnDetachedCmd(scriptPath);
+  return await spawnDetachedHiddenCmd(scriptPath);
 }
 
-function spawnDetachedCmd(scriptPath: string): Promise<{ exitCode: number | null; error?: string }> {
+/**
+ * Launch PowerShell with zero console flash.
+ * Direct powershell.exe is a console subsystem app and can briefly flash a black
+ * window even with -WindowStyle Hidden + windowsHide. wscript.exe is GUI-subsystem;
+ * Run(..., 0, False) starts the script with window style Hidden and no wait.
+ */
+async function spawnDetachedHiddenPowerShell(
+  scriptPath: string
+): Promise<{ exitCode: number | null; error?: string }> {
+  const vbsPath = join(dirname(scriptPath), `hidden-ps-${Date.now()}.vbs`);
+  const psQuoted = String(scriptPath).replace(/"/g, '""');
+  const vbs = [
+    'Set sh = CreateObject("WScript.Shell")',
+    `sh.Run "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File ""${psQuoted}""", 0, False`,
+    ""
+  ].join("\r\n");
+  try {
+    await writeFile(vbsPath, vbs, "utf8");
+  } catch (error) {
+    return {
+      exitCode: null,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
   return new Promise((resolve) => {
-    const child = spawn("cmd.exe", ["/c", scriptPath], {
+    const child = spawn("wscript.exe", ["//B", "//Nologo", vbsPath], {
       windowsHide: true,
       detached: true,
       stdio: "ignore"
@@ -165,6 +183,24 @@ function spawnDetachedCmd(scriptPath: string): Promise<{ exitCode: number | null
       finish({ exitCode: 0 });
     }, 250);
   });
+}
+
+/**
+ * Last-resort cmd launcher for legacy ulit apply scripts.
+ * Starts cmd itself with a hidden PowerShell wrapper so the black console does not flash.
+ */
+function spawnDetachedHiddenCmd(scriptPath: string): Promise<{ exitCode: number | null; error?: string }> {
+  const escaped = String(scriptPath).replace(/'/g, "''");
+  const launcher = join(dirname(scriptPath), `hidden-cmd-${Date.now()}.ps1`);
+  const body =
+    `$p = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/c', '${escaped}') `
+    + `-WindowStyle Hidden -PassThru; if ($p) { exit 0 } else { exit 1 }\r\n`;
+  return writeFile(launcher, body, "utf8")
+    .then(() => spawnDetachedHiddenPowerShell(launcher))
+    .catch((error) => ({
+      exitCode: null,
+      error: error instanceof Error ? error.message : String(error)
+    }));
 }
 
 function skippedVersionPath() {

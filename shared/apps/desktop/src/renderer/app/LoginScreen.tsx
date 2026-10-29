@@ -10,6 +10,7 @@ import {
   type LoginEmailAuthMode,
   type LoginFormState
 } from "./login-form";
+import { resolveLoginFailureBannerMessage } from "./login-error-message.ts";
 import { applyRememberedLogin, mergeRememberedLogin, type RememberedLogin } from "../../shared/remembered-login";
 
 export type { LoginAuthStatusView, LoginEmailAuthMode, LoginFormState } from "./login-form";
@@ -65,8 +66,10 @@ export function LoginScreen({
   );
   const [rememberLogin, setRememberLogin] = useState(true);
   const rememberedLoginRef = useRef<RememberedLogin | null>(null);
+  const loginErrorBannerRef = useRef<HTMLDivElement | null>(null);
   const [panelView, setPanelView] = useState<PanelView>("form");
   const agreementEnabled = Boolean(authStatus.agreement?.enabled);
+  const loginFailureMessage = resolveLoginFailureBannerMessage(errorMessage, authStatus.last_error);
   const agreementTitle =
     agreementDialog === "policy"
       ? authStatus.agreement?.policy_title || "使用政策"
@@ -84,6 +87,11 @@ export function LoginScreen({
       setPanelView("form");
     }
   }, [isSubmittingLogin, panelView]);
+
+  useEffect(() => {
+    if (!loginFailureMessage) return;
+    loginErrorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [loginFailureMessage]);
 
   useEffect(() => {
     const load = window.newbrain?.loadRememberedLogin;
@@ -214,6 +222,17 @@ export function LoginScreen({
                   手机
                 </button>
               </div>
+
+              {loginFailureMessage ? (
+                <div
+                  ref={loginErrorBannerRef}
+                  className="login-error-banner"
+                  role="alert"
+                  data-testid="login-error-banner"
+                >
+                  {loginFailureMessage}
+                </div>
+              ) : null}
 
               {channel === "email" ? (
                 <>
@@ -394,8 +413,6 @@ export function LoginScreen({
                 </span>
               </label>
 
-              {errorMessage ? <div className="login-error-banner">{errorMessage}</div> : null}
-
               <button
                 className="login-submit-btn"
                 disabled={!canSubmit}
@@ -437,7 +454,6 @@ export function LoginScreen({
 
               <div className="login-hints login-service-hints">
                 <span>{authServiceStatusLabel(authStatus)}</span>
-                {authStatus.last_error ? <em>{String(authStatus.last_error)}</em> : null}
                 {loginCeremonyEnabled ? (
                   <span className="login-ceremony-promo">欢庆国庆 · 找到彩蛋有好礼</span>
                 ) : null}

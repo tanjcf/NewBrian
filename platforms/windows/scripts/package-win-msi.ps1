@@ -26,6 +26,30 @@ function Resolve-RceditPath {
   return $hit.FullName
 }
 
+function Invoke-ElectronBuilderLogged {
+  param(
+    [Parameter(Mandatory = $true)][string]$ElectronBuilderJs,
+    [Parameter(Mandatory = $true)][string[]]$BuilderArgs,
+    [Parameter(Mandatory = $true)][string]$LogPath
+  )
+  # Under $ErrorActionPreference=Stop, piping native stderr (2>&1 | Tee-Object) can
+  # abort the build with an empty NativeCommandError. Also, bare Tee-Object would
+  # stream log lines as the function's return value and break exit-code checks.
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & node $ElectronBuilderJs @BuilderArgs 2>&1
+    $code = 0
+    if ($null -ne $LASTEXITCODE) { $code = [int]$LASTEXITCODE }
+    $lines = @($output | ForEach-Object { "$_" })
+    [System.IO.File]::WriteAllLines($LogPath, $lines)
+    foreach ($line in $lines) { Write-Host $line }
+    return $code
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+}
+
 function Set-NewBrainExecutableIcon {
   param(
     [Parameter(Mandatory = $true)][string]$ExecutablePath,
@@ -331,14 +355,84 @@ $prePackageSmokes = @(
   @{
     Id = "MARKDOWN-MESSAGE-SELECT-COPY-SMOKE-001"
     Path = Join-Path $desktopRoot "src\renderer\app\markdown-message-select-copy-smoke.test.ts"
+  },
+  @{
+    Id = "GOAL-COMPLETED-CARD-ANCHOR-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\goal-completed-card-anchor-smoke.test.ts"
+  },
+  @{
+    Id = "LOGIN-FAILURE-PROMPT-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\login-failure-prompt-smoke.test.ts"
+  },
+  @{
+    Id = "AUTOMATION-DEDICATED-THREAD-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\shared\automation-dedicated-thread-smoke.test.ts"
+  },
+  @{
+    Id = "NSIS-SILENT-UPGRADE-SMOKE-001"
+    Path = Join-Path $desktopRoot "build\installer-nsh-silent-upgrade.test.cjs"
+  },
+  @{
+    Id = "APP-UPDATE-SILENT-UPGRADE-SMOKE-001"
+    # Name kept for gate continuity; asserts Cockpit-style progress (/passive, no NSIS /S).
+    Path = Join-Path $desktopRoot "src\main\app-update-silent-upgrade-smoke.test.ts"
+  },
+  @{
+    Id = "APP-UPDATE-SKIP-CANCEL-SMOKE-001"
+    # Shared smoke: present after materialize under desktop, else resolve from BRAIN/shared.
+    Paths = @(
+      (Join-Path $desktopRoot "src\renderer\app\app-update-skip-cancel-smoke.test.ts"),
+      (Join-Path $sourceRoot "shared\apps\desktop\src\renderer\app\app-update-skip-cancel-smoke.test.ts"),
+      (Join-Path $repoRoot "..\..\shared\apps\desktop\src\renderer\app\app-update-skip-cancel-smoke.test.ts")
+    )
+  },
+  @{
+    Id = "APP-UPDATE-VERIFY-NOTICE-SMOKE-001"
+    # Verify IPC errors must not be mashed into Settings「更新说明」(seen twice in the field).
+    Paths = @(
+      (Join-Path $desktopRoot "src\renderer\app\app-update-verify-notice-smoke.test.ts"),
+      (Join-Path $sourceRoot "shared\apps\desktop\src\renderer\app\app-update-verify-notice-smoke.test.ts"),
+      (Join-Path $repoRoot "..\..\shared\apps\desktop\src\renderer\app\app-update-verify-notice-smoke.test.ts")
+    )
+  },
+  @{
+    Id = "APPROVAL-STICKY-AFTER-APPROVE-SMOKE-001"
+    # Clicking「批准并继续」must not stick on「等待批准」/「处理中，发送后排队」.
+    Paths = @(
+      (Join-Path $desktopRoot "src\renderer\app\approval-sticky-after-approve-smoke.test.ts"),
+      (Join-Path $sourceRoot "shared\apps\desktop\src\renderer\app\approval-sticky-after-approve-smoke.test.ts"),
+      (Join-Path $repoRoot "..\..\shared\apps\desktop\src\renderer\app\approval-sticky-after-approve-smoke.test.ts")
+    )
+  },
+  @{
+    Id = "APP-UPDATE-SKIP-PROMPT-SMOKE-001"
+    Path = Join-Path $desktopRoot "src\renderer\app\app-update-progress-copy.test.ts"
   }
 )
 foreach ($smoke in $prePackageSmokes) {
-  if (-not (Test-Path -LiteralPath $smoke.Path -PathType Leaf)) {
-    throw "Missing pre-package smoke case $($smoke.Id): $($smoke.Path)"
+  $smokePath = $null
+  if ($smoke.ContainsKey("Path") -and -not [string]::IsNullOrWhiteSpace([string]$smoke.Path)) {
+    if (Test-Path -LiteralPath $smoke.Path -PathType Leaf) {
+      $smokePath = $smoke.Path
+    }
+  }
+  if (-not $smokePath -and $smoke.ContainsKey("Paths")) {
+    foreach ($candidate in @($smoke.Paths)) {
+      if ([string]::IsNullOrWhiteSpace([string]$candidate)) { continue }
+      $resolved = $candidate
+      try { $resolved = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).Path } catch { }
+      if (Test-Path -LiteralPath $resolved -PathType Leaf) {
+        $smokePath = $resolved
+        break
+      }
+    }
+  }
+  if (-not $smokePath) {
+    $hint = if ($smoke.ContainsKey("Path")) { $smoke.Path } else { ($smoke.Paths -join " | ") }
+    throw "Missing pre-package smoke case $($smoke.Id): $hint"
   }
   Write-Host "Pre-package smoke: $($smoke.Id)" -ForegroundColor Cyan
-  & node --test $smoke.Path
+  & node --test $smokePath
   if ($LASTEXITCODE -ne 0) {
     throw "Pre-package smoke $($smoke.Id) failed. Packaging stopped."
   }
@@ -583,8 +677,7 @@ try {
       if (-not $requireSignature) { $dirArgs += "--config.win.signAndEditExecutable=false" }
       $builderStage = "application"
       $builderLog = Join-Path $builderOut "electron-builder-application.log"
-      & node $electronBuilder @dirArgs 2>&1 | Tee-Object -FilePath $builderLog
-      $lastBuilderExit = $LASTEXITCODE
+      $lastBuilderExit = Invoke-ElectronBuilderLogged -ElectronBuilderJs $electronBuilder -BuilderArgs $dirArgs -LogPath $builderLog
       if ($lastBuilderExit -eq 0) {
         $unpackedRoot = Join-Path $builderOut "win-unpacked"
         $unpackedExe = Join-Path $unpackedRoot "$productName.exe"
@@ -688,8 +781,7 @@ process.stdout.write(asar.extractFile(archive, file));
         if (-not $requireSignature) { $msiArgs += "--config.win.signAndEditExecutable=false" }
         $builderStage = "msi"
         $builderLog = Join-Path $builderOut "electron-builder-msi.log"
-        & node $electronBuilder @msiArgs 2>&1 | Tee-Object -FilePath $builderLog
-        $lastBuilderExit = $LASTEXITCODE
+        $lastBuilderExit = Invoke-ElectronBuilderLogged -ElectronBuilderJs $electronBuilder -BuilderArgs $msiArgs -LogPath $builderLog
         if ($lastBuilderExit -eq 0) {
           $nsisArgs = @("--win", "nsis", "--prepackaged=$unpackedRoot", "--config.directories.output=$builderOutRel", "--config.npmRebuild=false")
           $nsisArgs += "--config.extraMetadata.version=$($desktopPackage.version)"
@@ -697,8 +789,7 @@ process.stdout.write(asar.extractFile(archive, file));
           $builderStage = "nsis"
           $builderLog = Join-Path $builderOut "electron-builder-nsis.log"
           Write-Host "Packaging NSIS setup (electron-builder)..." -ForegroundColor Cyan
-          & node $electronBuilder @nsisArgs 2>&1 | Tee-Object -FilePath $builderLog
-          $lastBuilderExit = $LASTEXITCODE
+          $lastBuilderExit = Invoke-ElectronBuilderLogged -ElectronBuilderJs $electronBuilder -BuilderArgs $nsisArgs -LogPath $builderLog
         }
       }
     } finally {

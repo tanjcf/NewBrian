@@ -33,12 +33,22 @@ MSI 仍会一并产出，供企业静默/手动安装；客户端默认按 `pack
 test / production 无签名证书时自动打未签名包（文件名含 `unsigned`）。
 production 还要求干净 Git 工作区（`-AllowUnsigned` 时可放宽）。
 
-## 应用内更新（Cockpit 式）
+## 应用内更新（Cockpit 式进度条）
 
 1. 客户端发现新版本 → 弹窗展示 notes（取消 / 跳过此版本 / 立即更新）。
 2. 应用内下载并 SHA-256 校验 → 「已就绪，重启后生效」。
-3. 用户点「立即重启」→ 退出后静默跑 NSIS `/S`（或 MSI 静默）→ 再启动。
+3. 用户点「立即重启」→ 主程序退出 → **安装程序显示进度条**（NSIS `--updated /D=<安装目录>`，无 `/S`；MSI `/passive`；等待脚本用 wscript 启动，无黑框）→ 校验 `NewBrain.exe` 仍在 → 自动启动。
 4. 启动后展示「更新成功」与版本对比。
+
+与 Cockpit/Tauri `installMode: passive` 对齐：退出后的反馈来自安装包进度条，而不是完全无界面的 `/S`/`/qn`。
+
+NSIS 必须带 `--updated`（与 electron-updater 一致）：否则 oneClick 会按「真卸载」清目录/快捷方式，若随后安装失败就会变成「升级后应用消失」。`installer.nsh` 杀进程用 `nsExec`（禁止 `ExecWait cmd.exe`，避免黑框）。
+
+`--updated` 会把旧文件 rename 到 `%TEMP%\\nsn*\\.tmp\\old-install`。Windows 快捷方式跟踪可能把桌面图标改到该临时目录；升级失败后再装旧版若未覆盖 `.lnk`，双击会启动临时副本并报 `Cannot find package ...\\old-install\\resources\\...`。对策：`customInstall` 强制重写 Desktop/Start Menu 快捷方式到 `$INSTDIR`；延迟脚本拒绝从 `old-install` 启动，并在安装目录缺失时尝试从该临时树恢复。
+
+安装失败时才会打开安装包作为后备；等待脚本不应再弹出 cmd/PowerShell 黑窗口。
+
+**已中招机器急救**：删除桌面上的 `NewBrain.lnk`，直接运行 `%LOCALAPPDATA%\\.newbrain\\NewBrain.exe`（或重新安装一版带 `customInstall` 修复的 setup）；并可清理 `%TEMP%\\nsn*\\.tmp`。
 
 缺少校验值会停止更新；下载支持断点续传；校验不一致不会安装。
 用户目录下的 `.newbrain`、登录配置和项目数据不作为升级清理对象。
@@ -65,6 +75,14 @@ NSIS 一键安装默认当前用户目录，不删除用户数据。
 
 源代码回归测试：`node --test platforms/windows/apps/desktop/build/msi-project-created.test.cjs`。
 更新相关：`node --test platforms/windows/apps/desktop/src/main/desktop-app-update-patch.test.ts`。
+
+打包前强制冒烟（`package-win-msi.ps1` 失败即停）：
+
+- `NSIS-SILENT-UPGRADE-SMOKE-001` — `installer.nsh` 无 cmd 黑框 + 重写桌面快捷方式
+- `APP-UPDATE-SILENT-UPGRADE-SMOKE-001` — NSIS `--updated` 进度条（无 `/S`）、MSI `/passive`、old-install 恢复、跳过版本抑制
+- `APP-UPDATE-SKIP-CANCEL-SMOKE-001` — 取消/跳过持久抑制，同版本不重弹
+- `APP-UPDATE-VERIFY-NOTICE-SMOKE-001` — verify 失败不得拼进「更新说明」（英文 not found / 重复文案）
+- `APP-UPDATE-SKIP-PROMPT-SMOKE-001` — 发现弹窗/自动提示文案与门禁
 
 发布仍需在 Spring 登记安装包和真实校验值；未登记的本地构建不会自动推送给用户。
 test / production 无签名证书时自动打未签名包（文件名含 `unsigned`）。
