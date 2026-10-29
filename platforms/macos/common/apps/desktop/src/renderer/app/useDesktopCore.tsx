@@ -320,6 +320,27 @@ async function handleThreadMenuAction(action: string, workspace: WorkspaceCatalo
     case "new-window":
       window.open(window.location.href, "_blank", "noopener,noreferrer");
       return;
+    case "schedule-task": {
+      setSelectedWorkspaceId(workspace.id);
+      setSelectedThreadId(thread.id);
+      setIsComposingNewThread(false);
+      setActiveFeature("new-chat");
+      setQuestion(`请帮我为对话「${thread.title || "当前对话"}」创建一个自动化计划任务：说明触发时间和要执行的内容。`);
+      if (typeof ctx.setComposerSkillContext === "function") {
+        ctx.setComposerSkillContext("Automation Creator");
+      }
+      if (typeof ctx.setNewThreadScope === "function") {
+        ctx.setNewThreadScope("project");
+      }
+      if (typeof ctx.setChatUsesProject === "function") {
+        ctx.setChatUsesProject(true);
+      }
+      if (typeof ctx.setSelectedSidebarRow === "function") {
+        ctx.setSelectedSidebarRow(`chat:${workspace.id}:${thread.id}`);
+      }
+      setChatStatus("已进入 Automation Creator：发送后将创建计划任务，并继续在对话中确认细节。");
+      return;
+    }
     case "export-html": {
       if (!api?.exportWorkspaceThreadHtml) {
         setErrorMessage("当前版本不支持导出对话 HTML。");
@@ -423,8 +444,8 @@ function resetFeatureDraft(kind: ManagedFeatureKind) {
   setAutomationDraft({
     ...initialDraft,
     status: "idle",
-    workspaceId: selectedWorkspace?.id ?? "",
-    threadId: selectedThread?.id ?? "",
+    workspaceId: "",
+    threadId: "",
     runtime: "worktree",
     targetType: "project",
     schedule: "daily",
@@ -470,10 +491,11 @@ function loadFeatureDraft(kind: ManagedFeatureKind, item: SkillSpec | PluginSpec
     title: automation.title,
     trigger: automation.trigger,
     status: automation.status,
-    workspaceId: automation.workspaceId ?? selectedWorkspace?.id ?? "",
-    threadId: automation.threadId ?? selectedThread?.id ?? "",
+    workspaceId: automation.workspaceId ?? "",
+    threadId: automation.threadId ?? "",
     action: automation.action ?? "workspace_scan",
     intervalMinutes: String(automation.intervalMinutes ?? 30),
+    dailyTime: automation.dailyTime ?? "",
     runtime: automation.runtime ?? "worktree",
     targetType: automation.targetType ?? (automation.threadId ? "thread" : "project"),
     schedule: automation.schedule ?? "daily",
@@ -619,6 +641,20 @@ useEffect(() => {
       setBootstrapState(`${bootstrap.appName} · ${bootstrap.platform} · ${bootstrap.shell}`);
       setWorkspaceCatalog(normalizeWorkspaceCatalog(catalog));
       setModelConfig(model);
+      if (codecnApi.listCustomModelEndpoints) {
+        void codecnApi.listCustomModelEndpoints().then((snapshot) => {
+          const selected = snapshot?.endpoints?.find((item) => item.id === snapshot.selectedId);
+          if (!mounted || !selected) return;
+          setModelConfig((current) => ({
+            ...current,
+            model: selected.id,
+            provider: selected.label,
+            baseUrl: selected.baseUrl,
+            wireApi: selected.wireApi || "chat.completions",
+            apiKey: ""
+          }));
+        }).catch(() => undefined);
+      }
       setDesktopPreferences(preferences);
       applyVisualPreferences(preferences);
       setShellCommand(preferences.git.statusCommand);
@@ -1130,30 +1166,42 @@ async function saveFeature(kind: ManagedFeatureKind) {
   }
 
   const draft = kind === "skills" ? skillDraft : kind === "plugins" ? pluginDraft : automationDraft;
+  const schedule = String(draft.schedule || "").trim();
+  let intervalMinutes = String(draft.intervalMinutes || "").trim();
+  const dailyTime = String((draft as { dailyTime?: string }).dailyTime || "").trim();
+  if (kind === "automations") {
+    if (!intervalMinutes || intervalMinutes === "30") {
+      if (schedule === "hourly") intervalMinutes = "60";
+      else if (schedule === "daily") intervalMinutes = "1440";
+      else if (schedule === "weekly") intervalMinutes = String(7 * 1440);
+    }
+  }
   const item: Record<string, string> = {
     name: draft.name,
     summary: draft.summary,
-    status: draft.status,
+    status: kind === "automations" ? (draft.status || "scheduled") : draft.status,
     version: draft.version ?? "",
     source: draft.source ?? "",
     manifestPath: draft.manifestPath ?? "",
     path: draft.path ?? "",
     icon: draft.icon ?? "",
     capabilities: Array.isArray(draft.capabilities) ? draft.capabilities.join(",") : "",
-    trigger: draft.trigger,
+    trigger: draft.trigger || draft.prompt,
     title: draft.title,
     workspaceId: draft.workspaceId,
     threadId: draft.threadId,
-    action: draft.action,
-    intervalMinutes: draft.intervalMinutes,
+    action: draft.action === "thread_follow_up" ? "workspace_scan" : draft.action,
+    intervalMinutes,
+    dailyTime,
     runtime: draft.runtime,
     targetType: draft.targetType,
-    schedule: draft.schedule,
+    schedule,
     model: draft.model,
     reasoning: draft.reasoning,
     template: draft.template,
-    prompt: draft.prompt,
-    sandboxRule: draft.sandboxRule
+    prompt: draft.prompt || draft.trigger,
+    sandboxRule: draft.sandboxRule,
+    rrule: draft.rrule ?? ""
   };
 
   try {
@@ -1288,6 +1336,8 @@ async function saveDesktopPreferences(nextPreferences = desktopPreferences, opti
       dictation: { ...initialDesktopPreferences.dictation, ...nextPreferences.dictation },
       notifications: { ...initialDesktopPreferences.notifications, ...nextPreferences.notifications },
       shortcuts: { ...(initialDesktopPreferences.shortcuts || {}), ...(nextPreferences.shortcuts || {}) },
+      market: { ...initialDesktopPreferences.market, ...nextPreferences.market },
+      brain: { ...initialDesktopPreferences.brain, ...nextPreferences.brain },
       environment: {
         ...initialDesktopPreferences.environment,
         ...nextPreferences.environment,

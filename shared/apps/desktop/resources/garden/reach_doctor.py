@@ -3,11 +3,27 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
+import types
 
 sys.path.insert(0, str(Path(__file__).parent / "vendor"))
 
 
+def _ensure_rich_markup():
+    # Upstream doctor imports rich only to format its console report; check_all never uses it,
+    # and rich is not vendored or guaranteed on the user's Python.
+    try:
+        import rich.markup  # noqa: F401
+    except ImportError:
+        markup = types.ModuleType("rich.markup")
+        markup.escape = lambda text: str(text).replace("[", "\\[")
+        rich = types.ModuleType("rich")
+        rich.markup = markup
+        sys.modules.setdefault("rich", rich)
+        sys.modules["rich.markup"] = markup
+
+
 def diagnose():
+    _ensure_rich_markup()
     import agent_reach.doctor as doctor
     from agent_reach.channels import get_channel
     from agent_reach.config import Config

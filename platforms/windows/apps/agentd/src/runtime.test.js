@@ -286,10 +286,13 @@ test("runtime creates and loads the project manager skill for user shadow update
     const loadedSkill = await runtime.loadSkill(projectSkill.name);
     assert.deepEqual(loadedSkill.resources.references, [
       "backend-technical-design-framework.md",
+      "delivery-preferences.json",
       "java-javadoc-rules.md",
       "learning-open-questions.md",
       "programming-guardrails.md",
       "project-knowledge.md",
+      "scene-knowledge.md",
+      "scene-tools-routing.md",
       "session-digest.md",
       "user-output-rules.md"
     ]);
@@ -483,5 +486,38 @@ test("patch generation rejects symlinks that escape the workspace", async (t) =>
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("switching the running loop to full access skips later approval prompts", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-runtime-full-midrun-"));
+  try {
+    const runtime = await createLocalRuntime({
+      runtimeId: "full-midrun-test",
+      workspacePath: root,
+      platformLabel: "test",
+      shellLabel: "test",
+      skillRoots: []
+    });
+    let requests = 0;
+    const callModel = async () => {
+      requests += 1;
+      if (requests === 1) {
+        return { toolCalls: [{ id: "shell-1", name: "shell.exec", arguments: { command: "git push" } }] };
+      }
+      if (requests === 2) {
+        return { toolCalls: [{ id: "shell-2", name: "shell.exec", arguments: { command: "git pull" } }] };
+      }
+      return { content: "done" };
+    };
+    runtime.startAgentLoop([{ role: "user", content: "run" }], { permissionMode: "agent" });
+    const paused = await runtime.advanceAgentLoop(callModel);
+    assert.equal(paused.status, "awaiting-approval");
+    runtime.setAgentLoopPermissionMode("full");
+    const continued = await runtime.resumeAgentApproval(true, callModel);
+    assert.equal(continued.status, "completed");
+    assert.equal(runtime.getSnapshot().approval, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

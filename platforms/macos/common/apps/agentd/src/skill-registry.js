@@ -1,6 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+function normalizeNameSet(names) {
+  return new Set(Array.from(names ?? []).map((name) => String(name).toLowerCase()));
+}
+
 function unquote(value) {
   const trimmed = value.trim();
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
@@ -56,9 +60,28 @@ async function listOptionalResources(skillPath) {
   return resources;
 }
 
+async function readReferenceContents(skillPath) {
+  const referencePath = path.join(skillPath, "references");
+  let entries;
+  try {
+    entries = await fs.readdir(referencePath, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  const contents = [];
+  for (const entry of entries.filter((item) => item.isFile()).sort((left, right) => left.name.localeCompare(right.name))) {
+    const source = await fs.readFile(path.join(referencePath, entry.name), "utf8");
+    const limit = entry.name === "user-output-rules.md" ? 16 * 1024 : 64 * 1024;
+    contents.push({ name: entry.name, content: source.slice(0, limit) });
+  }
+  return contents;
+}
+
 export class SkillRegistry {
   constructor(input = {}) {
     this.roots = [...new Set((input.roots ?? []).filter(Boolean).map((root) => path.resolve(root)))];
+    this.disabledNames = normalizeNameSet(input.disabledNames);
     this.skills = new Map();
   }
 
@@ -75,7 +98,7 @@ export class SkillRegistry {
           throw error;
         }
         const metadata = parseSkillFrontmatter(source, path.basename(skillPath));
-        if (!discovered.has(metadata.name)) {
+        if (!this.disabledNames.has(String(metadata.name).toLowerCase()) && !discovered.has(metadata.name)) {
           discovered.set(metadata.name, {
             name: metadata.name,
             description: metadata.description,
@@ -117,8 +140,13 @@ export class SkillRegistry {
     return {
       ...skill,
       instructions,
-      resources: await listOptionalResources(skill.path)
+      resources: await listOptionalResources(skill.path),
+      referenceContents: await readReferenceContents(skill.path)
     };
+  }
+
+  setDisabledNames(names) {
+    this.disabledNames = normalizeNameSet(names);
   }
 }
 

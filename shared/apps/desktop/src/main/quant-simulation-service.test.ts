@@ -118,3 +118,26 @@ test("runs a built-in strategy into the caller's custom Skill ledger", async () 
   assert.deepEqual(service.listSkillIds("project"), ["sany-trend-portfolio"]);
   assert.ok(service.performance("project", "sany-trend-portfolio").tradeCount >= 1);
 });
+
+test("runs a saved custom declarative strategy into its independent paper portfolio", async () => {
+  const bars = Array.from({ length: 24 }, (_, index) => {
+    const close = 10 + index;
+    const day = new Date(Date.UTC(2026, 5, 1 + index));
+    return { symbol: "600031", exchange: "SSE", timezone: "Asia/Shanghai", interval: "1d" as const, adjustment: "forward" as const,
+      timestamp: `${day.toISOString().slice(0, 10)}T15:00:00+08:00`, open: close, high: close + 1, low: close - 1,
+      close, volume: 1000, turnover: 10_000, changePercent: 1, source: { provider: "fixture", dataset: "test", fetchedAt: "2026-08-23T00:00:00Z" } };
+  });
+  const service = new QuantSimulationService();
+  service.createSession("project", 100_000, bars);
+  const rules = {
+    buy: { all: [{ left: { metric: "close" as const }, comparison: "above" as const, right: { metric: "sma" as const, period: 5 } }] },
+    sell: { all: [{ left: { metric: "close" as const }, comparison: "below" as const, right: { metric: "sma" as const, period: 5 } }] }
+  };
+  const result = await service.runSkillSimulation("project", {
+    skillId: "custom-momentum", strategyId: "custom-momentum", rules, symbol: "600031", quantity: 100,
+    query: { symbol: "600031", interval: "1d", adjustment: "forward" }
+  });
+  assert.ok(result.tradeCount > 0);
+  assert.equal(result.snapshot.positions[0]?.quantity, 100);
+  assert.equal(service.snapshot("project", {}).positions.length, 0);
+});

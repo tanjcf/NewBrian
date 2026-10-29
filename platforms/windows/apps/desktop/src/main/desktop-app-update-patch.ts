@@ -4,7 +4,38 @@
  * and documents how tiny ulit applicator MSIs are still installed via msiexec.
  */
 
-export type DesktopUpdatePackageKind = "full-msi" | "ulit-msi" | "ulit-zip";
+export type DesktopUpdatePackageKind = "full-msi" | "full-nsis" | "ulit-msi" | "ulit-zip";
+
+/**
+ * Prefer the installer kind that matches the running install layout.
+ * Authoritative Windows root is `%LOCALAPPDATA%\.newbrain` (MSI + NSIS setups
+ * via installer.nsh). Legacy NSIS-only trees under
+ * `%LOCALAPPDATA%\Programs\@codex-forgedesktop` still prefer an NSIS offer.
+ * Cross-kind applies are safe: NSIS uses `/D=<dirname(exe)>`, MSI uses
+ * `APPLICATIONFOLDER=` so the running tree is upgraded in place (Cockpit-style).
+ */
+export function resolveDesktopPackagePreference(
+  executablePath: string | undefined | null
+): "msi" | "nsis" {
+  const normalized = String(executablePath || "")
+    .replace(/\//g, "\\")
+    .toLowerCase();
+  if (
+    normalized.includes("\\programs\\@codex-forgedesktop\\")
+    || normalized.includes("\\programs\\newbrain\\")
+  ) {
+    return "nsis";
+  }
+  if (
+    normalized.includes("\\.newbrain\\")
+    || normalized.includes("\\program files\\")
+    || normalized.includes("\\program files (x86)\\")
+  ) {
+    return "msi";
+  }
+  // Unknown layout: MSI / .newbrain is the authoritative Windows default.
+  return "msi";
+}
 
 /** Strip confusing admin suffixes such as `.ulit` / `-ulit` from a release version. */
 export function normalizeDesktopUpdateVersionLabel(version: string): string {
@@ -45,7 +76,19 @@ export function resolveDesktopUpdatePackageKind(input: {
     || fileName.endsWith(".ulit.zip")
     || /\.ulit$/i.test(version);
 
-  if (!looksUlit) return "full-msi";
+  if (!looksUlit) {
+    if (
+      declared === "nsis"
+      || declared === "full-nsis"
+      || declared === "setup"
+      || fileName.endsWith("-setup.exe")
+      || fileName.endsWith("setup.exe")
+      || (fileName.endsWith(".exe") && !fileName.endsWith(".msi"))
+    ) {
+      return "full-nsis";
+    }
+    return "full-msi";
+  }
 
   // Prefer MSI applicator when the artifact is clearly an installer (1.2.7 path).
   if (
@@ -84,29 +127,48 @@ export function safeDesktopUpdateFileName(input: {
   });
   if (kind === "ulit-zip") return `${safeVersion}ulit.zip`;
   if (kind === "ulit-msi") return `${safeVersion}ulit.msi`;
+  if (kind === "full-nsis") return `NewBrain ${safeVersion}-setup.exe`;
   return `NewBrain-${safeVersion}.msi`;
 }
 
 /**
  * Hidden PowerShell wait: never `tasklist | find /I` (blank console titled find /I).
- * Times out with a Chinese message, then continues so msiexec/apply still run.
+ * Prefer waiting on a specific PID (Electron main). On timeout, optionally force-kill
+ * so the installer is not racing a still-locked executable.
  */
 export function buildDeferredProcessExitWaitPowerShell(input: {
   processImageName?: string;
+  processId?: number;
   maxWaitSeconds?: number;
+  forceKillOnTimeout?: boolean;
 }): string {
   const image = String(input.processImageName || "NewBrain.exe").replace(/['"`]/g, "");
   const processName = image.replace(/\.exe$/i, "") || "NewBrain";
   const maxWait = Math.max(15, Math.min(300, Number(input.maxWaitSeconds) || 90));
+  const pid = Number(input.processId);
+  const hasPid = Number.isFinite(pid) && pid > 0;
+  const forceKill = input.forceKillOnTimeout !== false;
+  const waitBody = hasPid
+    ? `$proc=Get-Process -Id ${pid} -ErrorAction SilentlyContinue; `
+      + `if ($proc) { `
+      + `if (-not $proc.WaitForExit(${maxWait * 1000})) { `
+      + (forceKill
+        ? `Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; `
+        : "")
+      + `} }; `
+      + `Get-Process -Name '${processName}' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; `
+      + `exit 0`
+    : `$name='${processName}'; $deadline=(Get-Date).AddSeconds(${maxWait}); `
+      + `while ((Get-Date) -lt $deadline) { `
+      + `if (-not (Get-Process -Name $name -ErrorAction SilentlyContinue)) { exit 0 }; `
+      + `Start-Sleep -Seconds 1 }; `
+      + (forceKill
+        ? `Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; `
+        : `Write-Host '等待 NewBrain 退出超时（${maxWait}s），仍将继续安装/补丁。请确认已完全退出应用。'; `)
+      + `exit 0`;
   return (
     `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `
-    + `"$ErrorActionPreference='SilentlyContinue'; `
-    + `$name='${processName}'; $deadline=(Get-Date).AddSeconds(${maxWait}); `
-    + `while ((Get-Date) -lt $deadline) { `
-    + `if (-not (Get-Process -Name $name -ErrorAction SilentlyContinue)) { exit 0 }; `
-    + `Start-Sleep -Seconds 1 }; `
-    + `Write-Host '等待 NewBrain 退出超时（${maxWait}s），仍将继续安装/补丁。请确认已完全退出应用。'; `
-    + `exit 0"`
+    + `"$ErrorActionPreference='SilentlyContinue'; ${waitBody}"`
   );
 }
 
@@ -130,10 +192,7 @@ export function buildDeferredUlitZipApplyScript(input: {
   return [
     "@echo off",
     "setlocal EnableExtensions",
-    "title NewBrain update",
-    "echo NewBrain update: waiting for app exit...",
     waitLine,
-    "title NewBrain update: applying patch",
     `if exist ${stagingDir} rmdir /S /Q ${stagingDir}`,
     `mkdir ${stagingDir} >NUL 2>&1`,
     `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${escapePsSingle(input.zipPath)}' -DestinationPath '${escapePsSingle(input.stagingDir)}' -Force"`,

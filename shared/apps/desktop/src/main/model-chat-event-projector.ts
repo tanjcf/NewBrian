@@ -71,7 +71,7 @@ export class ModelChatEventProjector {
     const name = String(payload.name ?? "");
     const semantic = classifyToolActivity(name);
     const run = context.getRuns().find((item) => item.callId === callId);
-    const recordsArtifact = name === "workspace.write_file" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx" || (
+    const recordsArtifact = name === "workspace.write_file" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx" || name === "office.convert" || (
       name === "artifact.inspect" && isRecord(result.artifact) && Number(result.artifact.size) > 0
     );
     if (recordsArtifact && result.ok && isRecord(result.artifact) && result.artifact.path) {
@@ -88,14 +88,14 @@ export class ModelChatEventProjector {
       };
       if (priorIndex >= 0) context.writtenArtifacts[priorIndex] = nextArtifact;
       else context.writtenArtifacts.push(nextArtifact);
-      if (!priorArtifact || name === "workspace.write_file" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx") {
+      if (!priorArtifact || name === "workspace.write_file" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx" || name === "office.convert") {
         context.publishActivity({
           type: "patch",
           title: `${nextArtifact.changeType === "created" ? "已新建" : "已编辑"} ${nextArtifact.path}`,
           detail: "",
           artifactPath: nextArtifact.path,
           artifactSize: nextArtifact.size,
-          artifactVerified: name === "artifact.inspect" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx"
+          artifactVerified: name === "artifact.inspect" || name === "artifact.create" || name === "document.create_pdf" || name === "document.create_docx" || name === "office.convert"
         }, context.requestId);
       }
     }

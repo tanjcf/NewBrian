@@ -21,6 +21,9 @@ export interface PersistedThread {
   statusLabel?: string;
   memoryMode: string;
   model: string;
+  /** User conversations stay in the sidebar. Subagent sessions stay inside the parent turn. */
+  kind?: "user" | "subagent";
+  parentThreadId?: string;
 }
 
 export interface PersistedMemory {
@@ -353,14 +356,14 @@ export class CodexStorage {
     migrate(this.state, 5, "repair known mojibake thread labels", `
       UPDATE threads SET title = '默认线程' WHERE title IN ('榛樿绾跨▼', '姒涙顓荤痪璺ㄢ柤');
       UPDATE threads SET title = '未命名线程' WHERE title = '鏈懡鍚嶇嚎绋?';
-      UPDATE threads SET title = '新线程' WHERE title = '鏂扮嚎绋?';
+      UPDATE threads SET title = '新对话' WHERE title = '鏂扮嚎绋?';
       UPDATE threads SET title = '新对话' WHERE title = '鏂板璇?';
       UPDATE threads SET preview = replace(preview, '榛樿绾跨▼', '默认线程');
       UPDATE threads SET preview = replace(preview, '姒涙顓荤痪璺ㄢ柤', '默认线程');
       UPDATE threads SET preview = replace(preview, '鏈懡鍚嶇嚎绋?', '未命名线程');
       UPDATE threads SET preview = replace(preview, '鏆傛棤绾跨▼鎽樿銆?', '暂无线程摘要。');
       UPDATE threads SET preview = replace(preview, '绾跨▼宸插垱寤?', '线程已创建');
-      UPDATE threads SET preview = replace(preview, '鏂扮嚎绋?', '新线程');
+      UPDATE threads SET preview = replace(preview, '鏂扮嚎绋?', '新对话');
       UPDATE threads SET preview = replace(preview, '鏂板璇?', '新对话');
     `);
     migrate(this.state, 6, "persist desktop thread presentation metadata", `
@@ -404,6 +407,16 @@ export class CodexStorage {
       );
       CREATE INDEX IF NOT EXISTS idx_remote_event_outbox_due
         ON remote_event_outbox(status, next_attempt_at_ms, created_at_ms);
+    `);
+    migrate(this.state, 9, "keep subagent threads out of the user sidebar", `
+      ALTER TABLE threads ADD COLUMN kind TEXT NOT NULL DEFAULT 'user';
+      ALTER TABLE threads ADD COLUMN parent_thread_id TEXT NOT NULL DEFAULT '';
+      UPDATE threads
+      SET kind = 'subagent',
+          parent_thread_id = COALESCE((
+            SELECT parent_thread_id FROM thread_spawn_edges WHERE child_thread_id = threads.id
+          ), '')
+      WHERE id IN (SELECT child_thread_id FROM thread_spawn_edges);
     `);
     migrate(this.logs, 1, "structured logs", `
       CREATE TABLE IF NOT EXISTS logs (
@@ -562,49 +575,66 @@ export class CodexStorage {
   }
 
   upsertThread(thread: PersistedThread) {
+    const kind = thread.kind === "subagent" ? "subagent" : "user";
+    const parentThreadId = kind === "subagent" ? String(thread.parentThreadId || "").trim() : "";
     run(this.state.prepare(`
       INSERT INTO threads(id, rollout_path, created_at, updated_at, cwd, title, scope, status, approval_mode,
         archived, git_branch, preview, summary, last_event_summary, status_label, memory_mode, model,
-        recency_at, created_at_ms, updated_at_ms, recency_at_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        recency_at, created_at_ms, updated_at_ms, recency_at_ms, kind, parent_thread_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET rollout_path=excluded.rollout_path, updated_at=excluded.updated_at,
         cwd=excluded.cwd, title=excluded.title, scope=excluded.scope, status=excluded.status, approval_mode=excluded.approval_mode,
         archived=excluded.archived, git_branch=excluded.git_branch, preview=excluded.preview,
         summary=excluded.summary, last_event_summary=excluded.last_event_summary, status_label=excluded.status_label,
         memory_mode=excluded.memory_mode, model=excluded.model, recency_at=excluded.recency_at,
-        updated_at_ms=excluded.updated_at_ms, recency_at_ms=excluded.recency_at_ms
+        updated_at_ms=excluded.updated_at_ms, recency_at_ms=excluded.recency_at_ms,
+        kind=excluded.kind, parent_thread_id=excluded.parent_thread_id
     `), thread.id, thread.rolloutPath, thread.createdAt, thread.updatedAt, thread.cwd, thread.title,
       thread.scope === "chat" ? "chat" : "project", thread.status, thread.approvalMode, thread.archived ? 1 : 0, thread.gitBranch, thread.preview,
       thread.summary ?? thread.preview, thread.lastEventSummary ?? thread.preview, thread.statusLabel ?? "",
-      thread.memoryMode, thread.model, thread.updatedAt, thread.createdAt, thread.updatedAt, thread.updatedAt);
+      thread.memoryMode, thread.model, thread.updatedAt, thread.createdAt, thread.updatedAt, thread.updatedAt,
+      kind, parentThreadId);
+  }
+
+  private threadIdentity(row: { id: string; kind?: string; parentThreadId?: string }, spawnParents: ReadonlyMap<string, string>) {
+    const spawnParentId = String(spawnParents.get(row.id) || "").trim();
+    const storedParentId = String(row.parentThreadId || "").trim();
+    const parentThreadId = storedParentId || spawnParentId;
+    const kind = row.kind === "subagent" || spawnParentId ? "subagent" as const : "user" as const;
+    return {
+      kind,
+      ...(kind === "subagent" && parentThreadId ? { parentThreadId } : {})
+    };
+  }
+
+  private mapThreadRows(rows: any[]): PersistedThread[] {
+    const spawnParents = new Map(this.listThreadSpawnEdges().map((edge) => [edge.childThreadId, edge.parentThreadId]));
+    return rows.map((row) => ({
+      ...row,
+      scope: row.scope === "chat" ? "chat" : "project",
+      archived: Boolean(row.archived),
+      ...this.threadIdentity(row, spawnParents)
+    })) as PersistedThread[];
   }
 
   listThreads(cwd: string): PersistedThread[] {
-    return this.state.prepare(`
+    return this.mapThreadRows(this.state.prepare(`
       SELECT id, rollout_path AS rolloutPath, created_at AS createdAt, updated_at AS updatedAt,
         cwd, title, scope, status, approval_mode AS approvalMode, archived, git_branch AS gitBranch,
         preview, summary, last_event_summary AS lastEventSummary, status_label AS statusLabel,
-        memory_mode AS memoryMode, model
+        memory_mode AS memoryMode, model, kind, parent_thread_id AS parentThreadId
       FROM threads WHERE cwd = ? AND archived = 0 ORDER BY recency_at DESC
-    `).all(cwd).map((row: any) => ({
-      ...row,
-      scope: row.scope === "chat" ? "chat" : "project",
-      archived: Boolean(row.archived)
-    })) as PersistedThread[];
+    `).all(cwd) as any[]);
   }
 
   listArchivedThreads(cwd: string): PersistedThread[] {
-    return this.state.prepare(`
+    return this.mapThreadRows(this.state.prepare(`
       SELECT id, rollout_path AS rolloutPath, created_at AS createdAt, updated_at AS updatedAt,
         cwd, title, scope, status, approval_mode AS approvalMode, archived, git_branch AS gitBranch,
         preview, summary, last_event_summary AS lastEventSummary, status_label AS statusLabel,
-        memory_mode AS memoryMode, model
+        memory_mode AS memoryMode, model, kind, parent_thread_id AS parentThreadId
       FROM threads WHERE cwd = ? AND archived = 1 ORDER BY COALESCE(archived_at, recency_at) DESC
-    `).all(cwd).map((row: any) => ({
-      ...row,
-      scope: row.scope === "chat" ? "chat" : "project",
-      archived: Boolean(row.archived)
-    })) as PersistedThread[];
+    `).all(cwd) as any[]);
   }
 
   setThreadArchived(threadId: string, archived: boolean, rolloutPath?: string) {
@@ -643,6 +673,13 @@ export class CodexStorage {
       "UPDATE thread_spawn_edges SET status = ? WHERE child_thread_id = ?"
     ).run(status, childThreadId);
     if (Number(result.changes) === 0) throw new Error(`Unknown child thread: ${childThreadId}`);
+  }
+
+  listThreadSpawnEdges(): PersistedSpawnEdge[] {
+    return (this.state.prepare(`
+      SELECT parent_thread_id AS parentThreadId, child_thread_id AS childThreadId, status
+      FROM thread_spawn_edges ORDER BY child_thread_id
+    `).all() as unknown as PersistedSpawnEdge[]).map((row) => ({ ...row }));
   }
 
   listThreadSpawns(parentThreadId: string): PersistedSpawnEdge[] {

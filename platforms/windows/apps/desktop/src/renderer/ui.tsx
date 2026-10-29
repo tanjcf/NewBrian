@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { LoginScreen } from "./app/LoginScreen";
+import {
+  clearLoginCodeCooldowns,
+  initialLoginCodeCooldownByChannel,
+  loginCodeCooldownForChannel,
+  setChannelLoginCodeCooldown
+} from "./app/login-code-cooldown";
 import { WorkspaceModules } from "./app/WorkspaceModules";
 import { FeaturePanel } from "./app/FeaturePanel";
 import { coerceValueBySchema, createSchemaFieldRenderer, setValueAtPath } from "./app/schema-fields";
@@ -12,9 +18,9 @@ import { useDesktopCore } from "./app/useDesktopCore";
 import { SidebarIcon } from "./app/SidebarIcon";
 import { markThreadActiveInCatalog } from "./app/thread-order";
 import { compactModelAttachment } from "./app/model-attachment-policy";
-import { isComposerThreadRunning, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { isComposerThreadRunning, keepNewInputBelowHistoricalOutput, patchRuntimeSnapshotMessagesForTurn, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { snapshotToDisplayMessages } from "./app/thread-hydration";
-import { combineComposerQuote } from "./app/composer-quote";
+import { enqueueComposerDraft, takeNextComposerQueueItem } from "./app/composer-queue";
 import { markApprovalActivitiesSettling, mergeAssistantActivityItems } from "./app/assistant-activity-merge";
 import { parseUsageExceptionCommand } from "./app/usage-exception-command";
 import {
@@ -22,10 +28,23 @@ import {
   shouldRefreshAppUpdateOnWindowSignal
 } from "./app/app-update-status-poll";
 import {
+  buildAppUpdateErrorProgress,
+  isSameAppUpdateVersion,
+  shouldAutoOpenAppUpdateDiscover
+} from "./app/app-update-progress-copy";
+import {
   isSubscriptionInactiveError,
+  isUserCancelledModelError,
+  mapModelGatewayTimeoutUserMessage,
   mapSubscriptionInactiveUserMessage
 } from "../shared/model-user-facing-error.ts";
-import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, userVisibleThreads } from "./app/workspace-visibility";
+import {
+  LOGIN_FAILURE_FALLBACK,
+  normalizeLoginErrorMessage
+} from "./app/login-error-message.ts";
+import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.ts";
+import { codexAutomationSendPlan } from "../shared/automation-run-history.ts";
+import { projectWorkspaces, normalizeWorkspaceCatalog, resolveUserVisibleThreadSelection, shouldRepairSelectedThread, userVisibleThreads } from "./app/workspace-visibility";
 import {
   cloneNewChatComposerDraft,
   createAndActivateNewChatThread,
@@ -34,6 +53,7 @@ import {
   shouldCreateChatThreadBeforeSend,
   shouldCreateStandaloneChatThreadBeforeSend
 } from "./app/new-chat-target";
+import { composerSkillContextAfterReset } from "./app/composer-skill-context-reset";
 import {
   readThreadComposerSkills,
   skillForThread,
@@ -73,12 +93,15 @@ import {
   initialMcpServer,
   initialModelConfig,
   initialPatchForm,
+  isCnMobile,
   optionalLoad,
   parseEnvText,
+  resolveLoginIdentifier,
   settingsFeatureItem,
+  shouldUseLoginCode,
   withTimeout
 } from "./app/desktop-model";
-import { projectModelChatFailure } from "./app/model-chat-failure-projection";
+import { projectModelChatCancellation, projectModelChatFailure } from "./app/model-chat-failure-projection";
 import type {
   BootstrapPayload,
   ComposerToolFieldValueMap,
@@ -116,6 +139,8 @@ function normalizeModelErrorMessage(error: unknown) {
     .trim();
   const subscriptionMessage = mapSubscriptionInactiveUserMessage(message);
   if (subscriptionMessage) return subscriptionMessage;
+  const gatewayTimeoutMessage = mapModelGatewayTimeoutUserMessage(message);
+  if (gatewayTimeoutMessage) return gatewayTimeoutMessage;
   if (/fetch failed|failed to fetch|econnrefused|econnreset|enotfound|eai_again/i.test(message)) {
     return "无法连接模型服务，请检查网络或模型网关地址后重试。";
   }
@@ -146,16 +171,6 @@ function normalizeModelErrorMessage(error: unknown) {
   return message;
 }
 
-function normalizeLoginErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(/^Error invoking remote method 'phase1:login-auth': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:login-auth": Error:\s*/i, "")
-    .replace(/^Error invoking remote method 'phase1:send-login-code': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:send-login-code": Error:\s*/i, "")
-    .trim();
-}
-
 type ReviewChangeFile = {
   filePath: string;
   status: string;
@@ -166,6 +181,7 @@ type ReviewChangeFile = {
 };
 
 type QueuedComposerDraft = {
+  id?: string;
   threadId: string;
   question: string;
   images: Array<{ name: string; path: string; url: string }>;
@@ -207,23 +223,40 @@ export function App() {
     channel?: string;
     notes?: string;
     mandatory?: boolean;
+    staged?: boolean;
+    stagedPath?: string;
+    skippedVersion?: string;
     detail: string;
   }>(null);
   const [appUpdateBusy, setAppUpdateBusy] = useState(false);
+  const [appUpdateDiscoverOpen, setAppUpdateDiscoverOpen] = useState(false);
+  /** Same-session cancel/skip before persisted skippedVersion is refreshed. */
+  const [appUpdateSuppressedVersion, setAppUpdateSuppressedVersion] = useState<string | null>(null);
+  const [appUpdateApplied, setAppUpdateApplied] = useState<null | {
+    fromVersion: string;
+    toVersion: string;
+    notes: string;
+  }>(null);
   const [appUpdateProgress, setAppUpdateProgress] = useState<null | {
     phase: string;
     percent: number;
     detail: string;
     latestVersion?: string;
-    installMode?: "silent" | "wizard" | "patch";
+    currentVersion?: string;
+    notes?: string;
+    installMode?: "silent" | "wizard" | "patch" | "nsis";
     preservesUserData: true;
   }>(null);
   const questionRef = useRef("");
   const [composerImages, setComposerImages] = useState<
     Array<{ name: string; path: string; url: string }>
   >([]);
-  const [queuedComposerDraft, setQueuedComposerDraft] = useState<QueuedComposerDraft | null>(null);
-  const queuedComposerDraftRef = useRef<QueuedComposerDraft | null>(null);
+  const [queuedComposerDrafts, setQueuedComposerDraftsState] = useState<QueuedComposerDraft[]>([]);
+  const queuedComposerDraftsRef = useRef<QueuedComposerDraft[]>([]);
+  const setComposerQueue = (next: QueuedComposerDraft[]) => {
+    queuedComposerDraftsRef.current = next;
+    setQueuedComposerDraftsState(next);
+  };
   useEffect(() => {
     questionRef.current = question;
   }, [question]);
@@ -235,6 +268,7 @@ export function App() {
   const activeModelRequestIdRef = useRef("");
   const activeThreadRequestsRef = useRef<Map<string, string>>(new Map());
   const awaitingApprovalRequestIdsRef = useRef<Set<string>>(new Set());
+  const userCancelledRequestIdsRef = useRef<Set<string>>(new Set());
   const streamLengthsByRequestRef = useRef<Map<string, number>>(new Map());
   const [activeThreadRequestVersion, setActiveThreadRequestVersion] = useState(0);
   const [liveModelContent, setLiveModelContent] = useState<Record<string, string>>({});
@@ -438,7 +472,7 @@ export function App() {
   const [showOpenLocationMenu, setShowOpenLocationMenu] = useState(false);
   const [showWorkspaceStatusMenu, setShowWorkspaceStatusMenu] = useState(false);
   const [workspaceHeaderStatus, setWorkspaceHeaderStatus] = useState({
-    branch: "main",
+    branch: "",
     changes: 0,
     additions: 0,
     deletions: 0,
@@ -469,7 +503,14 @@ export function App() {
   const [showMcpToolPicker, setShowMcpToolPicker] = useState(false);
   const [selectedComposerTools, setSelectedComposerTools] = useState<ComposerToolChip[]>([]);
   const [selectedComposerSkill, setSelectedComposerSkill] = useState<SkillSpec | null>(null);
-  const [composerSkillContext, setComposerSkillContext] = useState("");
+  const [composerSkillContext, setComposerSkillContextState] = useState("");
+  // Same-turn creator entries set this before the new-chat reset effect runs.
+  // Null means the upcoming reset should blank leftover context.
+  const pendingComposerSkillContextRef = useRef<string | null>(null);
+  const setComposerSkillContext = useCallback((value: string) => {
+    pendingComposerSkillContextRef.current = value;
+    setComposerSkillContextState(value);
+  }, []);
   const [threadComposerSkills, setThreadComposerSkills] = useState<Record<string, ThreadComposerSkill>>(() => readThreadComposerSkills());
   const [composerModes, setComposerModes] = useState<Array<"goal" | "plan">>([]);
   const [authStatus, setAuthStatus] = useState<DesktopAuthStatusState>(initialDesktopAuthStatus);
@@ -483,7 +524,9 @@ export function App() {
   const [loginForm, setLoginForm] = useState<LoginFormState>(initialLoginForm);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [isSendingLoginCode, setIsSendingLoginCode] = useState(false);
-  const [loginCodeCooldownSeconds, setLoginCodeCooldownSeconds] = useState(0);
+  const [loginCodeCooldownByChannel, setLoginCodeCooldownByChannel] = useState(initialLoginCodeCooldownByChannel);
+  const loginCodeChannel = loginForm.channel === "phone" ? "phone" : "email";
+  const loginCodeCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, loginCodeChannel);
   const [agreementDialog, setAgreementDialog] = useState<null | "tos" | "policy">(null);
   const [desktopBootstrapStatus, setDesktopBootstrapStatus] = useState<DesktopBootstrapStatusState>({
     overall: {
@@ -585,7 +628,7 @@ export function App() {
       safeWorkspaceCatalog.find((item) => item.id === selectedWorkspaceId) ??
       safeWorkspaceCatalog[0];
     if (!workspace) return;
-    const repairKey = `${workspace.id}:${selectedWorkspaceId}:${selectedThreadId}:${isComposingStandaloneChat ? "compose" : "view"}`;
+    const repairKey = `${workspace.id}:${selectedWorkspaceId}:${selectedThreadId}:${isComposingNewThread ? "compose" : "view"}`;
     if (selectionRepairKeyRef.current === repairKey) return;
     selectionRepairKeyRef.current = repairKey;
 
@@ -593,13 +636,16 @@ export function App() {
       setSelectedWorkspaceId(workspace.id);
     }
     const visible = userVisibleThreads(workspace.threads);
-    if (!isComposingStandaloneChat && visible.length > 0) {
-      const resolved = resolveUserVisibleThreadSelection(workspace.threads, selectedThreadId);
-      if (resolved && resolved.id !== selectedThreadId) {
-        setSelectedThreadId(resolved.id);
-      }
+    const resolved = resolveUserVisibleThreadSelection(workspace.threads, selectedThreadId);
+    if (shouldRepairSelectedThread({
+      isComposingNewThread,
+      visibleThreadCount: visible.length,
+      selectedThreadId,
+      resolvedThreadId: resolved?.id || ""
+    })) {
+      setSelectedThreadId(resolved!.id);
     }
-  }, [isComposingStandaloneChat, selectedThreadId, selectedWorkspaceId, safeWorkspaceCatalog]);
+  }, [isComposingNewThread, selectedThreadId, selectedWorkspaceId, safeWorkspaceCatalog]);
 
   const refreshWorkspaceHeaderStatus = async () => {
     if (!api || !selectedWorkspace?.id) return;
@@ -633,6 +679,7 @@ export function App() {
   useEffect(() => {
     if (!api || !selectedWorkspace?.id) return;
     let canceled = false;
+    setWorkspaceHeaderStatus((current) => ({ ...current, branch: "" }));
     api.getWorkspaceHeaderStatus(selectedWorkspace.id)
       .then((status) => {
         if (!canceled) setWorkspaceHeaderStatus(status);
@@ -858,65 +905,226 @@ export function App() {
   useEffect(() => {
     if (!api?.onAppUpdateProgress) return;
     return api.onAppUpdateProgress((progress) => {
-      setAppUpdateProgress(progress);
-      if (progress.phase === "done" || progress.phase === "error") {
+      setAppUpdateProgress(
+        progress.phase === "error"
+          ? buildAppUpdateErrorProgress({
+            detail: progress.detail,
+            latestVersion: progress.latestVersion,
+            currentVersion: progress.currentVersion,
+            notes: progress.notes,
+            preservesUserData: progress.preservesUserData
+          })
+          : progress
+      );
+      setAppUpdateDiscoverOpen(false);
+      if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
         setAppUpdateBusy(false);
       }
-      if (progress.phase === "done" || progress.phase === "error") {
+      if (progress.phase === "ready" || progress.phase === "done" || progress.phase === "error") {
         void api.getAppUpdateStatus?.().then((status) => setAppUpdateStatus(status)).catch(() => undefined);
       }
     });
   }, [api]);
   useEffect(() => {
-    // App/control-plane status is refreshed only by an explicit update action.
-    // Automatic polling is disabled while the remote control plane is not a
-    // production-ready user-facing feature.
-    return;
+    if (!api?.getAppliedAppUpdate) return;
+    void api.getAppliedAppUpdate().then((applied) => {
+      if (applied) setAppUpdateApplied(applied);
+    }).catch(() => undefined);
+  }, [api]);
+  useEffect(() => {
+    if (!shouldAutoOpenAppUpdateDiscover({
+      available: Boolean(appUpdateStatus?.available),
+      latestVersion: appUpdateStatus?.latestVersion,
+      currentVersion: appUpdateStatus?.currentVersion,
+      skippedVersion: appUpdateStatus?.skippedVersion,
+      suppressedVersion: appUpdateSuppressedVersion,
+      appliedVisible: Boolean(appUpdateApplied)
+    })) {
+      return;
+    }
+    // Staged package was cleared (mismatch / failed apply) while the UI still
+    // showed "ready" — drop the stale ready card so the user can download again.
+    if (
+      appUpdateProgress?.phase === "ready"
+      && !appUpdateStatus?.staged
+      && appUpdateProgress.latestVersion
+      && isSameAppUpdateVersion(appUpdateProgress.latestVersion, appUpdateStatus?.latestVersion)
+    ) {
+      setAppUpdateProgress(null);
+      setAppUpdateDiscoverOpen(true);
+      return;
+    }
+    if (appUpdateProgress || appUpdateDiscoverOpen) return;
+    if (appUpdateStatus?.staged) {
+      setAppUpdateProgress({
+        phase: "ready",
+        percent: 100,
+        detail: appUpdateStatus.detail,
+        latestVersion: appUpdateStatus.latestVersion,
+        currentVersion: appUpdateStatus.currentVersion,
+        notes: appUpdateStatus.notes,
+        preservesUserData: true
+      });
+      return;
+    }
+    setAppUpdateDiscoverOpen(true);
+  }, [
+    appUpdateStatus?.available,
+    appUpdateStatus?.latestVersion,
+    appUpdateStatus?.staged,
+    appUpdateStatus?.skippedVersion,
+    appUpdateStatus?.detail,
+    appUpdateStatus?.currentVersion,
+    appUpdateStatus?.notes,
+    appUpdateSuppressedVersion,
+    appUpdateProgress?.phase,
+    appUpdateProgress?.latestVersion,
+    appUpdateDiscoverOpen,
+    appUpdateApplied
+  ]);
+  useEffect(() => {
+    if (!api?.getAppUpdateStatus) return;
+    let cancelled = false;
+    const refresh = () => {
+      if (!shouldRefreshAppUpdateOnWindowSignal({
+        isAuthenticated,
+        documentHidden: typeof document !== "undefined" && document.hidden
+      })) {
+        return;
+      }
+      void api.getAppUpdateStatus().then((status) => {
+        if (!cancelled && status) setAppUpdateStatus(status);
+      }).catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, APP_UPDATE_STATUS_POLL_MS);
+    const onFocus = () => refresh();
+    const onVisibility = () => refresh();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [api, isAuthenticated]);
   async function startDesktopAppUpdate() {
     if (!api?.startAppUpdate || appUpdateBusy) return;
     setAppUpdateBusy(true);
+    setAppUpdateDiscoverOpen(false);
     setAppUpdateProgress({
       phase: "preparing",
       percent: 1,
       detail: "正在准备更新。聊天记录、项目与本地历史会保留。",
       latestVersion: appUpdateStatus?.latestVersion,
+      currentVersion: appUpdateStatus?.currentVersion,
+      notes: appUpdateStatus?.notes,
       preservesUserData: true
     });
     try {
       const result = await api.startAppUpdate();
       setChatStatus(result.detail || "");
       if (!result.ok) {
-        setAppUpdateProgress((current) => current ? {
-          ...current,
-          phase: "error",
-          percent: 0,
-          detail: result.detail || "更新失败"
-        } : {
-          phase: "error",
-          percent: 0,
+        setAppUpdateProgress(buildAppUpdateErrorProgress({
           detail: result.detail || "更新失败",
+          latestVersion: appUpdateStatus?.latestVersion,
+          currentVersion: appUpdateStatus?.currentVersion,
+          notes: appUpdateStatus?.notes,
           preservesUserData: true
-        });
+        }));
         setErrorMessage(result.detail || "更新失败");
+      } else if (result.staged) {
+        setAppUpdateProgress((current) => ({
+          phase: "ready",
+          percent: 100,
+          detail: result.detail || `v${appUpdateStatus?.latestVersion || ""} 已就绪，重启后生效。`,
+          latestVersion: current?.latestVersion || appUpdateStatus?.latestVersion,
+          currentVersion: current?.currentVersion || appUpdateStatus?.currentVersion,
+          notes: current?.notes || appUpdateStatus?.notes,
+          preservesUserData: true
+        }));
       }
       const status = await api.getAppUpdateStatus().catch(() => null);
       if (status) setAppUpdateStatus(status);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setAppUpdateProgress({
-        phase: "error",
-        percent: 0,
+      setAppUpdateProgress(buildAppUpdateErrorProgress({
         detail,
+        latestVersion: appUpdateStatus?.latestVersion,
+        currentVersion: appUpdateStatus?.currentVersion,
         preservesUserData: true
-      });
+      }));
       setErrorMessage(detail);
     } finally {
       setAppUpdateBusy(false);
     }
   }
+  async function applyDesktopAppUpdate() {
+    if (!api?.applyAppUpdate || appUpdateBusy) return;
+    setAppUpdateBusy(true);
+    try {
+      const result = await api.applyAppUpdate();
+      setChatStatus(result.detail || "");
+      if (!result.ok) {
+        setAppUpdateProgress(buildAppUpdateErrorProgress({
+          detail: result.detail || "安装失败",
+          latestVersion: appUpdateStatus?.latestVersion,
+          currentVersion: appUpdateStatus?.currentVersion,
+          notes: appUpdateStatus?.notes,
+          preservesUserData: true
+        }));
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setAppUpdateProgress(buildAppUpdateErrorProgress({
+        detail,
+        latestVersion: appUpdateStatus?.latestVersion,
+        currentVersion: appUpdateStatus?.currentVersion,
+        notes: appUpdateStatus?.notes,
+        preservesUserData: true
+      }));
+    } finally {
+      setAppUpdateBusy(false);
+    }
+  }
+  async function skipDesktopAppUpdate(versionHint?: string) {
+    const version = String(
+      versionHint
+        || appUpdateStatus?.latestVersion
+        || appUpdateProgress?.latestVersion
+        || ""
+    ).trim();
+    // Close immediately and persist skip so polls cannot reopen this version.
+    setAppUpdateSuppressedVersion(version || null);
+    setAppUpdateDiscoverOpen(false);
+    setAppUpdateProgress(null);
+    if (version) {
+      setAppUpdateStatus((current) => current ? {
+        ...current,
+        skippedVersion: version,
+        available: current.mandatory ? current.available : false,
+        detail: current.mandatory
+          ? current.detail
+          : `已跳过版本 ${version}。有更新版本时再提醒。`
+      } : current);
+    }
+    if (api?.skipAppUpdateVersion) {
+      await api.skipAppUpdateVersion(version || undefined).catch(() => undefined);
+    }
+    const status = await api?.getAppUpdateStatus?.().catch(() => null);
+    if (status) setAppUpdateStatus(status);
+  }
   function dismissAppUpdateProgress() {
     setAppUpdateProgress(null);
+  }
+  function dismissAppUpdateDiscover() {
+    // 「取消 / 稍后」与跳过同语义：本版本不再自动弹，等更新的版本。
+    void skipDesktopAppUpdate();
+  }
+  async function dismissAppliedAppUpdate() {
+    setAppUpdateApplied(null);
+    await api?.dismissAppliedAppUpdate?.().catch(() => undefined);
   }
   const isBootstrapBlocking = false;
   const activeThreadRequestIds = useMemo(
@@ -946,8 +1154,9 @@ export function App() {
     }
 
     const turns: ConversationTurn[] = [];
+    const orderedMessages = keepNewInputBelowHistoricalOutput(chatMessages);
 
-    for (const message of chatMessages) {
+    for (const message of orderedMessages) {
       if (message.role === "user") {
         turns.push({ id: message.id, user: message });
         continue;
@@ -990,7 +1199,7 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp", "holon"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mcp", "holon"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
@@ -1056,7 +1265,7 @@ export function App() {
     api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds,
     activeThreadRequestIds,
     selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu,
-    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownSeconds,
+    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownByChannel,
     activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath,
     newThreadTitle, newThreadSummary, forkThreadTitle, editingThreadTitle, editingThreadSummary,
     skillDraft, pluginDraft, automationDraft, editingFeatureId, environmentEnvText, authStatus, loginForm,
@@ -1070,7 +1279,7 @@ export function App() {
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
     setShowRenameThreadDialog,
     setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary, setIsComposingNewThread,
-    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
+    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownByChannel, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
     initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad,
     formatEnvText, parseEnvText, buildWorkspaceTree, collectDirectoryKeys, coerceValueBySchema, settingsFeatureItem
@@ -1131,33 +1340,41 @@ export function App() {
         return;
       }
       if (command === "mcp") {
-        setActiveSettingsSection("mcp");
-        setActiveFeature("settings");
+        setActiveFeature("mcp");
       }
     };
     window.addEventListener("newbrain:app-command", handleAppCommand);
     return () => window.removeEventListener("newbrain:app-command", handleAppCommand);
   }, [addExistingProject, api]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isComposingNewThread) return;
+    const pendingWrite = pendingComposerSkillContextRef.current;
     setSelectedComposerSkill(null);
-    setComposerSkillContext("");
     setSelectedComposerTools([]);
     setComposerModes([]);
+    setComposerSkillContextState(composerSkillContextAfterReset(pendingWrite));
   }, [isComposingNewThread]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isComposingNewThread) return;
+    const nextContext = composerSkillContextAfterReset(pendingComposerSkillContextRef.current);
     if (!selectedThreadId) {
       setSelectedComposerSkill(null);
-      setComposerSkillContext("");
+      setComposerSkillContextState(nextContext);
       return;
     }
     const bound = skillForThread(threadComposerSkills, selectedThreadId);
     setSelectedComposerSkill(bound ? { ...bound } as SkillSpec : null);
-    setComposerSkillContext("");
+    setComposerSkillContextState(nextContext);
   }, [selectedThreadId, isComposingNewThread]);
+
+  // Consume the same-turn creator write after layout effects have read it.
+  // A microtask clear can run before React 19 flushes the new-chat reset and
+  // drop "Automation Creator" before the user sends.
+  useEffect(() => {
+    pendingComposerSkillContextRef.current = null;
+  });
 
   function bindThreadComposerSkill(threadId: string | null | undefined, skill: SkillSpec | ThreadComposerSkill | null) {
     if (!threadId) {
@@ -1299,21 +1516,43 @@ export function App() {
     }
   }
 
-  async function handleLoginSubmit(agreementChecked = loginForm.agreementAccepted) {
+  async function handleLoginSubmit(
+    agreementChecked = loginForm.agreementAccepted,
+    emailAuthMode: "password" | "code" = "password"
+  ) {
     if (!api || isSubmittingLogin) {
       return;
     }
 
-    const emailCodeRequired = Boolean(
-      (authStatus as DesktopAuthStatusState & { email_code_login_enabled?: boolean }).email_code_login_enabled
-    );
-    if (emailCodeRequired && !loginForm.captcha.trim()) {
-      setErrorMessage("已启用邮箱验证码，请先获取并填写验证码后再登录。");
-      return;
-    }
-    if (!loginForm.password.trim() && !loginForm.captcha.trim()) {
-      setErrorMessage("请输入密码或验证码。");
-      return;
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const identifier = resolveLoginIdentifier(loginForm);
+    const password = loginForm.password.trim();
+    const captcha = loginForm.captcha.trim();
+    const passwordLoginEnabled = authStatus.password_login_enabled !== false;
+    const useCode = shouldUseLoginCode(loginForm, emailAuthMode, { passwordLoginEnabled });
+
+    if (channel === "phone") {
+      if (!isCnMobile(identifier)) {
+        setErrorMessage("请填写 11 位手机号。");
+        return;
+      }
+      if (!captcha) {
+        setErrorMessage("请填写短信验证码。");
+        return;
+      }
+    } else {
+      if (!identifier) {
+        setErrorMessage("请输入邮箱。");
+        return;
+      }
+      if (useCode && !captcha) {
+        setErrorMessage("请先获取并填写邮箱验证码后再登录。");
+        return;
+      }
+      if (!useCode && !password) {
+        setErrorMessage("请输入密码。");
+        return;
+      }
     }
 
     if (authStatus.agreement?.enabled && !agreementChecked) {
@@ -1326,36 +1565,66 @@ export function App() {
     setIsSubmittingLogin(true);
     try {
       const nextAuthStatus = await api.loginAuth({
-        email: loginForm.email,
-        password: loginForm.password.trim(),
-        captcha: loginForm.captcha,
+        email: identifier,
+        password: useCode ? "" : password,
+        captcha: useCode ? captcha : "",
         agreement_accepted: authStatus.agreement?.enabled ? agreementChecked : true
       });
       setAuthStatus(nextAuthStatus);
-      if (nextAuthStatus.authenticated) {
-        const nextBootstrapStatus = await api.startDesktopBootstrap();
-        setDesktopBootstrapStatus(nextBootstrapStatus);
+      if (!nextAuthStatus.authenticated) {
+        setErrorMessage(
+          String(nextAuthStatus.last_error || "").trim() || LOGIN_FAILURE_FALLBACK
+        );
+        return false;
+      }
+      const nextBootstrapStatus = await api.startDesktopBootstrap();
+      setDesktopBootstrapStatus(nextBootstrapStatus);
+      try {
+        if (window.sessionStorage.getItem("nd_easter_found") === "1" && api.claimNationalDayGift) {
+          const gift = await api.claimNationalDayGift();
+          window.sessionStorage.removeItem("nd_easter_found");
+          const giftMessage =
+            gift && typeof gift === "object" && typeof (gift as { gift_message?: unknown }).gift_message === "string"
+              ? String((gift as { gift_message: string }).gift_message)
+              : "";
+          if (giftMessage) {
+            setChatStatus(giftMessage);
+          }
+        }
+      } catch (giftError) {
+        const giftFail = giftError instanceof Error ? giftError.message : String(giftError ?? "");
+        if (giftFail) setChatStatus(giftFail);
       }
       setLoginForm((current) => ({
         ...current,
         password: "",
         captcha: ""
       }));
+      setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
+      return true;
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
+      return false;
     } finally {
       setIsSubmittingLogin(false);
     }
   }
 
   async function handleSendLoginCode() {
-    if (!api || isSendingLoginCode || loginCodeCooldownSeconds > 0) {
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const channelCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, channel);
+    if (!api || isSendingLoginCode || channelCooldownSeconds > 0) {
       return;
     }
 
-    if (!loginForm.email.trim()) {
+    if (channel === "phone") {
+      if (!isCnMobile(loginForm.phone)) {
+        setErrorMessage("请先填写 11 位手机号。");
+        return;
+      }
+    } else if (!loginForm.email.trim()) {
       setErrorMessage("请先输入邮箱。");
       return;
     }
@@ -1363,13 +1632,23 @@ export function App() {
     setErrorMessage("");
     setIsSendingLoginCode(true);
     try {
-      const result = await api.sendLoginCode({ email: loginForm.email.trim() });
+      const result = await api.sendLoginCode(
+        channel === "phone"
+          ? { phone: loginForm.phone.trim() }
+          : { email: loginForm.email.trim() }
+      );
       const resendAfter =
         typeof (result.data as Record<string, unknown> | undefined)?.resend_after_seconds === "number"
           ? Number((result.data as Record<string, unknown>).resend_after_seconds)
           : 60;
-      setLoginCodeCooldownSeconds(Math.max(1, resendAfter));
-      setChatStatus("验证码已发送，请查收邮箱。");
+      setLoginCodeCooldownByChannel((current) =>
+        setChannelLoginCodeCooldown(current, channel, Math.max(1, resendAfter))
+      );
+      setChatStatus(
+        channel === "phone"
+          ? `验证码已发送至手机 ${loginForm.phone.trim().replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2")}，请查收短信。`
+          : `验证码已发送至邮箱 ${loginForm.email.trim()}，请查收邮件。`
+      );
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
@@ -1390,6 +1669,7 @@ export function App() {
     try {
       const nextAuthStatus = await api.loginWithAlipayQr({ agreement_accepted: agreementAccepted });
       setAuthStatus(nextAuthStatus);
+      setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("支付宝扫码登录成功，已接入真实会话。");
       setErrorMessage("");
     } catch (error) {
@@ -1408,14 +1688,18 @@ export function App() {
     forceStandaloneChat?: boolean;
     forceProjectThread?: boolean;
     targetWorkspaceId?: string;
+    targetThreadId?: string;
+    pinnedThreadEnsured?: boolean;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
+    keepComposer?: boolean;
   }) {
-    const draftQuestion = draftOverride?.question ?? question;
-    const draftImages = draftOverride?.images ?? composerImages;
-    const draftTools = draftOverride?.tools ?? selectedComposerTools;
-    const draftSkill = draftOverride?.skill ?? selectedComposerSkill;
-    const draftSkillContext = draftOverride?.skillContext ?? composerSkillContext;
-    const draftModes = draftOverride?.modes ?? composerModes;
+    const keepComposer = Boolean(draftOverride?.keepComposer);
+    const draftQuestion = draftOverride?.question ?? (keepComposer ? "" : question);
+    const draftImages = draftOverride?.images ?? (keepComposer ? [] : composerImages);
+    const draftTools = keepComposer ? (draftOverride?.tools ?? []) : (draftOverride?.tools ?? selectedComposerTools);
+    const draftSkill = keepComposer ? (draftOverride?.skill ?? null) : (draftOverride?.skill ?? selectedComposerSkill);
+    const draftSkillContext = draftOverride?.skillContext ?? (keepComposer ? "" : composerSkillContext);
+    const draftModes = draftOverride?.modes ?? (keepComposer ? [] : composerModes);
     const forceStandaloneChat = Boolean(draftOverride?.forceStandaloneChat);
     const forceProjectThread = Boolean(draftOverride?.forceProjectThread);
     const recoveryDraft = cloneNewChatComposerDraft({
@@ -1442,11 +1726,17 @@ export function App() {
     // Fresh composer sends often pass a draft override (question/images/tools).
     // Only queued-draft replays carry createdAt; those must not clear or re-queue.
     const isQueuedDraftReplay = Boolean(draftOverride?.createdAt);
-    const currentWorkspaceId = selectedWorkspaceIdRef.current || selectedWorkspaceId;
+    const pinnedWorkspaceId = String(draftOverride?.targetWorkspaceId || "").trim();
+    const pinnedThreadId = String(draftOverride?.targetThreadId || "").trim();
+    const currentWorkspaceId = (pinnedWorkspaceId && pinnedThreadId)
+      ? pinnedWorkspaceId
+      : (selectedWorkspaceIdRef.current || selectedWorkspaceId);
     const currentWorkspace =
       safeWorkspaceCatalog.find((workspace) => workspace.id === currentWorkspaceId) ??
       selectedWorkspace;
-    const currentThreadId = selectedThreadIdRef.current || selectedThreadId;
+    const currentThreadId = (pinnedWorkspaceId && pinnedThreadId)
+      ? pinnedThreadId
+      : (selectedThreadIdRef.current || selectedThreadId);
     const currentThread =
       currentWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
       selectedThread;
@@ -1471,17 +1761,20 @@ export function App() {
         modes: [...draftModes],
         createdAt: new Date().toISOString()
       };
-      queuedComposerDraftRef.current = nextDraft;
-      setQueuedComposerDraft(nextDraft);
-      setQuestion("");
-      setComposerImages([]);
-      setSelectedComposerTools([]);
-      setComposerSkillContext("");
-      setComposerModes([]);
-      setChatStatus("当前对话正在处理中，已将下一条消息加入排队。");
-      return;
+      const nextQueue = enqueueComposerDraft(queuedComposerDraftsRef.current, nextDraft);
+      setComposerQueue(nextQueue);
+      if (!keepComposer) {
+        setQuestion("");
+        setComposerImages([]);
+        setSelectedComposerTools([]);
+        setComposerSkillContext("");
+        setComposerModes([]);
+      }
+      const position = nextQueue.filter((item) => item.threadId === nextDraft.threadId).length;
+      setChatStatus(`已加入排队（第 ${position} 条），当前轮结束后按顺序发送。`);
+      return "queued";
     }
-    if (!isQueuedDraftReplay) {
+    if (!isQueuedDraftReplay && !keepComposer) {
       setQuestion("");
       setComposerImages([]);
       setSelectedComposerTools([]);
@@ -1504,7 +1797,7 @@ export function App() {
       isComposingNewThread,
       currentThreadId: currentThread?.id || currentThreadId
     });
-    const composingThreadScope = effectiveNewThreadScope === "chat" && effectiveChatUsesProject ? "project" : effectiveNewThreadScope;
+    let composingThreadScope = effectiveNewThreadScope === "chat" && effectiveChatUsesProject ? "project" : effectiveNewThreadScope;
     let targetWorkspaceId = composingNewThread
       ? resolveNewChatWorkspaceId({
           scope: effectiveNewThreadScope,
@@ -1528,19 +1821,61 @@ export function App() {
       (targetWorkspaceId === currentWorkspaceId ? currentWorkspace : undefined);
     let targetThread = targetWorkspace?.threads.find((thread) => thread.id === currentThreadId) ??
       (targetWorkspaceId === currentWorkspaceId ? currentThread : undefined);
+    let appendToBoundThread = false;
+    if (pinnedWorkspaceId && pinnedThreadId) {
+      targetWorkspaceId = pinnedWorkspaceId;
+      targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId);
+      const threadPlan = planAutomationThreadTarget({
+        boundWorkspaceId: pinnedWorkspaceId,
+        boundThreadId: pinnedThreadId,
+        workspaceExists: Boolean(targetWorkspace?.id),
+        threadExists: Boolean(targetThread?.id),
+        fallbackWorkspaceId: INTERNAL_CHAT_WORKSPACE_ID
+      });
+      appendToBoundThread = codexAutomationSendPlan({
+        boundWorkspaceId: pinnedWorkspaceId,
+        boundThreadId: pinnedThreadId,
+        snapshotHasThread: Boolean(targetThread?.id),
+        threadJustEnsured: Boolean(draftOverride?.pinnedThreadEnsured)
+      }).appendToBoundThread;
+      if (threadPlan.createThread && !appendToBoundThread) {
+        targetWorkspaceId = threadPlan.workspaceId;
+        targetWorkspace = safeWorkspaceCatalog.find((workspace) => workspace.id === targetWorkspaceId) ?? targetWorkspace;
+        composingNewThread = true;
+        composingThreadScope = targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID ? "chat" : "project";
+        targetThread = undefined;
+        setErrorMessage("");
+        setChatStatus("绑定的对话不存在，正在新建对话并执行任务。");
+      } else {
+        composingNewThread = false;
+        setSelectedWorkspaceId(targetWorkspaceId);
+        setSelectedThreadId(targetThread?.id || pinnedThreadId);
+        setIsComposingNewThread(false);
+      }
+    }
     // A selected-thread object can be stale after switching from a project to the
     // internal chat workspace. Validate against the resolved target workspace.
-    if (!targetThread?.id) composingNewThread = true;
+    if (appendToBoundThread && pinnedThreadId) {
+      composingNewThread = false;
+      targetWorkspaceId = pinnedWorkspaceId;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId)
+        ?? ({ id: pinnedThreadId, title: "自动化任务", scope: "chat" } as NonNullable<typeof targetThread>);
+      setSelectedWorkspaceId(pinnedWorkspaceId);
+      setSelectedThreadId(pinnedThreadId);
+      setIsComposingNewThread(false);
+    }
+    if (!targetThread?.id && !appendToBoundThread) composingNewThread = true;
     let targetThreadTitle = selectedThread?.title || "新对话";
     if (composingNewThread) {
       if (!targetWorkspaceId) {
-        setErrorMessage("请先选择一个项目，再新建线程。");
+        setErrorMessage("请先选择一个项目，再新建对话。");
         return;
       }
 
-      const titleText = draftQuestion.trim().slice(0, 36) || "新线程";
+      const titleText = draftQuestion.trim().slice(0, 36) || "新对话";
       try {
-        setChatStatus("正在创建新线程...");
+        setChatStatus("正在创建新对话...");
         const existingThreadIds = new Set(targetWorkspace?.threads.map((thread) => thread.id) ?? []);
         const createdThread = await createAndActivateNewChatThread({
           workspaceId: targetWorkspaceId,
@@ -1550,7 +1885,7 @@ export function App() {
           addWorkspaceThread: () => api.addWorkspaceThread({
             workspaceId: targetWorkspaceId,
             title: titleText,
-            summary: composingThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新线程。",
+            summary: composingThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新对话。",
             scope: composingThreadScope,
             ...(targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID && draftOverride?.brainWorkspaceKey
               ? { brainWorkspaceKey: draftOverride.brainWorkspaceKey }
@@ -1591,7 +1926,7 @@ export function App() {
           return;
         }
         setErrorMessage(message);
-        setChatStatus("新线程创建失败。");
+        setChatStatus("新对话创建失败。");
         return;
       }
     }
@@ -1648,7 +1983,7 @@ export function App() {
       ].filter(Boolean).join("\n\n");
     }
     if (composerWorkspaceContext && composingNewThread) {
-      toolContext = [toolContext, `当前新线程：${contextThreadTitle}`].filter(Boolean).join("\n\n");
+      toolContext = [toolContext, `当前新对话：${contextThreadTitle}`].filter(Boolean).join("\n\n");
     }
     const userMessage: ModelChatMessage = {
       id: `local-user-${Date.now()}`,
@@ -1780,22 +2115,39 @@ export function App() {
       }
       await refreshCatalog();
     } catch (error) {
-      requestFailed = true;
-      const message = normalizeModelErrorMessage(error);
-      setChatStatus(isSubscriptionInactiveError(message) ? "订阅未激活或已过期。" : "模型请求失败。");
-      setErrorMessage(message);
-      setGenerationFailure({ threadId: targetThreadId, message });
-      // Codex keeps the already streamed progress visible when a provider or
-      // tool fails. Freeze live deltas into the assistant message, and exclude
-      // this incomplete turn from later model context so a retry stays clean.
       const livePartial = String(liveModelContentRef.current[streamRequestId] ?? "");
-      updateThreadMessages(targetThreadId, (current) => current.map((item) => {
-        if (item.id !== streamRequestId) return item;
-        return {
-          ...item,
-          ...projectModelChatFailure(item, message, livePartial)
-        };
-      }));
+      const userCancelled = userCancelledRequestIdsRef.current.has(streamRequestId)
+        || isUserCancelledModelError(error);
+      userCancelledRequestIdsRef.current.delete(streamRequestId);
+      if (userCancelled) {
+        // Manual stop is a normal end of turn — keep streamed progress, no failure card.
+        setChatStatus("已停止生成。");
+        setErrorMessage("");
+        setGenerationFailure(null);
+        updateThreadMessages(targetThreadId, (current) => current.map((item) => {
+          if (item.id !== streamRequestId) return item;
+          return {
+            ...item,
+            ...projectModelChatCancellation(item, livePartial)
+          };
+        }));
+      } else {
+        requestFailed = true;
+        const message = normalizeModelErrorMessage(error);
+        setChatStatus(isSubscriptionInactiveError(message) ? "订阅未激活或已过期。" : "模型请求失败。");
+        setErrorMessage(message);
+        setGenerationFailure({ threadId: targetThreadId, message });
+        // Codex keeps the already streamed progress visible when a provider or
+        // tool fails. Freeze live deltas into the assistant message, and exclude
+        // this incomplete turn from later model context so a retry stays clean.
+        updateThreadMessages(targetThreadId, (current) => current.map((item) => {
+          if (item.id !== streamRequestId) return item;
+          return {
+            ...item,
+            ...projectModelChatFailure(item, message, livePartial)
+          };
+        }));
+      }
     } finally {
       setLastAssistantElapsedSeconds(Math.max(1, Math.round((Date.now() - requestStartedAt) / 1000)));
       setAssistantStartedAt(null);
@@ -1842,19 +2194,20 @@ export function App() {
           }
         }, 750);
       }
-      const queuedDraft = awaitingApproval || queuedComposerDraftRef.current?.threadId !== targetThreadId
-        ? null
-        : queuedComposerDraftRef.current;
-      if (queuedDraft) {
-        queuedComposerDraftRef.current = null;
-        setQueuedComposerDraft(null);
-        const typed = String(questionRef.current || "").trim();
-        const queuedText = String(queuedDraft.question || "").trim();
-        const mergedQuestion = combineComposerQuote(typed, queuedText);
-        setQuestion("");
-        window.setTimeout(() => void askModel({ ...queuedDraft, question: mergedQuestion }), 0);
+      // A failed or stopped turn pauses the queue; the user resumes it from the tray.
+      if (!awaitingApproval && !requestFailed) {
+        dispatchNextQueuedDraft(targetThreadId);
       }
+      return requestFailed ? "failed" : "sent";
     }
+  }
+
+  function dispatchNextQueuedDraft(threadId: string) {
+    if (!threadId || selectedThreadIdRef.current !== threadId) return;
+    const { next, rest } = takeNextComposerQueueItem(queuedComposerDraftsRef.current, threadId);
+    if (!next) return;
+    setComposerQueue(rest);
+    window.setTimeout(() => void askModel(next), 0);
   }
 
   async function startUsageExceptionFeedback(description: string, commandText = "") {
@@ -1981,18 +2334,7 @@ export function App() {
         ? selectedThreadIdRef.current
         : ""
     );
-    const queuedDraft = queuedComposerDraftRef.current?.threadId === threadId
-      ? queuedComposerDraftRef.current
-      : null;
-    if (queuedDraft) {
-      queuedComposerDraftRef.current = null;
-      setQueuedComposerDraft(null);
-      const typed = String(questionRef.current || "").trim();
-      const queuedText = String(queuedDraft.question || "").trim();
-      const mergedQuestion = combineComposerQuote(typed, queuedText);
-      setQuestion("");
-      window.setTimeout(() => void askModel({ ...queuedDraft, question: mergedQuestion }), 0);
-    }
+    dispatchNextQueuedDraft(threadId);
   }
 
   function releaseInactiveModelRequest(requestId: string, threadId: string) {
@@ -2010,15 +2352,24 @@ export function App() {
   }
 
   async function cancelCurrentModelRequest() {
-    const requestId = selectedThread?.id
-      ? activeThreadRequestsRef.current.get(selectedThread.id) || ""
-      : activeModelRequestIdRef.current;
+    // Prefer the thread map, but always fall back to the live request id — a
+    // missing map entry must not skip the cancel mark or IPC stop.
+    const requestId = (
+      (selectedThread?.id ? activeThreadRequestsRef.current.get(selectedThread.id) : "")
+      || activeModelRequestIdRef.current
+      || ""
+    ).trim();
     if (!api?.cancelModelRequest || !requestId) {
       setChatStatus("当前没有可停止的任务。");
+      setGenerationFailure(null);
+      setErrorMessage("");
       return;
     }
+    userCancelledRequestIdsRef.current.add(requestId);
+    setGenerationFailure(null);
+    setErrorMessage("");
     const result = await api.cancelModelRequest({ requestId });
-    setChatStatus(result.detail);
+    setChatStatus(result.ok ? "已停止生成。" : result.detail);
     if (result.ok) {
       streamingAssistantRef.current = { id: "", contentLength: 0 };
       awaitingApprovalRequestIdsRef.current.delete(requestId);
@@ -2032,6 +2383,8 @@ export function App() {
       }
       activeModelRequestIdRef.current = "";
     }
+    // Keep the cancel mark until askModel's catch consumes it. Clearing on
+    // !ok raced with late AbortError/429 replies and reopened the failure card.
   }
 
   function renderFeaturePanel() {
@@ -2598,9 +2951,11 @@ export function App() {
                   <button type="button" className={workspaceStatusSubmenu === "local" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("local")}>
                     <SidebarIcon name="computer" /><span>本地</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
+                  {workspaceHeaderStatus.branch ? (
                   <button type="button" className={workspaceStatusSubmenu === "branch" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("branch")}>
                     <SidebarIcon name="branch" /><span>{workspaceHeaderStatus.branch}</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={async () => {
@@ -2634,7 +2989,7 @@ export function App() {
                   {workspaceStatusSubmenu === "branch" ? (
                     <div className="workspace-status-submenu branch-status-submenu">
                       <label>⌕<input value={branchSearch} onChange={(event) => setBranchSearch(event.target.value)} placeholder="搜索分支" /></label>
-                      <span className="workspace-status-subtitle">分支</span>
+                      <span className="workspace-status-subtitle">{workspaceBranches.current ? `当前分支：${workspaceBranches.current}` : "当前分支：(detached HEAD)"}</span>
                       <div className="branch-status-list">
                         {workspaceBranches.branches.filter((branch) => branch.toLowerCase().includes(branchSearch.toLowerCase())).map((branch) => (
                           <button key={branch} type="button" onClick={async () => { if (!api || !selectedWorkspace || branch === workspaceBranches.current) return; try { const next = await api.switchWorkspaceBranch({ workspaceId: selectedWorkspace.id, branch }); setWorkspaceBranches(next); await refreshWorkspaceHeaderStatus(); setWorkspaceStatusSubmenu(null); } catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)); } }}><SidebarIcon name="branch" /><span><strong>{branch}</strong>{branch === workspaceBranches.current ? <small>未提交：{workspaceBranches.changedFiles} 个文件</small> : null}</span><em>{branch === workspaceBranches.current ? "✓" : ""}</em></button>
@@ -2781,6 +3136,8 @@ export function App() {
         appUpdateStatus={appUpdateStatus}
         appUpdateBusy={appUpdateBusy}
         startDesktopAppUpdate={startDesktopAppUpdate}
+        applyDesktopAppUpdate={applyDesktopAppUpdate}
+        skipDesktopAppUpdate={skipDesktopAppUpdate}
       />
     );
   }
@@ -2868,8 +3225,14 @@ export function App() {
         appUpdateStatus={appUpdateStatus}
         appUpdateBusy={appUpdateBusy}
         appUpdateProgress={appUpdateProgress}
+        appUpdateDiscoverOpen={appUpdateDiscoverOpen}
+        appUpdateApplied={appUpdateApplied}
         startDesktopAppUpdate={startDesktopAppUpdate}
+        applyDesktopAppUpdate={applyDesktopAppUpdate}
+        skipDesktopAppUpdate={skipDesktopAppUpdate}
         dismissAppUpdateProgress={dismissAppUpdateProgress}
+        dismissAppUpdateDiscover={dismissAppUpdateDiscover}
+        dismissAppliedAppUpdate={dismissAppliedAppUpdate}
         title={title}
         previewPlacement={previewPlacement}
         setPreviewPlacement={setPreviewPlacement}
@@ -2882,9 +3245,9 @@ export function App() {
         setChatMessages={setChatMessages}
         composerImages={composerImages}
         setComposerImages={setComposerImages}
-        queuedComposerDraft={queuedComposerDraft}
-        setQueuedComposerDraft={setQueuedComposerDraft}
-        queuedComposerDraftRef={queuedComposerDraftRef}
+        queuedComposerDrafts={queuedComposerDrafts}
+        setComposerQueue={setComposerQueue}
+        queuedComposerDraftsRef={queuedComposerDraftsRef}
         questionRef={questionRef}
         usageExceptionFeedbackPreview={usageExceptionFeedbackPreview}
         usageExceptionFeedbackBusy={usageExceptionFeedbackBusy}
@@ -2965,6 +3328,7 @@ export function App() {
         chatUsesProject={chatUsesProject}
         setChatUsesProject={setChatUsesProject}
         desktopPreferences={desktopPreferences}
+        saveDesktopPreferences={saveDesktopPreferences}
         featureConfig={featureConfig}
         setFeatureConfig={setFeatureConfig}
         skillDraft={skillDraft}
@@ -2991,7 +3355,9 @@ export function App() {
         isSubmittingLogin={isSubmittingLogin}
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
-        onLoginSubmit={(agreementChecked) => void handleLoginSubmit(agreementChecked)}
+        onLoginSubmit={(agreementChecked, emailAuthMode) =>
+          handleLoginSubmit(agreementChecked, emailAuthMode)
+        }
         onAlipayQrLogin={() => void handleAlipayQrLogin()}
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}

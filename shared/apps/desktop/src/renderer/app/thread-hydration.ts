@@ -56,7 +56,7 @@ export function resolveSidebarRowThreadTarget<
   const workspace = input.workspaces.find((item) => item.id === workspaceId);
   if (!workspace) return null;
   const threads = workspace.threads ?? [];
-  const direct = threads.find((thread) => thread.id === threadId && !thread.archived);
+  const direct = threads.find((thread) => thread.id === threadId && !thread.archived && thread.kind !== "subagent");
   if (direct) {
     return { kind: parsed.kind, workspace, thread: direct };
   }

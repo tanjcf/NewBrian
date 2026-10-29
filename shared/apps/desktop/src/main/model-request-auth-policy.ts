@@ -1,4 +1,4 @@
-﻿export interface ModelRequestAuthState {
+export interface ModelRequestAuthState {
   mode: "desktop_token" | "session_cookie";
   access_token?: string;
   session_cookie?: string;
@@ -10,12 +10,26 @@ export type ModelRequestAuthSource =
   | "dev_e2e_bypass"
   | "none";
 
-export function resolveDevE2eBearerToken(): string {
-  const bypassEnabled = process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1";
+/**
+ * Whether unpackaged E2E may inject a spring-app Bearer without a desktop login file.
+ * Must stay aligned with `resolveDesktopAuthStatus` fake-login: bypass alone is not
+ * enough for the UI, but once remote-debug E2E is active the UI treats the session as
+ * authenticated — Auto `/v1/auto/route` must receive the same bearer even when the
+ * gateway URL lives only in config (not in NEWBRAIN_MODEL_BASE_URL).
+ */
+export function isDevE2eAuthBypassActive(): boolean {
+  if (process.env.NEWBRAIN_E2E_AUTH_BYPASS !== "1") {
+    return false;
+  }
   const gatewayConfigured = Boolean(
     process.env.NEWBRAIN_MODEL_BASE_URL?.trim() || process.env.NEWBRAIN_MEDIA_GATEWAY_BASE_URL?.trim()
   );
-  if (!bypassEnabled || !gatewayConfigured) {
+  const e2eRemoteDebugSession = Boolean(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT?.trim());
+  return gatewayConfigured || e2eRemoteDebugSession;
+}
+
+export function resolveDevE2eBearerToken(): string {
+  if (!isDevE2eAuthBypassActive()) {
     return "";
   }
   return process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e";

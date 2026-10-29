@@ -16,6 +16,7 @@ test("active learning distills corrections without reusable markers", () => {
     "好的，已改为中文分点。"
   );
   assert.ok(facts.outputRules.some((line) => /修正:|偏好:|不要用英文总结/.test(line)));
+  assert.equal(facts.knowledgeStatus, "active");
   assert.match(facts.sessionSummary, /主动学习/);
 });
 
@@ -234,6 +235,143 @@ test("ensureProjectSkill clears corrupt lock metadata", async () => {
     writeFileSync(lockPath, "not-json-lock", "utf8");
     await shadow.ensureProjectSkill();
     assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a correction and an explicit remember both become lasting memory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-status-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "StatusDemo" });
+    await shadow.absorbExchange({
+      user: "不要用英文总结，改成中文分点输出。",
+      assistant: "好的。"
+    });
+    await shadow.absorbExchange({
+      user: "记住以后报表表头用蓝色",
+      assistant: "已记住。"
+    });
+    const rules = readFileSync(join(shadow.referencesPath, "user-output-rules.md"), "utf8");
+    assert.match(rules, /\[active\].*英文总结/);
+    assert.match(rules, /\[active\].*报表表头用蓝色/);
+    assert.match(rules, /For Chinese user requests/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("tentative talk and confirmation codes stay out of lasting memory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-tentative-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "TentativeDemo" });
+    await shadow.ensureProjectSkill();
+    const rulesPath = join(shadow.referencesPath, "user-output-rules.md");
+    const before = readFileSync(rulesPath, "utf8");
+    await shadow.absorbExchange({
+      user: "也许改成表格，先看看。",
+      assistant: "先不记成长期规则。"
+    });
+    await shadow.absorbExchange({
+      user: "这个模块的架构是什么？",
+      assistant: "分主进程和界面。"
+    });
+    await shadow.absorbExchange({
+      user: "确认写入",
+      assistant: "这句话不是记忆口令。"
+    });
+    const rules = readFileSync(rulesPath, "utf8");
+    const knowledge = readFileSync(join(shadow.referencesPath, "project-knowledge.md"), "utf8");
+    assert.equal(rules, before);
+    assert.doesNotMatch(knowledge, /这个模块的架构/);
+    const digest = readFileSync(join(shadow.referencesPath, "session-digest.md"), "utf8");
+    assert.match(digest, /也许改成表格/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a concrete point is noticed once and becomes lasting when the user returns to it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-deepen-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "DeepenDemo" });
+    await shadow.absorbExchange({
+      user: "渲染进程只做界面，节点模块放在主进程。",
+      assistant: "知道了。"
+    });
+    let rules = readFileSync(join(shadow.referencesPath, "user-output-rules.md"), "utf8");
+    assert.match(rules, /\[proposed\].*节点模块放在主进程/);
+    assert.doesNotMatch(rules, /\[active\].*节点模块放在主进程/);
+    await shadow.absorbExchange({
+      user: "节点模块放在主进程，界面层不再碰它。",
+      assistant: "这层就这样放。"
+    });
+    rules = readFileSync(join(shadow.referencesPath, "user-output-rules.md"), "utf8");
+    assert.match(rules, /\[active\].*节点模块放在主进程/);
+    await shadow.absorbExchange({
+      user: "我一直把标题写短",
+      assistant: "记下了。"
+    });
+    rules = readFileSync(join(shadow.referencesPath, "user-output-rules.md"), "utf8");
+    assert.match(rules, /\[active\].*标题写短/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a single explicit correction deprecates one matching active rule and keeps defaults", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-deprecate-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "DeprecateDemo" });
+    await shadow.absorbExchange({
+      user: "记住报表表头用蓝色",
+      assistant: "已记住。"
+    });
+    await shadow.absorbExchange({
+      user: "不要再报表表头用蓝色，改成绿色",
+      assistant: "已改为绿色。"
+    });
+    const rules = readFileSync(join(shadow.referencesPath, "user-output-rules.md"), "utf8");
+    assert.match(rules, /\[deprecated\].*报表表头用蓝色/);
+    assert.match(rules, /\[active\].*改成绿色/);
+    assert.match(rules, /For Chinese user requests/);
+    assert.doesNotMatch(rules, /\[deprecated\].*For Chinese user requests/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("secrets are dropped from durable knowledge and redacted in the session digest", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-secret-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "SecretDemo" });
+    await shadow.absorbExchange({
+      user: "记住密码: hunter2-secret",
+      assistant: "不会保存。"
+    });
+    const rules = readFileSync(join(shadow.referencesPath, "user-output-rules.md"), "utf8");
+    const digest = readFileSync(join(shadow.referencesPath, "session-digest.md"), "utf8");
+    assert.doesNotMatch(rules, /hunter2-secret/);
+    assert.doesNotMatch(digest, /hunter2-secret/);
+    assert.match(digest, /已省略/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("untagged legacy bullets survive a later learning turn", async () => {
+  const root = mkdtempSync(join(tmpdir(), "newbrain-knowledge-legacy-"));
+  try {
+    const shadow = new UserShadow({ workspacePath: root, projectName: "LegacyDemo" });
+    await shadow.ensureProjectSkill();
+    const rulesPath = join(shadow.referencesPath, "user-output-rules.md");
+    writeFileSync(rulesPath, `${readFileSync(rulesPath, "utf8").trimEnd()}\n- LEGACY_RULE_KEEP\n`, "utf8");
+    await shadow.absorbExchange({
+      user: "今天天气怎么样",
+      assistant: "晴。"
+    });
+    const rules = readFileSync(rulesPath, "utf8");
+    assert.match(rules, /LEGACY_RULE_KEEP/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -34,6 +34,7 @@ export interface PersistedMemory {
 export interface PersistedGoal {
   threadId: string;
   goalId: string;
+  turnId?: string;
   objective: string;
   status: string;
   tokenBudget?: number;
@@ -41,6 +42,86 @@ export interface PersistedGoal {
   timeUsedSeconds: number;
   createdAtMs: number;
   updatedAtMs: number;
+}
+
+export interface PersistedGoalPlanStep {
+  threadId: string;
+  goalId: string;
+  stepId: string;
+  position: number;
+  title: string;
+  description: string;
+  status: "pending" | "in_progress" | "completed";
+  result: string;
+  updatedAtMs: number;
+}
+
+export interface PersistedGoalQuestion {
+  threadId: string;
+  goalId: string;
+  questionId: string;
+  prompt: string;
+  options: Array<{ label: string; description: string; recommended?: boolean }>;
+  status: "pending" | "answered" | "dismissed";
+  answer: string;
+  createdAtMs: number;
+  answeredAtMs?: number;
+}
+
+export interface PersistedGoalRuntime {
+  threadId: string;
+  goalId: string;
+  phase: "idle" | "running" | "waiting_user" | "complete" | "blocked";
+  consecutiveBlockedTurns: number;
+  lastError: string;
+  selectedSkillNames?: string[];
+  updatedAtMs: number;
+}
+
+export interface PersistedGoalSnapshot {
+  goal: PersistedGoal;
+  runtime: PersistedGoalRuntime;
+  plan: PersistedGoalPlanStep[];
+  pendingQuestion: PersistedGoalQuestion | null;
+}
+
+export type PersistedRemoteWorkItemStatus =
+  | "claimed"
+  | "running"
+  | "waiting_approval"
+  | "interrupted"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface PersistedRemoteWorkItem {
+  id: string;
+  status: PersistedRemoteWorkItemStatus;
+  objective: string;
+  source: string;
+  targetDeviceId: string;
+  knowledgeSnapshotId?: string;
+  payloadJson: string;
+  threadId?: string;
+  claimedAtMs: number;
+  leaseUntilMs: number;
+  completedAtMs?: number;
+  lastError: string;
+}
+
+export type PersistedRemoteEventStatus = "pending" | "sending" | "acknowledged" | "quarantined";
+
+export interface PersistedRemoteEvent {
+  eventId: string;
+  workItemId: string;
+  sequenceNo: number;
+  payloadJson: string;
+  status: PersistedRemoteEventStatus;
+  attemptCount: number;
+  nextAttemptAtMs: number;
+  createdAtMs: number;
+  acknowledgedAtMs?: number;
+  lastError?: string;
 }
 
 export interface PersistedSpawnEdge {
@@ -63,6 +144,7 @@ export interface PersistedDelegatedAgentTask {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  dependsOn?: string[];
 }
 
 type BoundValue = string | number | bigint | null | Uint8Array;
@@ -277,6 +359,48 @@ export class CodexStorage {
       UPDATE threads SET preview = replace(preview, '鏂扮嚎绋?', '新线程');
       UPDATE threads SET preview = replace(preview, '鏂板璇?', '新对话');
     `);
+    migrate(this.state, 6, "persist desktop thread presentation metadata", `
+      ALTER TABLE threads ADD COLUMN summary TEXT NOT NULL DEFAULT '';
+      ALTER TABLE threads ADD COLUMN last_event_summary TEXT NOT NULL DEFAULT '';
+      ALTER TABLE threads ADD COLUMN status_label TEXT NOT NULL DEFAULT '';
+      UPDATE threads SET summary = preview, last_event_summary = preview WHERE summary = '';
+    `);
+    migrate(this.state, 7, "persist delegated task dependencies", `
+      ALTER TABLE delegated_agent_tasks ADD COLUMN depends_on_json TEXT NOT NULL DEFAULT '[]';
+    `);
+    migrate(this.state, 8, "durable Holon remote work and event outbox", `
+      CREATE TABLE IF NOT EXISTS remote_work_items (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        objective TEXT NOT NULL,
+        source TEXT NOT NULL,
+        target_device_id TEXT NOT NULL,
+        knowledge_snapshot_id TEXT,
+        payload_json TEXT NOT NULL,
+        thread_id TEXT,
+        claimed_at_ms INTEGER NOT NULL,
+        lease_until_ms INTEGER NOT NULL,
+        completed_at_ms INTEGER,
+        last_error TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_remote_work_items_status
+        ON remote_work_items(status, claimed_at_ms DESC);
+      CREATE TABLE IF NOT EXISTS remote_event_outbox (
+        event_id TEXT PRIMARY KEY,
+        work_item_id TEXT NOT NULL,
+        sequence_no INTEGER NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at_ms INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        acknowledged_at_ms INTEGER,
+        last_error TEXT NOT NULL DEFAULT '',
+        UNIQUE(work_item_id, sequence_no)
+      );
+      CREATE INDEX IF NOT EXISTS idx_remote_event_outbox_due
+        ON remote_event_outbox(status, next_attempt_at_ms, created_at_ms);
+    `);
     migrate(this.logs, 1, "structured logs", `
       CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,6 +464,97 @@ export class CodexStorage {
       );
       CREATE INDEX IF NOT EXISTS idx_thread_goals_status ON thread_goals(status, updated_at_ms DESC);
     `);
+    migrate(this.goals, 2, "durable goal execution state", `
+      CREATE TABLE IF NOT EXISTS goal_runtime (
+        thread_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        consecutive_blocked_turns INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NOT NULL DEFAULT '',
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(thread_id, goal_id),
+        FOREIGN KEY(thread_id, goal_id) REFERENCES thread_goals(thread_id, goal_id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS goal_plan_steps (
+        thread_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        step_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result TEXT NOT NULL DEFAULT '',
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(thread_id, goal_id, step_id),
+        UNIQUE(thread_id, goal_id, position),
+        FOREIGN KEY(thread_id, goal_id) REFERENCES thread_goals(thread_id, goal_id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS goal_questions (
+        thread_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        question_id TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        options_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        answer TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        answered_at_ms INTEGER,
+        PRIMARY KEY(thread_id, goal_id, question_id),
+        FOREIGN KEY(thread_id, goal_id) REFERENCES thread_goals(thread_id, goal_id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_goal_pending_question
+        ON goal_questions(thread_id, goal_id) WHERE status = 'pending';
+      CREATE TABLE IF NOT EXISTS goal_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(thread_id, goal_id) REFERENCES thread_goals(thread_id, goal_id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_goal_events_goal
+        ON goal_events(thread_id, goal_id, created_at_ms);
+    `);
+    migrate(this.goals, 3, "bind explicit skills to durable goals", `
+      ALTER TABLE goal_runtime ADD COLUMN selected_skill_names_json TEXT NOT NULL DEFAULT '[]';
+    `);
+    migrate(this.goals, 4, "bind goal presentation to conversation turn", `
+      ALTER TABLE thread_goals ADD COLUMN turn_id TEXT;
+    `);
+    migrate(this.goals, 5, "government writing specification versions", `
+      CREATE TABLE IF NOT EXISTS government_writing_spec_versions (
+        version_id TEXT PRIMARY KEY,
+        specification_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        version_number INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        content_json TEXT NOT NULL,
+        change_summary TEXT NOT NULL,
+        replaces_version_id TEXT,
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE(specification_id, version_number),
+        FOREIGN KEY(thread_id, goal_id) REFERENCES thread_goals(thread_id, goal_id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_gov_spec_thread_goal
+        ON government_writing_spec_versions(thread_id, goal_id, version_number DESC);
+      CREATE TABLE IF NOT EXISTS government_writing_spec_state (
+        specification_id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        current_version_id TEXT NOT NULL,
+        confirmed_version_id TEXT,
+        updated_at_ms INTEGER NOT NULL,
+        UNIQUE(thread_id, goal_id),
+        FOREIGN KEY(thread_id, goal_id) REFERENCES thread_goals(thread_id, goal_id) ON DELETE CASCADE,
+        FOREIGN KEY(current_version_id) REFERENCES government_writing_spec_versions(version_id),
+        FOREIGN KEY(confirmed_version_id) REFERENCES government_writing_spec_versions(version_id)
+      );
+    `);
+    migrate(this.goals, 6, "government writing specification guidance", `
+      ALTER TABLE government_writing_spec_state ADD COLUMN suggestions_json TEXT NOT NULL DEFAULT '[]';
+    `);
   }
 
   upsertThread(thread: PersistedThread) {
@@ -357,12 +572,41 @@ export class CodexStorage {
       thread.memoryMode, thread.model, thread.updatedAt, thread.createdAt, thread.updatedAt, thread.updatedAt);
   }
 
+  setThreadArchived(threadId: string, archived: boolean, rolloutPath?: string) {
+    const now = Date.now();
+    const result = rolloutPath
+      ? this.state.prepare(`
+          UPDATE threads
+          SET archived = ?, archived_at = ?, rollout_path = ?, updated_at = ?, updated_at_ms = ?
+          WHERE id = ?
+        `).run(archived ? 1 : 0, archived ? now : null, rolloutPath, now, now, threadId)
+      : this.state.prepare(`
+          UPDATE threads
+          SET archived = ?, archived_at = ?, updated_at = ?, updated_at_ms = ?
+          WHERE id = ?
+        `).run(archived ? 1 : 0, archived ? now : null, now, now, threadId);
+    return Number(result.changes) > 0;
+  }
+
   listThreads(cwd: string): PersistedThread[] {
     return this.state.prepare(`
       SELECT id, rollout_path AS rolloutPath, created_at AS createdAt, updated_at AS updatedAt,
         cwd, title, scope, status, approval_mode AS approvalMode, archived, git_branch AS gitBranch,
         preview, memory_mode AS memoryMode, model
       FROM threads WHERE cwd = ? AND archived = 0 ORDER BY recency_at DESC
+    `).all(cwd).map((row: any) => ({
+      ...row,
+      scope: row.scope === "chat" ? "chat" : "project",
+      archived: Boolean(row.archived)
+    })) as PersistedThread[];
+  }
+
+  listArchivedThreads(cwd: string): PersistedThread[] {
+    return this.state.prepare(`
+      SELECT id, rollout_path AS rolloutPath, created_at AS createdAt, updated_at AS updatedAt,
+        cwd, title, scope, status, approval_mode AS approvalMode, archived, git_branch AS gitBranch,
+        preview, memory_mode AS memoryMode, model
+      FROM threads WHERE cwd = ? AND archived = 1 ORDER BY COALESCE(archived_at, recency_at) DESC
     `).all(cwd).map((row: any) => ({
       ...row,
       scope: row.scope === "chat" ? "chat" : "project",
@@ -408,14 +652,15 @@ export class CodexStorage {
   upsertDelegatedAgentTask(task: PersistedDelegatedAgentTask) {
     run(this.state.prepare(`
       INSERT INTO delegated_agent_tasks(id, parent_thread_id, child_thread_id, title, instruction,
-        owner, status, summary, result_json, last_error, created_at, started_at, completed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        owner, status, summary, result_json, last_error, created_at, started_at, completed_at, depends_on_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET status=excluded.status, summary=excluded.summary,
         result_json=excluded.result_json, last_error=excluded.last_error,
-        started_at=excluded.started_at, completed_at=excluded.completed_at
+        started_at=excluded.started_at, completed_at=excluded.completed_at,
+        depends_on_json=excluded.depends_on_json
     `), task.id, task.parentThreadId, task.childThreadId, task.title, task.instruction,
       task.owner, task.status, task.summary, task.result == null ? null : JSON.stringify(task.result),
-      task.error, task.createdAt, task.startedAt, task.completedAt);
+      task.error, task.createdAt, task.startedAt, task.completedAt, JSON.stringify(task.dependsOn ?? []));
   }
 
   listDelegatedAgentTasks(parentThreadId?: string): PersistedDelegatedAgentTask[] {
@@ -435,7 +680,8 @@ export class CodexStorage {
       error: row.last_error,
       createdAt: row.created_at,
       startedAt: row.started_at,
-      completedAt: row.completed_at
+      completedAt: row.completed_at,
+      dependsOn: row.depends_on_json ? JSON.parse(row.depends_on_json) : []
     }));
   }
 
@@ -462,19 +708,19 @@ export class CodexStorage {
 
   upsertGoal(goal: PersistedGoal) {
     run(this.goals.prepare(`
-      INSERT INTO thread_goals(thread_id, goal_id, objective, status, token_budget, tokens_used,
+      INSERT INTO thread_goals(thread_id, goal_id, turn_id, objective, status, token_budget, tokens_used,
         time_used_seconds, created_at_ms, updated_at_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(thread_id, goal_id) DO UPDATE SET objective=excluded.objective, status=excluded.status,
-        token_budget=excluded.token_budget, tokens_used=excluded.tokens_used,
+        turn_id=excluded.turn_id, token_budget=excluded.token_budget, tokens_used=excluded.tokens_used,
         time_used_seconds=excluded.time_used_seconds, updated_at_ms=excluded.updated_at_ms
-    `), goal.threadId, goal.goalId, goal.objective, goal.status, goal.tokenBudget ?? null,
+    `), goal.threadId, goal.goalId, goal.turnId ?? null, goal.objective, goal.status, goal.tokenBudget ?? null,
       goal.tokensUsed, goal.timeUsedSeconds, goal.createdAtMs, goal.updatedAtMs);
   }
 
   getGoal(threadId: string): PersistedGoal | null {
     const row = this.goals.prepare(`
-      SELECT thread_id AS threadId, goal_id AS goalId, objective, status,
+      SELECT thread_id AS threadId, goal_id AS goalId, turn_id AS turnId, objective, status,
         token_budget AS tokenBudget, tokens_used AS tokensUsed,
         time_used_seconds AS timeUsedSeconds, created_at_ms AS createdAtMs,
         updated_at_ms AS updatedAtMs
@@ -482,10 +728,10 @@ export class CodexStorage {
       ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, updated_at_ms DESC LIMIT 1
     `).get(threadId) as any;
     if (!row) return null;
-    return { ...row, tokenBudget: row.tokenBudget ?? undefined } as PersistedGoal;
+    return { ...row, turnId: row.turnId ?? undefined, tokenBudget: row.tokenBudget ?? undefined } as PersistedGoal;
   }
 
-  createGoal(threadId: string, objective: string, tokenBudget?: number): PersistedGoal {
+  createGoal(threadId: string, objective: string, tokenBudget?: number, turnId?: string): PersistedGoal {
     const normalizedObjective = objective.trim();
     if (!normalizedObjective) throw new Error("Goal objective is required.");
     const current = this.getGoal(threadId);
@@ -499,6 +745,7 @@ export class CodexStorage {
     const goal: PersistedGoal = {
       threadId,
       goalId: randomUUID(),
+      turnId: turnId?.trim() || undefined,
       objective: normalizedObjective,
       status: "active",
       tokenBudget,
@@ -508,6 +755,15 @@ export class CodexStorage {
       updatedAtMs: now
     };
     this.upsertGoal(goal);
+    this.upsertGoalRuntime({
+      threadId,
+      goalId: goal.goalId,
+      phase: "idle",
+      consecutiveBlockedTurns: 0,
+      lastError: "",
+      updatedAtMs: now
+    });
+    this.appendGoalEvent(threadId, goal.goalId, "goal_created", { objective: normalizedObjective, tokenBudget });
     return goal;
   }
 
@@ -526,6 +782,444 @@ export class CodexStorage {
     const next = { ...current, status, tokensUsed, timeUsedSeconds, updatedAtMs: Date.now() };
     this.upsertGoal(next);
     return next;
+  }
+
+  setGoalPaused(threadId: string, paused: boolean): PersistedGoal {
+    const current = this.getGoal(threadId);
+    const expectedStatus = paused ? "active" : "paused";
+    if (!current || current.status !== expectedStatus) {
+      throw new Error(paused ? "No active goal exists for this thread." : "No paused goal exists for this thread.");
+    }
+    const now = Date.now();
+    const next: PersistedGoal = { ...current, status: paused ? "paused" : "active", updatedAtMs: now };
+    this.upsertGoal(next);
+    const runtime = this.getGoalRuntime(threadId, current.goalId);
+    this.upsertGoalRuntime({
+      ...(runtime ?? { threadId, goalId: current.goalId, consecutiveBlockedTurns: 0, lastError: "" }),
+      phase: "idle",
+      updatedAtMs: now
+    });
+    this.appendGoalEvent(threadId, current.goalId, paused ? "goal_paused" : "goal_resumed", {});
+    return next;
+  }
+
+  updateGoalObjective(threadId: string, objective: string): PersistedGoal {
+    const current = this.getGoal(threadId);
+    const normalizedObjective = objective.trim();
+    if (!current || !["active", "paused"].includes(current.status)) throw new Error("No editable goal exists for this thread.");
+    if (!normalizedObjective) throw new Error("Goal objective is required.");
+    const next = { ...current, objective: normalizedObjective, updatedAtMs: Date.now() };
+    this.upsertGoal(next);
+    this.appendGoalEvent(threadId, current.goalId, "goal_objective_updated", { objective: normalizedObjective });
+    return next;
+  }
+
+  deleteGoal(threadId: string): void {
+    const current = this.getGoal(threadId);
+    if (!current) return;
+    this.goals.prepare("DELETE FROM thread_goals WHERE thread_id = ? AND goal_id = ?").run(threadId, current.goalId);
+  }
+
+  upsertGoalRuntime(runtime: PersistedGoalRuntime) {
+    run(this.goals.prepare(`
+      INSERT INTO goal_runtime(thread_id, goal_id, phase, consecutive_blocked_turns, last_error, selected_skill_names_json, updated_at_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(thread_id, goal_id) DO UPDATE SET phase=excluded.phase,
+        consecutive_blocked_turns=excluded.consecutive_blocked_turns,
+        last_error=excluded.last_error, selected_skill_names_json=excluded.selected_skill_names_json,
+        updated_at_ms=excluded.updated_at_ms
+    `), runtime.threadId, runtime.goalId, runtime.phase, runtime.consecutiveBlockedTurns,
+      runtime.lastError, JSON.stringify(runtime.selectedSkillNames ?? []), runtime.updatedAtMs);
+  }
+
+  getGoalRuntime(threadId: string, goalId: string): PersistedGoalRuntime | null {
+    const row = this.goals.prepare(`
+      SELECT thread_id AS threadId, goal_id AS goalId, phase,
+        consecutive_blocked_turns AS consecutiveBlockedTurns, last_error AS lastError,
+        selected_skill_names_json AS selectedSkillNamesJson,
+        updated_at_ms AS updatedAtMs
+      FROM goal_runtime WHERE thread_id = ? AND goal_id = ?
+    `).get(threadId, goalId) as (Omit<PersistedGoalRuntime, "selectedSkillNames"> & { selectedSkillNamesJson: string }) | undefined;
+    if (!row) return null;
+    let selectedSkillNames: string[] = [];
+    try {
+      const parsed = JSON.parse(row.selectedSkillNamesJson);
+      if (Array.isArray(parsed)) selectedSkillNames = parsed.filter((name): name is string => typeof name === "string");
+    } catch {
+      selectedSkillNames = [];
+    }
+    const { selectedSkillNamesJson: _ignored, ...runtime } = row;
+    return { ...runtime, selectedSkillNames };
+  }
+
+  replaceGoalPlan(threadId: string, goalId: string, steps: Array<{
+    stepId: string;
+    title: string;
+    description: string;
+    status: PersistedGoalPlanStep["status"];
+    result?: string;
+  }>): PersistedGoalPlanStep[] {
+    if (!steps.length) throw new Error("A goal plan requires at least one step.");
+    const now = Date.now();
+    this.goals.exec("BEGIN IMMEDIATE");
+    try {
+      this.goals.prepare("DELETE FROM goal_plan_steps WHERE thread_id = ? AND goal_id = ?").run(threadId, goalId);
+      const insert = this.goals.prepare(`
+        INSERT INTO goal_plan_steps(thread_id, goal_id, step_id, position, title, description, status, result, updated_at_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      steps.forEach((step, position) => insert.run(
+        threadId,
+        goalId,
+        step.stepId,
+        position,
+        step.title.trim(),
+        step.description.trim(),
+        step.status,
+        step.result?.trim() ?? "",
+        now
+      ));
+      this.goals.exec("COMMIT");
+    } catch (error) {
+      this.goals.exec("ROLLBACK");
+      throw error;
+    }
+    this.appendGoalEvent(threadId, goalId, "plan_replaced", { stepCount: steps.length });
+    return this.listGoalPlan(threadId, goalId);
+  }
+
+  listGoalPlan(threadId: string, goalId: string): PersistedGoalPlanStep[] {
+    return this.goals.prepare(`
+      SELECT thread_id AS threadId, goal_id AS goalId, step_id AS stepId, position,
+        title, description, status, result, updated_at_ms AS updatedAtMs
+      FROM goal_plan_steps WHERE thread_id = ? AND goal_id = ? ORDER BY position
+    `).all(threadId, goalId) as unknown as PersistedGoalPlanStep[];
+  }
+
+  createGoalQuestion(threadId: string, goalId: string, input: {
+    questionId: string;
+    prompt: string;
+    options: PersistedGoalQuestion["options"];
+  }): PersistedGoalQuestion {
+    const now = Date.now();
+    this.goals.prepare(`
+      INSERT INTO goal_questions(thread_id, goal_id, question_id, prompt, options_json, status, answer, created_at_ms)
+      VALUES (?, ?, ?, ?, ?, 'pending', '', ?)
+      ON CONFLICT(thread_id, goal_id, question_id) DO UPDATE SET
+        prompt = excluded.prompt,
+        options_json = excluded.options_json,
+        status = 'pending',
+        answer = '',
+        created_at_ms = excluded.created_at_ms,
+        answered_at_ms = NULL
+    `).run(threadId, goalId, input.questionId, input.prompt.trim(), JSON.stringify(input.options), now);
+    const runtime = this.getGoalRuntime(threadId, goalId);
+    this.upsertGoalRuntime({
+      ...(runtime ?? { threadId, goalId, consecutiveBlockedTurns: 0, lastError: "" }),
+      phase: "waiting_user",
+      updatedAtMs: now
+    });
+    this.appendGoalEvent(threadId, goalId, "question_created", { questionId: input.questionId });
+    return this.getPendingGoalQuestion(threadId, goalId)!;
+  }
+
+  answerGoalQuestion(threadId: string, goalId: string, questionId: string, answer: string) {
+    const normalizedAnswer = answer.trim();
+    if (!normalizedAnswer) throw new Error("Goal question answer is required.");
+    const now = Date.now();
+    const result = this.goals.prepare(`
+      UPDATE goal_questions SET status = 'answered', answer = ?, answered_at_ms = ?
+      WHERE thread_id = ? AND goal_id = ? AND question_id = ? AND status = 'pending'
+    `).run(normalizedAnswer, now, threadId, goalId, questionId);
+    if (Number(result.changes) === 0) throw new Error("No matching pending goal question exists.");
+    const runtime = this.getGoalRuntime(threadId, goalId);
+    this.upsertGoalRuntime({
+      ...(runtime ?? { threadId, goalId, consecutiveBlockedTurns: 0, lastError: "" }),
+      phase: "idle",
+      updatedAtMs: now
+    });
+    this.appendGoalEvent(threadId, goalId, "question_answered", { questionId, answer: normalizedAnswer });
+  }
+
+  getPendingGoalQuestion(threadId: string, goalId: string): PersistedGoalQuestion | null {
+    const row = this.goals.prepare(`
+      SELECT thread_id AS threadId, goal_id AS goalId, question_id AS questionId,
+        prompt, options_json AS optionsJson, status, answer,
+        created_at_ms AS createdAtMs, answered_at_ms AS answeredAtMs
+      FROM goal_questions WHERE thread_id = ? AND goal_id = ? AND status = 'pending'
+      ORDER BY created_at_ms DESC LIMIT 1
+    `).get(threadId, goalId) as any;
+    if (!row) return null;
+    return { ...row, options: JSON.parse(row.optionsJson), answeredAtMs: row.answeredAtMs ?? undefined };
+  }
+
+  getGoalSnapshot(threadId: string): PersistedGoalSnapshot | null {
+    const goal = this.getGoal(threadId);
+    if (!goal) return null;
+    const runtime = this.getGoalRuntime(threadId, goal.goalId) ?? {
+      threadId,
+      goalId: goal.goalId,
+      phase: goal.status === "complete" ? "complete" as const : goal.status === "blocked" ? "blocked" as const : "idle" as const,
+      consecutiveBlockedTurns: 0,
+      lastError: "",
+      updatedAtMs: goal.updatedAtMs
+    };
+    return {
+      goal,
+      runtime,
+      plan: this.listGoalPlan(threadId, goal.goalId),
+      pendingQuestion: this.getPendingGoalQuestion(threadId, goal.goalId)
+    };
+  }
+
+  appendGoalEvent(threadId: string, goalId: string, eventType: string, payload: unknown) {
+    this.goals.prepare(`
+      INSERT INTO goal_events(thread_id, goal_id, event_type, payload_json, created_at_ms)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(threadId, goalId, eventType, JSON.stringify(payload ?? null), Date.now());
+  }
+
+  listExpertQuestions(threadId: string, goalId: string) {
+    return (this.goals.prepare(`SELECT question_id AS questionId, prompt, status, answer,
+      options_json AS optionsJson FROM goal_questions
+      WHERE thread_id = ? AND goal_id = ? AND question_id LIKE 'expert-%'
+      ORDER BY created_at_ms DESC`).all(threadId, goalId) as Array<any>)
+      .map((row) => ({ ...row, options: JSON.parse(row.optionsJson) }));
+  }
+
+  markExpertPreferenceApplied(threadId: string, goalId: string, questionId: string) {
+    this.goals.prepare(
+      "UPDATE goal_questions SET status = 'applied' WHERE thread_id = ? AND goal_id = ? AND question_id = ? AND status = 'answered'"
+    ).run(threadId, goalId, questionId);
+  }
+
+  hasExpertActivation(threadId: string, goalId: string, expertId: string) {
+    return Boolean(this.goals.prepare(
+      "SELECT 1 FROM goal_events WHERE thread_id = ? AND goal_id = ? AND event_type = 'expert_activated' AND json_extract(payload_json, '$.expertId') = ? LIMIT 1"
+    ).get(threadId, goalId, expertId));
+  }
+
+  recordGoalTurn(threadId: string, usage: { tokensUsed: number; timeUsedSeconds: number; lastError?: string }) {
+    const current = this.getGoal(threadId);
+    if (!current) return null;
+    const tokensUsed = current.tokensUsed + Math.max(0, Math.trunc(usage.tokensUsed));
+    const timeUsedSeconds = current.timeUsedSeconds + Math.max(0, Math.trunc(usage.timeUsedSeconds));
+    const next: PersistedGoal = {
+      ...current,
+      tokensUsed,
+      timeUsedSeconds,
+      updatedAtMs: Date.now()
+    };
+    this.upsertGoal(next);
+    const runtime = this.getGoalRuntime(threadId, current.goalId);
+    this.upsertGoalRuntime({
+      ...(runtime ?? { threadId, goalId: current.goalId, consecutiveBlockedTurns: 0, lastError: "" }),
+      phase: "idle",
+      lastError: usage.lastError?.trim() ?? runtime?.lastError ?? "",
+      updatedAtMs: next.updatedAtMs
+    });
+    return next;
+  }
+
+  upsertRemoteWorkItem(item: PersistedRemoteWorkItem) {
+    this.state.prepare(`
+      INSERT INTO remote_work_items(id, status, objective, source, target_device_id,
+        knowledge_snapshot_id, payload_json, thread_id, claimed_at_ms, lease_until_ms,
+        completed_at_ms, last_error)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET status=excluded.status, objective=excluded.objective,
+        source=excluded.source, target_device_id=excluded.target_device_id,
+        knowledge_snapshot_id=excluded.knowledge_snapshot_id, payload_json=excluded.payload_json,
+        thread_id=COALESCE(excluded.thread_id, remote_work_items.thread_id),
+        lease_until_ms=excluded.lease_until_ms,
+        completed_at_ms=COALESCE(excluded.completed_at_ms, remote_work_items.completed_at_ms),
+        last_error=excluded.last_error
+    `).run(item.id, item.status, item.objective, item.source, item.targetDeviceId,
+      item.knowledgeSnapshotId ?? null, item.payloadJson, item.threadId ?? null,
+      item.claimedAtMs, item.leaseUntilMs, item.completedAtMs ?? null, item.lastError);
+  }
+
+  getRemoteWorkItem(id: string): PersistedRemoteWorkItem | null {
+    const row = this.state.prepare(`
+      SELECT id, status, objective, source, target_device_id AS targetDeviceId,
+        knowledge_snapshot_id AS knowledgeSnapshotId, payload_json AS payloadJson,
+        thread_id AS threadId, claimed_at_ms AS claimedAtMs, lease_until_ms AS leaseUntilMs,
+        completed_at_ms AS completedAtMs, last_error AS lastError
+      FROM remote_work_items WHERE id = ?
+    `).get(id) as PersistedRemoteWorkItem | undefined;
+    return row ? {
+      ...row,
+      knowledgeSnapshotId: row.knowledgeSnapshotId ?? undefined,
+      threadId: row.threadId ?? undefined,
+      completedAtMs: row.completedAtMs ?? undefined
+    } : null;
+  }
+
+  getLatestActionableRemoteWorkItem(): PersistedRemoteWorkItem | null {
+    const row = this.state.prepare(`
+      SELECT id, status, objective, source, target_device_id AS targetDeviceId,
+        knowledge_snapshot_id AS knowledgeSnapshotId, payload_json AS payloadJson,
+        thread_id AS threadId, claimed_at_ms AS claimedAtMs, lease_until_ms AS leaseUntilMs,
+        completed_at_ms AS completedAtMs, last_error AS lastError
+      FROM remote_work_items
+      WHERE status IN ('claimed', 'interrupted')
+      ORDER BY claimed_at_ms DESC LIMIT 1
+    `).get() as PersistedRemoteWorkItem | undefined;
+    return row ? {
+      ...row,
+      knowledgeSnapshotId: row.knowledgeSnapshotId ?? undefined,
+      threadId: row.threadId ?? undefined,
+      completedAtMs: row.completedAtMs ?? undefined
+    } : null;
+  }
+
+  updateRemoteWorkItemStatus(
+    id: string,
+    expectedStatus: PersistedRemoteWorkItemStatus,
+    nextStatus: PersistedRemoteWorkItemStatus,
+    input: { threadId?: string; completedAtMs?: number; lastError?: string } = {}
+  ): boolean {
+    const result = this.state.prepare(`
+      UPDATE remote_work_items
+      SET status = ?, thread_id = COALESCE(?, thread_id),
+        completed_at_ms = COALESCE(?, completed_at_ms), last_error = ?
+      WHERE id = ? AND status = ?
+    `).run(nextStatus, input.threadId ?? null, input.completedAtMs ?? null,
+      input.lastError ?? "", id, expectedStatus);
+    return Number(result.changes) === 1;
+  }
+
+  nextRemoteEventSequence(workItemId: string): number {
+    const row = this.state.prepare(`
+      SELECT COALESCE(MAX(sequence_no), -1) + 1 AS nextSequence
+      FROM remote_event_outbox WHERE work_item_id = ?
+    `).get(workItemId) as { nextSequence: number };
+    return Number(row.nextSequence);
+  }
+
+  appendRemoteEvent(event: PersistedRemoteEvent) {
+    this.state.prepare(`
+      INSERT INTO remote_event_outbox(event_id, work_item_id, sequence_no, payload_json,
+        status, attempt_count, next_attempt_at_ms, created_at_ms, acknowledged_at_ms, last_error)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(event.eventId, event.workItemId, event.sequenceNo, event.payloadJson,
+      event.status, event.attemptCount, event.nextAttemptAtMs, event.createdAtMs,
+      event.acknowledgedAtMs ?? null, event.lastError ?? "");
+  }
+
+  listDueRemoteEvents(limit: number, nowMs: number): PersistedRemoteEvent[] {
+    return this.state.prepare(`
+      SELECT event_id AS eventId, work_item_id AS workItemId, sequence_no AS sequenceNo,
+        payload_json AS payloadJson, status, attempt_count AS attemptCount,
+        next_attempt_at_ms AS nextAttemptAtMs, created_at_ms AS createdAtMs,
+        acknowledged_at_ms AS acknowledgedAtMs, last_error AS lastError
+      FROM remote_event_outbox
+      WHERE status = 'pending' AND next_attempt_at_ms <= ?
+      ORDER BY created_at_ms, work_item_id, sequence_no LIMIT ?
+    `).all(nowMs, Math.max(1, Math.min(100, Math.trunc(limit)))).map((row: any) => ({
+      ...row,
+      acknowledgedAtMs: row.acknowledgedAtMs ?? undefined,
+      lastError: row.lastError || undefined
+    })) as PersistedRemoteEvent[];
+  }
+
+  getRemoteEventSyncStatus(): {
+    pendingEventCount: number;
+    sendingEventCount: number;
+    quarantinedEventCount: number;
+    lastAcknowledgedAtMs: number | null;
+    lastError: string;
+  } {
+    const counts = this.state.prepare(`
+      SELECT
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pendingEventCount,
+        SUM(CASE WHEN status = 'sending' THEN 1 ELSE 0 END) AS sendingEventCount,
+        SUM(CASE WHEN status = 'quarantined' THEN 1 ELSE 0 END) AS quarantinedEventCount,
+        MAX(acknowledged_at_ms) AS lastAcknowledgedAtMs
+      FROM remote_event_outbox
+    `).get() as {
+      pendingEventCount: number | null;
+      sendingEventCount: number | null;
+      quarantinedEventCount: number | null;
+      lastAcknowledgedAtMs: number | null;
+    };
+    const failure = this.state.prepare(`
+      SELECT last_error AS lastError FROM remote_event_outbox
+      WHERE last_error <> '' ORDER BY created_at_ms DESC LIMIT 1
+    `).get() as { lastError: string } | undefined;
+    return {
+      pendingEventCount: Number(counts.pendingEventCount ?? 0),
+      sendingEventCount: Number(counts.sendingEventCount ?? 0),
+      quarantinedEventCount: Number(counts.quarantinedEventCount ?? 0),
+      lastAcknowledgedAtMs: counts.lastAcknowledgedAtMs ?? null,
+      lastError: failure?.lastError ?? ""
+    };
+  }
+
+  markRemoteEventsSending(eventIds: string[]) {
+    if (!eventIds.length) return;
+    const update = this.state.prepare(`
+      UPDATE remote_event_outbox SET status = 'sending' WHERE event_id = ? AND status = 'pending'
+    `);
+    this.state.exec("BEGIN IMMEDIATE");
+    try {
+      for (const eventId of eventIds) update.run(eventId);
+      this.state.exec("COMMIT");
+    } catch (error) {
+      this.state.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  acknowledgeRemoteEvents(eventIds: string[], acknowledgedAtMs: number) {
+    if (!eventIds.length) return;
+    const update = this.state.prepare(`
+      UPDATE remote_event_outbox
+      SET status = 'acknowledged', acknowledged_at_ms = ?, last_error = ''
+      WHERE event_id = ? AND status IN ('pending', 'sending')
+    `);
+    this.state.exec("BEGIN IMMEDIATE");
+    try {
+      for (const eventId of eventIds) update.run(acknowledgedAtMs, eventId);
+      this.state.exec("COMMIT");
+    } catch (error) {
+      this.state.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  retryRemoteEvents(eventIds: string[], nextAttemptAtMs: number, lastError: string) {
+    const update = this.state.prepare(`
+      UPDATE remote_event_outbox SET status = 'pending', attempt_count = attempt_count + 1,
+        next_attempt_at_ms = ?, last_error = ? WHERE event_id = ? AND status = 'sending'
+    `);
+    for (const eventId of eventIds) update.run(nextAttemptAtMs, lastError, eventId);
+  }
+
+  quarantineRemoteEvents(eventIds: string[], lastError: string) {
+    const update = this.state.prepare(`
+      UPDATE remote_event_outbox SET status = 'quarantined', attempt_count = attempt_count + 1,
+        last_error = ? WHERE event_id = ? AND status = 'sending'
+    `);
+    for (const eventId of eventIds) update.run(lastError, eventId);
+  }
+
+  recoverRemoteExecutionState(nowMs: number) {
+    this.state.exec("BEGIN IMMEDIATE");
+    try {
+      this.state.prepare(`
+        UPDATE remote_event_outbox SET status = 'pending', next_attempt_at_ms = ?
+        WHERE status = 'sending'
+      `).run(nowMs);
+      this.state.prepare(`
+        UPDATE remote_work_items SET status = 'interrupted', last_error = 'APP_RESTARTED_DURING_EXECUTION'
+        WHERE status IN ('running', 'waiting_approval')
+      `).run();
+      this.state.exec("COMMIT");
+    } catch (error) {
+      this.state.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   close() {

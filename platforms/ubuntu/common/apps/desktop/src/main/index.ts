@@ -10,6 +10,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import * as os from "node:os";
 import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { ensurePptWritingTeamSkill } from "../../../../../../../shared/apps/desktop/src/main/ppt-writing-team-skill.js";
 import type {
   AutomationSpec,
   ChatMessage,
@@ -26,7 +27,10 @@ import type {
 } from "@codex-forge/protocol";
 import { isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { createLocalRuntime } from "../../../agentd/src/runtime.js";
+import { applyLoginItemSettings } from "./login-item-settings.js";
+import { deliverStartupDailyBriefing, setDailyBriefingChatHost } from "./daily-briefing-delivery.js";
 import { CodexStorage } from "./codex-storage.js";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
 import { registerBrainWorkspaceIpcHandlers } from "./brain-workspace-ipc.js";
 import { confirmBrainSceneUiAction } from "./brain-scene-auto-confirm.js";
@@ -34,12 +38,20 @@ import { QuantSimulationService } from "./quant-simulation-service.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
+import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DocumentWorkerProcess } from "./document-worker-process.js";
 import { readTextWithTransientRetry, recoverDurableText, restoreTextFile, writeTextAtomically } from "./atomic-file.js";
+import { executeDelegatedModelStep } from "./delegated-model-step.js";
+import { ModelChatStepService } from "./model-chat-step-service.js";
+import {
+  containsPrivatePlanningNarration,
+  extractPrivatePlanningNarration,
+  sanitizeVisibleModelContent
+} from "./model-stream-visibility.js";
 import { syncDesktopControlPlane as syncDesktopControlPlaneProtocol } from "./desktop-control-plane.js";
 import { decodeMcpMessages, encodeMcpMessage } from "./mcp-framing.js";
 import {
@@ -54,6 +66,11 @@ import {
 } from "./openai-wire.js";
 import { reconcileThreadMessages } from "./thread-message-reconciliation.js";
 import { builtinPluginCatalog, builtinPluginUri } from "../shared/builtin-plugins.js";
+import { loginCodeSendRequest, loginCodeVerifyFields } from "../shared/login-code-channel";
+import {
+  resolveLoginCeremonyAuthFields,
+  shouldInvalidateLocalAuthForLoginCeremony
+} from "../shared/login-ceremony-policy";
 import {
   appendRolloutRecords,
   appendStateSnapshotCompacting,
@@ -70,7 +87,11 @@ import { composeAndRegisterModelChat } from "./compose-model-chat.js";
 import { DesktopErrorCollector } from "./desktop-error-collector.js";
 import { DesktopErrorOutbox } from "./desktop-error-outbox.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
+import { createRememberedLoginStore } from "./remembered-login-store.js";
 import { createLinuxSecretProtector } from "./linux-secret-protector.js";
+import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
+import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
+import { isCustomModelSelection } from "../shared/custom-model-endpoint.js";
 import { GovernmentWritingSpecificationService } from "./government-writing-specification-service.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
@@ -92,6 +113,50 @@ import { scheduleUserKnowledgeSync } from "./user-knowledge-sync.js";
 import { selectModelRequestAuth } from "./model-request-auth-policy.js";
 import { NovelTtsService } from "./novel-tts-service.js";
 import { registerSystemIpcHandlers } from "./system-ipc.js";
+import {
+  askBrowserAnnotationDialog,
+  askBrowserDownloadApprovalDialog,
+  askBrowserHistoryAccessDialog,
+  clearNewbrainBrowserSessionData,
+  pickBrowserDownloadDirectory,
+  pickBrowserDownloadSavePath,
+  registerBrowserIpcHandlers
+} from "./browser-ipc.js";
+import {
+  assertBrowserAgentPermission,
+  browserOriginFromUrl,
+  DEFAULT_BROWSER_USE_PREFERENCES,
+  evaluateBrowserToolPolicyDecision,
+  normalizeBrowserUsePreferencesPartial,
+  resolveBrowserLinkOpenTarget,
+  type BrowserUsePreferences
+} from "./browser-agent-policy.js";
+import {
+  clearBrowserHistory,
+  listBrowserHistory,
+  recordBrowserHistoryVisit,
+  removeBrowserHistoryEntry
+} from "./browser-history-store.js";
+import {
+  listBrowserCredentials,
+  removeBrowserCredential,
+  upsertBrowserCredential
+} from "./browser-credentials-store.js";
+import {
+  listBrowserContacts,
+  removeBrowserContact,
+  upsertBrowserContact
+} from "./browser-contacts-store.js";
+import {
+  mergeBrowserPermissionsExceptions,
+  writeBrowserPermissionsFile
+} from "./browser-permissions-store.js";
+import { assertBrowserHistoryAccess } from "./browser-history-access.js";
+import { writeBrowserScreenshotAnnotation } from "./browser-screenshot-annotation.js";
+import { applyBrowserDownloadItemPolicy } from "./browser-download-session.js";
+import { attachBrowserCdpIfAllowed, resolveBrowserCdpAccess } from "./browser-cdp-access.js";
+import { probeBrowserSiteTools } from "./browser-site-tools.js";
+import { BrowserPreviewService, normalizeBrowserPreviewUrl } from "./browser-preview-service.js";
 
 const appDirectory = dirname(fileURLToPath(import.meta.url));
 const documentWorkerProcess = new DocumentWorkerProcess({
@@ -162,9 +227,18 @@ const builtinPluginsRoot = app.isPackaged
 const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".newbrain");
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
+const linuxSecretProtector = createLinuxSecretProtector(safeStorage);
 const privateModelCredentialVault = new DesktopSecretVault(
   privateModelCredentialPath,
-  createLinuxSecretProtector(safeStorage)
+  linuxSecretProtector
+);
+const rememberedLoginStore = createRememberedLoginStore(
+  join(workspaceStateRoot, "credentials", "remembered-login.credential"),
+  linuxSecretProtector
+);
+const customModelEndpointStore = new CustomModelEndpointStore(
+  join(workspaceStateRoot, "credentials", "custom-model-endpoints"),
+  linuxSecretProtector
 );
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
@@ -189,7 +263,7 @@ const shellLabel = process.platform === "win32" ? "PowerShell" : process.platfor
 const platformLabel = process.platform === "win32" ? "Windows" : process.platform === "linux" ? "Ubuntu Linux" : "macOS";
 const automationTickMs = 60_000;
 const configuredGatewayBaseUrlEnv = process.env.NEWBRAIN_MODEL_BASE_URL?.trim() || "";
-const productionGatewayBaseUrl = "http://120.48.151.202:8790/v1";
+const productionGatewayBaseUrl = "https://api.sinnauze.cn/v1";
 const defaultGatewayBaseUrl = app.isPackaged
   ? productionGatewayBaseUrl
   : "http://127.0.0.1:8790/v1";
@@ -209,6 +283,14 @@ const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({ accessToken, device: collectDesktopDeviceFingerprint() })
+});
+const desktopWebSearchClient = new DesktopWebSearchClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
 });
 const opsMarketDataUrl = resolveBrainMarketDataUrl();
 const quantSimulationService = new QuantSimulationService(
@@ -350,7 +432,7 @@ const desktopErrorCollector = new DesktopErrorCollector({
     return desktopErrorOutbox.capture({
       ...failure,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: failure.context ?? {}
     });
   },
@@ -598,7 +680,7 @@ function collectDesktopErrorEnvironment() {
     osRelease: os.release(),
     architecture: process.arch,
     locale: app.getLocale(),
-    codecnVersion: app.getVersion(),
+    codecnVersion: resolveElectronAppVersion(app),
     packaged: app.isPackaged,
     electronVersion: process.versions.electron ?? "",
     chromiumVersion: process.versions.chrome ?? "",
@@ -611,7 +693,7 @@ async function reportRendererFailure(input: RendererFailureInput) {
   const record = await desktopErrorOutbox.capture({
     ...input,
     deviceId: device.device_id,
-    appVersion: app.getVersion(),
+    appVersion: resolveElectronAppVersion(app),
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
@@ -638,7 +720,7 @@ async function reportRendererDiagnostic(input: import("@codex-forge/protocol").R
       message: input.message,
       stackTrace: input.stackTrace,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: {
         ...(input.context ?? {}),
         environment: collectDesktopErrorEnvironment(),
@@ -953,7 +1035,7 @@ function collectLiveDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
     device_type: "desktop",
     os_name: process.platform,
     os_version: os.release(),
-    app_version: app.getVersion(),
+    app_version: resolveElectronAppVersion(app),
     mac_id: safeMachineToken(primaryMac, machineGuid || os.hostname()),
     motherboard_id: safeMachineToken(boardSerial, machineGuid, os.hostname()),
     disk_id: safeMachineToken(diskSerial, machineGuid, workspacePath)
@@ -1119,7 +1201,7 @@ async function syncAuthenticatedDesktopControlPlane() {
   const state = await syncDesktopControlPlaneProtocol({
     gatewayOrigin: await readGatewayOrigin(),
     accessToken: authState.access_token,
-    clientVersion: app.getVersion(),
+    clientVersion: resolveElectronAppVersion(app),
     deviceId: device.device_id
   });
   await ensureDirectory(workspaceStateRoot);
@@ -1128,6 +1210,72 @@ async function syncAuthenticatedDesktopControlPlane() {
     `desktop control plane synced protocol=${state.protocol_version} origin=${state.gateway_origin}`
   );
   return state;
+}
+
+async function fetchDesktopAuthLoginFlags(): Promise<{
+  emailCodeLoginEnabled: boolean;
+  passwordLoginEnabled: boolean;
+  serverTime: string | null;
+  serverDate: string | null;
+  loginCeremonyEnabled: boolean;
+}> {
+  const ceremonyFallback = resolveLoginCeremonyAuthFields({
+    isPackaged: app.isPackaged,
+    serverTime: null,
+    serverDate: null
+  });
+  try {
+    const gatewayOrigin = await readGatewayOrigin();
+    const response = await fetch(`${gatewayOrigin}/api/desktop/auth/config`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+    const payload = (await readJsonResponse(response)) as Record<string, unknown> | null;
+    const data =
+      payload && typeof payload.data === "object" && payload.data
+        ? (payload.data as Record<string, unknown>)
+        : payload || {};
+    const emailCodeLoginEnabled = Boolean(data.email_code_login_enabled);
+    const passwordLoginEnabled =
+      data.password_login_enabled === undefined ? !emailCodeLoginEnabled : Boolean(data.password_login_enabled);
+    const serverTime = typeof data.server_time === "string" ? data.server_time : null;
+    const serverDate = typeof data.server_date === "string" ? data.server_date : null;
+    const ceremony = resolveLoginCeremonyAuthFields({
+      isPackaged: app.isPackaged,
+      serverTime,
+      serverDate
+    });
+    return {
+      emailCodeLoginEnabled,
+      passwordLoginEnabled,
+      serverTime: ceremony.server_time,
+      serverDate: ceremony.server_date,
+      loginCeremonyEnabled: ceremony.login_ceremony_enabled
+    };
+  } catch (error) {
+    await appendDesktopDebugLog(
+      `desktop auth config fetch failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return {
+      emailCodeLoginEnabled: false,
+      passwordLoginEnabled: true,
+      serverTime: null,
+      serverDate: null,
+      loginCeremonyEnabled: ceremonyFallback.login_ceremony_enabled
+    };
+  }
+}
+
+function desktopLoginCeremonyStatusFields(loginFlags: Awaited<ReturnType<typeof fetchDesktopAuthLoginFlags>>) {
+  return {
+    email_code_login_enabled: loginFlags.emailCodeLoginEnabled,
+    password_login_enabled: loginFlags.passwordLoginEnabled,
+    server_time: loginFlags.serverTime,
+    server_date: loginFlags.serverDate,
+    login_ceremony_enabled: loginFlags.loginCeremonyEnabled
+  };
 }
 
 async function fetchAgreementConfig(): Promise<DesktopAgreementConfig> {
@@ -1480,14 +1628,43 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
   const gatewayOrigin = await readGatewayOrigin();
 
   if (!persisted || !persisted.access_token) {
+    const loginFlags = await fetchDesktopAuthLoginFlags();
     return {
       authenticated: false,
       loading: false,
       mode: "none",
       base_url: gatewayOrigin,
       agreement,
-      last_checked_at: checkedAt
+      last_checked_at: checkedAt,
+      ...desktopLoginCeremonyStatusFields(loginFlags)
     };
+  }
+
+  {
+    const loginFlags = await fetchDesktopAuthLoginFlags();
+    if (
+      shouldInvalidateLocalAuthForLoginCeremony({
+        isPackaged: app.isPackaged,
+        serverDate: loginFlags.serverDate,
+        serverTime: loginFlags.serverTime,
+        lastSyncedAt: persisted.last_synced_at
+      })
+    ) {
+      await appendAuthAuditLog(
+        "session_expired",
+        persisted.user?.email ? `${maskEmail(persisted.user.email)} login_ceremony_window` : "login_ceremony_window"
+      );
+      await writeDesktopAuthState(null);
+      return {
+        authenticated: false,
+        loading: false,
+        mode: "none",
+        base_url: gatewayOrigin,
+        agreement,
+        last_checked_at: checkedAt,
+        ...desktopLoginCeremonyStatusFields(loginFlags)
+      };
+    }
   }
 
   try {
@@ -1523,6 +1700,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       if (response.status === 401 || response.status === 403) {
         await appendAuthAuditLog("session_expired", persisted.user?.email ? maskEmail(persisted.user.email) : "unknown");
         await writeDesktopAuthState(null);
+        const loginFlags = await fetchDesktopAuthLoginFlags();
         return {
           authenticated: false,
           loading: false,
@@ -1530,7 +1708,8 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
           base_url: gatewayOrigin,
           agreement,
           last_checked_at: checkedAt,
-          last_error: extractDesktopAuthErrorMessage(payload, response.status)
+          last_error: extractDesktopAuthErrorMessage(payload, response.status),
+          ...desktopLoginCeremonyStatusFields(loginFlags)
         };
       }
 
@@ -1614,6 +1793,11 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
       identifier: email,
       password: loginWithCode ? undefined : password,
       code: loginWithCode ? captcha : undefined,
+      ...loginCodeVerifyFields({
+        identifier: email,
+        captcha,
+        loginWithCode
+      }),
       agreement_accepted: input.agreement_accepted,
       device
     })
@@ -1699,26 +1883,24 @@ function normalizeDesktopLoginError(payload: unknown, status: number, loginWithC
 }
 
 async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
-  const email = input.email.trim().toLowerCase();
   const device = collectDesktopDeviceFingerprint();
   const gatewayOrigin = await readGatewayOrigin();
-  if (!email) {
-    throw new Error("邮箱不能为空。");
-  }
+  const request = loginCodeSendRequest({
+    phone: input.phone,
+    email: input.email,
+    deviceId: device.device_id,
+    deviceName: device.device_name
+  });
 
   let response: Response;
   try {
-    response = await fetch(`${gatewayOrigin}/api/desktop/auth/login-code/send`, {
+    response = await fetch(`${gatewayOrigin}${request.path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         ...createDesktopAuthHeaders({ device })
       },
-      body: JSON.stringify({
-        identifier: email,
-        device_id: device.device_id,
-        device_name: device.device_name
-      })
+      body: JSON.stringify(request.body)
     });
   } catch (error) {
     const message = `无法连接登录服务 ${gatewayOrigin}，请确认 newbrain.config.json 的 llm.baseUrl 可访问。`;
@@ -1908,12 +2090,8 @@ interface DesktopPreferences {
     keepArchived: boolean;
     rootDir: string;
   };
-  browser: {
-    autoOpenPreview: boolean;
-    preserveTabs: boolean;
-    highResScreenshots: boolean;
-    previewUrl: string;
-  };
+  browser: BrowserUsePreferences;
+  launchAtLogin: boolean;
   shortcuts: Record<string, string>;
 }
 
@@ -1988,7 +2166,8 @@ interface DesktopAuthLoginInput {
 }
 
 interface DesktopAuthSendCodeInput {
-  email: string;
+  email?: string;
+  phone?: string;
 }
 
 interface PersistedDesktopAuthState {
@@ -2230,6 +2409,90 @@ async function deactivatePlugin(plugin: PluginSpec) {
     await syncMcpToolsToRuntime();
   }
 }
+
+async function queueStartupDailyBriefing(): Promise<void> {
+  try {
+    const openedAtLogin = process.env.NEWBRAIN_DAILY_BRIEFING === "1"
+      || app.getLoginItemSettings().wasOpenedAtLogin === true;
+    if (!openedAtLogin) return;
+    const authState = await readDesktopAuthState();
+    const accessToken = authState?.access_token?.trim() || "";
+    if (!accessToken) return;
+    const catalog = await readWorkspaceCatalog();
+    await deliverStartupDailyBriefing({
+      openedAtLogin,
+      accessToken,
+      gatewayOrigin: await readGatewayOrigin(),
+      headers: createDesktopAuthHeaders({
+        accessToken,
+        device: collectDesktopDeviceFingerprint()
+      }),
+      catalog,
+      addThread: (workspaceId) => addWorkspaceThread({
+        workspaceId,
+        title: "今日简报",
+        summary: "开机后的今日热点",
+        scope: "chat"
+      }),
+      readMessages: async (workspaceId, threadId) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return [];
+        const state = await readThreadState(workspace, thread);
+        return state.messages ?? [];
+      },
+      appendAssistantMessage: async (workspaceId, threadId, content) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return;
+        const state = await readThreadState(workspace, thread);
+        state.messages = [...(state.messages ?? []), {
+          id: makeId("message"),
+          role: "assistant",
+          content,
+          createdAt: nowIso()
+        }];
+        await writeThreadState(workspace, thread, state);
+      },
+      activate: (workspaceId, threadId) => activateWorkspaceThread({ workspaceId, threadId })
+    });
+  } catch (error) {
+    await appendDesktopDebugLog(`daily briefing skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+setDailyBriefingChatHost({
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  readGatewayOrigin: () => readGatewayOrigin(),
+  createHeaders: (accessToken) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  }),
+  readThreadTitle: async (workspaceId, threadId) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    return workspace?.threads.find((item) => item.id === threadId)?.title || "";
+  },
+  appendMessages: async (workspaceId, threadId, messages) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    const thread = workspace?.threads.find((item) => item.id === threadId);
+    if (!workspace || !thread) return;
+    const state = await readThreadState(workspace, thread);
+    const known = new Set((state.messages ?? []).map((item) => item.id));
+    const next = messages.filter((item) => !known.has(item.id));
+    if (!next.length) return;
+    state.messages = [...(state.messages ?? []), ...next];
+    await writeThreadState(workspace, thread, state);
+    if (runtime && activeWorkspaceId === workspaceId && activeThreadId === threadId) {
+      runtime.setThreadState(state);
+    }
+  },
+  snapshot: async () => runtime?.getSnapshot?.() ?? { messages: [] },
+  nowIso
+});
 
 async function activateConfiguredPlugins() {
   const config = await readFeatureConfig();
@@ -2506,13 +2769,18 @@ const defaultDesktopPreferences: DesktopPreferences = {
     rootDir: join(workspaceStateRoot, "worktrees")
   },
   browser: {
+    ...DEFAULT_BROWSER_USE_PREFERENCES,
     autoOpenPreview: false,
     preserveTabs: true,
     highResScreenshots: false,
     previewUrl: "http://127.0.0.1:3000"
   },
+  launchAtLogin: true,
   shortcuts: {}
 };
+
+/** Sync Browser Use prefs for policy-engine hooks (updated on read/save). */
+let cachedBrowserUsePreferences: DesktopPreferences["browser"] = defaultDesktopPreferences.browser;
 
 const defaultMcpServers: McpServerConfig[] = [];
 const shownCondaPromptKeys = new Set<string>();
@@ -3234,21 +3502,11 @@ function normalizeDesktopPreferences(input?: Partial<DesktopPreferences>): Deskt
           : defaultDesktopPreferences.worktree.keepArchived,
       rootDir: normalizeWorktreeRootDir(input?.worktree?.rootDir)
     },
-    browser: {
-      autoOpenPreview:
-        typeof input?.browser?.autoOpenPreview === "boolean"
-          ? input.browser.autoOpenPreview
-          : defaultDesktopPreferences.browser.autoOpenPreview,
-      preserveTabs:
-        typeof input?.browser?.preserveTabs === "boolean"
-          ? input.browser.preserveTabs
-          : defaultDesktopPreferences.browser.preserveTabs,
-      highResScreenshots:
-        typeof input?.browser?.highResScreenshots === "boolean"
-          ? input.browser.highResScreenshots
-          : defaultDesktopPreferences.browser.highResScreenshots,
-      previewUrl: input?.browser?.previewUrl?.trim() || defaultDesktopPreferences.browser.previewUrl
-    },
+    browser: normalizeBrowserUsePreferencesPartial(input?.browser, defaultDesktopPreferences.browser),
+    launchAtLogin:
+      typeof input?.launchAtLogin === "boolean"
+        ? input.launchAtLogin
+        : defaultDesktopPreferences.launchAtLogin,
     shortcuts:
       input?.shortcuts && typeof input.shortcuts === "object"
         ? Object.fromEntries(
@@ -3276,12 +3534,13 @@ function normalizeThread(input: Partial<WorkspaceThreadRecord>): WorkspaceThread
       .replaceAll("鏆傛棤绾跨▼鎽樿銆?", "暂无线程摘要。")
       .replaceAll("绾跨▼宸插垱寤?", "线程已创建")
       .replaceAll("姒涙顓荤痪璺ㄢ柤", "默认线程")
-      .replaceAll("鏂扮嚎绋?", "新线程")
+      .replaceAll("鏂扮嚎绋?", "新对话")
       .replaceAll("鏂板璇?", "新对话");
   };
+  const repairedTitle = repairKnownMojibakeText(input.title?.trim()) || "未命名线程";
   return {
     id: input.id?.trim() || makeId("thread"),
-    title: repairKnownMojibakeText(input.title?.trim()) || "未命名线程",
+    title: repairedTitle === "新线程" ? "新对话" : repairedTitle,
     summary: repairKnownMojibakeText(input.summary?.trim()) || "暂无线程摘要。",
     scope: input.scope === "chat" ? "chat" : "project",
     ...(isBrainWorkspaceKey(input.brainWorkspaceKey) ? { brainWorkspaceKey: input.brainWorkspaceKey } : {}),
@@ -3628,6 +3887,10 @@ async function writeDesktopPreferences(nextPreferences: DesktopPreferences) {
     preferences
   };
   await fs.writeFile(modelConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeBrowserPermissionsFile(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
   await applyDesktopPreferences(preferences);
   return preferences;
 }
@@ -4462,6 +4725,7 @@ async function discoverWorkspaceSkillSpecs() {
 }
 
 async function syncDiscoveredSkills(config: FeatureConfigFile) {
+  await ensurePptWritingTeamSkill(userSkillRoot);
   const discoveredSkills = await discoverWorkspaceSkillSpecs();
   if (!discoveredSkills.length) return config;
   const existingKeys = new Set(config.skills.map((skill) => skill.name || skill.id));
@@ -4892,13 +5156,14 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
     input.status === "paused"
       ? input.status
       : "idle";
-  const nextAutomation: AutomationSpec = {
+  let nextAutomation: AutomationSpec = {
     id: input.id?.trim() || makeId("automation"),
     title: input.title?.trim() || "未命名自动化",
     status: nextStatus,
     trigger: input.trigger?.trim() || "待配置触发说明",
-    workspaceId: input.workspaceId?.trim() || activeWorkspaceId || undefined,
-    threadId: input.threadId?.trim() || activeThreadId || undefined,
+    // Codex: do not inherit active thread; allocate a dedicated bind below when empty.
+    workspaceId: input.workspaceId?.trim() || undefined,
+    threadId: input.threadId?.trim() || undefined,
     action:
       input.action === "git_status" || input.action === "workspace_scan"
         ? input.action
@@ -4909,6 +5174,35 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
         ? computeNextRunAt(parsedInterval)
         : undefined
   };
+  if (!String(nextAutomation.workspaceId || "").trim() || !String(nextAutomation.threadId || "").trim()) {
+    const catalog = await readWorkspaceCatalog();
+    const preferredWorkspaceId = String(input.workspaceId || "").trim();
+    const workspace =
+      catalog.workspaces.find((item) => item.id === preferredWorkspaceId)
+      ?? catalog.workspaces[0];
+    if (!workspace) {
+      throw new Error("无法为自动化创建专用对话：没有可用工作区。");
+    }
+    const title = String(nextAutomation.title || "自动化任务").trim().slice(0, 36) || "自动化任务";
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const created = await addWorkspaceThread({
+      workspaceId: workspace.id,
+      title,
+      summary: "自动化任务专用对话；定时执行只写入此对话。",
+      scope: "chat"
+    });
+    const thread = created.workspaces
+      .find((item) => item.id === workspace.id)
+      ?.threads.find((item) => !before.has(item.id));
+    if (!thread?.id) {
+      throw new Error("无法为自动化创建专用对话。");
+    }
+    nextAutomation = {
+      ...nextAutomation,
+      workspaceId: workspace.id,
+      threadId: thread.id
+    };
+  }
 
   return writeFeatureConfig({
     ...config,
@@ -4959,11 +5253,20 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
     });
   }
 
-  return writeFeatureConfig({
+  const runNow = input.status === "run_now";
+  const nextConfig = await writeFeatureConfig({
     ...config,
     automations: config.automations.map((item) => {
       if (item.id !== id) {
         return item;
+      }
+
+      if (runNow) {
+        return {
+          ...item,
+          status: "scheduled" as const,
+          nextRunAt: new Date(Date.now() - 1_000).toISOString()
+        };
       }
 
       const parsedInterval = Number.parseInt(input.intervalMinutes ?? "", 10);
@@ -4995,6 +5298,10 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
       };
     })
   });
+  if (runNow) {
+    void tickAutomations();
+  }
+  return nextConfig;
 }
 
 async function deleteFeatureItem(kind: ManagedFeatureKind, id: string) {
@@ -6301,7 +6608,51 @@ function getWorkspaceShellEnv(workspace?: WorkspaceCatalogItem) {
 
 async function getActiveDesktopPreferences() {
   const config = await readRootConfig();
-  return normalizeDesktopPreferences(config.preferences);
+  const preferences = normalizeDesktopPreferences(config.preferences);
+  preferences.browser.agentPermissions.exceptions = await mergeBrowserPermissionsExceptions(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
+  cachedBrowserUsePreferences = preferences.browser;
+  return preferences;
+}
+
+function installBrowserAgentPolicyGate(
+  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>
+) {
+  const original = targetRuntime.evaluateToolPolicy.bind(targetRuntime);
+  targetRuntime.evaluateToolPolicy = (
+    descriptor: { name?: string; kind?: string; risk?: string; requiresApproval?: boolean },
+    argumentsValue: Record<string, unknown>,
+    permissionMode?: "full" | "approval" | "agent"
+  ) => {
+    const currentUrl =
+      previewWindowRef && !previewWindowRef.isDestroyed()
+        ? previewWindowRef.webContents.getURL()
+        : cachedBrowserUsePreferences.previewUrl;
+    const browserDecision = evaluateBrowserToolPolicyDecision(
+      cachedBrowserUsePreferences,
+      String(descriptor?.name || ""),
+      argumentsValue || {},
+      currentUrl
+    );
+    if (browserDecision) {
+      targetRuntime.sessionMachine.events.push({
+        id: `policy_${Date.now().toString(36)}`,
+        type: "policy_decision",
+        timestamp: new Date().toISOString(),
+        payload: {
+          toolName: descriptor?.name,
+          decision: browserDecision.decision,
+          source: browserDecision.source,
+          ruleId: browserDecision.ruleId,
+          reason: browserDecision.reason
+        }
+      });
+      return browserDecision;
+    }
+    return original(descriptor, argumentsValue, permissionMode);
+  };
 }
 
 async function buildWorkspaceShellEnvWithPreferences(workspace?: WorkspaceCatalogItem) {
@@ -6391,6 +6742,12 @@ function registerDictationShortcuts(dictation: DesktopPreferences["dictation"]) 
 }
 
 async function applyDesktopPreferences(preferences: DesktopPreferences) {
+  try {
+    applyLoginItemSettings(app, preferences.launchAtLogin !== false);
+  } catch (error) {
+    void appendDesktopDebugLog(`login item update failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  cachedBrowserUsePreferences = preferences.browser;
   terminalSession.shell = preferences.environment.terminalShell;
   registerPopupShortcut(preferences.popup.shortcut);
   registerDictationShortcuts(preferences.dictation);
@@ -6416,24 +6773,84 @@ function resolveThemePreference(preferences: DesktopPreferences) {
 
 async function ensurePreviewWindow(targetUrl: string) {
   const preferences = await getActiveDesktopPreferences();
+  if (preferences.browser.enabled === false) {
+    throw new Error("Browser Use 已关闭。请在设置 → 浏览器中开启。");
+  }
+  const partition = "persist:newbrain-browser";
   if (previewWindowRef && !previewWindowRef.isDestroyed()) {
     if (!preferences.browser.preserveTabs || previewWindowRef.webContents.getURL() !== targetUrl) {
       await previewWindowRef.loadURL(targetUrl);
     }
     previewWindowRef.show();
+    void recordBrowserHistoryVisit(
+      { rootDir: workspaceStateRoot },
+      { url: previewWindowRef.webContents.getURL(), title: previewWindowRef.webContents.getTitle() }
+    ).catch(() => undefined);
     return previewWindowRef;
   }
 
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: "NewBrain 浏览器预览",
+    title: "NewBrain 浏览器",
     show: false,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      partition
     }
+  });
+  const downloadDir = String(preferences.browser.downloadDir || "").trim();
+  void downloadDir;
+  previewWindow.webContents.session.removeAllListeners("will-download");
+  previewWindow.webContents.session.on("will-download", (_event, item) => {
+    void applyBrowserDownloadItemPolicy({
+      item,
+      browser: preferences.browser,
+      askApproval: askBrowserDownloadApprovalDialog,
+      askSavePath: pickBrowserDownloadSavePath
+    });
+  });
+  const syncPreviewTitle = () => {
+    const pageUrl = previewWindow.webContents.getURL();
+    const pageTitle = previewWindow.webContents.getTitle();
+    if (preferences.browser.showFullUrl) {
+      previewWindow.setTitle(pageUrl || "NewBrain 浏览器");
+    } else {
+      previewWindow.setTitle(pageTitle ? `${pageTitle} — NewBrain` : "NewBrain 浏览器");
+    }
+  };
+  previewWindow.webContents.on("page-title-updated", syncPreviewTitle);
+  previewWindow.webContents.on("did-navigate", () => {
+    syncPreviewTitle();
+  });
+  previewWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const normalized = requireWebUrl(url);
+      const target = resolveBrowserLinkOpenTarget(preferences.browser, normalized);
+      if (target === "system") {
+        void electronShell.openExternal(normalized);
+      } else {
+        void previewWindow.loadURL(normalized);
+      }
+    } catch {
+      // deny non-http(s)
+    }
+    return { action: "deny" };
+  });
+  previewWindow.webContents.on("will-navigate", (event, url) => {
+    try {
+      requireWebUrl(url);
+    } catch {
+      event.preventDefault();
+    }
+  });
+  previewWindow.webContents.on("did-navigate", (_event, url) => {
+    void recordBrowserHistoryVisit(
+      { rootDir: workspaceStateRoot },
+      { url, title: previewWindow.webContents.getTitle() }
+    ).catch(() => undefined);
   });
   previewWindowRef = previewWindow;
   previewWindow.on("closed", () => {
@@ -6447,12 +6864,7 @@ async function ensurePreviewWindow(targetUrl: string) {
 }
 
 function requireWebUrl(value: unknown) {
-  const raw = String(value ?? "").trim();
-  const parsed = new URL(raw);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Browser navigation only supports http and https URLs.");
-  }
-  return parsed.toString();
+  return normalizeBrowserPreviewUrl(value);
 }
 
 function registerBrowserAgentTools() {
@@ -6463,7 +6875,7 @@ function registerBrowserAgentTools() {
     description: "Open an HTTP or HTTPS URL in the NewBrain browser.",
     kind: "read",
     risk: "low",
-    requiresApproval: false,
+    requiresApproval: true,
     namespace: "browser",
     inputSchema: {
       type: "object",
@@ -6472,8 +6884,20 @@ function registerBrowserAgentTools() {
       additionalProperties: false
     }
   }, async (input: { url?: string }) => {
+    const preferences = await getActiveDesktopPreferences();
     const url = requireWebUrl(input.url);
+    const origin = browserOriginFromUrl(url);
+    assertBrowserAgentPermission(preferences.browser, origin, "browse");
     const window = await ensurePreviewWindow(url);
+    if (preferences.browser.fullCdpAccess) {
+      await attachBrowserCdpIfAllowed({
+        fullCdpAccess: true,
+        webContents: window.webContents
+      });
+    }
+    if (preferences.browser.siteToolsEnabled) {
+      void probeBrowserSiteTools({ siteToolsEnabled: true, pageUrl: url }).catch(() => undefined);
+    }
     return {
       ok: true,
       exitCode: 0,
@@ -6491,7 +6915,9 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     const preferences = await getActiveDesktopPreferences();
-    const window = await ensurePreviewWindow(previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl);
+    const currentUrl = previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl;
+    assertBrowserAgentPermission(preferences.browser, browserOriginFromUrl(currentUrl), "browse");
+    const window = await ensurePreviewWindow(currentUrl);
     const page = await window.webContents.executeJavaScript(`(() => {
       const visible = (element) => {
         const style = window.getComputedStyle(element);
@@ -6527,6 +6953,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6556,6 +6988,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string; text?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6582,13 +7020,27 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const image = await previewWindowRef.webContents.capturePage();
     await ensureDirectory(workspaceStateRoot);
     await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+    const pageUrl = previewWindowRef.webContents.getURL();
+    const annotationPath = await writeBrowserScreenshotAnnotation({
+      mode: preferences.browser.annotatedScreenshots || "always",
+      path: desktopPreviewScreenshotPath,
+      url: pageUrl,
+      title: previewWindowRef.webContents.getTitle(),
+      ask: askBrowserAnnotationDialog
+    });
     return {
       ok: true,
       exitCode: 0,
-      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: previewWindowRef.webContents.getURL() })
+      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: pageUrl, annotationPath })
     };
   });
 }
@@ -6603,11 +7055,18 @@ async function capturePreviewWindow() {
   const image = await previewWindow.webContents.capturePage();
   await ensureDirectory(workspaceStateRoot);
   await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+  const annotationPath = await writeBrowserScreenshotAnnotation({
+    mode: preferences.browser.annotatedScreenshots || "always",
+    path: desktopPreviewScreenshotPath,
+    url: targetUrl,
+    title: previewWindow.webContents.getTitle(),
+    ask: askBrowserAnnotationDialog
+  });
   if (preferences.browser.highResScreenshots) {
     previewWindow.webContents.setZoomFactor(1);
   }
   await appendDiagnosticsLog(`captured preview screenshot ${desktopPreviewScreenshotPath}`);
-  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl };
+  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl, annotationPath };
 }
 
 function setupWorkspaceWatcher(preferences: DesktopPreferences) {
@@ -7022,14 +7481,33 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
       content: currentTask.instruction,
       createdAt: nowIso()
     };
-    const response = await callModelApi({
-      ...config.llm,
-      systemPrompt: [
-        config.llm.systemPrompt,
-        `You are the ${currentTask.owner} child agent for parent thread ${currentTask.parentThreadId}.`,
-        "Work only on the bounded delegated instruction. Return evidence and a concise result for the parent agent."
-      ].filter(Boolean).join("\n\n"),
-      messages: [...state.messages.filter((message) => message.role !== "tool"), userMessage]
+    const childSystemPrompt = [
+      config.llm.systemPrompt,
+      `You are the ${currentTask.owner} child agent for parent thread ${currentTask.parentThreadId}.`,
+      "Work only on the bounded delegated instruction. Return evidence and a concise result for the parent agent."
+    ].filter(Boolean).join("\n\n");
+    const childMessages = [...state.messages.filter((message) => message.role !== "tool"), userMessage];
+    const childAbortController = new AbortController();
+    const response = await executeDelegatedModelStep(desktopModelChatStepService, {
+      modelInput: {
+        ...config.llm,
+        requestId: childThread.id,
+        workspaceId: workspace.id,
+        threadId: childThread.id,
+        systemPrompt: childSystemPrompt,
+        messages: []
+      },
+      messages: childMessages,
+      tools: [],
+      systemPrompt: childSystemPrompt,
+      abortSignal: childAbortController.signal,
+      requestId: childThread.id,
+      onReasoningDelta: () => undefined,
+      onRetry: (requestId, attempt, maxAttempts, delayMs) => {
+        void appendDesktopDebugLog(
+          `child model step retry child=${childThread.id} requestId=${requestId} attempt=${attempt} maxAttempts=${maxAttempts} delayMs=${delayMs}`
+        );
+      }
     });
     const assistantMessage: ChatMessage = {
       id: makeId("msg"),
@@ -7308,7 +7786,7 @@ async function getWorkspaceHeaderStatus(workspaceId: string) {
   }
   const ghResult = spawnSync("gh", ["--version"], { encoding: "utf8", windowsHide: true });
   return {
-    branch: branchResult.stdout?.trim() || "main",
+    branch: branchResult.status === 0 ? (branchResult.stdout?.trim() || "") : "",
     changes: (statusResult.stdout || "").split(/\r?\n/).filter(Boolean).length,
     additions,
     deletions,
@@ -8927,17 +9405,38 @@ async function callModelApi(input: {
       attachments?: Array<{ name: string; path: string; url: string }>;
   }>;
 }) {
+  const ownedCustom = isCustomModelSelection(input.model)
+    ? await customModelEndpointStore.resolveChatRequest(input.model)
+    : null;
+  if (isCustomModelSelection(input.model) && !ownedCustom) {
+    throw new Error("自备模型不存在或已被删除。请在模型菜单里重新添加。");
+  }
+  if (ownedCustom) {
+    input = {
+      ...input,
+      provider: ownedCustom.label,
+      baseUrl: ownedCustom.baseUrl,
+      apiKey: ownedCustom.apiKey,
+      wireApi: ownedCustom.wireApi,
+      model: ownedCustom.model
+    };
+  }
   let baseUrl = input.baseUrl.trim();
-  const configuredApiKey = await resolveTrustedPrivateModelCredential(
-    input.apiKey,
-    () => privateModelCredentialVault.readForTrustedRequest()
-  );
+  const configuredApiKey = ownedCustom
+    ? ownedCustom.apiKey
+    : await resolveTrustedPrivateModelCredential(
+      input.apiKey,
+      () => privateModelCredentialVault.readForTrustedRequest()
+    );
   let bearerToken = "";
   let authSource: "desktop_access_token" | "configured_api_key" | "none" = "none";
   const model = input.model.trim();
 
   const authState = await readDesktopAuthState();
-  if (authState?.mode === "desktop_token" && authState.access_token) {
+  if (ownedCustom) {
+    bearerToken = ownedCustom.apiKey;
+    authSource = "configured_api_key";
+  } else if (authState?.mode === "desktop_token" && authState.access_token) {
     bearerToken = authState.access_token;
     authSource = "desktop_access_token";
     baseUrl = await readGatewayBaseUrl();
@@ -9427,6 +9926,17 @@ function readModelUsageTokens(usage: unknown) {
   const output = Number(value.output_tokens ?? value.completion_tokens ?? value.outputTokens ?? 0);
   return Math.max(0, Math.trunc((Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0)));
 }
+function createDesktopModelChatStepService() {
+  return new ModelChatStepService({
+    callModel: (stepInput) => callModelApi(stepInput as Parameters<typeof callModelApi>[0]),
+    isRetryableError: isRetryableModelGatewayError,
+    readUsageTokens: (usage) => readModelUsageTokens(usage),
+    containsPrivatePlanning: containsPrivatePlanningNarration,
+    sanitizeVisibleContent: sanitizeVisibleModelContent,
+    extractPlanningNarration: extractPrivatePlanningNarration
+  });
+}
+const desktopModelChatStepService = createDesktopModelChatStepService();
 
 async function scheduleAutomaticUserKnowledgeSync(input?: {
   projectWorkspacePath?: string;
@@ -9680,7 +10190,7 @@ function registerIpc() {
               type: "info",
               title: "关于 NewBrain",
               message: "NewBrain",
-              detail: `版本 ${app.getVersion()}\n面向 Windows 的智能编程协作桌面应用。`
+              detail: `版本 ${resolveElectronAppVersion(app)}\n面向 Windows 的智能编程协作桌面应用。`
             })
           }
         ]
@@ -10075,6 +10585,7 @@ function registerIpc() {
     const config = await readRootConfig();
     return config.llm;
   });
+  registerCustomModelEndpointIpc(customModelEndpointStore);
 
   ipcMain.handle("phase1:get-desktop-preferences", async () => {
     return getActiveDesktopPreferences();
@@ -10112,6 +10623,10 @@ function registerIpc() {
   ipcMain.handle("phase1:login-auth", async (_event, input: DesktopAuthLoginInput) => {
     return loginDesktopAuth(input);
   });
+
+  ipcMain.handle("phase1:load-remembered-login", () => rememberedLoginStore.load());
+  ipcMain.handle("phase1:save-remembered-login", (_event, input: unknown) => rememberedLoginStore.save(input));
+  ipcMain.handle("phase1:clear-remembered-login", () => rememberedLoginStore.clear());
 
   ipcMain.handle("phase1:logout-auth", async () => {
     return logoutDesktopAuth();
@@ -10164,25 +10679,74 @@ function registerIpc() {
     return saved.llm;
   });
 
-  ipcMain.handle("phase1:open-browser-preview", async (_event, url?: string) => {
-    const preferences = await getActiveDesktopPreferences();
-    const targetUrl = typeof url === "string" && url.trim() ? url.trim() : preferences.browser.previewUrl;
-    await ensurePreviewWindow(targetUrl);
-    await saveActiveThreadState(`已打开浏览器预览: ${targetUrl}`);
-    await appendDiagnosticsLog(`opened preview ${targetUrl}`);
-    return { ok: true, url: targetUrl };
-  });
-
-  ipcMain.handle("phase1:close-browser-preview", async () => {
-    if (previewWindowRef && !previewWindowRef.isDestroyed()) {
-      previewWindowRef.close();
+  const browserPreviewService = new BrowserPreviewService({
+    getPreferences: getActiveDesktopPreferences,
+    openWindow: ensurePreviewWindow,
+    closeWindow: () => {
+      if (previewWindowRef && !previewWindowRef.isDestroyed()) previewWindowRef.close();
+      previewWindowRef = null;
+    },
+    captureWindow: capturePreviewWindow,
+    saveThreadState: saveActiveThreadState,
+    appendDiagnostics: appendDiagnosticsLog,
+    openExternal: async (url) => {
+      const { shell } = await import("electron");
+      await shell.openExternal(url);
     }
-    previewWindowRef = null;
-    return { ok: true };
   });
-
-  ipcMain.handle("phase1:capture-browser-preview", async () => {
-    return capturePreviewWindow();
+  registerBrowserIpcHandlers({
+    openPreview: (url) => browserPreviewService.open(url),
+    closePreview: () => browserPreviewService.close(),
+    capturePreview: () => browserPreviewService.capture(),
+    clearBrowsingData: async () => {
+      await clearNewbrainBrowserSessionData("persist:newbrain-browser");
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true, detail: "已清除内置浏览器数据与历史。" };
+    },
+    listHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("访问浏览历史")
+      );
+      return listBrowserHistory({ rootDir: workspaceStateRoot });
+    },
+    removeHistoryEntry: async (id) => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("删除浏览历史")
+      );
+      return removeBrowserHistoryEntry({ rootDir: workspaceStateRoot }, id);
+    },
+    clearHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("清空浏览历史")
+      );
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true };
+    },
+    selectDownloadDir: () => pickBrowserDownloadDirectory(),
+    listCredentials: () => listBrowserCredentials({ rootDir: workspaceStateRoot }),
+    upsertCredential: (input) => upsertBrowserCredential({ rootDir: workspaceStateRoot }, input),
+    removeCredential: (id) => removeBrowserCredential({ rootDir: workspaceStateRoot }, id),
+    listContacts: () => listBrowserContacts({ rootDir: workspaceStateRoot }),
+    upsertContact: (input) => upsertBrowserContact({ rootDir: workspaceStateRoot }, input),
+    removeContact: (id) => removeBrowserContact({ rootDir: workspaceStateRoot }, id),
+    getCdpAccess: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      return resolveBrowserCdpAccess({ fullCdpAccess: Boolean(preferences.browser.fullCdpAccess) });
+    },
+    probeSiteTools: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      const pageUrl =
+        previewWindowRef && !previewWindowRef.isDestroyed()
+          ? previewWindowRef.webContents.getURL()
+          : preferences.browser.previewUrl;
+      return probeBrowserSiteTools({
+        siteToolsEnabled: preferences.browser.siteToolsEnabled !== false,
+        pageUrl
+      });
+    }
   });
 
   ipcMain.handle("phase1:save-mcp-servers", async (_event, servers: McpServerConfig[]) => {
@@ -10488,6 +11052,7 @@ function registerIpc() {
     activeThreadId: () => activeThreadId,
     getCachedAuthorizedModels: () => cachedAuthorizedModels,
     readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: (modelId: string) => customModelEndpointStore.find(modelId),
     readWorkspaceCatalog,
     readThreadState,
     writeThreadState,
@@ -10527,6 +11092,7 @@ function registerIpc() {
       userSkillRoot,
       readFeatureSkills: async () => (await readFeatureConfig()).skills,
       officialGovernmentWebService,
+      desktopWebSearchClient,
       readWorkspaceCatalog,
       getActiveWorkspaceId: () => activeWorkspaceId,
       publishWorkspaceFilePreview: (event) => publishWorkspaceFilePreviewFromMain(mainWindowRef, event)
@@ -10663,6 +11229,7 @@ app.whenReady().then(async () => {
     });
     runtime.setPolicyRules(await readPolicyRules());
     registerBrowserAgentTools();
+    installBrowserAgentPolicyGate(runtime);
     await activateConfiguredPlugins();
     await syncMcpToolsToRuntime();
     await restoreEnabledMcpServers();
@@ -10676,6 +11243,7 @@ app.whenReady().then(async () => {
       const threadState = await readThreadState(initialWorkspace, initialThread);
       runtime.setThreadState(threadState);
     }
+    await queueStartupDailyBriefing();
   } catch (error) {
     await appendDesktopDebugLog(`startup runtime init failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     throw error;

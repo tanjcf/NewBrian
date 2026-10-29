@@ -70,6 +70,23 @@ test("runs a supported signal strategy into a custom Skill ledger", async () => 
   assert.equal(JSON.parse(updates.at(-1)?.resultJson).skillId, "custom-portfolio");
 });
 
+test("automation executes saved custom rules in simulation mode", async () => {
+  const current = { ...task("custom-ma"), resourceLimitsJson: JSON.stringify({ exchange: "SSE", tradingDate: "2026-08-20", symbol: "600519", quantity: 100,
+    strategyId: "trend-following", rules: { buy: { all: [{ left: { metric: "close", }, comparison: "above", right: { metric: "sma", period: 5 } }] }, sell: { all: [{ left: { metric: "close" }, comparison: "below", right: { metric: "sma", period: 5 } }] } }, simulationOnly: true }) };
+  const updates: any[] = []; const simulation = new QuantSimulationService();
+  simulation.createSession(current.projectId, 100_000, bars(true));
+  const runner = new QuantStrategyTaskRunner({ resolveOwnerId: () => "owner-a", simulation,
+    store: { listRunnableQuantStrategyTasks: () => [current], claimQuantStrategyTask: () => current, getTask: () => current,
+      updateTask: (input) => { updates.push(input); return { ...current, ...input }; } }
+  });
+  await runner.tick();
+  const result = JSON.parse(String(updates.at(-1)?.resultJson));
+  assert.equal(updates.at(-1)?.status, "SUCCEEDED");
+  assert.equal(result.simulationOnly, true);
+  assert.equal(result.signal, "buy");
+  assert.equal(result.fill.quantity, 100);
+});
+
 test("rejects non-simulation task configuration before reading market data", async () => {
   const current = { ...task(), resourceLimitsJson: JSON.stringify({ exchange: "SSE", tradingDate: "2026-08-20", symbol: "600519", quantity: 100, simulationOnly: false }) };
   const updates: any[] = []; let queried = false;

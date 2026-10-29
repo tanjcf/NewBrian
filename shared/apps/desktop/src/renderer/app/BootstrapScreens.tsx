@@ -1,3 +1,4 @@
+import brandIcon from "../assets/newbrain-icon-256.png";
 import type { DesktopBootstrapStatusState } from "./desktop-model";
 
 interface AuthLoadingScreenProps {
@@ -18,7 +19,7 @@ export function AuthLoadingScreen({ bootstrapState, errorMessage }: AuthLoadingS
     <main className="codex-shell login-shell">
       <section className="login-stage">
         <div className="login-panel login-panel-loading">
-          <div className="login-panel-mark">C</div>
+          <img src={brandIcon} alt="" width={56} height={56} style={{ borderRadius: 14 }} />
           <strong>正在检查登录状态...</strong>
           <span>{bootstrapState}</span>
           {errorMessage ? <div className="login-error-banner">{errorMessage}</div> : null}
@@ -39,7 +40,7 @@ export function BootstrapBlockingScreen({
     <main className="codex-shell login-shell">
       <section className="login-stage">
         <div className="login-panel login-panel-loading">
-          <div className="login-panel-mark">C</div>
+          <img src={brandIcon} alt="" width={56} height={56} style={{ borderRadius: 14 }} />
           <strong>正在初始化本地开发环境...</strong>
           <span>{desktopBootstrapStatus.overall.message || bootstrapState}</span>
           <div

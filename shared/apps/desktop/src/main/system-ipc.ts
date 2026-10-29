@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { clipboard, ipcMain } from "electron";
 import type { VideoVoiceAnalysisInput, VideoVoiceCasting } from "@codex-forge/protocol/brain-video-runtime";
 import {
   desktopIpcChannels,
@@ -150,4 +150,11 @@ export function registerSystemIpcHandlers(services: SystemIpcServices) {
     services.synthesizeNovelSpeech(parseSynthesizeNovelSpeechInput(input))
   );
   ipcMain.handle(desktopIpcChannels.system.cancelNovelSpeech, () => services.cancelNovelSpeech());
+  ipcMain.handle("phase1:write-clipboard-text", (_event, input: unknown) => {
+    if (typeof input !== "string" || input.length > 2_000_000) {
+      throw new TypeError("Clipboard text is invalid.");
+    }
+    clipboard.writeText(input);
+    return { ok: true };
+  });
 }

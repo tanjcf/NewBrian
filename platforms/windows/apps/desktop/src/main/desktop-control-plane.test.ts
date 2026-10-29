@@ -83,6 +83,49 @@ test("replaces loopback gateway with the bundled production endpoint", async () 
   );
 });
 
+test("packaged production builds file traffic on the production gateway instead of the test gateway", async () => {
+  const { resolveEffectiveGatewayBaseUrl } = await controlPlane;
+  const productionBaseUrl = "https://api.sinnauze.cn/v1";
+  const testBaseUrl = "http://120.48.151.202:8790/v1";
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: testBaseUrl,
+      bundledBaseUrl: testBaseUrl,
+      isPackaged: true,
+      productionBaseUrl
+    }),
+    productionBaseUrl
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: productionBaseUrl,
+      bundledBaseUrl: testBaseUrl,
+      envBaseUrl: testBaseUrl,
+      isPackaged: true,
+      productionBaseUrl
+    }),
+    productionBaseUrl
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: testBaseUrl,
+      bundledBaseUrl: testBaseUrl,
+      isPackaged: true,
+      productionBaseUrl: testBaseUrl
+    }),
+    testBaseUrl
+  );
+  assert.equal(
+    resolveEffectiveGatewayBaseUrl({
+      configuredBaseUrl: testBaseUrl,
+      bundledBaseUrl: productionBaseUrl,
+      isPackaged: false,
+      productionBaseUrl
+    }),
+    testBaseUrl
+  );
+});
+
 test("development builds preserve an explicit loopback gateway", async () => {
   const { resolveEffectiveGatewayBaseUrl } = await controlPlane;
   assert.equal(
@@ -108,14 +151,20 @@ test("development builds preserve an explicit loopback gateway", async () => {
 
 test("synchronizes the authenticated v1 control plane without persisting credentials", async () => {
   const { syncDesktopControlPlane } = await controlPlane;
-  const requested: Array<{ url: string; authorization: string | null; platform: string | null }> = [];
+  const requested: Array<{
+    url: string;
+    authorization: string | null;
+    platform: string | null;
+    packagePreference: string | null;
+  }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     const headers = new Headers(init?.headers);
     requested.push({
       url,
       authorization: headers.get("Authorization"),
-      platform: headers.get("X-Desktop-Platform")
+      platform: headers.get("X-Desktop-Platform"),
+      packagePreference: headers.get("X-Desktop-Package-Preference")
     });
     const body = url.endsWith("/bootstrap")
       ? { protocol_version: "1.0", minimum_client_version: "0.1.0", skills: [] }
@@ -131,6 +180,7 @@ test("synchronizes the authenticated v1 control plane without persisting credent
     accessToken: "secret-token",
     clientVersion: "0.1.0",
     platform: "win32",
+    packagePreference: "nsis",
     fetchImpl,
     now: () => "2026-06-30T00:00:00.000Z"
   });
@@ -138,6 +188,7 @@ test("synchronizes the authenticated v1 control plane without persisting credent
   assert.equal(requested.length, 4);
   assert.ok(requested.every((request) => request.authorization === "Bearer secret-token"));
   assert.ok(requested.every((request) => request.platform === "windows"));
+  assert.ok(requested.every((request) => request.packagePreference === "nsis"));
   assert.ok(requested.some((request) => request.url.endsWith("/api/desktop/v1/app-update")));
   assert.equal(state.gateway_origin, "http://120.48.151.202:8790");
   assert.equal(state.protocol_version, "1.0");
@@ -177,4 +228,79 @@ test("rejects an incompatible minimum client version", async () => {
     }),
     /低于服务端最低版本/
   );
+});
+
+test("caches stable app-update offers and clears them when unavailable", async () => {
+  const { syncDesktopControlPlane } = await controlPlane;
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/bootstrap")) {
+      return new Response(JSON.stringify({
+        protocol_version: "1.0",
+        minimum_client_version: "0.1.0",
+        app_release: {
+          latest_version: "1.4.10",
+          download_url: "http://example.test/old.msi",
+          sha256: "abc"
+        }
+      }), { status: 200 });
+    }
+    if (url.endsWith("/app-update")) {
+      return new Response(JSON.stringify({
+        available: true,
+        latest_version: "1.4.12",
+        download_url: "http://example.test/NewBrain-1.4.12-setup.exe",
+        sha256: "def",
+        channel: "stable",
+        release_id: "rel_test",
+        package_kind: "nsis"
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      protocol_version: "1.0",
+      minimum_client_version: "0.1.0"
+    }), { status: 200 });
+  };
+
+  const withOffer = await syncDesktopControlPlane({
+    gatewayOrigin: "http://120.48.151.202:8790",
+    accessToken: "token",
+    clientVersion: "1.4.11",
+    fetchImpl
+  });
+  assert.equal(withOffer.bootstrap.app_release?.latest_version, "1.4.12");
+  assert.equal(withOffer.bootstrap.app_release?.channel, "stable");
+
+  const clearFetch: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/bootstrap")) {
+      return new Response(JSON.stringify({
+        protocol_version: "1.0",
+        minimum_client_version: "0.1.0",
+        app_release: {
+          latest_version: "1.4.12",
+          download_url: "http://example.test/NewBrain-1.4.12-setup.exe",
+          sha256: "def"
+        }
+      }), { status: 200 });
+    }
+    if (url.endsWith("/app-update")) {
+      return new Response(JSON.stringify({
+        available: false,
+        detail: "当前已是可用版本，或服务端尚未发布更新包。"
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      protocol_version: "1.0",
+      minimum_client_version: "0.1.0"
+    }), { status: 200 });
+  };
+
+  const cleared = await syncDesktopControlPlane({
+    gatewayOrigin: "http://120.48.151.202:8790",
+    accessToken: "token",
+    clientVersion: "1.4.12",
+    fetchImpl: clearFetch
+  });
+  assert.equal(cleared.bootstrap.app_release, undefined);
 });

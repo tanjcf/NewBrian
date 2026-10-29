@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "repository": "agency-agents",
-  "commit": "af128a92888fd7d7c389b6cb37f1820be1b3cd9d",
+  "commit": "83294689da3832c0a9f223221148c411fd3eacc0",
   "source": "engineering/engineering-backend-architect.md",
   "license": "MIT",
-  "upstreamSha256": "18f237d054fa91f72a5dcda46a52ddcf7354ea3a3e39e0247629f4ea0f446917",
+  "upstreamSha256": "45d94306c8f0f4c51efb76066008297fa4e87ce5b69f509cfede224084b74dfb",
   "files": {
     ".codex-plugin/plugin.json": "9b85169c2a89ec7bc334ae0eb07301b24d83f0e32c1fcabf4e3b7398a3ed1962",
     "agents/agency-engineering-backend-architect.md": "7be44c25473f9bd1cd5b8ca34d4762b54a91137a83912abf36b7342313de9a04",
     "LICENSE": "45c861c1178a99178033b61302af7610e870082e874981b57519c2a1369299c0",
-    "skills/agency-engineering-backend-architect/SKILL.md": "b6e18ad19abd9a3d96f6e45ffb27f82d1c038b96be0d1d8e6e6127ee28d9c983",
-    "skills/agency-engineering-backend-architect/UPSTREAM-SKILL.md": "18f237d054fa91f72a5dcda46a52ddcf7354ea3a3e39e0247629f4ea0f446917"
+    "skills/agency-engineering-backend-architect/SKILL.md": "5915320d939d4710add2113d895f26ab73446dee93069faf03caaaa8f9776cc9",
+    "skills/agency-engineering-backend-architect/UPSTREAM-SKILL.md": "45d94306c8f0f4c51efb76066008297fa4e87ce5b69f509cfede224084b74dfb"
   },
   "adaptations": [
     "BRAIN tool and output-path mapping",

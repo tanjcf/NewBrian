@@ -22,6 +22,7 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       const command = (event as CustomEvent<{ command?: string }>).detail?.command;
       if (command === "expand-sidebar") setSidebarCollapsed(false);
       if (command === "collapse-sidebar") setSidebarCollapsed(true);
+      if (command === "toggle-sidebar-local") setSidebarCollapsed((current) => !current);
     };
     window.addEventListener("newbrain:app-command", onAppCommand as EventListener);
     return () => window.removeEventListener("newbrain:app-command", onAppCommand as EventListener);
@@ -66,7 +67,9 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
       if (command === "settings") {
         window.dispatchEvent(new CustomEvent("newbrain:open-settings", { detail: { section: "account" } }));
       }
-      if (command === "toggle-sidebar") setSidebarCollapsed((current) => !current);
+      if (command === "toggle-sidebar") {
+        window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "sidebar-button-click" } }));
+      }
       if (command === "toggle-file-tree") dispatchAppCommand(command);
       if (command === "previous-chat" || command === "next-chat") {
         const rows = [...document.querySelectorAll<HTMLElement>(".thread-row:not(.muted)")];
@@ -106,7 +109,9 @@ export function AppShell({ children, menu, activeThread, onNavigateThread }: App
           aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
           title={sidebarCollapsed ? "展开侧边栏 (Ctrl+B)" : "收起侧边栏 (Ctrl+B)"}
           aria-pressed={sidebarCollapsed}
-          onClick={() => setSidebarCollapsed((current) => !current)}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("newbrain:app-command", { detail: { command: "sidebar-button-click" } }));
+          }}
         >
           <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
             <rect x="2.5" y="3" width="15" height="14" rx="2.5" />

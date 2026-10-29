@@ -222,6 +222,9 @@ function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreamin
   const streamingSnapshot = useStreamingSnapshot(content, isStreaming);
   const renderableContent = useMemo(() => normalizeStreamingMarkdown(streamingSnapshot, isStreaming), [streamingSnapshot, isStreaming]);
   const components = useMemo(() => markdownComponents(workspaceId, onOpenLocalFile), [workspaceId, onOpenLocalFile]);
+  // Always render a flat document. Collapsible <details>/<summary> sections make
+  // drag-selecting characters unreliable on Chromium (selection clears or jumps).
+  const useFlatDocument = true;
 
   return <div className={`markdown-message${isStreaming ? " markdown-message-streaming" : ""}`} onContextMenu={(event) => {
     const link = (event.target as HTMLElement).closest<HTMLElement>("[data-local-file-path]");
@@ -237,7 +240,9 @@ function MarkdownMessageView({ content, workspaceId, onOpenLocalFile, isStreamin
   }}>
     {!isStreaming ? <div className="markdown-view-toolbar"><button type="button" aria-pressed={showSource} onClick={() => setShowSource((value) => !value)}>{showSource ? "渲染视图" : "查看源码"}</button></div> : null}
     {showSource ? <pre className="markdown-source-view"><code>{content}</code></pre> : <MarkdownErrorBoundary content={renderableContent}>
-        <CollapsibleMarkdownDocument content={renderableContent} components={components} />
+        {useFlatDocument
+          ? <MarkdownDocument content={renderableContent} components={components} />
+          : <CollapsibleMarkdownDocument content={renderableContent} components={components} />}
       </MarkdownErrorBoundary>}
     {fileMenu && workspaceId ? <LocalFileContextMenu menu={fileMenu} workspaceId={workspaceId}
       onClose={() => setFileMenu(null)} /> : null}

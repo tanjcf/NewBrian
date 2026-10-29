@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, globalShortcut, ipcMain, net, protocol, screen } from "electron";
+import { app, BrowserWindow, crashReporter, globalShortcut, ipcMain, nativeImage, net, protocol, screen, session } from "electron";
 import { nativeTheme } from "electron";
 import { safeStorage } from "electron";
 import { dialog } from "electron";
@@ -54,6 +54,10 @@ import type {
 } from "@codex-forge/protocol";
 import { desktopIpcChannels, isBrainWorkspaceKey } from "@codex-forge/protocol";
 import { normalizeDesktopBillingPayload } from "./desktop-billing-policy.js";
+import {
+  isTempNsisOldInstallPath,
+  resolveCanonicalNewBrainExecutable
+} from "./desktop-install-path.js";
 import { buildWalletPaymentUrl } from "./wallet-payment-url.js";
 import {
   createBootstrapTaskDefinitions,
@@ -73,6 +77,7 @@ import {
   isUsableDesktopDeviceFingerprint,
   resolvePrimaryMacAddress,
   reusePersistedDesktopDeviceFingerprint,
+  shouldRequireLoginCodeLocally,
   type DesktopDeviceFingerprint
 } from "./desktop-device-policy.js";
 import { normalizeModelConfig as normalizeModelConfigValue } from "./model-config-policy.js";
@@ -94,6 +99,8 @@ import {
   type DesktopAuthApiAccount,
   type DesktopAuthApiUser
 } from "./desktop-auth-policy.js";
+import { resolveLoginCeremonyAuthFields, shouldInvalidateLocalAuthForLoginCeremony } from "../shared/login-ceremony-policy";
+import { loginCodeSendRequest, loginCodeVerifyFields } from "../shared/login-code-channel";
 import {
   createLocalRuntime,
   createStructuredAgentResult,
@@ -113,7 +120,8 @@ import { registerVideoAgentTools } from "./video-agent-tools.js";
 import { registerMusicAgentTools } from "./music-agent-tools.js";
 import { registerAutoMediaAgentTools, resolveAutoMediaReferenceImage } from "./auto-media-agent-tools.js";
 import { registerDataAgentTools } from "./data-agent-tools.js";
-import { registerDocumentAgentTools } from "./document-agent-tools.js";
+import { persistDocumentOutput, registerDocumentAgentTools } from "./document-agent-tools.js";
+import { registerOfficeAgentTools } from "./office-agent-tools.js";
 import { registerExploreAgentTools } from "./explore-agent-tools.js";
 import { MusicTimelineService } from "./music-timeline-service.js";
 import { MusicMediaService } from "./music-media-service.js";
@@ -130,12 +138,18 @@ import { DataRuntimeService } from "./data-runtime-service.js";
 import { registerDataImportIpc } from "./data-import-ipc.js";
 import { QuantSimulationService } from "./quant-simulation-service.js";
 import { QuantSkillPackageService } from "./quant-skill-package-service.js";
+import { QuantRadarService } from "./quant-radar-service.js";
+import { quantStrategyRulesInputSchema, type QuantStrategyRules } from "./quant-strategy-rules.js";
 import { resolveBrainMarketDataUrl } from "./brain-market-data-url.js";
 import { QuantStrategyScheduler } from "./quant-strategy-scheduler.js";
 import { FlowScheduler } from "./flow-scheduler.js";
 import { QuantStrategyTaskRunner } from "./quant-strategy-task-runner.js";
 import { ChinaMarketCalendarService, parseConfiguredMarketHolidays } from "./market-calendar-service.js";
 import { DesktopSecretVault } from "./desktop-secret-vault.js";
+import { createRememberedLoginStore } from "./remembered-login-store.js";
+import { CustomModelEndpointStore } from "./custom-model-endpoint-store.js";
+import { registerCustomModelEndpointIpc } from "./custom-model-endpoint-ipc.js";
+import { isCustomModelSelection } from "../shared/custom-model-endpoint.js";
 import {
   resolveEffectiveGatewayBaseUrl,
   syncDesktopControlPlane as syncDesktopControlPlaneProtocol,
@@ -171,6 +185,9 @@ import { OfficialGovernmentWebService } from "./official-government-web-service.
 import { registerOfficialGovernmentWebTools } from "./official-government-web-tools.js";
 import { DesktopMarketBarsClient } from "./desktop-market-bars-client.js";
 import { DesktopMarketOverviewClient } from "./desktop-market-overview-client.js";
+import { DesktopWebSearchClient } from "./desktop-web-search-client.js";
+import { messagesBeforeUserMessage } from "./rewind-thread-messages.js";
+import { registerDesktopWebSearchTools } from "./desktop-web-search-tools.js";
 import { ManagedChildProcessManager } from "./managed-child-process.js";
 import { RustCoreClient } from "./rust-core-client.js";
 import { RustCoreService } from "./rust-core-service.js";
@@ -213,12 +230,20 @@ import {
 } from "./workspace-catalog-policy.js";
 import {
   ensureInternalChatWorkspace,
+  INTERNAL_CHAT_WORKSPACE_ID,
   isInternalChatWorkspace,
   resolveInternalChatPath
 } from "./internal-chat-workspace.js";
+import { planAutomationThreadTarget } from "../shared/automation-thread-recovery.js";
+import {
+  automationDedicatedThreadTitle,
+  automationNeedsDedicatedThread
+} from "../shared/automation-dedicated-thread.js";
+import { moveThreadBetweenProjects } from "../shared/sidebar-layout.js";
 import { ensureInternalChatWorkspaceCatalog } from "./internal-chat-workspace-catalog-service.js";
 import { ensureWorkspaceCatalogConda as ensureWorkspaceCatalogCondaValue } from "./workspace-catalog-conda-service.js";
 import { resolveExistingFileInsideRoot } from "./path-security.js";
+import { resolveElectronAppVersion } from "./resolve-app-version.js";
 import { formatWrittenArtifactSummary, type WrittenArtifact } from "./output-summary.js";
 import {
   makeOpenAiYaml,
@@ -230,13 +255,16 @@ import {
   titleCaseSkillName,
   validateSkillMarkdown
 } from "./skill-scaffold-policy.js";
+import { resolveUserSkillRoot } from "./user-skill-root.js";
 import {
   assertAttachmentSize,
   formatAttachmentSize,
   getImageMimeType,
   getModelEmbeddableImageMimeType,
   truncateAttachmentText,
-  MAX_EXTRACTOR_OUTPUT_BYTES
+  MAX_ATTACHMENT_BYTES,
+  MAX_EXTRACTOR_OUTPUT_BYTES,
+  MAX_IMAGE_BYTES
 } from "./attachment-security.js";
 import {
   describeImageForBridge
@@ -261,6 +289,7 @@ import {
 import { runGitUtf8 } from "./git-command.js";
 import { runBoundedExtractor } from "./bounded-extractor.js";
 import { applyApplicationSkillPolicy as applySkillPolicy } from "./application-skill-policy.js";
+import { ensurePptWritingTeamSkill } from "../../../../../../shared/apps/desktop/src/main/ppt-writing-team-skill.js";
 import { resolveRepositoryVirtualPath } from "./repository-plugin-paths.js";
 import {
   buildRepositoryPluginSpec,
@@ -273,6 +302,45 @@ import {
 import { registerSettingsIpcHandlers } from "./settings-ipc.js";
 import { registerUserKnowledgeIpcHandlers } from "./user-knowledge-ipc.js";
 import { registerDesktopIntegrationIpcComposition } from "./desktop-integration-ipc-composition.js";
+import {
+  askBrowserAnnotationDialog,
+  askBrowserDownloadApprovalDialog,
+  askBrowserHistoryAccessDialog,
+  clearNewbrainBrowserSessionData,
+  pickBrowserDownloadDirectory,
+  pickBrowserDownloadSavePath
+} from "./browser-ipc.js";
+import {
+  assertBrowserAgentPermission,
+  browserOriginFromUrl,
+  evaluateBrowserToolPolicyDecision,
+  resolveBrowserLinkOpenTarget
+} from "./browser-agent-policy.js";
+import {
+  clearBrowserHistory,
+  listBrowserHistory,
+  recordBrowserHistoryVisit,
+  removeBrowserHistoryEntry
+} from "./browser-history-store.js";
+import {
+  listBrowserCredentials,
+  removeBrowserCredential,
+  upsertBrowserCredential
+} from "./browser-credentials-store.js";
+import {
+  listBrowserContacts,
+  removeBrowserContact,
+  upsertBrowserContact
+} from "./browser-contacts-store.js";
+import {
+  mergeBrowserPermissionsExceptions,
+  writeBrowserPermissionsFile
+} from "./browser-permissions-store.js";
+import { assertBrowserHistoryAccess } from "./browser-history-access.js";
+import { writeBrowserScreenshotAnnotation } from "./browser-screenshot-annotation.js";
+import { applyBrowserDownloadItemPolicy } from "./browser-download-session.js";
+import { attachBrowserCdpIfAllowed, resolveBrowserCdpAccess } from "./browser-cdp-access.js";
+import { probeBrowserSiteTools } from "./browser-site-tools.js";
 import { McpStdioClient } from "./mcp-stdio-client.js";
 import { McpConfigService } from "./mcp-config-service.js";
 import { McpToolRuntimeService } from "./mcp-tool-runtime-service.js";
@@ -297,6 +365,7 @@ import { ThreadRolloutRecoveryService } from "./thread-rollout-recovery-service.
 import { DelegatedAgentControlService } from "./delegated-agent-control-service.js";
 import { DelegatedAgentIpcService } from "./delegated-agent-ipc-service.js";
 import { runDelegatedAgentLoop } from "./delegated-agent-loop-service.js";
+import { executeDelegatedModelStep } from "./delegated-model-step.js";
 import { DelegatedAgentRunService } from "./delegated-agent-run-service.js";
 import { ComposerAttachmentService, resolveManagedAttachmentPath } from "./composer-attachment-service.js";
 import { DesktopArtifactPreviewService } from "./desktop-artifact-preview-service.js";
@@ -378,6 +447,8 @@ import {
   createDefaultDesktopPreferences,
   normalizeDesktopPreferencesValue
 } from "./desktop-preferences-config.js";
+import { applyLoginItemSettings } from "./login-item-settings.js";
+import { deliverStartupDailyBriefing, setDailyBriefingChatHost } from "./daily-briefing-delivery.js";
 import {
   buildApiEndpoint,
   buildModelRequestPayload,
@@ -385,12 +456,12 @@ import {
   canContinueThinkingWithMessages,
   extractResponsesText,
   extractResponsesTextFromSse,
-  isThinkingContextGatewayRejection,
+  shouldRetryModelRequestWithoutThinking,
   requiresThinkingWireProtocol,
   resolveGatewayBaseUrl,
   resolveGatewayOrigin,
 } from "./model-gateway-protocol.js";
-import { selectModelRequestAuth } from "./model-request-auth-policy.js";
+import { resolveDevE2eBearerToken, selectModelRequestAuth } from "./model-request-auth-policy.js";
 import { readModelResponseBody } from "./model-response-stream.js";
 import {
   normalizeMcpServer as normalizeMcpServerConfig,
@@ -401,10 +472,13 @@ import { normalizeBrowserPreviewUrl } from "./browser-preview-service.js";
 // BrowserPreviewService composition: desktop-integration-ipc-composition.ts
 import { registerSystemIpcHandlers } from "./system-ipc.js";
 import { registerUsageExceptionFeedbackComposition } from "./user-usage-exception-feedback-composition.js";
-import { registerDesktopAppUpdateComposition } from "./desktop-app-update-composition.js";
+import { registerDesktopAppUpdateComposition, isDesktopUpdateExitPending } from "./desktop-app-update-composition.js";
+import { fetchGithubDesktopRelease } from "./github-desktop-release.js";
 import { registerGrowthComposition } from "./growth-composition.js";
 import { registerWorkspaceGitIpcHandlers } from "./workspace-git-ipc.js";
 import { registerWindowIpcHandlers } from "./window-ipc.js";
+import { DesktopWindowControl } from "./desktop-window-control.js";
+import { registerDesktopWindowControlIpc } from "./desktop-window-control-ipc.js";
 import { registerHolonIpcHandlers } from "./holon-ipc.js";
 import { registerLearningIpcHandlers } from "./learning-ipc.js";
 import { HolonControlPlaneService } from "./holon-control-plane-service.js";
@@ -428,11 +502,14 @@ import { NovelTtsService } from "./novel-tts-service.js";
 import { DesktopControlPlaneHeartbeat } from "./desktop-control-plane-heartbeat.js";
 import { buildErrorRemediationRequest } from "./error-remediation-policy.js";
 import {
+  automationTaskPrompt,
   computeNextDailyRunAt,
   createAutomationSpec,
   markAutomationFailed,
   markAutomationRunning,
   markAutomationSucceeded,
+  resolveAutomationSkillNames,
+  scheduledAutomationRequest,
   selectDueAutomations,
   updateAutomationSpec
 } from "./automation-schedule-policy.js";
@@ -462,6 +539,7 @@ import {
 import {
   assertCanDelegateChild,
   countActiveChildren,
+  countDelegateFailuresSince,
   DEFAULT_MAX_CHILDREN_PER_PARENT,
   isTerminalDelegatedStatus,
   normalizeChildThreadIds,
@@ -572,6 +650,10 @@ async function expertSceneForThread(threadId: string) {
   const thread = workspace?.threads.find(item => item.id === threadId);
   return thread?.brainWorkspaceKey || workspace?.brainWorkspaceKey || "unknown";
 }
+async function summonExpertChosenByUser(input: Parameters<typeof summonExpertToThreadCore>[0]) {
+  await (await expertCollaborationForThread(input.threadId)).acceptExplicitChoice(input.expertId);
+  return summonExpertToThread(input);
+}
 async function summonExpertToThread(input: Parameters<typeof summonExpertToThreadCore>[0]) {
   await (await expertCollaborationForThread(input.threadId)).authorize(input.expertId);
   const context = await summonExpertToThreadCore({ ...input, workspaceKey: await expertSceneForThread(input.threadId) });
@@ -597,6 +679,7 @@ async function expertCollaborationForThread(threadId: string) {
       return questions;
     },
     applied: (goalId, questionId) => codexStorage.markExpertPreferenceApplied(threadId, goalId, questionId),
+    answer: (goalId, questionId, answer) => codexStorage.answerGoalQuestion(threadId, goalId, questionId, answer),
     ask: (goalId, question) => codexStorage.createGoalQuestion(threadId, goalId, question),
     catalog: async () => (await listExpertsForRuntime()).filter(item => isExpertAvailableInWorkspace(item, scene)),
     preferences: async () => {
@@ -627,7 +710,7 @@ async function listExpertsForRuntime() {
   });
 }
 function collectSkillRootsForExpertBridge(workspacePathValue?: string) {
-  const roots = [userSkillRoot];
+  const roots = [...managedUserSkillRoots()];
   if (workspacePathValue) {
     roots.push(join(workspacePathValue, "skills"), join(workspacePathValue, ".newbrain", "skills"));
   }
@@ -667,8 +750,24 @@ async function ensureExpertSummonedFromSkills(input: {
 }
 const bootstrapConfigPath = join(workspacePath, "newbrain.bootstrap.json");
 const workspaceStateRoot = join(workspacePath, ".newbrain");
+const windowsUiScriptRoot = app.isPackaged
+  ? join(process.resourcesPath, "windows-ui-driver")
+  : join(app.getAppPath(), "scripts");
+const desktopWindowControl = new DesktopWindowControl({
+  driverPath: join(windowsUiScriptRoot, "windows-installed-ui-driver.ps1"),
+  scenarioPath: join(windowsUiScriptRoot, "native-ui-scenario.mjs"),
+  captureDirectory: join(workspaceStateRoot, "window-captures")
+});
 const privateModelCredentialPath = join(workspaceStateRoot, "credentials", "private-model.credential");
 const privateModelCredentialVault = new DesktopSecretVault(privateModelCredentialPath, safeStorage);
+const rememberedLoginStore = createRememberedLoginStore(
+  join(workspaceStateRoot, "credentials", "remembered-login.credential"),
+  safeStorage
+);
+const customModelEndpointStore = new CustomModelEndpointStore(
+  join(workspaceStateRoot, "credentials", "custom-model-endpoints"),
+  safeStorage
+);
 const policyRulesPath = join(workspaceStateRoot, "rules", "default.rules.json");
 const desktopProfileRoot = join(workspacePath, ".desktop-profile");
 const desktopAuthStatePath = join(workspaceStateRoot, "desktop-auth.json");
@@ -693,7 +792,12 @@ const desktopPreviewScreenshotPath = join(workspaceStateRoot, "preview-screensho
 const desktopDiagnosticsLogPath = join(workspaceStateRoot, "diagnostics.log");
 const desktopErrorOutbox = new DesktopErrorOutbox(join(workspaceStateRoot, "error-reports"));
 let rendererFailureRestartScheduled = false;
-const userSkillRoot = join(workspaceStateRoot, "skills");
+const userSkillLocations = resolveUserSkillRoot({ homeDir: os.homedir(), workspacePath });
+const userSkillRoot = userSkillLocations.primary;
+const legacyUserSkillRoots = userSkillLocations.legacy;
+function managedUserSkillRoots() {
+  return [userSkillRoot, ...legacyUserSkillRoots];
+}
 const pluginRepositoryRoot = join(app.getPath("userData"), "plugins");
 const userKnowledgeRoot = workspaceStateRoot;
 const authAuditLogPath = join(workspacePath, "tmp-auth-session.log");
@@ -774,6 +878,27 @@ const defaultGatewayBaseUrl = app.isPackaged
   : "http://127.0.0.1:8790/v1";
 const dashboardPath = "/api/dashboard";
 const processUuid = randomUUID();
+// NSIS --updated can leave a Temp\\nsm*\\old-install copy running. If that copy
+// holds the single-instance lock, Desktop shortcuts to the real install appear dead.
+if (
+  app.isPackaged
+  && process.platform === "win32"
+  && isTempNsisOldInstallPath(process.execPath)
+) {
+  const canonical = resolveCanonicalNewBrainExecutable({
+    execPath: process.execPath,
+    localAppData: process.env.LOCALAPPDATA
+  });
+  if (canonical) {
+    spawn(canonical, [], {
+      detached: true,
+      stdio: "ignore",
+      cwd: dirname(canonical)
+    }).unref();
+  }
+  app.quit();
+  process.exit(0);
+}
 // Acquire process ownership before opening or migrating any shared SQLite database.
 const singleInstanceLockAcquired = process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT
   ? true
@@ -907,6 +1032,14 @@ const desktopMarketBarsClient = new DesktopMarketBarsClient({
   })
 });
 const desktopMarketOverviewClient = new DesktopMarketOverviewClient({
+  readGatewayOrigin,
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  })
+});
+const desktopWebSearchClient = new DesktopWebSearchClient({
   readGatewayOrigin,
   readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
   createHeaders: ({ accessToken }) => createDesktopAuthHeaders({
@@ -1107,12 +1240,85 @@ let automationTickRunning = false;
 let mainWindowRef: BrowserWindow | null = null;
 let trayService: DesktopTrayService | null = null;
 let explicitQuitRequested = false;
-function resolveDesktopIconPath() {
-  const packagedIconPath = join(process.resourcesPath, "newbrain.ico");
-  const devIconPath = join(appDirectory, "..", "..", "build", "icon.ico");
-  const legacyDevIconPath = join(workspacePath, "apps/desktop/build/icon.ico");
-  const preferredPath = app.isPackaged ? packagedIconPath : devIconPath;
-  return existsSync(preferredPath) ? preferredPath : legacyDevIconPath;
+function resolveDesktopIconPath(options?: { preferIco?: boolean }) {
+  // Default: PNG is fine for window chrome. Pass preferIco for tray/taskbar.
+  const preferIco = options?.preferIco === true;
+  const packaged = [
+    join(process.resourcesPath, "newbrain.ico"),
+    join(process.resourcesPath, "icon.ico"),
+    join(process.resourcesPath, "newbrain.png"),
+    join(process.resourcesPath, "icon.png")
+  ];
+  const unpackaged = [
+    join(appDirectory, "..", "..", "build", "icon.ico"),
+    join(appDirectory, "..", "..", "public", "icon.ico"),
+    join(appDirectory, "..", "..", "build", "icon.png"),
+    join(appDirectory, "..", "..", "public", "icon.png"),
+    join(workspacePath, "apps/desktop/build/icon.ico"),
+    join(workspacePath, "apps/desktop/build/icon.png")
+  ];
+  const pngFirstPackaged = [
+    join(process.resourcesPath, "newbrain.png"),
+    join(process.resourcesPath, "newbrain.ico"),
+    join(process.resourcesPath, "icon.png"),
+    join(process.resourcesPath, "icon.ico")
+  ];
+  const pngFirstUnpackaged = [
+    join(appDirectory, "..", "..", "build", "icon.png"),
+    join(appDirectory, "..", "..", "build", "icon.ico"),
+    join(appDirectory, "..", "..", "public", "icon.png"),
+    join(appDirectory, "..", "..", "public", "icon.ico"),
+    join(workspacePath, "apps/desktop/build/icon.png"),
+    join(workspacePath, "apps/desktop/build/icon.ico")
+  ];
+  // Windows tray/taskbar need multi-size .ico; a lone 256 PNG scales into a blurry glyph.
+  const candidates = app.isPackaged
+    ? (preferIco ? packaged : pngFirstPackaged)
+    : (preferIco ? unpackaged : pngFirstUnpackaged);
+  for (const candidate of candidates) {
+    if (!candidate || !existsSync(candidate)) continue;
+    try {
+      const image = nativeImage.createFromPath(candidate);
+      if (!image.isEmpty()) return candidate;
+    } catch {
+      // Try the next candidate when Electron cannot decode this asset.
+    }
+  }
+  return candidates.find((candidate) => candidate && existsSync(candidate)) || "";
+}
+function resolveDesktopTrayIconPath() {
+  // Tray-only asset: keep taskbar/exe on marketing icon.ico / icon.png.
+  const trayCandidates = app.isPackaged
+    ? [
+        join(process.resourcesPath, "newbrain-tray.ico"),
+        join(process.resourcesPath, "tray.ico")
+      ]
+    : [
+        join(appDirectory, "..", "..", "build", "tray.ico"),
+        join(appDirectory, "..", "..", "public", "tray.ico"),
+        join(workspacePath, "apps/desktop/build/tray.ico")
+      ];
+  for (const candidate of trayCandidates) {
+    if (!candidate || !existsSync(candidate)) continue;
+    try {
+      const image = nativeImage.createFromPath(candidate);
+      if (!image.isEmpty()) return candidate;
+    } catch {
+      // Try the next tray candidate.
+    }
+  }
+  // Legacy fallback: multi-size marketing ICO (never the lone 256 PNG).
+  return resolveDesktopIconPath({ preferIco: true });
+}
+function resolveDesktopNativeImage() {
+  const iconPath = resolveDesktopIconPath({ preferIco: false });
+  if (!iconPath) return nativeImage.createEmpty();
+  try {
+    const image = nativeImage.createFromPath(iconPath);
+    return image.isEmpty() ? nativeImage.createEmpty() : image;
+  } catch {
+    return nativeImage.createEmpty();
+  }
 }
 function showMainWindow() {
   const window = mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : createMainWindow();
@@ -1122,7 +1328,7 @@ function showMainWindow() {
   return window;
 }
 function createDesktopTray() {
-  trayService ??= new DesktopTrayService({ iconPath: resolveDesktopIconPath(),
+  trayService ??= new DesktopTrayService({ iconPath: resolveDesktopTrayIconPath(),
     readWorkspaces: async () => (await readWorkspaceCatalog()).workspaces, showWindow: () => { showMainWindow(); },
     openThread: async (workspaceId, threadId) => { const snapshot = await activateWorkspaceThread({ workspaceId, threadId }); showMainWindow().webContents.send(desktopIpcChannels.events.snapshotUpdate, snapshot); },
     createTask: () => { void showMainWindow().webContents.executeJavaScript(`document.querySelector('[data-testid="new-chat-button"]')?.click()`, true); },
@@ -1343,7 +1549,7 @@ function collectDesktopErrorEnvironment() {
     osRelease: os.release(),
     architecture: process.arch,
     locale: app.getLocale(),
-    codecnVersion: app.getVersion(),
+    codecnVersion: resolveElectronAppVersion(app),
     packaged: app.isPackaged,
     electronVersion: process.versions.electron ?? "",
     chromiumVersion: process.versions.chrome ?? "",
@@ -1356,11 +1562,15 @@ async function reportRendererFailure(input: RendererFailureInput) {
   const record = await desktopErrorOutbox.capture({
     ...input,
     deviceId: device.device_id,
-    appVersion: app.getVersion(),
+    appVersion: resolveElectronAppVersion(app),
     context: { ...(input.context ?? {}), environment: collectDesktopErrorEnvironment() }
   });
   await appendDesktopDebugLog(`renderer failure persisted id=${record.id} fingerprint=${record.fingerprint}`);
-  if (!rendererFailureRestartScheduled && process.env.NEWBRAIN_DISABLE_CRASH_RESTART !== "1") {
+  if (
+    !rendererFailureRestartScheduled
+    && process.env.NEWBRAIN_DISABLE_CRASH_RESTART !== "1"
+    && !isDesktopUpdateExitPending()
+  ) {
     rendererFailureRestartScheduled = true;
     setTimeout(() => {
       explicitQuitRequested = true;
@@ -1383,7 +1593,7 @@ async function reportRendererDiagnostic(input: import("@codex-forge/protocol").R
       message: input.message,
       stackTrace: input.stackTrace,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: {
         ...(input.context ?? {}),
         environment: collectDesktopErrorEnvironment(),
@@ -1430,7 +1640,7 @@ const desktopErrorCollector = new DesktopErrorCollector({
     return desktopErrorOutbox.capture({
       ...failure,
       deviceId: device.device_id,
-      appVersion: app.getVersion(),
+      appVersion: resolveElectronAppVersion(app),
       context: { ...(failure.context ?? {}), environment: collectDesktopErrorEnvironment() }
     });
   },
@@ -1606,7 +1816,7 @@ function collectLiveDesktopDeviceFingerprint(): DesktopDeviceFingerprint {
     workspacePath,
     hostname: os.hostname(),
     osVersion: os.release(),
-    appVersion: app.getVersion(),
+    appVersion: resolveElectronAppVersion(app),
     machineGuid,
     primaryMac,
     boardSerial,
@@ -1707,7 +1917,7 @@ async function syncAuthenticatedDesktopControlPlane(): Promise<DesktopControlPla
         state = await syncDesktopControlPlaneProtocol({
           gatewayOrigin,
           accessToken,
-          clientVersion: app.getVersion(),
+          clientVersion: resolveElectronAppVersion(app),
           deviceId: device.device_id,
           headers: createDesktopAuthHeaders({ accessToken, device })
         });
@@ -1747,7 +1957,7 @@ async function syncAuthenticatedDesktopControlPlane(): Promise<DesktopControlPla
         gateway_origin: new URL(gatewayOrigin).origin,
         protocol_version: "1.0",
         minimum_client_version: "0.1.0",
-        client_version: app.getVersion(),
+        client_version: resolveElectronAppVersion(app),
         synced_at: nowIso(),
         bootstrap: { protocol_version: "1.0", minimum_client_version: "0.1.0" },
         model_config: {
@@ -1787,9 +1997,12 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
       value: accessTokenCredential,
       headers: createDesktopAuthHeaders({ accessToken: accessTokenCredential, device })
     } : null,
-    process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? { value: "newbrain-e2e", headers: { Authorization: "Bearer newbrain-e2e" } }
-      : null,
+    (() => {
+      const e2eToken = resolveDevE2eBearerToken();
+      return e2eToken
+        ? { value: e2eToken, headers: { Authorization: `Bearer ${e2eToken}` } }
+        : null;
+    })(),
     apiKeyCredential ? { value: apiKeyCredential, headers: { Authorization: `Bearer ${apiKeyCredential}` } } : null
   ].filter((item): item is { value: string; headers: Record<string, string> } => Boolean(item));
   let remoteModels: unknown[] = [];
@@ -1905,9 +2118,23 @@ async function readAuthorizedDesktopModelConfig(candidate?: Partial<ModelConfig>
 async function fetchDesktopAuthLoginFlags(): Promise<{
   emailCodeLoginEnabled: boolean;
   passwordLoginEnabled: boolean;
+  serverTime: string | null;
+  serverDate: string | null;
+  loginCeremonyEnabled: boolean;
 }> {
+  const ceremonyFallback = resolveLoginCeremonyAuthFields({
+    isPackaged: app.isPackaged,
+    serverTime: null,
+    serverDate: null
+  });
   if (isE2eEmailCaptchaBypassEnabled()) {
-    return { emailCodeLoginEnabled: false, passwordLoginEnabled: true };
+    return {
+      emailCodeLoginEnabled: false,
+      passwordLoginEnabled: true,
+      serverTime: null,
+      serverDate: null,
+      loginCeremonyEnabled: ceremonyFallback.login_ceremony_enabled
+    };
   }
   try {
     const gatewayOrigin = await readGatewayOrigin();
@@ -1925,13 +2152,42 @@ async function fetchDesktopAuthLoginFlags(): Promise<{
     const emailCodeLoginEnabled = Boolean(data.email_code_login_enabled);
     const passwordLoginEnabled =
       data.password_login_enabled === undefined ? !emailCodeLoginEnabled : Boolean(data.password_login_enabled);
-    return { emailCodeLoginEnabled, passwordLoginEnabled };
+    const serverTime = typeof data.server_time === "string" ? data.server_time : null;
+    const serverDate = typeof data.server_date === "string" ? data.server_date : null;
+    const ceremony = resolveLoginCeremonyAuthFields({
+      isPackaged: app.isPackaged,
+      serverTime,
+      serverDate
+    });
+    return {
+      emailCodeLoginEnabled,
+      passwordLoginEnabled,
+      serverTime: ceremony.server_time,
+      serverDate: ceremony.server_date,
+      loginCeremonyEnabled: ceremony.login_ceremony_enabled
+    };
   } catch (error) {
     await appendDesktopDebugLog(
       `desktop auth config fetch failed: ${error instanceof Error ? error.message : String(error)}`
     );
-    return { emailCodeLoginEnabled: false, passwordLoginEnabled: true };
+    return {
+      emailCodeLoginEnabled: false,
+      passwordLoginEnabled: true,
+      serverTime: null,
+      serverDate: null,
+      loginCeremonyEnabled: ceremonyFallback.login_ceremony_enabled
+    };
   }
+}
+
+function desktopLoginCeremonyStatusFields(loginFlags: Awaited<ReturnType<typeof fetchDesktopAuthLoginFlags>>) {
+  return {
+    email_code_login_enabled: loginFlags.emailCodeLoginEnabled,
+    password_login_enabled: loginFlags.passwordLoginEnabled,
+    server_time: loginFlags.serverTime,
+    server_date: loginFlags.serverDate,
+    login_ceremony_enabled: loginFlags.loginCeremonyEnabled
+  };
 }
 async function fetchAgreementConfig(): Promise<DesktopAgreementConfig> {
   try {
@@ -1991,7 +2247,11 @@ async function fetchJsonWithDesktopAuth(path: string, authState: PersistedDeskto
   for (const token of tokenCandidates.length ? tokenCandidates : [""]) {
     const headers = createDesktopAuthHeaders({ accessToken: token, device });
     if (sessionCookie) headers.Cookie = sessionCookie;
-    const response = await fetch(`${gatewayOrigin}${path}`, { method: "GET", headers });
+    const response = await fetch(`${gatewayOrigin}${path}`, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(15_000)
+    });
     const payload = await readJsonResponse(response);
     if (response.ok) return payload;
     lastPayload = payload;
@@ -2001,7 +2261,8 @@ async function fetchJsonWithDesktopAuth(path: string, authState: PersistedDeskto
   if (sessionCookie && tokenCandidates.length > 0) {
     const response = await fetch(`${gatewayOrigin}${path}`, {
       method: "GET",
-      headers: { Accept: "application/json", Cookie: sessionCookie }
+      headers: { Accept: "application/json", Cookie: sessionCookie },
+      signal: AbortSignal.timeout(15_000)
     });
     const payload = await readJsonResponse(response);
     if (response.ok) return payload;
@@ -2198,26 +2459,132 @@ async function fetchDesktopBillingSubscription() {
   const gatewayOrigin = await readGatewayOrigin();
   return { ...(normalized as Record<string, unknown>), gateway_origin: gatewayOrigin };
 }
+function extractGatewayErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const record = payload as Record<string, unknown>;
+  const nested =
+    record.result && typeof record.result === "object"
+      ? (record.result as Record<string, unknown>)
+      : null;
+  const candidates = [
+    record.message,
+    record.detail,
+    record.error,
+    record.reason,
+    nested?.message,
+    nested?.detail
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate ?? "").trim();
+    if (text && text !== "true" && text !== "false") return text;
+  }
+  return fallback;
+}
+
+function mapRedeemGatewayError(message: string, status: number): string {
+  const text = String(message || "").trim();
+  if (/login required|AUTH_UNAUTHORIZED|unauthorized|请先登录/i.test(text) || status === 401) {
+    return "请先登录后再兑换。";
+  }
+  if (/redeem code is invalid|code is required|invalid redeem/i.test(text)) {
+    return "兑换码无效，请检查后重试。";
+  }
+  if (/redeem code is not active/i.test(text)) {
+    return "兑换码未启用或已停用。";
+  }
+  if (/redeem code expired/i.test(text)) {
+    return "兑换码已过期。";
+  }
+  if (/usage limit reached|already used|update failed/i.test(text)) {
+    return "兑换码已使用或次数已用尽。";
+  }
+  if (/missing subscription plan/i.test(text)) {
+    return "兑换码缺少套餐配置，请联系发放方。";
+  }
+  if (status === 404 || status === 501) {
+    return "该接口处于开发中，暂时无法使用。";
+  }
+  return text || `兑换失败：HTTP ${status || "unknown"}`;
+}
+
 async function redeemDesktopCode(input: { code: string }) {
   const code = String(input?.code || "").trim();
   if (!code) throw new Error("请输入兑换码。");
   const authState = await readDesktopAuthState();
-  if (!authState) throw new Error("请先登录再兑换。");
+  if (!authState) throw new Error("请先登录后再兑换。");
+  if (!authState.access_token?.trim() && !authState.session_cookie?.trim()) {
+    throw new Error("请先登录后再兑换。");
+  }
   const gatewayOrigin = await readGatewayOrigin();
   const device = collectDesktopDeviceFingerprint();
-  const headers = { "Content-Type": "application/json", ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device }) };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
+  };
   if (authState.session_cookie?.trim()) headers.Cookie = authState.session_cookie.trim();
-  const response = await fetch(`${gatewayOrigin}/api/redeem`, { method: "POST", headers, body: JSON.stringify({ code }) });
-  const payload = await readJsonResponse(response);
-  if (!response.ok) {
-    if (response.status === 404 || response.status === 501) {
-      throw new Error("该接口处于开发中，暂时无法使用。");
+  let response: Response;
+  try {
+    response = await fetch(`${gatewayOrigin}/api/redeem`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ code })
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error || "");
+    if (/ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed/i.test(detail)) {
+      throw new Error("无法连接 spring-app，请确认网关可用后重试。");
     }
-    const message = payload && typeof payload === "object" ? String((payload as Record<string, unknown>).message || (payload as Record<string, unknown>).detail || "") : "";
-    throw new Error(message || `兑换失败：HTTP ${response.status}`);
+    throw new Error(detail || "兑换请求失败，请稍后重试。");
+  }
+  const payload = await readJsonResponse(response);
+  const payloadRecord = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const businessFailed = Boolean(payloadRecord && payloadRecord.ok === false);
+  if (!response.ok || businessFailed) {
+    const rawMessage = extractGatewayErrorMessage(payload, "");
+    throw new Error(mapRedeemGatewayError(rawMessage, response.status));
   }
   return payload;
 }
+
+/** Claim National Day easter-egg gift from spring-app (once per user). */
+async function claimNationalDayGift() {
+  const authState = await readDesktopAuthState();
+  if (!authState) throw new Error("请先登录后再领取国庆赠礼。");
+  if (!authState.access_token?.trim() && !authState.session_cookie?.trim()) {
+    throw new Error("请先登录后再领取国庆赠礼。");
+  }
+  const gatewayOrigin = await readGatewayOrigin();
+  const device = collectDesktopDeviceFingerprint();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...createDesktopAuthHeaders({ accessToken: authState.access_token || "", device })
+  };
+  if (authState.session_cookie?.trim()) headers.Cookie = authState.session_cookie.trim();
+  let response: Response;
+  try {
+    response = await fetch(`${gatewayOrigin}/api/desktop/v1/activities/national-day/claim`, {
+      method: "POST",
+      headers,
+      body: "{}"
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error || "");
+    if (/ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed/i.test(detail)) {
+      throw new Error("无法连接 spring-app，请确认网关可用后重试。");
+    }
+    throw new Error(detail || "国庆赠礼领取失败，请稍后重试。");
+  }
+  const payload = await readJsonResponse(response);
+  const payloadRecord = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  if (!response.ok) {
+    const rawMessage = extractGatewayErrorMessage(payload, "");
+    throw new Error(rawMessage || `国庆赠礼领取失败：HTTP ${response.status}`);
+  }
+  return payloadRecord || payload;
+}
+
 async function fetchDashboardWithSessionCookie(sessionCookie: string) {
   const gatewayOrigin = await readGatewayOrigin();
   const response = await fetch(`${gatewayOrigin}${dashboardPath}`, {
@@ -2331,9 +2698,35 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
       base_url: gatewayOrigin,
       agreement,
       last_checked_at: checkedAt,
-      email_code_login_enabled: loginFlags.emailCodeLoginEnabled,
-      password_login_enabled: loginFlags.passwordLoginEnabled
+      ...desktopLoginCeremonyStatusFields(loginFlags)
     } as DesktopAuthStatus;
+  }
+  {
+    const loginFlags = await fetchDesktopAuthLoginFlags();
+    if (
+      shouldInvalidateLocalAuthForLoginCeremony({
+        isPackaged: app.isPackaged,
+        serverDate: loginFlags.serverDate,
+        serverTime: loginFlags.serverTime,
+        lastSyncedAt: persisted.last_synced_at
+      })
+    ) {
+      await appendAuthAuditLog(
+        "session_expired",
+        persisted.user?.email ? `${maskEmail(persisted.user.email)} login_ceremony_window` : "login_ceremony_window"
+      );
+      desktopControlPlaneHeartbeat.stop();
+      await writeDesktopAuthState(null);
+      return {
+        authenticated: false,
+        loading: false,
+        mode: "none",
+        base_url: gatewayOrigin,
+        agreement,
+        last_checked_at: checkedAt,
+        ...desktopLoginCeremonyStatusFields(loginFlags)
+      } as DesktopAuthStatus;
+    }
   }
   try {
     let { response, payload } = await fetchDesktopAuthMe(persisted.access_token, device);
@@ -2367,6 +2760,7 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
         await appendAuthAuditLog("session_expired", persisted.user?.email ? maskEmail(persisted.user.email) : "unknown");
         desktopControlPlaneHeartbeat.stop();
         await writeDesktopAuthState(null);
+        const loginFlags = await fetchDesktopAuthLoginFlags();
         return {
           authenticated: false,
           loading: false,
@@ -2374,7 +2768,8 @@ async function resolveDesktopAuthStatus(): Promise<DesktopAuthStatus> {
           base_url: gatewayOrigin,
           agreement,
           last_checked_at: checkedAt,
-          last_error: extractDesktopAuthErrorMessage(payload, response.status)
+          last_error: extractDesktopAuthErrorMessage(payload, response.status),
+          ...desktopLoginCeremonyStatusFields(loginFlags)
         };
       }
       return {
@@ -2599,6 +2994,11 @@ async function attemptDesktopAuthLogin(input: {
       identifier: input.email,
       password: input.loginWithCode ? undefined : input.password,
       code: input.loginWithCode ? input.captcha : undefined,
+      ...loginCodeVerifyFields({
+        identifier: input.email,
+        captcha: input.captcha,
+        loginWithCode: input.loginWithCode
+      }),
       agreement_accepted: input.agreementAccepted,
       ...(isE2eEmailCaptchaBypassEnabled() ? { e2e_skip_email_code: true } : {}),
       device: input.device
@@ -2697,14 +3097,22 @@ async function loginDesktopAuth(input: DesktopAuthLoginInput): Promise<DesktopAu
   if (!email || (!password && !captcha)) {
     await appendAuthAuditLog("login_rejected", "missing_credentials");
     throw new Error(
-      loginFlags.emailCodeLoginEnabled
+      !loginFlags.passwordLoginEnabled
         ? "请输入邮箱，并填写邮箱验证码。"
         : "请输入邮箱，并填写密码或验证码。"
     );
   }
-  if (loginFlags.emailCodeLoginEnabled && !captcha && !isE2eEmailCaptchaBypassEnabled()) {
+  // email_code_login_enabled only means OTP is available. Password login must reach the
+  // server so trusted MAC/IP devices can skip the code; only force code when password login is off.
+  if (
+    shouldRequireLoginCodeLocally({
+      passwordLoginEnabled: loginFlags.passwordLoginEnabled,
+      captcha,
+      e2eBypass: isE2eEmailCaptchaBypassEnabled()
+    })
+  ) {
     await appendAuthAuditLog("login_rejected", "missing_login_code");
-    throw new Error("已启用邮箱验证码，请先获取并填写验证码后再登录。");
+    throw new Error("当前仅支持邮箱验证码登录，请先获取并填写验证码。");
   }
   if (agreement.enabled && !input.agreement_accepted) {
     await appendAuthAuditLog("login_rejected", `${maskEmail(email)} agreement_missing`);
@@ -2857,6 +3265,14 @@ async function loginDesktopWithAlipayQr(input: { agreement_accepted: boolean }):
 
 function normalizeDesktopLoginError(payload: unknown, status: number, loginWithCode: boolean) {
   const rawMessage = extractDesktopAuthErrorMessage(payload, status).toLowerCase();
+  if (
+    rawMessage.includes("auth_login_code_required") ||
+    rawMessage.includes("login requires email verification code") ||
+    rawMessage.includes("email verification code is required") ||
+    rawMessage.includes("检测到新的登录环境")
+  ) {
+    return "检测到新设备或新网络，请先获取并填写邮箱验证码后再登录。";
+  }
   if (status === 401 || rawMessage.includes("unauthorized") || rawMessage.includes("invalid username/email or password")) {
     return loginWithCode ? "邮箱或验证码不正确，请检查后重试。" : "邮箱或密码不正确，请检查后重试。";
   }
@@ -2869,25 +3285,23 @@ function normalizeDesktopLoginError(payload: unknown, status: number, loginWithC
   return extractDesktopAuthErrorMessage(payload, status);
 }
 async function sendDesktopLoginCode(input: DesktopAuthSendCodeInput) {
-  const email = input.email.trim().toLowerCase();
   const device = collectDesktopDeviceFingerprint();
   const gatewayOrigin = await readGatewayOrigin();
-  if (!email) {
-    throw new Error("邮箱不能为空。");
-  }
+  const request = loginCodeSendRequest({
+    phone: input.phone,
+    email: input.email,
+    deviceId: device.device_id,
+    deviceName: device.device_name
+  });
   let response: Response;
   try {
-    response = await fetch(`${gatewayOrigin}/api/desktop/auth/login-code/send`, {
+    response = await fetch(`${gatewayOrigin}${request.path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         ...createDesktopAuthHeaders({ device })
       },
-      body: JSON.stringify({
-        identifier: email,
-        device_id: device.device_id,
-        device_name: device.device_name
-      })
+      body: JSON.stringify(request.body)
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -3104,7 +3518,7 @@ interface FeatureConfigFile {
 }
 async function discoverWorkspaceSkillSpecs() {
   const discovered: SkillSpec[] = [];
-  const roots = [userSkillRoot, join(workspacePath, "skills")];
+  const roots = [...managedUserSkillRoots(), join(workspacePath, "skills")];
   for (const root of roots) {
     let entries;
     try {
@@ -3137,6 +3551,7 @@ async function discoverWorkspaceSkillSpecs() {
   return discovered;
 }
 async function syncDiscoveredSkills(config: FeatureConfigFile) {
+  await ensurePptWritingTeamSkill(userSkillRoot, join(expertBuiltinRoot, "..", "garden", "ppt"));
   const discoveredSkills = await discoverWorkspaceSkillSpecs();
   if (!discoveredSkills.length) return config;
   const existingKeys = new Set(config.skills.map((skill) => skill.name || skill.id));
@@ -3175,7 +3590,7 @@ async function updateManagedSkillScaffold(current: SkillSpec, input: FeatureItem
   await ensureDirectory(join(nextPath, "agents"));
   await fs.writeFile(join(nextPath, "SKILL.md"), skillMarkdown, "utf8");
   await fs.writeFile(join(nextPath, "agents", "openai.yaml"), makeOpenAiYaml(nextName, displayName, description), "utf8");
-  await runtime.addSkillRoots([userSkillRoot]);
+  await runtime.addSkillRoots(managedUserSkillRoots());
   return {
     id: `skill-${nextName}`,
     name: nextName,
@@ -3196,7 +3611,7 @@ async function deleteManagedSkillScaffold(skill: SkillSpec) {
     throw new Error(`Refusing to delete skill outside managed root: ${skillPath}`);
   }
   await fs.rm(normalizedPath, { recursive: true, force: true });
-  await runtime.addSkillRoots([userSkillRoot]);
+  await runtime.addSkillRoots(managedUserSkillRoots());
 }
 async function createSkillScaffold(input: FeatureItemInput): Promise<SkillSpec> {
   const requestedName = input.name?.trim() || input.title?.trim() || input.id?.trim() || "";
@@ -3216,7 +3631,7 @@ async function createSkillScaffold(input: FeatureItemInput): Promise<SkillSpec> 
   await ensureDirectory(join(skillDir, "agents"));
   await fs.writeFile(join(skillDir, "SKILL.md"), skillMarkdown, "utf8");
   await fs.writeFile(join(skillDir, "agents", "openai.yaml"), makeOpenAiYaml(skillName, displayName, description), "utf8");
-  await runtime.addSkillRoots([userSkillRoot]);
+  await runtime.addSkillRoots(managedUserSkillRoots());
   return {
     id: input.id?.trim() || `skill-${skillName}`,
     name: skillName,
@@ -3514,6 +3929,90 @@ async function reconcileLocalRepositoryPlugins() {
   }
 }
 
+async function queueStartupDailyBriefing(): Promise<void> {
+  try {
+    const openedAtLogin = process.env.NEWBRAIN_DAILY_BRIEFING === "1"
+      || app.getLoginItemSettings().wasOpenedAtLogin === true;
+    if (!openedAtLogin) return;
+    const authState = await readDesktopAuthState();
+    const accessToken = authState?.access_token?.trim() || "";
+    if (!accessToken) return;
+    const catalog = await readWorkspaceCatalog();
+    await deliverStartupDailyBriefing({
+      openedAtLogin,
+      accessToken,
+      gatewayOrigin: await readGatewayOrigin(),
+      headers: createDesktopAuthHeaders({
+        accessToken,
+        device: collectDesktopDeviceFingerprint()
+      }),
+      catalog,
+      addThread: (workspaceId) => addWorkspaceThread({
+        workspaceId,
+        title: "今日简报",
+        summary: "开机后的今日热点",
+        scope: "chat"
+      }),
+      readMessages: async (workspaceId, threadId) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return [];
+        const state = await readThreadState(workspace, thread);
+        return state.messages ?? [];
+      },
+      appendAssistantMessage: async (workspaceId, threadId, content) => {
+        const latest = await readWorkspaceCatalog();
+        const workspace = latest.workspaces.find((item) => item.id === workspaceId);
+        const thread = workspace?.threads.find((item) => item.id === threadId);
+        if (!workspace || !thread) return;
+        const state = await readThreadState(workspace, thread);
+        state.messages = [...(state.messages ?? []), {
+          id: makeId("message"),
+          role: "assistant",
+          content,
+          createdAt: nowIso()
+        }];
+        await writeThreadState(workspace, thread, state);
+      },
+      activate: (workspaceId, threadId) => activateWorkspaceThread({ workspaceId, threadId })
+    });
+  } catch (error) {
+    await appendDesktopDebugLog(`daily briefing skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+setDailyBriefingChatHost({
+  readAccessToken: async () => (await readDesktopAuthState())?.access_token?.trim() || "",
+  readGatewayOrigin: () => readGatewayOrigin(),
+  createHeaders: (accessToken) => createDesktopAuthHeaders({
+    accessToken,
+    device: collectDesktopDeviceFingerprint()
+  }),
+  readThreadTitle: async (workspaceId, threadId) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    return workspace?.threads.find((item) => item.id === threadId)?.title || "";
+  },
+  appendMessages: async (workspaceId, threadId, messages) => {
+    const catalog = await readWorkspaceCatalog();
+    const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+    const thread = workspace?.threads.find((item) => item.id === threadId);
+    if (!workspace || !thread) return;
+    const state = await readThreadState(workspace, thread);
+    const known = new Set((state.messages ?? []).map((item) => item.id));
+    const next = messages.filter((item) => !known.has(item.id));
+    if (!next.length) return;
+    state.messages = [...(state.messages ?? []), ...next];
+    await writeThreadState(workspace, thread, state);
+    if (runtime && activeWorkspaceId === workspaceId && activeThreadId === threadId) {
+      runtime.setThreadState(state);
+    }
+  },
+  snapshot: async () => runtime?.getSnapshot?.() ?? { messages: [] },
+  nowIso
+});
+
 async function activateConfiguredPlugins() {
   const config = await readFeatureConfig();
   const nextPlugins: PluginSpec[] = [];
@@ -3615,7 +4114,10 @@ const systemToolPolicyContext = {
     platform: process.platform,
     env: process.env,
     fileExists: existsSync,
-    runCommand: (command: string, args: string[]) => spawnSync(command, args, { encoding: "utf8", windowsHide: true })
+    runCommand: (command: string, args: string[]) => {
+      const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
+      return { status: result.status, stdout: typeof result.stdout === "string" ? result.stdout : "" };
+    }
 };
 function resolveSystemToolCommand(tool: SystemToolEntry) {
   return resolveSystemToolCommandValue(tool, systemToolPolicyContext);
@@ -3787,7 +4289,7 @@ async function applyApplicationSkillPolicy(targetRuntime: Awaited<ReturnType<typ
     : [];
   const experts = await listExpertsForRuntime();
   for (const expert of experts.filter(item => item.installed)) projectRoots.push(join(expert.rootPath, "skills"));
-  await applySkillPolicy(targetRuntime, userSkillRoot, async () => (await readFeatureConfig()).skills, projectRoots);
+  await applySkillPolicy(targetRuntime, userSkillRoot, async () => (await readFeatureConfig()).skills, [...legacyUserSkillRoots, ...projectRoots], join(expertBuiltinRoot, "..", "garden", "ppt"));
   const scene = workspace?.threads.find(item => item.id === activeThreadId)?.brainWorkspaceKey || workspace?.brainWorkspaceKey || "unknown";
   const disabled = (await readFeatureConfig()).skills.filter(item => item.status === "disabled").map(item => item.name);
   const confirmedExpertIds = new Set<string>();
@@ -4099,6 +4601,38 @@ function registerQuantRuntimeTools(
     return { ok: true, output: JSON.stringify(result) };
   });
   targetRuntime.registerExternalTool({
+    name: "quant.radar.scan", title: "运行量化雷达扫描",
+    description: "使用真实市场快照筛出最多 100 只股票，再按已保存 Skill 的策略规则查询日线并推送买入信号。雷达只扫描和通知，不创建订单、不修改模拟组合。",
+    namespace: "quant", kind: "read", risk: "low", requiresApproval: false,
+    inputSchema: { type: "object", properties: {
+      skillId: { type: "string", description: "可选已保存量化 Skill；提供后自动读取其策略规则" },
+      strategyId: { type: "string", description: "未提供 skillId 时使用的内置信号策略" },
+      rules: { ...quantStrategyRulesInputSchema, description: "自定义买入、卖出及跟踪条件" },
+      criteria: { type: "object", description: "真实行情快照筛选条件，例如涨跌幅、成交量或市值" }
+    }, required: ["criteria"], additionalProperties: false }
+  }, async (input) => {
+    const skillId = typeof input.skillId === "string" ? input.skillId.trim() : "";
+    const savedSkill = skillId ? await quantSkillPackages.read(skillId) : null;
+    const strategyId = String(input.strategyId || savedSkill?.strategyId || "trend-following");
+    const rules = (input.rules as QuantStrategyRules | undefined) || savedSkill?.rules;
+    const screened = await desktopMarketOverviewClient.queryScreener({ ...(input.criteria as Record<string, unknown>), limit: 100 });
+    const radar = new QuantRadarService({
+      queryScreener: async () => screened,
+      queryBars: (query) => desktopMarketBarsClient.queryBars(query)
+    });
+    const result = { ...await radar.scan({ strategyId, rules, criteria: input.criteria as Record<string, unknown> }), skillId: skillId || undefined, dataset: screened.dataset, fetchedAt: screened.fetchedAt };
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantScreenerUpdated, { projectId: workspaceId, result: { ...screened, radar: result } });
+    }
+    return { ok: true, output: JSON.stringify(result) };
+  });
+  targetRuntime.registerExternalTool({
+    name: "quant.skill.list", title: "列出已保存量化 Skill",
+    description: "列出当前项目已保存的量化策略 Skill 标识、标的、规则和模拟属性。运行或绑定自动化前先用它查找可复用的 Skill。",
+    namespace: "quant", kind: "read", risk: "low", requiresApproval: false,
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => ({ ok: true, output: JSON.stringify(await quantSkillPackages.list()) }));
+  targetRuntime.registerExternalTool({
     name: "quant.portfolio.summary",
     title: "读取模拟组合",
     description: "读取当前量化模拟组合，不执行真实交易。",
@@ -4111,13 +4645,14 @@ function registerQuantRuntimeTools(
   targetRuntime.registerExternalTool({
     name: "quant.portfolio.create",
     title: "创建量化 Skill 与模拟组合",
-    description: "在当前项目 .newbrain/skills 中真实创建量化 Skill 包，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
+    description: "在当前项目 .newbrain/skills/<skillId>/ 创建目录并写入 SKILL.md，同时创建同一 skillId 的独立模拟组合并同步右侧组合面板。不连接真实券商。只生成文字或只创建账本都不算完成。",
     namespace: "quant", kind: "write", risk: "low", requiresApproval: false,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "Skill 的稳定英文标识" },
       title: { type: "string", description: "Skill 名称和右侧组合卡片显示名称" },
       symbol: { type: "string", description: "Skill 主要模拟标的代码" },
-      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "Skill 使用的内置信号策略" }
+      strategyId: { type: "string", description: "内置信号 ID，或自定义策略稳定标识" },
+      rules: { ...quantStrategyRulesInputSchema, description: "条件组 all 表示全部成立、any 表示任一成立；指标包括 close、volume、turnover、changePercent、sma（必须指定 2 至 250 日），支持 above、below、crosses_above、crosses_below" }
     }, required: ["skillId", "title", "symbol", "strategyId"], additionalProperties: false }
   }, async (input) => {
     const skillId = String(input.skillId || "").trim();
@@ -4127,7 +4662,8 @@ function registerQuantRuntimeTools(
       skillId,
       title,
       symbol: String(input.symbol || "").trim(),
-      strategyId: String(input.strategyId || "") as "trend-following" | "mean-reversion"
+      strategyId: String(input.strategyId || ""),
+      rules: input.rules as QuantStrategyRules | undefined
     });
     quantSimulationService.createSession(workspaceId);
     quantSimulationService.resetSkillLedger(workspaceId, skillId);
@@ -4179,17 +4715,23 @@ function registerQuantRuntimeTools(
     namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "承载模拟成交的组合 Skill 标识" },
-      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "运行的内置信号策略" },
-      symbol: { type: "string" },
+      strategyId: { type: "string", description: "可选策略标识；默认读取已保存 Skill 的策略" },
+      rules: { ...quantStrategyRulesInputSchema, description: "可选声明式规则；默认读取已保存 Skill 的规则" },
+      symbol: { type: "string", description: "可选标的；默认使用已保存 Skill 的标的" },
       quantity: { type: "integer", minimum: 1 }, startDate: { type: "string" }, endDate: { type: "string" }
-    }, required: ["skillId", "symbol", "quantity"], additionalProperties: false }
+    }, required: ["skillId", "quantity"], additionalProperties: false }
   }, async (input) => {
+    const skillId = String(input.skillId);
+    const savedSkill = await quantSkillPackages.read(skillId);
+    const symbol = String(input.symbol || savedSkill?.symbol || "").trim();
+    if (!symbol) throw new TypeError("symbol is required when the Skill has no saved symbol");
     const result = await quantSimulationService.runSkillSimulation(workspaceId, {
-      skillId: String(input.skillId), strategyId: input.strategyId ? String(input.strategyId) : undefined, symbol: String(input.symbol), quantity: Number(input.quantity),
-      query: { symbol: String(input.symbol), interval: "1d", adjustment: "forward", startDate: input.startDate ? String(input.startDate) : undefined, endDate: input.endDate ? String(input.endDate) : undefined }
+      skillId, strategyId: input.strategyId ? String(input.strategyId) : savedSkill?.strategyId, rules: (input.rules as QuantStrategyRules | undefined) || savedSkill?.rules,
+      symbol, quantity: Number(input.quantity),
+      query: { symbol, interval: "1d", adjustment: "forward", startDate: input.startDate ? String(input.startDate) : undefined, endDate: input.endDate ? String(input.endDate) : undefined }
     });
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      const activity = quantSimulationService.skillActivity(workspaceId, String(input.skillId), { [String(input.symbol)]: result.snapshot.positions.find((item) => item.symbol === String(input.symbol))?.currentPrice || 0 });
+      const activity = quantSimulationService.skillActivity(workspaceId, skillId, { [symbol]: result.snapshot.positions.find((item) => item.symbol === symbol)?.currentPrice || 0 });
       mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId: String(input.skillId), activity });
     }
     return { ok: true, output: JSON.stringify({ simulationOnly: true, result }) };
@@ -4204,37 +4746,34 @@ function registerQuantRuntimeTools(
     return { ok: true, output: JSON.stringify(quantSimulationService.performance(workspaceId, String(input.skillId))) };
   });
   targetRuntime.registerExternalTool({
-    name: "quant.radar.create", title: "创建 Skill 雷达并立即模拟",
-    description: "创建交易日自动运行的 Skill 雷达计划，并立即用最近 12 个月真实历史行情执行一次模拟以同步右侧雷达和组合。不连接真实券商。",
+    name: "quant.automation.create", title: "创建策略模拟自动化",
+    description: "创建交易日自动执行的模拟策略任务，按已保存 Skill 的规则处理指定标的并写入独立模拟组合。不连接真实券商。",
     namespace: "quant", kind: "write", risk: "medium", requiresApproval: true,
     inputSchema: { type: "object", properties: {
       skillId: { type: "string", description: "承载雷达模拟成交的自定义组合 Skill 标识" },
-      strategyId: { type: "string", enum: ["trend-following", "mean-reversion"], description: "雷达自动运行的内置信号策略" },
-      symbol: { type: "string" }, quantity: { type: "integer", minimum: 1 },
+      strategyId: { type: "string", description: "可选内置信号策略标识；默认使用已保存 Skill 的规则" },
+      rules: { ...quantStrategyRulesInputSchema, description: "可选声明式买入、卖出和跟踪规则" },
+      symbol: { type: "string", description: "可选标的；默认使用已保存 Skill 的标的" }, quantity: { type: "integer", minimum: 1 },
       exchange: { type: "string", enum: ["SSE", "SZSE", "BSE"] },
       runAt: { type: "string", description: "交易日执行时间，HH:mm" }
-    }, required: ["skillId", "strategyId", "symbol", "quantity", "exchange", "runAt"], additionalProperties: false }
+    }, required: ["skillId", "quantity", "exchange", "runAt"], additionalProperties: false }
   }, async (input) => {
     const skillId = String(input.skillId || "").trim();
-    const strategyId = String(input.strategyId || "") as "trend-following" | "mean-reversion";
-    const symbol = String(input.symbol || "").trim();
+    const savedSkill = await quantSkillPackages.read(skillId);
+    const strategyId = String(input.strategyId || savedSkill?.strategyId || "trend-following");
+    const rules = (input.rules as QuantStrategyRules | undefined) || savedSkill?.rules;
+    if (strategyId !== "trend-following" && strategyId !== "mean-reversion" && !rules) throw new TypeError("custom strategy automation requires a saved Skill with rules");
+    const symbol = String(input.symbol || savedSkill?.symbol || "").trim();
+    if (!symbol) throw new TypeError("symbol is required when the Skill has no saved symbol");
     const quantity = Number(input.quantity);
     const exchange = String(input.exchange || "") as "SSE" | "SZSE" | "BSE";
     const runAt = String(input.runAt || "").trim();
     const ownerId = await resolveBrainLocalOwnerId();
-    const schedule = brainWorkspaceStorage.createQuantStrategySchedule({ ownerId, projectId: workspaceId, skillId, strategyId, exchange, runAt, symbol, quantity });
-    const end = new Date();
-    const start = new Date(end);
-    start.setUTCFullYear(start.getUTCFullYear() - 1);
-    const result = await quantSimulationService.runSkillSimulation(workspaceId, {
-      skillId, strategyId, symbol, quantity,
-      query: { symbol, interval: "1d", adjustment: "forward", startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) }
-    });
-    const activity = quantSimulationService.skillActivity(workspaceId, skillId, { [symbol]: result.snapshot.positions.find((item) => item.symbol === symbol)?.currentPrice || 0 });
+    const schedule = brainWorkspaceStorage.createQuantStrategySchedule({ ownerId, projectId: workspaceId, skillId, strategyId, rules, exchange, runAt, symbol, quantity });
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, schedule, activity });
+      mainWindowRef.webContents.send(desktopIpcChannels.events.quantPortfolioUpdated, { projectId: workspaceId, skillId, schedule });
     }
-    return { ok: true, output: JSON.stringify({ simulationOnly: true, schedule, result }) };
+    return { ok: true, output: JSON.stringify({ simulationOnly: true, schedule, ordersPlacedAtCreation: 0 }) };
   });
   targetRuntime.registerExternalTool({
     name: "quant.note.add", title: "添加量化研究笔记",
@@ -4472,6 +5011,10 @@ async function writeDesktopPreferences(nextPreferences: DesktopPreferences) {
     preferences
   };
   await fs.writeFile(modelConfigPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeBrowserPermissionsFile(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
   await applyDesktopPreferences(preferences);
   return preferences;
 }
@@ -4721,11 +5264,39 @@ async function addFeatureItem(kind: ManagedFeatureKind, input: FeatureItemInput)
       plugins: [nextItem, ...config.plugins.filter((item) => item.id !== nextItem.id)]
     });
   }
-  const nextAutomation = createAutomationSpec(input, {
-    makeId: () => makeId("automation"),
-    activeWorkspaceId,
-    activeThreadId
+  let nextAutomation = createAutomationSpec(input, {
+    makeId: () => makeId("automation")
   });
+  if (automationNeedsDedicatedThread(nextAutomation)) {
+    const catalog = await readWorkspaceCatalog();
+    const preferredWorkspaceId = String(input.workspaceId || "").trim();
+    const workspace =
+      catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID)
+      ?? catalog.workspaces.find((item) => item.id === preferredWorkspaceId)
+      ?? catalog.workspaces[0];
+    if (!workspace) {
+      throw new Error("无法为自动化创建专用对话：没有可用工作区。");
+    }
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const created = await workspaceThreadLifecycleService.add({
+      workspaceId: workspace.id,
+      title: automationDedicatedThreadTitle(nextAutomation.title),
+      summary: "自动化任务专用对话；定时执行只写入此对话。",
+      scope: "chat",
+      ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
+    });
+    const thread = created.workspaces
+      .find((item) => item.id === workspace.id)
+      ?.threads.find((item) => !before.has(item.id));
+    if (!thread?.id) {
+      throw new Error("无法为自动化创建专用对话。");
+    }
+    nextAutomation = {
+      ...nextAutomation,
+      workspaceId: workspace.id,
+      threadId: thread.id
+    };
+  }
   return writeFeatureConfig({
     ...config,
     automations: [nextAutomation, ...config.automations.filter((item) => item.id !== nextAutomation.id)]
@@ -4771,15 +5342,31 @@ async function updateFeatureItem(kind: ManagedFeatureKind, id: string, input: Fe
       plugins: config.plugins.map((item) => item.id === id ? nextPlugin : item)
     });
   }
-  return writeFeatureConfig({
+  const runNow = input.status === "run_now";
+  const recordRun = input.status === "record_run";
+  const nextConfig = await writeFeatureConfig({
     ...config,
     automations: config.automations.map((item) => {
       if (item.id !== id) {
         return item;
       }
+      if (recordRun) {
+        return markAutomationSucceeded([item], item.id, nowIso())[0];
+      }
+      if (runNow) {
+        return {
+          ...item,
+          status: "scheduled" as const,
+          nextRunAt: new Date(Date.now() - 1_000).toISOString()
+        };
+      }
       return updateAutomationSpec(item, input);
     })
   });
+  if (runNow) {
+    void tickAutomations();
+  }
+  return nextConfig;
 }
 async function deleteFeatureItem(kind: ManagedFeatureKind, id: string) {
   const config = await readFeatureConfig();
@@ -4877,6 +5464,8 @@ async function readWorkspaceCatalog(): Promise<WorkspaceCatalogFile> {
           title: thread.title,
           summary: thread.summary || thread.preview,
           scope: thread.scope,
+          kind: thread.kind,
+          parentThreadId: thread.parentThreadId,
           updatedAt: new Date(thread.updatedAt).toISOString(),
           lastEventSummary: thread.lastEventSummary || thread.preview,
           status: thread.status as WorkspaceThreadRecord["status"],
@@ -4923,6 +5512,17 @@ function readModelUsageTokens(usage: unknown) {
   const output = Number(value.output_tokens ?? value.completion_tokens ?? value.outputTokens ?? 0);
   return Math.max(0, Math.trunc((Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0)));
 }
+function createDesktopModelChatStepService() {
+  return new ModelChatStepService({
+    callModel: (stepInput) => callModelApi(stepInput as Parameters<typeof callModelApi>[0]),
+    isRetryableError: isRetryableModelGatewayError,
+    readUsageTokens: (usage) => readModelUsageTokens(usage),
+    containsPrivatePlanning: containsPrivatePlanningNarration,
+    sanitizeVisibleContent: sanitizeVisibleModelContent,
+    extractPlanningNarration: extractPrivatePlanningNarration
+  });
+}
+const desktopModelChatStepService = createDesktopModelChatStepService();
 async function restoreArchivedRolloutFiles(workspace: WorkspaceCatalogItem, threads: Array<{ id: string; archived: boolean }>) {
   await threadRolloutLifecycleService.reconcileArchived(workspace, threads);
 }
@@ -4950,7 +5550,9 @@ async function writeWorkspaceCatalog(workspaces: WorkspaceCatalogItem[]) {
         lastEventSummary: thread.lastEventSummary,
         statusLabel: thread.statusLabel,
         memoryMode: "enabled",
-        model: ""
+        model: "",
+        kind: thread.kind === "subagent" ? "subagent" : "user",
+        parentThreadId: thread.parentThreadId
       });
     }
   }
@@ -5659,10 +6261,9 @@ function startDesktopBootstrapInitialization() {
   return desktopBootstrapPromise;
 }
 async function startDesktopBootstrapAfterAuth() {
-  // Control-plane synchronization is intentionally manual until the remote
-  // service is production-ready. Use the explicit refresh/update action to
-  // call syncAuthenticatedDesktopControlPlane instead of touching the network
-  // during login or on a background timer.
+  // Keep control-plane + /app-update warm after login so Settings / sidebar can
+  // discover newly promoted stable releases without a manual restart.
+  desktopControlPlaneHeartbeat.start();
   try {
     await startDesktopBootstrapInitialization();
   } catch (error) {
@@ -5770,12 +6371,9 @@ async function ensureWorkspaceCondaConfig(workspace: WorkspaceCatalogItem): Prom
   const envExists = await pathExists(envPath);
   if (!envExists) {
     const createArgs = ["create", "--yes", "--prefix", envPath, `python=${pythonVersion}`];
-    const createResult = await runBoundedEnvironmentCommand(condaPath.toLowerCase().endsWith(".bat") ? {
-      executable: "cmd.exe",
-      args: ["/d", "/s", "/c", `"${condaPath}" ${createArgs.map((item) => quoteShellArgument(item)).join(" ")}`],
-      cwd: workspace.path,
-      signal: desktopBootstrapAbortController?.signal
-    } : {
+    // Pass conda.bat/conda.exe directly — runBoundedEnvironmentCommand uses shell:true
+    // for .bat/.cmd and never builds a cmd.exe /c string from absolute paths (CodeQL).
+    const createResult = await runBoundedEnvironmentCommand({
       executable: condaPath,
       args: createArgs,
       cwd: workspace.path,
@@ -5869,7 +6467,54 @@ function getWorkspaceShellEnv(workspace?: WorkspaceCatalogItem) {
 }
 async function getActiveDesktopPreferences() {
   const config = await readRootConfig();
-  return normalizeDesktopPreferences(config.preferences);
+  const preferences = normalizeDesktopPreferences(config.preferences);
+  preferences.browser.agentPermissions.exceptions = await mergeBrowserPermissionsExceptions(
+    workspaceStateRoot,
+    preferences.browser.agentPermissions?.exceptions || []
+  );
+  cachedBrowserUsePreferences = preferences.browser;
+  return preferences;
+}
+
+/** Sync Browser Use prefs for policy-engine hooks (updated on read/save). */
+let cachedBrowserUsePreferences: DesktopPreferences["browser"] = defaultDesktopPreferences.browser;
+
+function installBrowserAgentPolicyGate(
+  targetRuntime: Awaited<ReturnType<typeof createLocalRuntime>>
+) {
+  const original = targetRuntime.evaluateToolPolicy.bind(targetRuntime);
+  targetRuntime.evaluateToolPolicy = (
+    descriptor: { name?: string; kind?: string; risk?: string; requiresApproval?: boolean },
+    argumentsValue: Record<string, unknown>,
+    permissionMode?: "full" | "approval" | "agent"
+  ) => {
+    const currentUrl =
+      previewWindowRef && !previewWindowRef.isDestroyed()
+        ? previewWindowRef.webContents.getURL()
+        : cachedBrowserUsePreferences.previewUrl;
+    const browserDecision = evaluateBrowserToolPolicyDecision(
+      cachedBrowserUsePreferences,
+      String(descriptor?.name || ""),
+      argumentsValue || {},
+      currentUrl
+    );
+    if (browserDecision) {
+      targetRuntime.sessionMachine.events.push({
+        id: `policy_${Date.now().toString(36)}`,
+        type: "policy_decision",
+        timestamp: new Date().toISOString(),
+        payload: {
+          toolName: descriptor?.name,
+          decision: browserDecision.decision,
+          source: browserDecision.source,
+          ruleId: browserDecision.ruleId,
+          reason: browserDecision.reason
+        }
+      });
+      return browserDecision;
+    }
+    return original(descriptor, argumentsValue, permissionMode);
+  };
 }
 async function buildWorkspaceShellEnvWithPreferences(workspace?: WorkspaceCatalogItem) {
   const preferences = await getActiveDesktopPreferences();
@@ -5990,6 +6635,12 @@ function registerCommandShortcuts(shortcuts: DesktopPreferences["shortcuts"]) {
   }
 }
 async function applyDesktopPreferences(preferences: DesktopPreferences) {
+  try {
+    applyLoginItemSettings(app, preferences.launchAtLogin !== false);
+  } catch (error) {
+    void appendDesktopDebugLog(`login item update failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  cachedBrowserUsePreferences = preferences.browser;
   activeTerminalShell = preferences.environment.terminalShell;
   registerPopupShortcut(preferences.popup.shortcut);
   registerDictationShortcuts(preferences.dictation);
@@ -6009,8 +6660,11 @@ function resolveThemePreference(preferences: DesktopPreferences) {
 }
 async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?: boolean }) {
   const preferences = await getActiveDesktopPreferences();
+  if (!options?.paymentPortal && preferences.browser.enabled === false) {
+    throw new Error("Browser Use 已关闭。请在设置 → 浏览器中开启。");
+  }
   const paymentPortal = options?.paymentPortal === true;
-  const partition = paymentPortal ? "newbrain-payment-preview" : "newbrain-browser-preview";
+  const partition = paymentPortal ? "persist:newbrain-payment-preview" : "persist:newbrain-browser";
   if (previewWindowRef && !previewWindowRef.isDestroyed()) {
     const currentPartition = String(previewWindowRef.webContents.session.partition || "");
     const isPaymentWindow = currentPartition.includes("payment");
@@ -6019,6 +6673,10 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
         await previewWindowRef.loadURL(targetUrl);
       }
       previewWindowRef.show();
+      void recordBrowserHistoryVisit(
+        { rootDir: workspaceStateRoot },
+        { url: previewWindowRef.webContents.getURL(), title: previewWindowRef.webContents.getTitle() }
+      ).catch(() => undefined);
       return previewWindowRef;
     }
     previewWindowRef.close();
@@ -6027,7 +6685,7 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
   const previewWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: paymentPortal ? "NewBrain 支付" : "NewBrain 浏览器预览",
+    title: paymentPortal ? "NewBrain 支付" : "NewBrain 浏览器",
     show: false,
     webPreferences: {
       sandbox: true,
@@ -6036,11 +6694,46 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
       partition
     }
   });
+  const downloadDir = String(preferences.browser.downloadDir || "").trim();
+  void downloadDir;
+  previewWindow.webContents.session.removeAllListeners("will-download");
+  previewWindow.webContents.session.on("will-download", (_event, item) => {
+    void applyBrowserDownloadItemPolicy({
+      item,
+      browser: preferences.browser,
+      askApproval: askBrowserDownloadApprovalDialog,
+      askSavePath: pickBrowserDownloadSavePath
+    });
+  });
+  const syncPreviewTitle = () => {
+    if (paymentPortal) {
+      previewWindow.setTitle("NewBrain 支付");
+      return;
+    }
+    const pageUrl = previewWindow.webContents.getURL();
+    const pageTitle = previewWindow.webContents.getTitle();
+    if (preferences.browser.showFullUrl) {
+      previewWindow.setTitle(pageUrl || "NewBrain 浏览器");
+    } else {
+      previewWindow.setTitle(pageTitle ? `${pageTitle} — NewBrain` : "NewBrain 浏览器");
+    }
+  };
+  previewWindow.webContents.on("page-title-updated", syncPreviewTitle);
+  previewWindow.webContents.on("did-navigate", () => {
+    syncPreviewTitle();
+  });
   previewWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const normalized = requireWebUrl(url);
       if (paymentPortal || isAllowedPaymentHost(normalized)) {
         void previewWindow.loadURL(normalized);
+      } else {
+        const target = resolveBrowserLinkOpenTarget(preferences.browser, normalized);
+        if (target === "system") {
+          void electronShell.openExternal(normalized);
+        } else {
+          void previewWindow.loadURL(normalized);
+        }
       }
     } catch {
       // deny non-http(s)
@@ -6053,6 +6746,12 @@ async function ensurePreviewWindow(targetUrl: string, options?: { paymentPortal?
     } catch {
       event.preventDefault();
     }
+  });
+  previewWindow.webContents.on("did-navigate", (_event, url) => {
+    void recordBrowserHistoryVisit(
+      { rootDir: workspaceStateRoot },
+      { url, title: previewWindow.webContents.getTitle() }
+    ).catch(() => undefined);
   });
   previewWindowRef = previewWindow;
   previewWindow.on("closed", () => {
@@ -6085,6 +6784,50 @@ function isAllowedPaymentHost(url: string) {
 function requireWebUrl(value: unknown) {
   return normalizeBrowserPreviewUrl(value);
 }
+function registerDesktopWindowControlAgentTools() {
+  runtime.unregisterExternalTools("desktop-window");
+  runtime.registerExternalTool({
+    name: "window.list",
+    title: "列出 Windows 桌面窗口",
+    description: "List visible top-level Windows desktop windows that can be targeted by processId.",
+    kind: "read",
+    risk: "low",
+    requiresApproval: false,
+    namespace: "desktop-window",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  }, async () => ({
+    ok: true,
+    exitCode: 0,
+    output: JSON.stringify(await desktopWindowControl.list())
+  }));
+  runtime.registerExternalTool({
+    name: "window.activate",
+    title: "激活 Windows 桌面窗口",
+    description: "Bring a visible Windows desktop window to the foreground. Prefer processId returned by window.list.",
+    kind: "write",
+    risk: "medium",
+    requiresApproval: true,
+    namespace: "desktop-window",
+    inputSchema: {
+      type: "object",
+      properties: {
+        processId: { type: "integer", minimum: 1 },
+        processName: { type: "string", minLength: 1 },
+        windowTitle: { type: "string", minLength: 1 }
+      },
+      anyOf: [
+        { required: ["processId"] },
+        { required: ["processName"] },
+        { required: ["windowTitle"] }
+      ],
+      additionalProperties: false
+    }
+  }, async (input: { processId?: number; processName?: string; windowTitle?: string }) => ({
+    ok: true,
+    exitCode: 0,
+    output: JSON.stringify(await desktopWindowControl.activate(input))
+  }));
+}
 function registerBrowserAgentTools() {
   runtime.unregisterExternalTools("browser");
   runtime.registerExternalTool({
@@ -6102,8 +6845,20 @@ function registerBrowserAgentTools() {
       additionalProperties: false
     }
   }, async (input: { url?: string }) => {
+    const preferences = await getActiveDesktopPreferences();
     const url = requireWebUrl(input.url);
+    const origin = browserOriginFromUrl(url);
+    assertBrowserAgentPermission(preferences.browser, origin, "browse");
     const window = await ensurePreviewWindow(url);
+    if (preferences.browser.fullCdpAccess) {
+      await attachBrowserCdpIfAllowed({
+        fullCdpAccess: true,
+        webContents: window.webContents
+      });
+    }
+    if (preferences.browser.siteToolsEnabled) {
+      void probeBrowserSiteTools({ siteToolsEnabled: true, pageUrl: url }).catch(() => undefined);
+    }
     return {
       ok: true,
       exitCode: 0,
@@ -6121,7 +6876,9 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     const preferences = await getActiveDesktopPreferences();
-    const window = await ensurePreviewWindow(previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl);
+    const currentUrl = previewWindowRef?.webContents.getURL() || preferences.browser.previewUrl;
+    assertBrowserAgentPermission(preferences.browser, browserOriginFromUrl(currentUrl), "browse");
+    const window = await ensurePreviewWindow(currentUrl);
     const page = await window.webContents.executeJavaScript(`(() => {
       const visible = (element) => {
         const style = window.getComputedStyle(element);
@@ -6157,6 +6914,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6186,6 +6949,12 @@ function registerBrowserAgentTools() {
     }
   }, async (input: { selector?: string; text?: string }) => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const selector = String(input.selector ?? "").trim();
     if (!selector) throw new Error("A CSS selector is required.");
     const result = await previewWindowRef.webContents.executeJavaScript(`(() => {
@@ -6212,13 +6981,27 @@ function registerBrowserAgentTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }, async () => {
     if (!previewWindowRef || previewWindowRef.isDestroyed()) throw new Error("No browser page is open.");
+    const preferences = await getActiveDesktopPreferences();
+    assertBrowserAgentPermission(
+      preferences.browser,
+      browserOriginFromUrl(previewWindowRef.webContents.getURL()),
+      "browse"
+    );
     const image = await previewWindowRef.webContents.capturePage();
     await ensureDirectory(workspaceStateRoot);
     await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+    const pageUrl = previewWindowRef.webContents.getURL();
+    const annotationPath = await writeBrowserScreenshotAnnotation({
+      mode: preferences.browser.annotatedScreenshots || "always",
+      path: desktopPreviewScreenshotPath,
+      url: pageUrl,
+      title: previewWindowRef.webContents.getTitle(),
+      ask: askBrowserAnnotationDialog
+    });
     return {
       ok: true,
       exitCode: 0,
-      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: previewWindowRef.webContents.getURL() })
+      output: JSON.stringify({ path: desktopPreviewScreenshotPath, url: pageUrl, annotationPath })
     };
   });
 }
@@ -6353,11 +7136,18 @@ async function capturePreviewWindow() {
   const image = await previewWindow.webContents.capturePage();
   await ensureDirectory(workspaceStateRoot);
   await fs.writeFile(desktopPreviewScreenshotPath, image.toPNG());
+  const annotationPath = await writeBrowserScreenshotAnnotation({
+    mode: preferences.browser.annotatedScreenshots || "always",
+    path: desktopPreviewScreenshotPath,
+    url: targetUrl,
+    title: previewWindow.webContents.getTitle(),
+    ask: askBrowserAnnotationDialog
+  });
   if (preferences.browser.highResScreenshots) {
     previewWindow.webContents.setZoomFactor(1);
   }
   await appendDiagnosticsLog(`captured preview screenshot ${desktopPreviewScreenshotPath}`);
-  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl };
+  return { ok: true, path: desktopPreviewScreenshotPath, url: targetUrl, annotationPath };
 }
 function setupWorkspaceWatcher(preferences: DesktopPreferences) {
   workspaceWatcher?.close();
@@ -6592,6 +7382,22 @@ async function addWorkspaceThread(input: {
 }) {
   return workspaceThreadLifecycleService.add(input);
 }
+async function rewindWorkspaceThread(input: { workspaceId: string; threadId: string; userMessageId: string }) {
+  const catalog = await readWorkspaceCatalog();
+  const { workspace, thread } = requireWorkspaceThreadSelection(catalog.workspaces, input.workspaceId, input.threadId);
+  const state = await readThreadState(workspace, thread);
+  const kept = messagesBeforeUserMessage(state.messages ?? [], input.userMessageId);
+  if (!kept) {
+    throw new Error("找不到要编辑的这条消息。");
+  }
+  const nextState: ThreadStateFile = { ...state, messages: kept };
+  if (activeWorkspaceId === workspace.id && activeThreadId === thread.id) {
+    runtime.setThreadState(nextState);
+    nextState.messages = runtime.exportThreadState().messages;
+  }
+  await writeThreadState(workspace, thread, nextState);
+  return buildSnapshotWithThreadState(runtime.getSnapshot(), nextState);
+}
 async function forkWorkspaceThread(input: {
   workspaceId: string;
   sourceThreadId: string;
@@ -6651,18 +7457,57 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
     const state = await readThreadState(workspace, childThread);
     let agentWorkspacePath = workspace.path;
     let worktree: { repositoryRoot: string; worktreePath: string; branch: string; baseRef: string } | null = null;
-    if (currentTask.owner === "editor") {
-      const manager = new WorktreeManager({ workspacePath: workspace.path });
-      const createdWorktree = await manager.create({ taskId: currentTask.id });
-      worktree = createdWorktree;
-      agentWorkspacePath = createdWorktree.worktreePath;
-    }
     const userMessage: ChatMessage = {
       id: makeId("msg"),
       role: "user",
       content: currentTask.instruction,
       createdAt: nowIso()
     };
+    const persistChildFailure = async (reason: string) => {
+      const failureMessage: ChatMessage = {
+        id: makeId("msg"),
+        role: "assistant",
+        content: `子 Agent 执行失败：${reason}`,
+        createdAt: nowIso()
+      };
+      const latestState = await readThreadState(workspace, childThread);
+      latestState.messages = [...latestState.messages, userMessage, failureMessage];
+      latestState.timeline = [
+        createTimelineEvent("thread", "子 Agent 失败", reason.slice(0, 160)),
+        ...(latestState.timeline ?? [])
+      ].slice(0, 80);
+      await writeThreadState(workspace, childThread, latestState);
+      await appendThreadEvents(workspace, childThread, [
+        createThreadEvent("message", { role: "user", messageId: userMessage.id, content: userMessage.content }),
+        createThreadEvent("message", { role: "assistant", messageId: failureMessage.id, content: failureMessage.content })
+      ]);
+    };
+    if (currentTask.owner === "editor") {
+      const manager = new WorktreeManager({ workspacePath: workspace.path });
+      const isGitWorkspace = await manager.repositoryRoot().then(() => true, () => false);
+      if (isGitWorkspace) {
+        try {
+          const createdWorktree = await manager.create({ taskId: currentTask.id });
+          worktree = createdWorktree;
+          agentWorkspacePath = createdWorktree.worktreePath;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          await persistChildFailure(reason).catch(() => undefined);
+          await announceChildResultToParent({
+            workspaceId: workspace.id,
+            parentThreadId: currentTask.parentThreadId,
+            childThreadId: currentTask.childThreadId,
+            status: "failed",
+            error: reason
+          });
+          throw error;
+        }
+      } else {
+        void appendDesktopDebugLog(
+          `delegated editor child=${currentTask.childThreadId} runs in workspace directly (not a Git repository): ${workspace.path}`
+        );
+      }
+    }
     const childSystemPrompt = [
       config.llm.systemPrompt,
       `You are the ${currentTask.owner} child agent for parent thread ${currentTask.parentThreadId}.`,
@@ -6730,13 +7575,26 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
       const steeredMessages = followups.length > 0
         ? [...messages, ...followups.map((content) => ({ role: "user" as const, content }))]
         : messages;
-      const response = await callModelApi({
-        ...config.llm,
-        signal: childAbortController.signal,
-        systemPrompt: childSystemPrompt,
+      const response = await executeDelegatedModelStep(desktopModelChatStepService, {
+        modelInput: {
+          ...config.llm,
+          requestId: currentTask.childThreadId,
+          workspaceId: workspace.id,
+          threadId: childThread.id,
+          systemPrompt: childSystemPrompt,
+          messages: []
+        },
         messages: steeredMessages,
         tools,
-        onReasoningDelta: (delta) => { latestReasoningSummary += delta; }
+        systemPrompt: childSystemPrompt,
+        abortSignal: childAbortController.signal,
+        requestId: currentTask.childThreadId,
+        onReasoningDelta: (delta) => { latestReasoningSummary += delta; },
+        onRetry: (requestId, attempt, maxAttempts, delayMs) => {
+          void appendDesktopDebugLog(
+            `child model step retry child=${currentTask.childThreadId} requestId=${requestId} attempt=${attempt} maxAttempts=${maxAttempts} delayMs=${delayMs}`
+          );
+        }
       });
       recordChildModelUsage(response);
       return response;
@@ -6833,6 +7691,9 @@ async function runDelegatedAgent(input: { workspaceId: string; childThreadId: st
     });
     return { ...structuredResult, reasoningSummary: latestReasoningSummary.trim() };
     } catch (error) {
+      if (!childAbortController.signal.aborted) {
+        await persistChildFailure(error instanceof Error ? error.message : String(error)).catch(() => undefined);
+      }
       await announceChildResultToParent({
         workspaceId: workspace.id,
         parentThreadId: currentTask.parentThreadId,
@@ -7024,7 +7885,10 @@ function registerAgentCollaborationTools(
         spawnDepth: parentThread.kind === "subagent" ? 1 : 0,
         activeChildCount: countActiveChildren(existingTasks).active,
         maxChildrenPerParent: DEFAULT_MAX_CHILDREN_PER_PARENT,
-        recentFailedCount: existingTasks.filter((task) => String(task.status).toLowerCase() === "failed").length
+        recentFailedCount: countDelegateFailuresSince(
+          existingTasks,
+          delegationTurnStartedAt.get(parentThread.id)
+        )
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -7074,11 +7938,24 @@ function registerAgentCollaborationTools(
         runtime.listDelegatedTasks().find((task) => task.childThreadId === dependency)?.status,
       onDependencyFailure: failDependency,
       run: async () => {
-        if (graph.get(childThread.id)?.status === "cancelled") return failDependency();
-        graph.mark(childThread.id, "running");
-        const result = await runDelegatedAgent({ workspaceId: workspace.id, childThreadId: childThread.id });
-        graph.mark(childThread.id, result.status === "completed" ? "completed" : "failed", result.result);
-        return result;
+        try {
+          if (graph.get(childThread.id)?.status === "cancelled") return failDependency();
+          graph.mark(childThread.id, "running");
+          const result = await runDelegatedAgent({ workspaceId: workspace.id, childThreadId: childThread.id });
+          graph.mark(childThread.id, result.status === "completed" ? "completed" : "failed", result.result);
+          return result;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          void appendDesktopDebugLog(`delegated agent start failed child=${childThread.id}: ${reason}`);
+          try {
+            const failed = runtime.failDelegatedTask(childThread.id, reason);
+            codexStorage.upsertDelegatedAgentTask(failed);
+          } catch {
+            // Already terminal, or the task was removed. The thrown error still rejects the run.
+          }
+          graph.mark(childThread.id, "failed");
+          throw error;
+        }
       }
     });
     void run.catch(() => undefined);
@@ -7214,12 +8091,14 @@ function registerAgentCollaborationTools(
       const activeRun = delegatedAgentControlService.getRun(childThreadId);
       const waited = await waitForAgentRun(activeRun, owned);
       if (!waited.ok) {
-        const reason = `Child agent run is unavailable: ${childThreadId}.`;
+        const latest = runtime.listDelegatedTasks(parentThread.id).find((task) => task.childThreadId === childThreadId);
+        const persistedError = String(latest?.error || "").trim();
+        const reason = persistedError || `Child agent run is unavailable: ${childThreadId}.`;
         return {
           childThreadId,
           ok: false as const,
           code: WAIT_UNAVAILABLE,
-          task: waited.value ?? owned,
+          task: latest ?? waited.value ?? owned,
           output: reason
         };
       }
@@ -7366,7 +8245,7 @@ async function getWorkspaceHeaderStatus(workspaceId: string) {
   }
   const ghResult = spawnSync("gh", ["--version"], { encoding: "utf8", windowsHide: true });
   return {
-    branch: branchResult.stdout?.trim() || "main",
+    branch: branchResult.status === 0 ? (branchResult.stdout?.trim() || "") : "",
     changes: (statusResult.stdout || "").split(/\r?\n/).filter(Boolean).length,
     additions,
     deletions,
@@ -7588,11 +8467,16 @@ async function extractSpreadsheetAttachmentText(filePath: string) {
 async function extractTextAttachment(filePath: string, extension: string) {
   if ([".pdf", ".docx", ".pptx", ".xlsx"].includes(extension)) {
     try {
+      const fileStat = await fs.stat(filePath).catch(() => null);
+      const maxBytes = Math.min(
+        Math.max(20 * 1024 * 1024, Number(fileStat?.size) || 0),
+        512 * 1024 * 1024
+      );
       const result = await documentWorkerProcess.ingest({
         requestId: `attachment-${randomUUID()}`,
         projectRoot: dirname(filePath),
         relativePath: basename(filePath),
-        maxBytes: 20 * 1024 * 1024
+        maxBytes
       });
       if (result.status === "completed") return result.text;
     } catch (error) {
@@ -7767,6 +8651,31 @@ async function archiveWorkspaceThread(input: {
 }) {
   return threadRolloutLifecycleService.setArchived(input);
 }
+async function moveWorkspaceThread(input: {
+  threadId: string;
+  fromWorkspaceId: string;
+  toWorkspaceId: string;
+}) {
+  const catalog = await readWorkspaceCatalog();
+  const nextWorkspaces = moveThreadBetweenProjects(catalog.workspaces, input);
+  await relocateThreadFiles(input.fromWorkspaceId, input.toWorkspaceId, input.threadId);
+  if (activeThreadId === input.threadId && activeWorkspaceId === input.fromWorkspaceId) {
+    activeWorkspaceId = input.toWorkspaceId;
+  }
+  return writeWorkspaceCatalog(nextWorkspaces);
+}
+async function relocateThreadFiles(fromWorkspaceId: string, toWorkspaceId: string, threadId: string) {
+  const targetDir = join(getWorkspaceStateDir(toWorkspaceId), "threads");
+  await fs.mkdir(targetDir, { recursive: true });
+  for (const source of [getThreadEventLogPath(fromWorkspaceId, threadId), getLegacyThreadStatePath(fromWorkspaceId, threadId)]) {
+    try {
+      await fs.rename(source, join(targetDir, basename(source)));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+  }
+}
 async function deleteWorkspaceThread(input: {
   workspaceId: string;
   threadId: string;
@@ -7924,6 +8833,65 @@ async function searchWorkspaceThreads(query: string) {
     .sort((left, right) => new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime())
     .slice(0, 40);
 }
+
+async function previewConversationRef(input: {
+  kind: "thread" | "brain_conversation";
+  workspaceId?: string;
+  threadId?: string;
+  conversationId?: string;
+  turnLimit?: number;
+}) {
+  const { buildConversationRefPreview } = await import("./conversation-ref-preview.js");
+  if (input.kind === "brain_conversation") {
+    const conversationId = String(input.conversationId || "").trim();
+    if (!conversationId) throw new TypeError("conversationId is required for brain_conversation preview.");
+    const ownerId = await resolveBrainLocalOwnerId();
+    const conversation = brainWorkspaceStorage.getConversation(ownerId, conversationId);
+    const messages = brainWorkspaceStorage.listMessages(ownerId, conversationId);
+    return buildConversationRefPreview({
+      kind: "brain_conversation",
+      title: conversation.title,
+      summary: conversation.title,
+      conversationId,
+      archived: String(conversation.status || "").toUpperCase() === "ARCHIVED",
+      turnLimit: input.turnLimit,
+      messages
+    });
+  }
+  const workspaceId = String(input.workspaceId || "").trim();
+  const threadId = String(input.threadId || "").trim();
+  if (!workspaceId || !threadId) throw new TypeError("workspaceId and threadId are required for thread preview.");
+  const catalog = await readWorkspaceCatalog();
+  const workspace = catalog.workspaces.find((item) => item.id === workspaceId);
+  const thread = workspace?.threads.find((item) => item.id === threadId);
+  if (!workspace || !thread) throw new Error("Referenced workspace thread was not found.");
+  const threadState = await readThreadState(workspace, thread);
+  return buildConversationRefPreview({
+    kind: "thread",
+    title: thread.title,
+    summary: thread.summary || "",
+    workspaceId,
+    threadId,
+    archived: Boolean((thread as { archived?: boolean; status?: string }).archived)
+      || String((thread as { status?: string }).status || "").toLowerCase() === "archived",
+    turnLimit: input.turnLimit,
+    messages: threadState.messages ?? []
+  });
+}
+async function listProjectSkillNames(projectPath: string) {
+  const names: Array<{ name: string; summary: string; status: "enabled" }> = [];
+  let entries: Array<{ name: string; isDirectory: () => boolean }> = [];
+  try {
+    entries = await fs.readdir(join(projectPath, ".newbrain", "skills"), { withFileTypes: true });
+  } catch {
+    return names;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    names.push({ name: entry.name, summary: "", status: "enabled" });
+  }
+  return names;
+}
 async function runScheduledAutomation(automation: AutomationSpec) {
   if (!runtime) throw new Error("Automation runtime is not available.");
   const startedAt = nowIso();
@@ -7933,44 +8901,105 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     automations: markAutomationRunning(currentConfig.automations, automation.id, startedAt)
   });
   const catalog = await readWorkspaceCatalog();
-  const workspace = automation.action === "error_remediation"
+  let workspace = automation.action === "error_remediation"
     ? catalog.workspaces.find((item) => resolve(item.path) === resolve(workspacePath)) ?? catalog.workspaces[0]
     : catalog.workspaces.find((item) => item.id === automation.workspaceId);
-  const thread = automation.action === "error_remediation"
-    ? workspace?.threads.find((item) => item.id === automation.threadId) ?? workspace?.threads[0]
-    : workspace?.threads.find((item) => item.id === automation.threadId);
+  // Never fall back to threads[0] — that dumps runs into unrelated chats.
+  let thread = workspace?.threads.find((item) => item.id === automation.threadId);
+  const fallbackWorkspace = catalog.workspaces.find((item) => item.id === INTERNAL_CHAT_WORKSPACE_ID) ?? catalog.workspaces[0];
+  const threadPlan = planAutomationThreadTarget({
+    boundWorkspaceId: workspace?.id || automation.workspaceId,
+    boundThreadId: thread?.id || automation.threadId,
+    workspaceExists: Boolean(workspace),
+    threadExists: Boolean(thread),
+    fallbackWorkspaceId: fallbackWorkspace?.id || ""
+  });
+  if (threadPlan.createThread) {
+    workspace = catalog.workspaces.find((item) => item.id === threadPlan.workspaceId) ?? fallbackWorkspace;
+    if (!workspace) throw new Error("Automation target workspace/thread was not found.");
+    const before = new Set(workspace.threads.map((item) => item.id));
+    const scope = "chat" as const;
+    const created = await workspaceThreadLifecycleService.add({
+      workspaceId: workspace.id,
+      title: automationDedicatedThreadTitle(automation.title),
+      summary: "绑定的对话不存在，已新建专用对话执行。",
+      scope,
+      ...(workspace.brainWorkspaceKey ? { brainWorkspaceKey: workspace.brainWorkspaceKey } : {})
+    });
+    thread = created.workspaces.find((item) => item.id === workspace.id)?.threads.find((item) => !before.has(item.id));
+    const createdThread = thread;
+    const reboundWorkspaceId = workspace.id;
+    if (createdThread) {
+      const rebound = await readFeatureConfig();
+      await writeFeatureConfig({
+        ...rebound,
+        automations: rebound.automations.map((item) => item.id === automation.id
+          ? { ...item, workspaceId: reboundWorkspaceId, threadId: createdThread.id }
+          : item)
+      });
+    }
+  }
   if (!workspace || !thread) throw new Error("Automation target workspace/thread was not found.");
   const threadState = await readThreadState(workspace, thread);
-  if (automation.action === "error_remediation") {
+  const storedPrompt = String(automation.prompt || automation.trigger || "").trim();
+  const automationPrompt = automation.action === "error_remediation"
+    ? storedPrompt
+    : automationTaskPrompt(storedPrompt);
+  if (automationPrompt && automationPrompt !== String(automation.prompt || "").trim()) {
+    const promptConfig = await readFeatureConfig();
+    await writeFeatureConfig({
+      ...promptConfig,
+      automations: promptConfig.automations.map((item) => item.id === automation.id
+        ? { ...item, prompt: automationPrompt, trigger: automationPrompt }
+        : item)
+    });
+  }
+  if (automation.action === "error_remediation" || automationPrompt) {
     if (!automationModelChatService || !mainWindowRef || mainWindowRef.isDestroyed()) {
-      throw new Error("Error remediation model runtime is not available.");
+      throw new Error("Automation model runtime is not available.");
     }
     const config = await readRootConfig();
-    const request = buildErrorRemediationRequest();
-    await automationModelChatService.chat(mainWindowRef.webContents, {
-      requestId: makeId("automation-error-remediation"),
+    const request = automation.action === "error_remediation"
+      ? buildErrorRemediationRequest()
+      : automationPrompt || String(automation.trigger || automation.title);
+    const permissionMode = automation.permissionMode === "agent" ? "agent" : "full";
+    const taskRequest = automation.action === "error_remediation"
+      ? request
+      : scheduledAutomationRequest(request);
+    const installedSkillNames = automation.action === "error_remediation"
+      ? ["error-auto-remediation"]
+      : resolveAutomationSkillNames(request, [
+        ...(await readFeatureConfig()).skills,
+        ...await listProjectSkillNames(workspace.path)
+      ]);
+    delegationTurnStartedAt.set(thread.id, new Date().toISOString());
+    const chatResult = await automationModelChatService.chat(mainWindowRef.webContents, {
+      requestId: makeId("automation-run"),
       workspaceId: workspace.id,
       threadId: thread.id,
       provider: config.llm.provider,
       baseUrl: config.llm.baseUrl,
       apiKey: config.llm.apiKey,
       wireApi: config.llm.wireApi,
-      model: config.llm.model,
+      model: automation.model || config.llm.model,
       reviewModel: config.llm.reviewModel,
-      reasoningEffort: config.llm.reasoningEffort,
+      reasoningEffort: automation.reasoning || config.llm.reasoningEffort,
       disableResponseStorage: config.llm.disableResponseStorage,
-      permissionMode: "agent",
+      permissionMode,
       systemPrompt: config.llm.systemPrompt,
-      selectedSkillNames: ["error-auto-remediation"],
+      selectedSkillNames: installedSkillNames,
       composerModes: ["goal"],
       messages: [
         ...(threadState.messages ?? []).map((message) => ({
           id: message.id, role: message.role as "system" | "user" | "assistant",
           content: message.content, createdAt: message.createdAt
         })),
-        { id: makeId("msg"), role: "user", content: request, createdAt: nowIso() }
+        { id: makeId("msg"), role: "user", content: taskRequest, createdAt: nowIso() }
       ]
     });
+    if (chatResult?.awaitingApproval) {
+      throw new Error("定时任务停在工具批准，没有完成执行。");
+    }
   } else {
   const shellEnv = await buildWorkspaceShellEnvWithPreferences(workspace);
   const automationRuntime = await createLocalRuntime({
@@ -8017,8 +9046,13 @@ async function runScheduledAutomation(automation: AutomationSpec) {
     automations: markAutomationSucceeded(latestConfig.automations, automation.id, startedAt)
   });
 }
+const delegationTurnStartedAt = new Map<string, string>();
+let automationTickQueued = false;
 async function tickAutomations() {
-  if (automationTickRunning) return;
+  if (automationTickRunning) {
+    automationTickQueued = true;
+    return;
+  }
   automationTickRunning = true;
   try {
   const config = await readFeatureConfig();
@@ -8037,6 +9071,10 @@ async function tickAutomations() {
   }
   } finally {
     automationTickRunning = false;
+    if (automationTickQueued) {
+      automationTickQueued = false;
+      void tickAutomations();
+    }
   }
 }
 const automationTimerService = new AutomationTimerService({
@@ -8056,6 +9094,25 @@ async function activateWorkspaceThreadUnlocked(input: { workspaceId: string; thr
   const catalog = await readWorkspaceCatalog();
   await ensureCatalogState(catalog);
   const { workspace, thread } = requireWorkspaceThreadSelection(catalog.workspaces, input.workspaceId, input.threadId);
+  if (thread.kind === "subagent") {
+    const parentId = String(thread.parentThreadId || "").trim();
+    const parentTask = parentId
+      ? [...concurrentModelTasks.values()].find((task) => task.workspaceId === workspace.id && task.threadId === parentId)
+      : undefined;
+    if (parentTask) {
+      const liveRuntime = parentTask.runtime ?? runtime;
+      const liveState = typeof liveRuntime.exportThreadState === "function"
+        ? liveRuntime.exportThreadState()
+        : await readThreadState(workspace, workspace.threads.find((item) => item.id === parentId) ?? thread);
+      return buildSnapshotWithThreadState(liveRuntime.getSnapshot(), liveState);
+    }
+    const parent = parentId
+      ? workspace.threads.find((item) => item.id === parentId && item.kind !== "subagent")
+      : undefined;
+    if (parent) {
+      return activateWorkspaceThreadUnlocked({ workspaceId: workspace.id, threadId: parent.id });
+    }
+  }
   await ensureActivatableWorkspaceDirectory(workspace);
   // Navigation is not activity. Persist the thread being left without making it
   // appear newly run; real messages and task events update updatedAt separately.
@@ -8145,14 +9202,32 @@ async function callModelApi(input: {
       attachments?: Array<{ name: string; path: string; url: string }>;
   }>;
 }) {
+  const ownedCustom = isCustomModelSelection(input.model)
+    ? await customModelEndpointStore.resolveChatRequest(input.model)
+    : null;
+  if (isCustomModelSelection(input.model) && !ownedCustom) {
+    throw new Error("自备模型不存在或已被删除。请在模型菜单里重新添加。");
+  }
+  if (ownedCustom) {
+    input = {
+      ...input,
+      provider: ownedCustom.label,
+      baseUrl: ownedCustom.baseUrl,
+      apiKey: ownedCustom.apiKey,
+      wireApi: ownedCustom.wireApi,
+      model: ownedCustom.model
+    };
+  }
   let baseUrl = input.baseUrl.trim();
   let bearerToken = "";
   const model = input.model.trim();
   const authState = await readDesktopAuthState();
-  const authSelection = selectModelRequestAuth(authState, input.apiKey);
+  const authSelection = ownedCustom
+    ? { source: "configured_api_key" as const, bearerToken: ownedCustom.apiKey, useGatewayBaseUrl: false }
+    : selectModelRequestAuth(authState, input.apiKey);
   bearerToken = authSelection.bearerToken;
-  if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-    bearerToken = "newbrain-e2e";
+  if (!bearerToken) {
+    bearerToken = resolveDevE2eBearerToken();
   }
   if (authSelection.useGatewayBaseUrl) baseUrl = await readGatewayBaseUrl();
   if (!baseUrl) {
@@ -8164,27 +9239,27 @@ async function callModelApi(input: {
   if (!model) {
     throw new Error("Model name is required.");
   }
-  const authorizedConfig = await readAuthorizedDesktopModelConfig();
-  const availableModels = authorizedConfig.availableModels ?? [];
+  const availableModels = ownedCustom ? [] : (await readAuthorizedDesktopModelConfig()).availableModels ?? [];
+  const parentSelectedModel = String(
+    (input as { parentSelectedModel?: string }).parentSelectedModel || ""
+  ).trim();
   // spring-app exposes only /v1/responses. Never downgrade to chat/completions.
   // Thinking models still use the responses wire; when the opaque reasoning trace
   // cannot be echoed (400), retry once on the same endpoint without thinking.
-  const thinkingCapable = requiresThinkingWireProtocol({
+  // A user-owned endpoint keeps the OpenAI chat/completions wire it was saved with.
+  const thinkingCapable = ownedCustom ? false : requiresThinkingWireProtocol({
     provider: input.provider,
     model,
-    routedModel: lastGatewayRoutedModel,
+    routedModel: parentSelectedModel || lastGatewayRoutedModel,
     candidateModels: availableModels
   });
-  if (input.wireApi === "chat.completions") {
+  if (!ownedCustom && input.wireApi === "chat.completions") {
     input.wireApi = "responses";
   }
   const apiUrl = buildApiEndpoint(baseUrl, input.wireApi);
   await appendDesktopDebugLog(
     `model request auth=${authSelection.source} endpoint=${apiUrl} model=${model} thinkingCapable=${thinkingCapable} tokenPresent=${Boolean(bearerToken)} tokenLength=${bearerToken.length}`
   );
-  const parentSelectedModel = String(
-    (input as { parentSelectedModel?: string }).parentSelectedModel || ""
-  ).trim();
   const mainModelOption =
     availableModels.find((item) => item.model.toLowerCase() === model.toLowerCase())
     ?? (
@@ -8214,10 +9289,22 @@ async function callModelApi(input: {
       const mimeType = getModelEmbeddableImageMimeType(extension);
       const stat = await fs.stat(attachment.path);
       if (!stat.isFile()) throw new Error(`Attachment is not a file: ${attachment.name}`);
-      assertAttachmentSize(extension, stat.size);
-      const attachmentHeader = `Attachment ${index + 1}: ${attachment.name}\nType: ${extension || "unknown"}\nSize: ${formatAttachmentSize(stat.size)}\nLocal path: ${attachment.path}`;
+      const linkMode = attachment.linkMode === "local" ? "local" : "copied";
+      const localLinked = linkMode === "local" || stat.size > MAX_ATTACHMENT_BYTES;
+      if (!localLinked) {
+        assertAttachmentSize(extension, stat.size);
+      }
+      const sourcePath = String(attachment.sourcePath || "").trim() || attachment.path;
+      const attachmentHeader = [
+        `Attachment ${index + 1}: ${attachment.name}`,
+        `Type: ${extension || "unknown"}`,
+        `Size: ${formatAttachmentSize(stat.size)}`,
+        `Local path: ${attachment.path}`,
+        sourcePath !== attachment.path ? `Source path: ${sourcePath}` : "",
+        localLinked ? "Access: local-path reference (not whole-file copied into app storage)" : ""
+      ].filter(Boolean).join("\n");
       if (mimeType) {
-        if (stat.size > 10 * 1024 * 1024) throw new Error(`Image attachment exceeds 10 MB: ${attachment.name}`);
+        if (stat.size > MAX_IMAGE_BYTES) throw new Error(`Image attachment exceeds 10 MB: ${attachment.name}`);
         imageAttachments.push({
           name: attachment.name,
           path: attachment.path,
@@ -8233,7 +9320,9 @@ async function callModelApi(input: {
           await appendDesktopDebugLog(
             `attachment extraction failed path=${attachment.path} error=${error instanceof Error ? error.stack || error.message : String(error)}`
           );
-          content = `[Unable to extract attachment text: ${error instanceof Error ? error.message : String(error)}]`;
+          content = localLinked
+            ? `[Large local file could not be fully extracted in-process. Keep using Local path above; prefer workspace tools / targeted reads. Detail: ${error instanceof Error ? error.message : String(error)}]`
+            : `[Unable to extract attachment text: ${error instanceof Error ? error.message : String(error)}]`;
         }
         files.push(`${attachmentHeader}\nExtracted content:\n${truncateAttachmentText(content, 120_000)}`);
       }
@@ -8262,6 +9351,8 @@ async function callModelApi(input: {
         if (image.kind === "native") {
           parts.push({ type: "text", text: `${image.header}\nContent: image attached below.` });
           parts.push({ type: "image", imageUrl: image.dataUrl });
+        } else if (image.kind === "omitted") {
+          files.push(`${image.header}\n${image.text}`);
         } else {
           files.push(formatBridgedImageText(image));
         }
@@ -8319,8 +9410,10 @@ async function callModelApi(input: {
       enableThinking: !options.dropProviderReasoning
         && thinkingCapable
         && canContinueThinkingWithMessages(messages),
+      includeStore: !options.dropProviderReasoning,
+      includeThinkingField: !options.dropProviderReasoning,
       tools: formatToolDefinitions(input.tools ?? [], input.wireApi, {
-        webSearch: supportsNativeWebSearch(input.provider, model, input.wireApi)
+        webSearch: supportsNativeWebSearch(input.provider, parentSelectedModel || model, input.wireApi)
       })
     }));
   };
@@ -8372,11 +9465,12 @@ async function callModelApi(input: {
     return { response: httpResponse, responseBody: streamed, parsed: payload };
   };
   let attempt = await sendModelRequest(apiUrl, buildRequestBody({ dropProviderReasoning: false }));
-  if (isThinkingContextGatewayRejection(attempt.response.status, attempt.parsed, attempt.responseBody.rawText)) {
-    // The routed thinking model demands an opaque reasoning trace this history
-    // cannot supply. Retry once on the same /v1/responses wire without thinking.
+  if (shouldRetryModelRequestWithoutThinking(attempt.response.status, attempt.parsed, attempt.responseBody.rawText)) {
+    // Thinking models demand an opaque reasoning trace this history cannot
+    // supply; Hunyuan/MaaS instead 400s unknown OpenAI fields like `reasoning`.
+    // Retry once on the same wire without thinking / store extras.
     await appendDesktopDebugLog(
-      `model request thinking-context repair endpoint=${apiUrl} model=${model}`
+      `model request thinking-context repair endpoint=${apiUrl} model=${model} status=${attempt.response.status}`
     );
     attempt = await sendModelRequest(apiUrl, buildRequestBody({ dropProviderReasoning: true }));
   }
@@ -8449,6 +9543,7 @@ function createMainWindow() {
   const { workAreaSize } = screen.getPrimaryDisplay();
   const windowBounds = computeDesktopWindowBounds(workAreaSize);
   const resolvedIconPath = resolveDesktopIconPath();
+  const resolvedIconImage = resolveDesktopNativeImage();
   const window = new BrowserWindow({
     width: windowBounds.width,
     height: windowBounds.height,
@@ -8462,7 +9557,9 @@ function createMainWindow() {
       : {}),
     title: "NewBrain",
     backgroundColor: "#efe7d8",
-    icon: resolvedIconPath,
+    ...(resolvedIconImage.isEmpty()
+      ? (resolvedIconPath ? { icon: resolvedIconPath } : {})
+      : { icon: resolvedIconImage }),
     frame: false,
     titleBarOverlay: {
       color: "#ffffff",
@@ -8476,6 +9573,13 @@ function createMainWindow() {
       nodeIntegration: false
     }
   });
+  if (!resolvedIconImage.isEmpty()) {
+    try {
+      window.setIcon(resolvedIconImage);
+    } catch {
+      // Windows may reject empty or unsupported icon payloads; keep BrowserWindow options as fallback.
+    }
+  }
   // Prefer Ctrl+wheel font-size scaling in the renderer; block Chromium page zoom.
   try {
     window.webContents.setVisualZoomLevelLimits(1, 1);
@@ -8615,9 +9719,7 @@ function createMainWindow() {
 function registerHolonRuntime(runtimeCommandService: RuntimeCommandService, modelChatService: ModelChatService) {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
-      : "";
+    const e2eCredential = !app.isPackaged ? resolveDevE2eBearerToken() : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("HOLON_AUTH_REQUIRED");
     const device = collectDesktopDeviceFingerprint();
@@ -8734,7 +9836,7 @@ async function waitForRemoteApprovalCompletion(requestId: string, signal: AbortS
 }
 
 function registerPluginRepositoryHandlers() {
-  registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: pluginRepositoryRoot, clientVersion: app.getVersion(), getConnection: async () => {
+  registerDesktopPluginRepositoryRuntime(ipcMain, { pluginRoot: pluginRepositoryRoot, clientVersion: resolveElectronAppVersion(app), getConnection: async () => {
       const authState = await readDesktopAuthState(), token = authState?.access_token?.trim() || "";
       if (!token) throw new Error("PLUGIN_AUTH_REQUIRED: 请先登录再使用插件仓库。");
       const device = collectDesktopDeviceFingerprint();
@@ -8760,9 +9862,7 @@ function registerPluginRepositoryHandlers() {
 function createAgentTurnControlPlane() {
   const getConnection = async () => {
     const authState = await readDesktopAuthState();
-    const e2eCredential = !app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv
-      ? process.env.NEWBRAIN_E2E_AUTH_TOKEN?.trim() || "newbrain-e2e"
-      : "";
+    const e2eCredential = !app.isPackaged ? resolveDevE2eBearerToken() : "";
     const accessToken = authState?.access_token?.trim() || e2eCredential;
     if (!accessToken) throw new Error("AGENT_TURN_AUTH_REQUIRED");
     const device = collectDesktopDeviceFingerprint();
@@ -8797,6 +9897,7 @@ async function resolveBrainLocalOwnerId() {
 }
 
 function registerIpc() {
+  registerDesktopWindowControlIpc(desktopWindowControl);
   const resolveBrainWorkspaceRoot = async (workspaceId: string) => {
     const workspace = (await readWorkspaceCatalog()).workspaces.find((item) => item.id === workspaceId);
     if (!workspace) throw new Error("BRAIN_LOCAL_WORKSPACE_NOT_AUTHORIZED");
@@ -8863,8 +9964,8 @@ function registerIpc() {
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
       if (!bearerToken) throw new Error("媒体生成需要已登录的网关凭证。");
@@ -9093,8 +10194,12 @@ function registerIpc() {
     openWalletPayment: openDesktopWalletPayment,
     setWalletOverageEnabled: setDesktopWalletOverageEnabled,
     redeemCode: redeemDesktopCode,
+    claimNationalDayGift,
     sendLoginCode: sendDesktopLoginCode,
     login: loginDesktopAuth,
+    loadRememberedLogin: () => rememberedLoginStore.load(),
+    saveRememberedLogin: (input) => rememberedLoginStore.save(input),
+    clearRememberedLogin: () => rememberedLoginStore.clear(),
     loginWithAlipayQr: loginDesktopWithAlipayQr,
     changePassword: changeDesktopAuthPassword,
     changeEmail: changeDesktopAuthEmail,
@@ -9179,6 +10284,55 @@ function registerIpc() {
       previewWindowRef = null;
     },
     capturePreviewWindow,
+    clearBrowserBrowsingData: async () => {
+      await clearNewbrainBrowserSessionData("persist:newbrain-browser");
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true, detail: "已清除内置浏览器数据与历史。" };
+    },
+    listBrowserHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("访问浏览历史")
+      );
+      return listBrowserHistory({ rootDir: workspaceStateRoot });
+    },
+    removeBrowserHistoryEntry: async (id) => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("删除浏览历史")
+      );
+      return removeBrowserHistoryEntry({ rootDir: workspaceStateRoot }, id);
+    },
+    clearBrowserHistory: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      await assertBrowserHistoryAccess(preferences.browser.historyAccess, () =>
+        askBrowserHistoryAccessDialog("清空浏览历史")
+      );
+      await clearBrowserHistory({ rootDir: workspaceStateRoot });
+      return { ok: true };
+    },
+    selectBrowserDownloadDir: () => pickBrowserDownloadDirectory(),
+    listBrowserCredentials: () => listBrowserCredentials({ rootDir: workspaceStateRoot }),
+    upsertBrowserCredential: (input) => upsertBrowserCredential({ rootDir: workspaceStateRoot }, input),
+    removeBrowserCredential: (id) => removeBrowserCredential({ rootDir: workspaceStateRoot }, id),
+    listBrowserContacts: () => listBrowserContacts({ rootDir: workspaceStateRoot }),
+    upsertBrowserContact: (input) => upsertBrowserContact({ rootDir: workspaceStateRoot }, input),
+    removeBrowserContact: (id) => removeBrowserContact({ rootDir: workspaceStateRoot }, id),
+    getBrowserCdpAccess: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      return resolveBrowserCdpAccess({ fullCdpAccess: Boolean(preferences.browser.fullCdpAccess) });
+    },
+    probeBrowserSiteTools: async () => {
+      const preferences = await getActiveDesktopPreferences();
+      const pageUrl =
+        previewWindowRef && !previewWindowRef.isDestroyed()
+          ? previewWindowRef.webContents.getURL()
+          : preferences.browser.previewUrl;
+      return probeBrowserSiteTools({
+        siteToolsEnabled: preferences.browser.siteToolsEnabled !== false,
+        pageUrl
+      });
+    },
     saveActiveThreadState,
     appendDiagnosticsLog,
     readPolicyRules,
@@ -9186,6 +10340,7 @@ function registerIpc() {
     codexStorage,
     processUuid
   });
+  registerCustomModelEndpointIpc(customModelEndpointStore);
   registerExpertMarketplaceIpcHandlers(desktopIpcChannels.experts, {
     list: async () => listExpertsForRuntime(),
     install: (expertId) => installExpertFromBuiltin({
@@ -9201,7 +10356,7 @@ function registerIpc() {
       builtinRoot: expertBuiltinRoot,
       installedRoot: expertInstalledRoot
     }).then(async () => { await applyApplicationSkillPolicy(runtime); return listExpertsForRuntime(); }),
-    summon: (threadId, expertId) => summonExpertToThread({
+    summon: (threadId, expertId, userConfirmed) => (userConfirmed ? summonExpertChosenByUser : summonExpertToThread)({
       threadId,
       expertId,
       registryPath: expertRegistryPath,
@@ -9264,12 +10419,15 @@ function registerIpc() {
     openLocation: (input) => desktopNativeCapabilityService.openWorkspace(input),
     addThread: async (input) => (await addWorkspaceThread(input)).workspaces,
     forkThread: async (input) => (await forkWorkspaceThread(input)).workspaces,
+    rewindThread: (input) => rewindWorkspaceThread(input),
     renameThread: async (input) => (await renameWorkspaceThread(input)).workspaces,
     archiveThread: async (input) => (await archiveWorkspaceThread(input)).workspaces,
+    moveThread: async (input) => (await moveWorkspaceThread(input)).workspaces,
     deleteThread: (input) => workspaceThreadService.delete(input),
     activateThread: activateWorkspaceThread,
     exportThreadHtml: exportWorkspaceThreadHtml,
     search: searchWorkspaceThreads,
+    previewConversationRef: previewConversationRef,
     readFile: (input) => workspaceFileService.read(input),
     previewFile: (input) => workspaceFileService.preview(input),
     openFile: (input) => workspaceFileService.open(input),
@@ -9296,13 +10454,9 @@ function registerIpc() {
           return { ok: true, detail: `已保存到 ${selection.filePath}` };
         }
         if (input.action === "open-with") {
-          if (process.platform === "win32") {
-            await spawnDetachedAndConfirm("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", targetPath]);
-          } else {
-            const detail = await electronShell.openPath(targetPath);
-            if (detail) return { ok: false, detail };
-          }
-          return { ok: true, detail: "" };
+          const detail = await electronShell.openPath(targetPath);
+          if (detail) return { ok: false, detail };
+          return { ok: true, detail: "已用系统应用打开。" };
         }
         if (input.action === "open-tool") {
           const tool = getSystemTools().find((item) => item.id === input.toolId && item.available);
@@ -9325,12 +10479,26 @@ function registerIpc() {
           }
           return { ok: true, detail: "" };
         }
-        const locator = process.platform === "win32" ? "where.exe" : "which";
-        if (spawnSync(locator, ["code"], { encoding: "utf8", windowsHide: true }).status !== 0) {
-          return { ok: false, detail: "未检测到 Visual Studio Code。" };
+        const vscodeTool = getSystemTools().find((item) => item.id === "vscode");
+        const vscodeCommand = vscodeTool ? resolveSystemToolCommand(vscodeTool) : "";
+        if (!vscodeCommand) return { ok: false, detail: "未检测到 Visual Studio Code。" };
+        // For .cmd/.bat shims: literal cmd.exe + fixed `call %VAR%` line; paths live only in env
+        // (CodeQL js/shell-command-injection-from-environment).
+        if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(vscodeCommand)) {
+          const commandLine = `"${vscodeCommand.replace(/"/g, "")}" "${targetPath.replace(/"/g, "")}"`;
+          await spawnDetachedAndConfirm(
+            "C:\\Windows\\System32\\cmd.exe",
+            ["/d", "/s", "/c", "call %NEWBRAIN_BOUNDED_CMDLINE%"],
+            {
+              windowsHide: false,
+              windowsVerbatimArguments: true,
+              env: { ...process.env, NEWBRAIN_BOUNDED_CMDLINE: commandLine }
+            }
+          );
+        } else {
+          await spawnDetachedAndConfirm(vscodeCommand, [targetPath], { windowsHide: false });
         }
-        await spawnDetachedAndConfirm("code", [targetPath]);
-        return { ok: true, detail: "" };
+        return { ok: true, detail: "已用 VS Code 打开。" };
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         if (input.action === "reveal" || input.action === "open-tool" || input.action === "open-with" || input.action === "open-vscode" || input.action === "save-as") {
@@ -9497,12 +10665,7 @@ function registerIpc() {
       }
     },
     syncControlPlane: () => syncAuthenticatedDesktopControlPlane(),
-    fetchAppUpdate: async () => {
-      const authState = await readDesktopAuthState();
-      if (!authState) throw new Error("desktop session required");
-      const device = collectDesktopDeviceFingerprint();
-      return fetchJsonWithDesktopAuth("/api/desktop/v1/app-update", authState, device);
-    },
+    fetchAppUpdate: () => fetchGithubDesktopRelease(),
     verifyAppUpdate: async ({ releaseId, ok, appVersion }) => {
       const authState = await readDesktopAuthState();
       if (!authState) throw new Error("desktop session required");
@@ -9565,6 +10728,7 @@ function registerIpc() {
     },
     readCatalog: readWorkspaceCatalog,
     readAuthorizedModelConfig: readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: (modelId) => customModelEndpointStore.find(modelId),
     resolveSkillRoutingHints: async ({ workspaceId, selectedSkillNames }) => {
       const hints: SkillRoutingHint[] = [];
       const catalog = await readWorkspaceCatalog();
@@ -9604,7 +10768,7 @@ function registerIpc() {
           hints.push(projectHint);
           continue;
         }
-        const userHint = await tryScope(name, [userSkillRoot], "user");
+        const userHint = await tryScope(name, managedUserSkillRoots(), "user");
         if (userHint) {
           hints.push(userHint);
           continue;
@@ -9626,13 +10790,18 @@ function registerIpc() {
       const authState = await readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (!bearerToken) {
         bearerToken = await refreshDesktopAccessTokenForGateway().catch(() => "");
       }
       if (!bearerToken) {
+        if (!app.isPackaged && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
+          throw new Error(
+            "E2E Auto 路由缺少凭证：请设置 NEWBRAIN_MODEL_BASE_URL，或启用 NEWBRAIN_E2E_REMOTE_DEBUG_PORT 远程调试会话。"
+          );
+        }
         throw new Error("Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。");
       }
       const gatewayBaseUrl = await readGatewayBaseUrl();
@@ -9680,14 +10849,7 @@ function registerIpc() {
     callModel: (compactionInput) => callModelApi(compactionInput as Parameters<typeof callModelApi>[0])
   });
   const modelChatEventProjector = new ModelChatEventProjector();
-  const modelChatStepService = new ModelChatStepService({
-    callModel: (stepInput) => callModelApi(stepInput as Parameters<typeof callModelApi>[0]),
-    isRetryableError: isRetryableModelGatewayError,
-    readUsageTokens: (usage) => readModelUsageTokens(usage),
-    containsPrivatePlanning: containsPrivatePlanningNarration,
-    sanitizeVisibleContent: sanitizeVisibleModelContent,
-    extractPlanningNarration: extractPrivatePlanningNarration
-  });
+  const modelChatStepService = desktopModelChatStepService;
   const governmentOutlineService = new GovernmentOutlineService({
     storage: codexStorage,
     readAuthorizedModelConfig: readAuthorizedDesktopModelConfig,
@@ -9819,14 +10981,15 @@ function registerIpc() {
           const authState = await readDesktopAuthState();
           const authSelection = selectModelRequestAuth(authState, "");
           let bearerToken = authSelection.bearerToken;
-          if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-            bearerToken = "newbrain-e2e";
+          if (!bearerToken) {
+            bearerToken = resolveDevE2eBearerToken();
           }
           if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
             baseUrl = await readGatewayBaseUrl();
           }
           return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
-        }
+        },
+        refreshAccessToken: refreshDesktopAccessTokenForGateway
       });
       if (workspace.brainWorkspaceKey === "game") {
         registerGameRuntimeTools(targetRuntime, workspace.id, workspace.path);
@@ -9852,8 +11015,8 @@ function registerIpc() {
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-                bearerToken = "newbrain-e2e";
+              if (!bearerToken) {
+                bearerToken = resolveDevE2eBearerToken();
               }
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
                 baseUrl = await readGatewayBaseUrl();
@@ -9899,7 +11062,7 @@ function registerIpc() {
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) bearerToken = "newbrain-e2e";
+              if (!bearerToken) bearerToken = resolveDevE2eBearerToken();
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) baseUrl = await readGatewayBaseUrl();
               if (!bearerToken) throw new Error("配音生成需要已登录的网关凭证。");
               const { synthesizeMinimaxSyncTts, resolveMinimaxNarrationVoice, MINIMAX_DEFAULT_VOICE_ID } = await import("./minimax-tts-gateway.js");
@@ -9978,8 +11141,8 @@ function registerIpc() {
               const authState = await readDesktopAuthState();
               const authSelection = selectModelRequestAuth(authState, "");
               let bearerToken = authSelection.bearerToken;
-              if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-                bearerToken = "newbrain-e2e";
+              if (!bearerToken) {
+                bearerToken = resolveDevE2eBearerToken();
               }
               if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
                 baseUrl = await readGatewayBaseUrl();
@@ -10056,16 +11219,30 @@ function registerIpc() {
           ownerId,
           workspaceKey: "document"
         }).find((project) => project.localWorkspaceId === workspace.id);
+        const notifyDocumentUi = (payload: { projectId: string; reason: string }) => {
+          mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
+        };
+        registerOfficeAgentTools(targetRuntime, {
+          projectRoot: workspace.path,
+          projectId: documentProject?.id || workspace.id,
+          notifyUi: notifyDocumentUi,
+          persistOutput: documentProject
+            ? (relativePath) => persistDocumentOutput({
+              ownerId: resolveBrainLocalOwnerId,
+              projectId: documentProject.id,
+              projectRoot: workspace.path,
+              storage: brainWorkspaceStorage,
+              notifyUi: notifyDocumentUi
+            }, relativePath)
+            : undefined
+        });
         if (documentProject) {
           registerDocumentAgentTools(targetRuntime, {
             ownerId: resolveBrainLocalOwnerId,
             projectId: documentProject.id,
             projectRoot: workspace.path,
             storage: brainWorkspaceStorage,
-            notifyUi: (payload) => {
-              // Reuse the resource-panel refresh channel so 文件/产物 counts update live.
-              mainWindowRef?.webContents.send(desktopIpcChannels.events.dataWorkspaceUpdated, payload);
-            }
+            notifyUi: notifyDocumentUi
           });
         }
       }
@@ -10096,8 +11273,10 @@ function registerIpc() {
       // the official-evidence tools here as well as on the long-lived desktop
       // runtime, otherwise government-writing turns only see goal tools.
       registerOfficialGovernmentWebTools(targetRuntime, officialGovernmentWebService);
-      // Search is routed by Spring and must not be present in every ordinary
-      // model-chat runtime (otherwise a greeting can trigger a search).
+      // Spring-backed Search→Fetch tools. Greeting/short-chat paths must not call them
+      // (enforced by Auto companion SOP); web.search calls Spring /api/desktop/v1/web-search.
+      registerDesktopWebSearchTools(targetRuntime, desktopWebSearchClient);
+      // Search is routed by Spring; keep companion turns from inventing freshness without tools.
       await applyApplicationSkillPolicy(targetRuntime);
     },
     readPolicyRules,
@@ -10227,8 +11406,8 @@ function registerIpc() {
       const authState = await readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (authSelection.useGatewayBaseUrl && !forcedMediaBase && app.isPackaged) {
         baseUrl = await readGatewayBaseUrl();
@@ -10415,7 +11594,13 @@ function registerIpc() {
   });
   automationModelChatService = modelChatService;
   registerHolonRuntime(runtimeCommandService, modelChatService);
-  registerModelChatIpcHandlers({ chat: (event, input) => modelChatService.chat(event.sender, input) });
+  registerModelChatIpcHandlers({
+    chat: (event, input) => {
+      const threadId = String(input?.threadId || "");
+      if (threadId) delegationTurnStartedAt.set(threadId, new Date().toISOString());
+      return modelChatService.chat(event.sender, input);
+    }
+  });
 }
 
 app.whenReady().then(async () => {
@@ -10526,9 +11711,12 @@ app.whenReady().then(async () => {
     registerDesktopArtifactRenderer(runtime, initialWorkspace?.path ?? workspacePath);
     await applyApplicationSkillPolicy(runtime);
     runtime.setPolicyRules(await readPolicyRules());
+    registerDesktopWindowControlAgentTools();
     registerBrowserAgentTools();
+    installBrowserAgentPolicyGate(runtime);
     registerWorkspaceMediaAgentTools();
     registerOfficialGovernmentWebTools(runtime, officialGovernmentWebService);
+    registerDesktopWebSearchTools(runtime, desktopWebSearchClient);
     await activateConfiguredPlugins();
     await reconcileLocalRepositoryPlugins();
     await syncMcpToolsToRuntime();
@@ -10575,6 +11763,7 @@ app.whenReady().then(async () => {
       const threadState = await readThreadState(initialWorkspace, initialThread);
       runtime.setThreadState(threadState);
     }
+    await queueStartupDailyBriefing();
   } catch (error) {
     await appendDesktopDebugLog(`startup runtime init failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     throw error;

@@ -1,6 +1,6 @@
 {
   "name": "@codex-forge/desktop",
-  "version": "1.4.3",
+  "version": "1.4.40",
   "private": true,
   "description": "Desktop shell for the NewBrain local-first coding agent workbench.",
   "author": "NewBrain",
@@ -14,7 +14,7 @@
     "package:mac": "node node_modules/electron-builder/cli.js --mac dmg zip",
     "check": "node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "test:settings": "node --test src/renderer/app/settings-general.test.mjs src/renderer/app/composer-layout.test.mjs",
-    "test:application-services": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/internal-chat-workspace-catalog-service.test.ts src/main/workspace-catalog-conda-service.test.ts src/main/environment-discovery-service.test.ts src/main/bootstrap-state-service.test.ts src/main/managed-conda-installer-service.test.ts src/main/thread-state-service.test.ts src/main/workspace-thread-lifecycle-service.test.ts src/main/workspace-worktree-service.test.ts src/main/thread-rollout-lifecycle-service.test.ts src/main/thread-rollout-recovery-service.test.ts src/main/delegated-agent-control-service.test.ts src/main/delegated-agent-ipc-service.test.ts src/main/delegated-agent-loop-service.test.ts src/main/delegated-agent-run-service.test.ts src/main/composer-attachment-service.test.ts src/main/desktop-artifact-preview-service.test.ts src/main/desktop-native-capability-service.test.ts src/main/workspace-file-service.test.ts src/main/model-config-service.test.ts src/main/browser-preview-service.test.ts src/main/agent-host-agent-service.test.ts src/main/agent-host-model-callbacks.test.ts src/main/model-chat-preparation-service.test.ts src/main/model-auto-router.test.ts src/main/authorized-model-catalog.test.ts src/main/skill-routing.test.ts src/main/model-chat-goal-service.test.ts src/main/model-chat-task-service.test.ts src/main/model-chat-service.test.ts src/main/model-chat-timing.test.ts src/main/model-chat-agent-loop-service.test.ts src/main/model-chat-event-projector.test.ts src/main/model-chat-step-service.test.ts src/main/model-chat-failure-service.test.ts src/main/model-chat-run-persistence-service.test.ts src/main/agent-loop-boundary-persistence.test.ts src/main/model-stream-visibility.test.ts src/main/native-tool-prompt-policy.test.ts",
+    "test:application-services": "node --experimental-strip-types --test src/main/atomic-file.test.ts src/main/workspace-catalog-durability.test.mjs src/shared/workspace-selection-errors.test.ts src/main/internal-chat-workspace-catalog-service.test.ts src/main/workspace-catalog-conda-service.test.ts src/main/environment-discovery-service.test.ts src/main/bootstrap-state-service.test.ts src/main/managed-conda-installer-service.test.ts src/main/thread-state-service.test.ts src/main/workspace-thread-lifecycle-service.test.ts src/main/workspace-worktree-service.test.ts src/main/thread-rollout-lifecycle-service.test.ts src/main/thread-rollout-recovery-service.test.ts src/main/delegated-agent-control-service.test.ts src/main/delegated-agent-ipc-service.test.ts src/main/delegated-agent-loop-service.test.ts src/main/delegated-model-step.test.ts src/main/delegated-agent-run-service.test.ts src/main/composer-attachment-service.test.ts src/main/desktop-artifact-preview-service.test.ts src/main/desktop-native-capability-service.test.ts src/main/workspace-file-service.test.ts src/main/model-config-service.test.ts src/main/browser-preview-service.test.ts src/main/agent-host-agent-service.test.ts src/main/agent-host-model-callbacks.test.ts src/main/model-chat-preparation-service.test.ts src/main/model-auto-router.test.ts src/main/authorized-model-catalog.test.ts src/main/skill-routing.test.ts src/main/model-chat-goal-service.test.ts src/main/model-chat-task-service.test.ts src/main/model-chat-service.test.ts src/main/model-chat-timing.test.ts src/main/model-chat-agent-loop-service.test.ts src/main/model-chat-event-projector.test.ts src/main/model-chat-step-service.test.ts src/main/model-chat-failure-service.test.ts src/main/model-chat-run-persistence-service.test.ts src/main/agent-loop-boundary-persistence.test.ts src/main/model-stream-visibility.test.ts src/main/native-tool-prompt-policy.test.ts",
     "test:agent-host-runtime": "node scripts/test-agent-host-lifecycle.mjs",
     "test:agent-host-chat": "node --experimental-strip-types scripts/test-agent-host-chat-lifecycle.mjs",
     "test:agent-host-electron": "node scripts/test-electron-agent-host.mjs",
@@ -63,9 +63,9 @@
     "@uzen/kokoro-js": "1.2.4",
     "exceljs": "4.4.0",
     "jszip": "3.10.1",
-    "katex": "^0.18.0",
+    "katex": "0.18.2",
     "mammoth": "^1.12.0",
-    "mermaid": "^11.16.0",
+    "mermaid": "11.17.2",
     "parse5": "7.3.0",
     "@pdf-lib/fontkit": "1.1.1",
     "pdf-lib": "1.17.1",
@@ -86,8 +86,9 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^35.0.0",
-    "electron-builder": "^25.1.8",
+    "electron": "41.10.7",
+    "electron-builder": "26.15.3",
+    "electron-builder-squirrel-windows": "26.15.3",
     "electron-vite": "^3.0.0",
     "typescript": "^5.8.0",
     "vite": "^6.0.0"
@@ -109,6 +110,9 @@
       "node_modules/pdfjs-dist/**",
       "node_modules/@uzen/kokoro-js/**",
       "node_modules/@huggingface/transformers/**",
+      "!node_modules/@huggingface/transformers/**/*.d.ts",
+      "!node_modules/@huggingface/transformers/**/*.d.ts.map",
+      "!node_modules/@huggingface/transformers/types/**",
       "node_modules/phonemizer/**",
       "node_modules/pinyin-pro/**"
     ],
@@ -123,7 +127,10 @@
       "node_modules/pinyin-pro/**"
     ],
     "extraResources": [
-      { "from": "resources/garden", "to": "garden" },
+      {
+        "from": "resources/garden",
+        "to": "garden"
+      },
       {
         "from": "build/package-resources/newbrain.config.json",
         "to": "newbrain.config.json"
@@ -139,6 +146,14 @@
       {
         "from": "build/icon.ico",
         "to": "newbrain.ico"
+      },
+      {
+        "from": "build/tray.ico",
+        "to": "newbrain-tray.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "newbrain.png"
       },
       {
         "from": "build/plugins",
@@ -157,8 +172,20 @@
         "to": "document-worker.js"
       },
       {
+        "from": "scripts/windows-installed-ui-driver.ps1",
+        "to": "windows-ui-driver/windows-installed-ui-driver.ps1"
+      },
+      {
+        "from": "scripts/native-ui-scenario.mjs",
+        "to": "windows-ui-driver/native-ui-scenario.mjs"
+      },
+      {
         "from": "build/rust-core/brain-core.exe",
         "to": "brain-core/brain-core.exe"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
       }
     ],
     "msiProjectCreated": "build/msi-project-created.cjs",
@@ -167,9 +194,30 @@
       "signAndEditExecutable": true,
       "target": [
         {
+          "target": "nsis"
+        },
+        {
           "target": "msi"
         }
       ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "include": "installer.nsh",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NewBrain",
+      "menuCategory": false,
+      "artifactName": "${productName} ${version}-setup.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "displayLanguageSelector": false
     },
     "msi": {
       "upgradeCode": "2D97097C-03A2-54F7-B1D4-7E34233F7A65",

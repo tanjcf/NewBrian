@@ -18,6 +18,7 @@ export const agentHostMethods = [
   "agent.loop.restore",
   "agent.loop.advance",
   "agent.loop.resume-approval",
+  "agent.loop.set-permission-mode",
   "agent.loop.steer",
   "agent.loop.cancel",
   "agent.loop.snapshot",

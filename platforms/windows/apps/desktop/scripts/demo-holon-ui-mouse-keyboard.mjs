@@ -3,6 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const debugPort = Number(process.env.NEWBRAIN_E2E_REMOTE_DEBUG_PORT || 9350);
 const evidenceDir = join(process.cwd(), "..", "..", "integration-artifacts", "holon-ui-demo", String(Date.now()));
@@ -47,14 +48,14 @@ async function screenshot(name) {
   writeFileSync(join(evidenceDir, `${name}.png`), Buffer.from(result.data, "base64"));
 }
 async function clickText(text) {
-  const box = await evaluate(`(() => { const node = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim().includes(${JSON.stringify(text)})); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  const box = await evaluate(`(() => { const node = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim().includes(${embedJsValue(text)})); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
   assert.ok(box, `Visible button not found: ${text}`);
   await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
   await command("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x: box.x, y: box.y });
   await command("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, x: box.x, y: box.y });
 }
 async function typeText(selector, value) {
-  const box = await evaluate(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; })()`);
+  const box = await evaluate(`(() => { const node = document.querySelector(${embedJsValue(selector)}); if (!node) return null; const r = node.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; })()`);
   assert.ok(box, `Visible input not found: ${selector}`);
   await command("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x: box.x, y: box.y });
   await command("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, x: box.x, y: box.y });

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { ensureElectronE2ESession } from "./electron-e2e-session.mjs";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const execFileAsync = promisify(execFile);
 const ffmpeg = process.env.BRAIN_FFMPEG_BINARY || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
@@ -89,29 +90,29 @@ async function seedBrainProject(kind, fixture) {
   const title = kind === "video" ? "视频渲染验收" : "音乐渲染验收";
   const projectName = kind === "video" ? "BRAIN Video E2E" : "BRAIN Music E2E";
   return evaluate(`(async () => {
-    const path = ${JSON.stringify(fixture.root)};
-    const workspaceKey = ${JSON.stringify(kind)};
+    const path = ${embedJsValue(fixture.root)};
+    const workspaceKey = ${embedJsValue(kind)};
     let catalog = await window.newbrain.listWorkspaces();
-    if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: ${JSON.stringify(projectName)}, path });
+    if (!catalog.some((item) => item.path === path)) catalog = await window.newbrain.addWorkspace({ name: ${embedJsValue(projectName)}, path });
     const local = catalog.find((item) => item.path === path);
     if (!local) return { ok: false, reason: "workspace-missing" };
     let projects = await window.newbrain.listBrainProjects({ workspaceKey });
-    let project = projects.find((item) => item.name === ${JSON.stringify(projectName)});
-    if (!project) project = await window.newbrain.createBrainProject({ name: ${JSON.stringify(projectName)}, primaryWorkspaceKey: workspaceKey, localWorkspaceId: local.id });
+    let project = projects.find((item) => item.name === ${embedJsValue(projectName)});
+    if (!project) project = await window.newbrain.createBrainProject({ name: ${embedJsValue(projectName)}, primaryWorkspaceKey: workspaceKey, localWorkspaceId: local.id });
     else project = await window.newbrain.updateBrainProject({ projectId: project.id, localWorkspaceId: local.id });
     let conversations = await window.newbrain.listBrainConversations({ projectId: project.id, workspaceKey });
     let conversation = conversations[0];
-    if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey, title: ${JSON.stringify(title)} });
+    if (!conversation) conversation = await window.newbrain.createBrainConversation({ projectId: project.id, workspaceKey, title: ${embedJsValue(title)} });
     const files = await window.newbrain.listBrainFiles({ projectId: project.id });
-    let file = files.find((item) => item.storageKey === ${JSON.stringify(fixture.storageKey)});
+    let file = files.find((item) => item.storageKey === ${embedJsValue(fixture.storageKey)});
     if (!file) {
       file = await window.newbrain.registerBrainFile({
         projectId: project.id,
-        logicalName: ${JSON.stringify(fixture.logicalName)},
-        mimeType: ${JSON.stringify(fixture.mimeType)},
+        logicalName: ${embedJsValue(fixture.logicalName)},
+        mimeType: ${embedJsValue(fixture.mimeType)},
         sizeBytes: ${fixture.sizeBytes},
-        contentHash: ${JSON.stringify(fixture.contentHash)},
-        storageKey: ${JSON.stringify(fixture.storageKey)}
+        contentHash: ${embedJsValue(fixture.contentHash)},
+        storageKey: ${embedJsValue(fixture.storageKey)}
       });
     }
     if (workspaceKey === "video") {
@@ -140,21 +141,21 @@ async function openSceneTab(kind, conversationTitle, tabLabel) {
     if (trigger && !trigger.getAttribute('aria-expanded')?.includes('true')) trigger.click();
     return Boolean(trigger);
   })()`);
-  await waitFor(`Boolean([...document.querySelectorAll('.brain-workspace-menu [role="menuitemradio"]')].find((button) => button.textContent?.includes(${JSON.stringify(workspaceLabel)})))`);
+  await waitFor(`Boolean([...document.querySelectorAll('.brain-workspace-menu [role="menuitemradio"]')].find((button) => button.textContent?.includes(${embedJsValue(workspaceLabel)})))`);
   await evaluate(`(() => {
-    const button = [...document.querySelectorAll('.brain-workspace-menu [role="menuitemradio"]')].find((item) => item.textContent?.includes(${JSON.stringify(workspaceLabel)}));
+    const button = [...document.querySelectorAll('.brain-workspace-menu [role="menuitemradio"]')].find((item) => item.textContent?.includes(${embedJsValue(workspaceLabel)}));
     button?.click();
     return Boolean(button);
   })()`);
-  await waitFor(`Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${JSON.stringify(conversationTitle)})))`);
+  await waitFor(`Boolean([...document.querySelectorAll('.brain-conversation-list button')].find((button) => button.textContent?.includes(${embedJsValue(conversationTitle)})))`);
   await evaluate(`(() => {
-    const button = [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes(${JSON.stringify(conversationTitle)}));
+    const button = [...document.querySelectorAll('.brain-conversation-list button')].find((item) => item.textContent?.includes(${embedJsValue(conversationTitle)}));
     button?.click();
     return Boolean(button);
   })()`);
-  await waitFor(`Boolean([...document.querySelectorAll('.brain-resource-panel nav button')].find((button) => button.textContent?.trim() === ${JSON.stringify(tabLabel)}))`);
+  await waitFor(`Boolean([...document.querySelectorAll('.brain-resource-panel nav button')].find((button) => button.textContent?.trim() === ${embedJsValue(tabLabel)}))`);
   await evaluate(`(() => {
-    const button = [...document.querySelectorAll('.brain-resource-panel nav button')].find((item) => item.textContent?.trim() === ${JSON.stringify(tabLabel)});
+    const button = [...document.querySelectorAll('.brain-resource-panel nav button')].find((item) => item.textContent?.trim() === ${embedJsValue(tabLabel)});
     button?.click();
     return Boolean(button);
   })()`);
@@ -162,7 +163,7 @@ async function openSceneTab(kind, conversationTitle, tabLabel) {
 
 async function openWorkspaceTab(kind, conversationTitle, tabLabel) {
   await openSceneTab(kind, conversationTitle, tabLabel);
-  await waitFor(`Boolean(document.querySelector(${JSON.stringify(kind === "video" ? '[data-testid="brain-video-workspace"]' : '[data-testid="brain-music-workspace"]')}))`);
+  await waitFor(`Boolean(document.querySelector(${embedJsValue(kind === "video" ? '[data-testid="brain-video-workspace"]' : '[data-testid="brain-music-workspace"]')}))`);
 }
 
 async function runStoryboardFlow(fileId) {
@@ -204,7 +205,7 @@ async function runStoryboardFlow(fileId) {
       }
     });
     return rows.slice(0, 3).every((row) => row.querySelector('td:nth-child(4) select')?.value === fileId);
-  })(${JSON.stringify(fileId)})`);
+  })(${embedJsValue(fileId)})`);
   assert.equal(configured, true, "storyboard rows missing asset selection");
   await evaluate(`document.querySelector('[data-testid="brain-video-storyboard-push"]')?.click()`);
   await waitFor(`document.querySelector('[data-testid="brain-video-storyboard"]')?.textContent?.includes('3 个镜头')`);
@@ -223,7 +224,7 @@ async function runStoryboardFlow(fileId) {
 async function runVideoFlow() {
   const fixture = await prepareMediaWorkspace("video");
   const seeded = await seedBrainProject("video", fixture);
-  assert.equal(seeded?.ok, true, `video seed failed: ${JSON.stringify(seeded)}`);
+  assert.equal(seeded?.ok, true, `video seed failed: ${embedJsValue(seeded)}`);
   await waitForReloadReady();
   const storyboard = await runStoryboardFlow(seeded.fileId);
   await openWorkspaceTab("video", "视频渲染验收", "项目与素材");
@@ -289,7 +290,7 @@ async function runVideoFlow() {
 async function runMusicFlow() {
   const fixture = await prepareMediaWorkspace("music");
   const seeded = await seedBrainProject("music", fixture);
-  assert.equal(seeded?.ok, true, `music seed failed: ${JSON.stringify(seeded)}`);
+  assert.equal(seeded?.ok, true, `music seed failed: ${embedJsValue(seeded)}`);
   await waitForReloadReady();
   await openWorkspaceTab("music", "音乐渲染验收", "项目与音频");
   await waitFor(`document.querySelector('[data-testid="brain-music-status"]')?.textContent?.includes('时间线已加载')`);

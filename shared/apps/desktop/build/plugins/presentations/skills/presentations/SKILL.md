@@ -6,6 +6,7 @@ description: Create, edit, inspect, and verify PPTX/HTML presentation files with
 
 - Prefer `artifact.create` with `format: "pptx"` or `format: "html"`. PPTX also writes a companion `*.slides.html` for browser presentation.
 - Build decks like a designed webpage, not a Word outline: dark title/closing, varied layouts, one idea per slide, generous hierarchy.
+- PPTX generation writes the file after each slide so the desktop Tools preview can open immediately and grow page by page; after create, tell the user the preview is available for marking edits.
 - **Every deck must include visuals**, not text-only slides:
   - **≥1 chart slide** (`layout: "chart"`) with real numbers from the source document
   - **≥1 stage/process slide** (`layout: "timeline"` or `"process"`) for milestones, rollout, or workflow

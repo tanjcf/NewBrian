@@ -88,6 +88,56 @@ export function selectGovernmentDraftCandidate(current: string, priorAssistantMe
   return substantive[0] ?? "";
 }
 
+function stripMarkupTags(value: string) {
+  let result = "";
+  let index = 0;
+  while (index < value.length) {
+    const char = value[index];
+    const next = value[index + 1];
+    if (char === "<" && next && /[A-Za-z/!]/.test(next)) {
+      const close = value.indexOf(">", index + 1);
+      const newline = value.indexOf("\n", index + 1);
+      if (close !== -1 && (newline === -1 || close < newline)) {
+        index = close + 1;
+        continue;
+      }
+    }
+    result += char;
+    index += 1;
+  }
+  return result;
+}
+
+/**
+ * Pick government article body for native PDF/DOCX delivery.
+ * Prefer the same substantive candidate as finalization; fall back to a short
+ * complete speech (salutation) so brief closing remarks still export.
+ */
+export function prepareGovernmentPdfContent(content: string, priorAssistantMessages: string[], _sourceText = "") {
+  void _sourceText;
+  const preferred = selectGovernmentDraftCandidate(content, priorAssistantMessages);
+  const candidates = [content, ...priorAssistantMessages]
+    .map((candidate) => String(candidate ?? "").trim())
+    .filter(Boolean);
+  const salutations = ["同志们"];
+  const selected = preferred
+    || candidates.find((candidate) =>
+      salutations.some((salutation) => candidate.includes(salutation))
+      && candidate.replace(/\s+/g, "").length >= 40
+    )
+    || "";
+  if (!selected) return "";
+  const salutationOffsets = salutations
+    .map((salutation) => selected.indexOf(salutation))
+    .filter((offset) => offset >= 0);
+  const salutationOffset = salutationOffsets.length ? Math.min(...salutationOffsets) : -1;
+  return stripMarkupTags((salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
+    .split(/\n#{1,6}\s*终审结果/u)[0]
+    .replace(/\n*PDF (?:文件)?尚未生成并验证[\s\S]*$/u, "")
+    .replace(/```[\s\S]*?```/g, ""))
+    .trim();
+}
+
 export function buildGovernmentWritingFinalizationRequest(userRequest: string, draft: string) {
   return [
     "Finalize a government-writing draft after the user confirmed its outline.",

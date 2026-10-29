@@ -7,8 +7,10 @@ export const APP_UPDATE_STATUS_POLL_MS = 30_000;
 
 /** Whether a focus/visibility event should trigger an immediate app-update refresh. */
 export function shouldRefreshAppUpdateOnWindowSignal(input: {
-  isAuthenticated: boolean;
+  isAuthenticated?: boolean;
   documentHidden: boolean;
 }): boolean {
-  return Boolean(input.isAuthenticated) && !input.documentHidden;
+  // app-update is public; refresh whenever the window is visible.
+  void input.isAuthenticated;
+  return !input.documentHidden;
 }

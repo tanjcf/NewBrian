@@ -34,11 +34,16 @@ test("maps account capability flags from the API contract", () => {
 test("formats authenticated errors without duplicating detail", () => {
   assert.equal(policy.extractDesktopAuthErrorMessage({ code: "DENIED", message: "No access", detail: "No access", request_id: "req-1" }, 403), "DENIED: No access | request_id=req-1");
   assert.equal(policy.extractDesktopAuthErrorMessage(null, 401), "认证失败 (401)");
+  assert.equal(
+    policy.extractDesktopAuthErrorMessage({ code: "AUTH_SESSION_REVOKED", message: "desktop session is revoked" }, 401),
+    "账号已在其他设备登录，当前会话已失效，请重新登录"
+  );
 });
 
 test("classifies connection and retryable gateway failures", () => {
   assert.equal(policy.normalizeConnectionErrorMessage(new Error("fetch failed")), "无法连接认证服务，请检查网络或服务器地址。");
   assert.equal(policy.isRetryableModelGatewayError(new Error("HTTP 503 unavailable")), true);
+  assert.equal(policy.isRetryableModelGatewayError(new Error("模型网关请求失败（HTTP 524）")), true);
   assert.equal(policy.isRetryableModelGatewayError(new Error("HTTP 400 invalid")), false);
   assert.equal(policy.isRetryableModelGatewayError(new Error("fetch failed")), true);
   assert.equal(policy.isRetryableModelGatewayError(new Error("AgentHostClientError: fetch failed")), true);

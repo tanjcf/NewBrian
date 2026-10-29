@@ -1,3 +1,4 @@
+import type { NewbrainApi } from "../../preload/index.js";
 import type {
   AutomationSpec,
   AddFeatureItemInput,
@@ -85,6 +86,7 @@ import type {
   WorkspaceThreadRecord,
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
+import type { DesktopWindowControlApi } from "../../shared/desktop-window-control-contract.js";
 
 export interface BootstrapPayload {
   appName: string;
@@ -109,12 +111,16 @@ export type ChatMessageRole = "user" | "assistant";
 export type { DesktopAgreementConfig, FeatureConfigPayload };
 export type DesktopAuthStatusState = DesktopAuthStatus;
 
-export interface LoginFormState {
-  email: string;
-  password: string;
-  captcha: string;
-  agreementAccepted: boolean;
-}
+export type { LoginFormState, LoginChannel, LoginEmailAuthMode } from "./login-form";
+export {
+  initialLoginForm,
+  isCnMobile,
+  normalizeCnMobileInput,
+  resolveLoginIdentifier,
+  shouldUseLoginCode,
+  canSubmitLoginForm,
+  authServiceStatusLabel
+} from "./login-form";
 
 export interface ModelChatMessage {
   id: string;
@@ -223,6 +229,7 @@ export interface ManagedFeatureDraft {
   threadId: string;
   action: string;
   intervalMinutes: string;
+  dailyTime: string;
   runtime: string;
   targetType: string;
   schedule: string;
@@ -271,7 +278,8 @@ export type SettingsNavIconName =
 
 declare global {
   interface Window {
-    newbrain?: {
+    newbrain?: NewbrainApi & {
+      windowControl: DesktopWindowControlApi;
       listBrainWorkspaces: () => Promise<BrainWorkspaceDto[]>;
       listBrainProjects: (input?: BrainProjectListInput) => Promise<BrainProjectDto[]>;
       createBrainProject: (input: BrainProjectCreateInput) => Promise<BrainProjectDto>;
@@ -377,6 +385,7 @@ declare global {
   }) => Promise<Record<string, unknown>>;
   setWalletOverageEnabled: (input: { enabled: boolean }) => Promise<Record<string, unknown>>;
   redeemCode: (input: { code: string }) => Promise<Record<string, unknown>>;
+  claimNationalDayGift: () => Promise<Record<string, unknown>>;
       listRepositoryPlugins: (input?: PluginCatalogQuery) => Promise<PluginCatalogSnapshot>;
       getRepositoryPlugin: (input: PluginKeyInput) => Promise<Record<string, unknown>>;
       installRepositoryPlugin: (input: PluginInstallInput) => Promise<PluginOperationResult>;
@@ -384,7 +393,8 @@ declare global {
       removeRepositoryPlugin: (input: PluginKeyInput) => Promise<PluginOperationResult>;
       reconcileRepositoryPlugins: () => Promise<Record<string, unknown>>;
       sendLoginCode: (input: {
-        email: string;
+        email?: string;
+        phone?: string;
       }) => Promise<Record<string, unknown>>;
       loginAuth: (input: {
         email: string;
@@ -392,6 +402,21 @@ declare global {
         agreement_accepted: boolean;
         captcha?: string;
       }) => Promise<DesktopAuthStatusState>;
+      loadRememberedLogin?: () => Promise<{
+        version: 1;
+        channel: "email" | "phone";
+        email: string;
+        phone: string;
+        password: string;
+      } | null>;
+      saveRememberedLogin?: (input: {
+        version: 1;
+        channel: "email" | "phone";
+        email: string;
+        phone: string;
+        password: string;
+      }) => Promise<{ ok: true }>;
+      clearRememberedLogin?: () => Promise<{ ok: true }>;
       loginWithAlipayQr: (input: { agreement_accepted: boolean }) => Promise<DesktopAuthStatusState>;
       changeAuthPassword: (input: {
         currentPassword: string;
@@ -426,10 +451,27 @@ declare global {
       queueWorkspaceScan: () => Promise<PhaseOneSnapshot>;
       queueGitStatus: () => Promise<PhaseOneSnapshot>;
       queueShellCommand: (command: string) => Promise<PhaseOneSnapshot>;
-      respondApproval: (input: boolean | { approved: boolean; requestId?: string; approvalId?: string }) => Promise<PhaseOneSnapshot>;
+      respondApproval: (input: boolean | { approved: boolean; requestId?: string; approvalId?: string; permissionMode?: "full" }) => Promise<PhaseOneSnapshot>;
+      applyLivePermissionMode?: (input: { requestId: string; permissionMode: "full" }) => Promise<{ applied: boolean; permissionMode?: "full" }>;
       generatePatch: (input: PatchFormState) => Promise<PhaseOneSnapshot>;
       applyPatch: () => Promise<PhaseOneSnapshot>;
       getModelConfig: () => Promise<ModelConfigState>;
+      listCustomModelEndpoints?: () => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      saveCustomModelEndpoint?: (input: { label: string; baseUrl: string; apiKey: string; model: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      deleteCustomModelEndpoint?: (input: { id: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
+      selectCustomModelEndpoint?: (input: { id: string }) => Promise<{
+        endpoints: Array<{ id: string; label: string; baseUrl: string; model: string; wireApi: "chat.completions" | "responses" }>;
+        selectedId: string;
+      }>;
       reviewResearchWriting: (payload: { title?: string; body: string; sources: Array<{ title: string; sourceType: string; url?: string; content: string }> }) => Promise<{ ok: boolean; source_count: number; risk_count: number; unsupported_count: number; risks: Array<{ category: string; label: string; claim: string; supported: boolean; source_titles: string[]; severity: string; suggestion: string }> }>;
       exportResearchWriting: (input: { payload: { title?: string; body: string; sources: Array<{ title: string; sourceType: string; url?: string; content: string }> }; format: "docx" | "txt" | "review-docx" | "review-txt" }) => Promise<{ ok: boolean; canceled: boolean; path?: string }>;
       exportWorkspaceThreadHtml?: (input: {
@@ -507,9 +549,21 @@ declare global {
         notes?: string;
         mandatory?: boolean;
         downloadUrl?: string;
+        staged?: boolean;
+        stagedPath?: string;
+        skippedVersion?: string;
         detail: string;
       }>;
-      startAppUpdate: () => Promise<{ ok: boolean; path?: string; detail: string }>;
+      startAppUpdate: () => Promise<{ ok: boolean; path?: string; detail: string; staged?: boolean }>;
+      applyAppUpdate: () => Promise<{ ok: boolean; path?: string; detail: string }>;
+      getAppliedAppUpdate: () => Promise<{
+        fromVersion: string;
+        toVersion: string;
+        notes: string;
+        appliedAt: string;
+      } | null>;
+      dismissAppliedAppUpdate: () => Promise<void>;
+      skipAppUpdateVersion: (version?: string) => Promise<{ ok: boolean; detail: string }>;
       verifyAppUpdate: (input?: { releaseId?: string; ok?: boolean }) => Promise<{
         ok: boolean;
         releaseId?: string;
@@ -519,10 +573,13 @@ declare global {
         detail: string;
       }>;
       onAppUpdateProgress?: (listener: (progress: {
-        phase: "preparing" | "downloading" | "verifying" | "installing" | "opening" | "done" | "error";
+        phase: string;
         percent: number;
         detail: string;
         latestVersion?: string;
+        currentVersion?: string;
+        notes?: string;
+        installMode?: "silent" | "wizard" | "patch" | "nsis";
         preservesUserData: true;
       }) => void) => () => void;
       getMcpServers: () => Promise<Array<{
@@ -540,6 +597,24 @@ declare global {
       updateFeatureItem: (input: UpdateFeatureItemInput) => Promise<FeatureConfigPayload>;
       deleteFeatureItem: (input: DeleteFeatureItemInput) => Promise<FeatureConfigPayload>;
       searchWorkspaces: (query: string) => Promise<SearchResultSpec[]>;
+      previewConversationRef?: (input: {
+        kind: "thread" | "brain_conversation";
+        workspaceId?: string;
+        threadId?: string;
+        conversationId?: string;
+        turnLimit?: number;
+      }) => Promise<{
+        id: string;
+        kind: "thread" | "brain_conversation";
+        title: string;
+        summary: string;
+        workspaceId?: string;
+        threadId?: string;
+        conversationId?: string;
+        archived?: boolean;
+        turns: Array<{ role: string; content: string; createdAt?: string }>;
+        truncated: boolean;
+      }>;
       readWorkspaceFile: (input: { workspaceId: string; filePath: string }) => Promise<{
         path: string;
         name: string;
@@ -584,7 +659,7 @@ declare global {
       listExperts?: () => Promise<Array<Record<string, unknown>>>;
       installExpert?: (input: { expertId: string }) => Promise<Record<string, unknown>>;
       setExpertEnabled?: (input: { expertId: string; enabled: boolean }) => Promise<Array<Record<string, unknown>>>;
-      summonExpert?: (input: { threadId: string; expertId: string }) => Promise<Record<string, unknown>>;
+      summonExpert?: (input: { threadId: string; expertId: string; userConfirmed?: boolean }) => Promise<Record<string, unknown>>;
       clearExpertSummon?: (input: { threadId: string }) => Promise<{ ok: boolean }>;
       getExpertSummon?: (input: { threadId: string }) => Promise<Record<string, unknown> | null>;
       resolveExpertFromSkill?: (input: { skillName: string; skillNames?: string[] }) => Promise<{ expertId: string; skillName: string } | null>;
@@ -761,6 +836,11 @@ declare global {
         archived: boolean;
         scope?: "project" | "chat";
       }) => Promise<WorkspaceCatalogItem[]>;
+      moveWorkspaceThread: (input: {
+        threadId: string;
+        fromWorkspaceId: string;
+        toWorkspaceId: string;
+      }) => Promise<WorkspaceCatalogItem[]>;
       deleteWorkspaceThread: (input: {
         workspaceId: string;
         threadId: string;
@@ -769,6 +849,29 @@ declare global {
       openBrowserPreview: (url?: string) => Promise<{ ok: boolean; url: string }>;
       closeBrowserPreview: () => Promise<{ ok: boolean }>;
       captureBrowserPreview: () => Promise<{ ok: boolean; path: string; url: string }>;
+      clearBrowserBrowsingData?: () => Promise<{ ok: boolean; detail: string }>;
+      listBrowserHistory?: () => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+      removeBrowserHistoryEntry?: (id: string) => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+      clearBrowserHistory?: () => Promise<{ ok: boolean }>;
+      selectBrowserDownloadDir?: () => Promise<{ path: string } | null>;
+      listBrowserCredentials?: () => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      upsertBrowserCredential?: (input: {
+        origin: string;
+        username: string;
+        password: string;
+        id?: string;
+      }) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      removeBrowserCredential?: (id: string) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+      listBrowserContacts?: () => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      upsertBrowserContact?: (input: {
+        name: string;
+        email?: string;
+        phone?: string;
+        id?: string;
+      }) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      removeBrowserContact?: (id: string) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+      getBrowserCdpAccess?: () => Promise<{ enabled: boolean; partition: string; detail: string }>;
+      probeBrowserSiteTools?: () => Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }>;
       getSystemTools: () => Promise<SystemToolState[]>;
       generateResearchWritingIntake: (input: {
         userRequest?: string;
@@ -827,12 +930,13 @@ declare global {
 }
 
 export const featureItems: FeatureItem[] = [
-  { id: "new-chat", label: "新建对话", icon: "+", description: "创建新线程或从当前线程分叉上下文。" },
+  { id: "new-chat", label: "新建对话", icon: "+", description: "创建新对话或从当前对话分叉上下文。" },
   { id: "experts", label: "专家市场", icon: "◎", description: "浏览并安装专家包；召唤仅由全局/项目 Skill 自行 expert.summon。" },
   { id: "extensions", label: "扩展", icon: "◇", description: "管理 GitHub、Jira、Slack 等外部服务集成。" },
   { id: "skills", label: "技能", icon: "⬡", description: "管理当前工作台可调用的技能能力。" },
   { id: "plugins", label: "插件", icon: "⌘", description: "管理外接能力和集成插件。" },
-  { id: "automation", label: "自动化", icon: "◔", description: "配置项目空间和线程的定时动作。" }
+  { id: "automation", label: "自动化", icon: "◔", description: "用自然语言创建定时任务，对齐 Codex 自动任务。" },
+  { id: "mcp", label: "软件联动", icon: "↔", description: "键鼠控制任意 Windows 窗口；MCP 仅作高级扩展。" }
 ];
 
 export const settingsFeatureItem: FeatureItem = {
@@ -894,7 +998,7 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
     diffMarks: "color"
   },
   configuration: {
-    requireApprovalForShell: true,
+    requireApprovalForShell: false,
     saveResponses: false,
     telemetryEnabled: false
   },
@@ -965,14 +1069,49 @@ export const initialDesktopPreferences: DesktopPreferencesState = {
     rootDir: ".newbrain/worktrees"
   },
   browser: {
+    enabled: true,
     autoOpenPreview: false,
     preserveTabs: true,
     highResScreenshots: false,
-    previewUrl: "http://127.0.0.1:3000"
+    previewUrl: "http://127.0.0.1:3000",
+    openWebLinksIn: "in-app-browser",
+    openLocalLinksIn: "in-app-browser",
+    showFullUrl: false,
+    annotatedScreenshots: "always",
+    downloadDir: "",
+    askDownloadPath: false,
+    historyAccess: "always_ask",
+    siteToolsEnabled: true,
+    agentPermissions: {
+      defaults: {
+        browse: "require_approval",
+        download: "require_approval",
+        upload: "require_approval"
+      },
+      exceptions: [
+        {
+          origin: "http://127.0.0.1:8765",
+          browse: "always_allow",
+          download: "require_approval",
+          upload: "require_approval"
+        },
+        {
+          origin: "http://localhost:8765",
+          browse: "always_allow",
+          download: "require_approval",
+          upload: "require_approval"
+        }
+      ]
+    },
+    fullCdpAccess: false
   },
   market: {
     directClawhubAllowed: true
-  }
+  },
+  brain: {
+    selectedWorkspaceKey: ""
+  },
+  launchAtLogin: true
 };
 
 export const initialFeatureConfig: FeatureConfigPayload = {
@@ -1070,13 +1209,6 @@ export async function optionalLoad<T>(promise: Promise<T>, fallback: T, label: s
   }
 }
 
-export const initialLoginForm: LoginFormState = {
-  email: "",
-  password: "",
-  captcha: "",
-  agreementAccepted: false
-};
-
 export const initialDraft: ManagedFeatureDraft = {
   name: "",
   summary: "",
@@ -1093,6 +1225,7 @@ export const initialDraft: ManagedFeatureDraft = {
   threadId: "",
   action: "workspace_scan",
   intervalMinutes: "30",
+  dailyTime: "",
   runtime: "worktree",
   targetType: "project",
   schedule: "daily",

@@ -6,6 +6,8 @@ import { extractTextAttachment } from "./attachment-text.js";
 import { DesktopArtifactPreviewService } from "./desktop-artifact-preview-service.js";
 import { registerOfficialGovernmentWebTools } from "./official-government-web-tools.js";
 import type { OfficialGovernmentWebService } from "./official-government-web-service.js";
+import { registerDesktopWebSearchTools } from "./desktop-web-search-tools.js";
+import type { DesktopWebSearchClient } from "./desktop-web-search-client.js";
 import { resolveExistingFileInsideRoot } from "./path-security.js";
 import {
   assertWorkspaceMediaKind,
@@ -26,6 +28,7 @@ export interface ModelChatRuntimeSetupDependencies {
   userSkillRoot: string;
   readFeatureSkills: () => Promise<Array<{ name: string; status: string }>>;
   officialGovernmentWebService: OfficialGovernmentWebService;
+  desktopWebSearchClient: Pick<DesktopWebSearchClient, "search" | "fetchPage">;
   readWorkspaceCatalog: () => Promise<{ workspaces: WorkspaceCatalogItem[] }>;
   getActiveWorkspaceId: () => string;
   publishWorkspaceFilePreview: (event: { workspaceId: string; filePath: string; kind: WorkspaceMediaKind }) => void;
@@ -193,6 +196,7 @@ export async function configureModelChatRuntime(
   registerDesktopArtifactRenderer(targetRuntime, workspace.path);
   registerWorkspaceMediaAgentTools(deps, targetRuntime, { workspaceId: workspace.id });
   registerOfficialGovernmentWebTools(targetRuntime, deps.officialGovernmentWebService);
+  registerDesktopWebSearchTools(targetRuntime, deps.desktopWebSearchClient);
   await applyApplicationSkillPolicy(targetRuntime, deps.userSkillRoot, deps.readFeatureSkills);
 }
 

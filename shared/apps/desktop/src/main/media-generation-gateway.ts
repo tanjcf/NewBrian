@@ -101,6 +101,52 @@ export function isMediaGenerationAuthenticationError(error: unknown): boolean {
     && (error.status === 401 || error.status === 403);
 }
 
+/** Clear Chinese guidance when media/image tools refuse with HTTP 401/403. */
+export const MEDIA_GENERATION_AUTH_USER_MESSAGE =
+  "媒体生成认证失败（登录态/网关凭证无效）。请重新登录后再试；不要去「模型配置」找混元生图——401 不是缺模型。若刚登录仍失败，请联系管理员检查网关鉴权。";
+
+/** Clear Chinese guidance when spring-app has no authorised image/video/music model (HTTP 404). */
+export const MEDIA_GENERATION_MISSING_MODEL_USER_MESSAGE =
+  "当前套餐没有可用的媒体生成模型。请管理员在「模型配置」启用对应能力（图片：混元生图 hy-image-v3；视频/音乐：已开通的 TokenHub 模型），并确认套餐已授权该模型。";
+
+/**
+ * Map media gateway auth refusals to a user-facing Chinese message.
+ * Accepts MediaGenerationHttpError or already-stringified tool/output text.
+ */
+export function mapMediaGenerationAuthUserMessage(error: unknown): string | null {
+  if (isMediaGenerationAuthenticationError(error)) return MEDIA_GENERATION_AUTH_USER_MESSAGE;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/Auto\s*媒体工具失败[（(]\s*40[13]\s*[）)]|媒体生成需要已登录|HTTP\s*40[13]\b|^\s*Unauthorized\s*$|invalid desktop access token|desktop login session or local api key required/i.test(message)) {
+    return MEDIA_GENERATION_AUTH_USER_MESSAGE;
+  }
+  return null;
+}
+
+/**
+ * Map “no authorised media model” refusals (typically HTTP 404 from GenerationJobFacade).
+ */
+export function mapMediaGenerationMissingModelUserMessage(error: unknown): string | null {
+  if (error instanceof MediaGenerationHttpError && error.status === 404) {
+    const detail = String(
+      (error.payload && typeof error.payload === "object" && !Array.isArray(error.payload)
+        ? (error.payload as Record<string, unknown>).message
+          ?? (error.payload as Record<string, unknown>).detail
+          ?? (error.payload as Record<string, unknown>).error
+          : null)
+        ?? error.message
+        ?? ""
+    );
+    if (/generation model is not available|model .* is not available|not available for this credential or plan|AUTO_MEDIA_TOOL_UNAVAILABLE/i.test(detail)) {
+      return MEDIA_GENERATION_MISSING_MODEL_USER_MESSAGE;
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/Auto\s*媒体工具失败[（(]\s*404\s*[）)].*(?:generation model is not available|model .* is not available|not available for this credential)|套餐没有可用的文生图|没有可用的.*(?:出图|生图|视频|音乐).*模型/i.test(message)) {
+    return MEDIA_GENERATION_MISSING_MODEL_USER_MESSAGE;
+  }
+  return null;
+}
+
 export type RunAutoMediaToolInput = {
   gatewayBaseUrl: string;
   bearerToken: string;

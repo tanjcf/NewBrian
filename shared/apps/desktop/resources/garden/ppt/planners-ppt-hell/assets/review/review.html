@@ -1,0 +1,1304 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>整套 PPT 审阅工作台</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;height:100vh;overflow:hidden;background:#ebeff2;color:#17242b;font:13px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;flex-direction:column}
+header{height:48px;background:#112b35;color:white;padding:0 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid #0b1d24}
+header .brand-left{display:flex;align-items:center;gap:14px}
+header b#project{font-size:15px;letter-spacing:.01em}
+header .status-pills{display:flex;align-items:center;gap:12px;font-size:12px;color:#b7c8cd}
+header .status-pills p{position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none;margin:0}
+header .status-pills p.readonly-warn{position:static;left:auto;top:auto;opacity:1;pointer-events:auto;margin:0;padding:2px 8px;border-radius:4px;background:#593315;color:#ffd8b3}
+header small{color:#8fa6ae;font-size:12px}
+.sr-only{position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none}
+
+/* Top PPT-style Ribbon / Toolbar — Strict single-line nowrap, zero button deformation */
+.ppt-toolbar{height:52px;background:#f8fafb;border-bottom:1px solid #cfdadd;padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.ppt-toolbar::-webkit-scrollbar{display:none}
+.ppt-toolbar button,.ppt-toolbar .toolbar-metric,.ppt-toolbar .selected-badge{white-space:nowrap;flex-shrink:0}
+.toolbar-group{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.toolbar-divider{width:1px;height:26px;background:#d5dfe3;margin:0 6px;flex-shrink:0}
+.tool-mode{font-weight:600;border:1px solid #b8c7cd;background:white;color:#1c313a;padding:6px 12px;border-radius:6px;transition:all .12s;white-space:nowrap;flex-shrink:0}
+.tool-mode.active{background:#1b4e60;color:white;border-color:#1b4e60;box-shadow:0 1px 3px rgba(17,43,53,.18)}
+.micro-edit-bar{display:flex;align-items:center;gap:6px;background:#eef3f5;padding:4px 10px;border-radius:6px;border:1px solid #d5e0e4;flex-shrink:0;flex-wrap:nowrap}
+.selected-badge{font-size:12px;color:#234957;font-weight:600;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:4px}
+#inlineTextInput{width:210px;min-width:130px;padding:5px 8px;border:1px solid #b8c7cd;border-radius:4px;background:white;font:inherit;color:#17242b}
+#inlineTextInput:disabled{background:#e7ecef;color:#87969c}
+.toolbar-metric{font-size:12px;font-variant-numeric:tabular-nums;color:#39525c;background:white;border:1px solid #cfdadd;border-radius:4px;padding:4px 7px;min-width:48px;text-align:center}
+.compact-btn{padding:5px 10px;font-size:12px;border-radius:4px;white-space:nowrap;flex-shrink:0}
+
+/* Main 3-column PPT Workspace */
+.workspace{flex:1;min-height:0;display:grid;grid-template-columns:148px minmax(320px,1fr) 340px;gap:14px;padding:12px 16px}
+.rail,.panel{overflow:auto;scrollbar-width:thin}
+.rail{background:#e3e8ec;border-radius:8px;padding:8px}
+.rail button{display:block;width:100%;padding:6px;border:2px solid transparent;border-radius:6px;background:white;margin-bottom:8px;text-align:left;transition:border-color .12s,transform .1s}
+.rail button:hover{border-color:#89a8b4}
+.rail img{width:100%;display:block;border-radius:3px;border:1px solid #e5eaed;aspect-ratio:16/9;object-fit:contain;background:white}
+.rail .active{border-color:#1b4e60;box-shadow:0 2px 6px rgba(17,43,53,.12)}
+.rail-meta{display:flex;align-items:center;justify-content:space-between;margin-top:5px;font-size:12px;font-weight:600;color:#2c4049}
+.rail-tag{color:#cb741d}
+.rail-tag:empty{display:none}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#929ca0;margin-right:6px}
+.approved .dot{background:#138357}
+.revise .dot{background:#cb741d}
+.updated .dot{background:#2f7fd0}
+
+/* Center Stage */
+.stage{min-width:0;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden;background:#dde4e8;border-radius:10px;padding:12px;position:relative}
+.stage-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:0 4px}
+.stage h2{font-size:16px;margin:0;color:#17242b;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stage-hint{font-size:12px;color:#5a7079;white-space:nowrap;flex-shrink:0}
+.preview{position:relative;width:100%;line-height:0;max-height:calc(100% - 44px);aspect-ratio:16/9;background:white;border-radius:6px;box-shadow:0 8px 28px rgba(17,43,53,.14);overflow:hidden;user-select:none}
+.preview img#slide{width:100%;height:100%;object-fit:contain;background:white;user-select:none;display:block}
+.preview.marking{cursor:crosshair;touch-action:none}
+.preview.marking .svg-stage-wrap,.preview.marking .region-overlay{pointer-events:none}
+
+/* Live Inline SVG Overlay */
+.svg-stage-wrap{position:absolute;inset:0;width:100%;height:100%;z-index:2;overflow:hidden}
+.svg-stage-wrap svg{width:100%;height:100%;display:block;user-select:none}
+.svg-stage-wrap [data-review-id]{cursor:pointer;transition:filter .08s}
+.svg-stage-wrap svg[data-review-id="0"]{cursor:default}
+.svg-stage-wrap [data-review-id]:hover{filter:drop-shadow(0 0 2px rgba(27,78,96,.45))}
+
+/* Selected SVG Element Frame */
+.el-highlight-box{position:absolute;z-index:4;border:2px solid #0d7490;background:rgba(13,116,144,.07);pointer-events:none;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.85)}
+.el-highlight-tag{display:none}
+
+/* Persistent Numbered Annotation Boxes on Canvas */
+.region-overlay{position:absolute;inset:0;z-index:3;pointer-events:none}
+.canvas-region-box{position:absolute;border:2px solid #d96b12;background:rgba(231,132,33,.12);border-radius:4px;pointer-events:none;transition:all .12s}
+.canvas-region-box:hover,.canvas-region-box.active-region{border-color:#b84300;background:rgba(231,132,33,.24);box-shadow:0 0 0 2px rgba(255,255,255,.9),0 4px 12px rgba(184,67,0,.25);z-index:5}
+.canvas-region-badge{position:absolute;top:-11px;left:-11px;min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:#d96b12;color:white;font-size:12px;font-weight:700;line-height:22px;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,.25);pointer-events:auto;cursor:pointer}
+.canvas-region-caption{position:absolute;left:0;bottom:calc(100% + 4px);max-width:240px;background:rgba(17,43,53,.92);color:white;font-size:11px;line-height:1.35;padding:3px 7px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+
+.box{position:absolute;z-index:6;border:2px dashed #e78421;background:#ffbb3328;pointer-events:none}
+
+/* Right Panel */
+.panel{background:white;border-radius:8px;padding:14px;border:1px solid #d5dfe3;display:flex;flex-direction:column;gap:8px}
+.panel textarea{width:100%;height:78px;resize:vertical;font:inherit;padding:8px;border:1px solid #c2d0d6;border-radius:6px}
+.panel h3{margin:6px 0 2px;font-size:13px;color:#1b3642;display:flex;align-items:center;justify-content:space-between}
+button,input,select{font:inherit}
+button{cursor:pointer;border:1px solid #b9c6cb;border-radius:5px;padding:6px 11px;background:white;color:#17242b}
+button:hover:not(:disabled){background:#f2f6f8}
+button.primary{background:#235c70;color:white;border-color:#235c70}
+button.primary:hover:not(:disabled){background:#1b4959}
+button.good{background:#138357;color:white;border-color:#138357}
+button.good:hover:not(:disabled){background:#0f6b47}
+button:disabled{opacity:.45;cursor:default}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.muted{color:#6c7d84;font-size:12px;margin:2px 0}
+.asset{border:1px solid #d6dfe2;padding:10px;margin:6px 0;border-radius:6px}
+.asset img{display:block;width:100%;height:100%;object-fit:contain}
+.crop{height:110px;background:#edf1f2;margin:6px 0}
+.asset select,.asset input[type=text]{width:100%;margin:3px 0;padding:5px}
+.asset input[type=file]{width:100%;font-size:12px}
+.drop{border:2px dashed #aebfc6;padding:12px;text-align:center;margin:4px 0;border-radius:6px;cursor:pointer}
+.annotation{border:1px solid #e6ecef;background:#fafcfd;border-radius:6px;padding:7px 9px;margin-bottom:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;transition:border-color .12s,background .12s}
+.annotation:hover,.annotation.active-region{border-color:#d96b12;background:#fff8f1}
+.annotation button{padding:2px 8px;font-size:12px;flex-shrink:0}
+.svg-edits-box{background:#eef8f3;border:1px solid #b7e1cd;border-radius:6px;padding:8px 10px;font-size:12px;color:#14593c}
+.svg-edit-item{display:flex;align-items:center;justify-content:space-between;padding:2px 0;border-bottom:1px dashed #cde8da}
+.svg-edit-item:last-child{border-bottom:0}
+
+footer{height:60px;padding:0 20px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:white;border-top:1px solid #ccd7db;flex-shrink:0}
+dialog{border:0;border-radius:12px;padding:24px;width:min(540px,92vw);box-shadow:0 20px 90px #0005}
+dialog::backdrop{background:#112b3580}
+dialog textarea{width:100%;min-height:96px;font:inherit;padding:8px;border:1px solid #b9c6cb;border-radius:6px;margin:8px 0}
+#message{color:#9c401b;max-width:50vw;font-weight:500}
+#message.ok{color:#138357}
+#regions{max-height:170px;overflow:auto}
+#regionNote{width:100%}
+.region-hit-hint{font-size:12px;color:#235c70;background:#eef5f8;border:1px solid #cbe0e8;border-radius:6px;padding:6px 10px;margin-bottom:6px}
+@media(max-width:1100px){
+  .workspace{grid-template-columns:100px minmax(200px,1fr) 280px;gap:8px;padding:8px}
+  header small{display:none}
+  #inlineTextInput{width:140px}
+}
+</style>
+
+<header>
+  <div class="brand-left">
+    <b id="project"></b>
+    <span id="pageStatus" class="toolbar-metric" style="background:#193b48;color:#fff;border-color:#2b596b"></span>
+  </div>
+  <div class="status-pills">
+    <p id="bridgeState">正在连接审阅宿主…</p>
+    <p id="pulseState">变化戳：还没收到</p>
+    <small>Planner’s PPT Hell · 阿祖不看 TVC · demyth.info</small>
+  </div>
+</header>
+
+<div class="ppt-toolbar">
+  <div class="toolbar-group">
+    <button id="modeSelect" class="tool-mode active" onclick="setMode('select')" title="点选画布上的文字或图形，直接改字、调字号或拖动位置">选择与微调</button>
+    <button id="mark" class="tool-mode" onclick="startRegion()" title="在画布上拖出矩形框写修改意见">框选问题</button>
+    <button class="compact-btn" onclick="clearRegions()">清空框选</button>
+  </div>
+
+  <div class="micro-edit-bar" id="microEditBar">
+    <span id="selectedBadge" class="selected-badge">未选中</span>
+    <input id="inlineTextInput" type="text" placeholder="点击画布文字可直接修改…" disabled>
+    <button id="fontDecBtn" class="compact-btn" onclick="stepFontSize(-2)" disabled title="字号 -2px">A-</button>
+    <span id="fontSizeLabel" class="toolbar-metric">--px</span>
+    <button id="fontIncBtn" class="compact-btn" onclick="stepFontSize(2)" disabled title="字号 +2px">A+</button>
+    <span id="posDeltaBadge" class="sr-only">Δx: 0, Δy: 0</span>
+    <button id="deleteElBtn" class="compact-btn" onclick="deleteSelectedSvgElement()" disabled title="删除选中的元素（快捷键：Delete / Backspace）">删除</button>
+    <button id="commentElBtn" class="compact-btn" onclick="commentOnSelected()" disabled title="针对该元素添加批注">对此项提意见</button>
+    <button id="undoEditBtn" class="compact-btn" onclick="undoLastSvgEdit()" disabled title="撤销本页上一次微调">撤销</button>
+    <button id="resetEditsBtn" class="compact-btn" onclick="resetPageSvgEdits()" hidden title="还原所有微调">重置</button>
+  </div>
+
+  <div class="toolbar-group">
+    <button id="compare" class="compact-btn" onclick="togglePrevious()">查看修改前</button>
+  </div>
+</div>
+
+<div class="workspace">
+  <nav class="rail" id="rail"></nav>
+
+  <section class="stage">
+    <div class="stage-head">
+      <h2 id="title"></h2>
+      <span id="stageModeHint" class="stage-hint"></span>
+    </div>
+    <div id="staleNote" hidden style="width:100%;margin:0 0 8px;padding:8px 12px;border-radius:6px;background:#4a2f12;color:#ffd9a8;font-size:13px;line-height:1.4"></div>
+    <div class="preview" id="preview">
+      <img id="slide" draggable="false" alt="当前幻灯片">
+      <div id="svgStageWrap" class="svg-stage-wrap"></div>
+      <div id="elHighlightBox" class="el-highlight-box" hidden><span id="elHighlightTag" class="el-highlight-tag"></span></div>
+      <div id="regionOverlay" class="region-overlay"></div>
+      <div id="selection" class="box" hidden></div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <p id="updatedNote" class="muted" hidden style="background:#e8f2fc;color:#19558f;padding:6px 8px;border-radius:5px"></p>
+    <p id="previousNote" class="muted" hidden style="white-space:pre-wrap;background:#f4f6f7;padding:6px 8px;border-radius:5px"></p>
+
+    <div id="svgEditsPanel" class="svg-edits-box" hidden>
+      <div style="font-weight:700;margin-bottom:4px">本页微调记录</div>
+      <div id="svgEditsList"></div>
+    </div>
+
+    <h3><span>框选与批注</span><small class="muted" id="regionCountHint"></small></h3>
+    <div id="regions"></div>
+
+    <h3>本页反馈</h3>
+    <textarea id="feedback" placeholder="填写本页修改意见…"></textarea>
+
+    <h3>本页图片</h3>
+    <p class="muted">支持替换、拖入或粘贴图片</p>
+    <div id="assets"></div>
+    <div class="drop" id="addDrop" tabindex="0">新增图片：点击、拖入或粘贴<input id="newFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>
+  </aside>
+</div>
+
+<footer>
+  <div class="tools">
+    <button onclick="go(-1)">上一页</button>
+    <button onclick="go(1)">下一页</button>
+    <button onclick="decideCurrent('revise')">本页要求修改</button>
+    <button class="good" onclick="decideCurrent('approved')">本页通过</button>
+    <button onclick="location.reload()">重新加载</button>
+  </div>
+  <span id="message"></span>
+  <button class="primary" onclick="showSubmit()">整套提交</button>
+</footer>
+
+<dialog id="submitDialog">
+  <h2>整套提交</h2>
+  <p id="stats"></p>
+  <textarea id="overall" placeholder="整套补充意见（可选）"></textarea>
+  <p class="muted">“批准未处理页”会将未表态的页面一并标记为通过。</p>
+  <div class="tools">
+    <button onclick="submitBatch(false)">提交已有决定</button>
+    <button class="good" onclick="submitBatch(true)">批准未处理页并提交</button>
+    <button onclick="document.querySelector('#submitDialog').close()">返回</button>
+  </div>
+  <p id="submitMessage"></p>
+</dialog>
+
+<dialog id="regionDialog">
+  <h3>这个区域需要怎么改？</h3>
+  <div id="regionHitInfo" class="region-hit-hint" hidden></div>
+  <textarea id="regionNote" placeholder="写清这处需要怎么改…"></textarea>
+  <div class="tools">
+    <button class="primary" onclick="saveRegion()">保存标注</button>
+    <button onclick="cancelRegion()">取消</button>
+  </div>
+</dialog>
+
+{{REVIEW_BRIDGE}}
+<script>
+/* 审阅页（ppt-hell 的审阅面入口，review-surface/2.0.0）。
+   同一份代码两种宿主：有插件 → DSH 侧栏 iframe + postMessage；没插件 → serve-review.mjs + fetch。
+   差异全在桥里，这里不分支。页面**不带桥的副本**：注入点独立成行，宿主 serve 时把它换成**整段注入**。 */
+let review=null,index=0,marking=false,start=null,rect=null,pendingTargets=[],pendingTargetSummary='',previous=false,uploads=0,stale=false,staleKeys=[],slideSeq=0,canUpload=false;
+let selectedReviewId=null,dragState=null,activeRegionIdx=-1;
+const updatedPages=new Set();
+let pulseCount=0,lastPulseAt=null;
+function drawPulse(){
+  $('#pulseState').textContent='变化戳：'+(pulseCount?pulseCount+' 次 · 最后 '+lastPulseAt:'还没收到');
+}
+const $=s=>document.querySelector(s);
+const data=__DATA__;
+const page=()=>data.pages[index];
+const labels={pending:'未处理',approved:'人工批准',revise:'要求修改'};
+const CIRCLED=['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
+const numBadge=i=>CIRCLED[i]||String(i+1);
+const TAG_NAMES={text:'文字',rect:'色块',line:'线条',circle:'圆形',ellipse:'椭圆',path:'图形',polygon:'图形',polyline:'线条',image:'图片',g:'模块'};
+const tagLabel=t=>TAG_NAMES[t]||'元素';
+
+const state=Object.fromEntries(data.pages.map(p=>[p.key,{
+  decision:p.decision,
+  feedback:'',
+  annotations:[],
+  assets:[],
+  svg_edits:[],
+  edit_history:[]
+}]));
+const initial=structuredClone(state);
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>((window.crypto&&crypto.randomUUID)?crypto.randomUUID():'f'+Math.random().toString(16).slice(2)+Date.now().toString(16));
+function note(text,kind){const el=$('#message');el.textContent=text||'';el.className=kind||''}
+
+const assetVersion=a=>String((a&&(a.version||a.sha256))||'').slice(0,12);
+/* 资源 URL 按「路径 + 版本」记住：同一版内容只向宿主取一次。
+ *
+ * 以前每次重建缩略图轨道都把 N 张图重新取一遍（插件模式下是 N 次桥往返 + N 个新 blob），
+ * 翻一页就重来一次。键里带版本号，所以模型重出这一页（版本变）取到的一定是新图；
+ * 版本没变就是同一份字节，重复取没有意义。取失败不缓存，下次还会再试。
+ */
+const assetUrls=new Map();
+async function assetFor(rel,v){
+  const cacheKey=rel+'\u0000'+(v==null?'':String(v));
+  if(assetUrls.has(cacheKey))return assetUrls.get(cacheKey);
+  let url='';
+  if(!review){
+    url='/'+rel+(v?'?v='+encodeURIComponent(String(v)):'');
+  }else{
+    try{url=await review.asset(rel,v?{v:String(v)}:undefined)}
+    catch(error){note('取不到资源：'+error.message,'error');return ''}
+  }
+  if(url)assetUrls.set(cacheKey,url);
+  return url;
+}
+
+// 注意：`changed(p)` 判定的是「是否需要大模型重画」（feedback / annotations / assets）。
+// 纯画布微调（`svg_edits`）不强制把页面锁死在 revise —— 用户可以直接点「本页通过」0 秒落盘生效！
+function changed(p){const s=state[p.key];return !!(s.feedback.trim()||s.annotations.length||s.assets.length)}
+function status(){
+  const s=state[page().key];
+  const suffix=(s.svg_edits&&s.svg_edits.length)?' · 已微调 '+s.svg_edits.length+' 处':'';
+  $('#pageStatus').textContent=labels[s.decision]+suffix;
+}
+function autoState(){
+  const p=page(),s=state[p.key];
+  s.decision=changed(p)?'revise':initial[p.key].decision;
+  updateRail([p.key]);status();   // 逐字符路径：只碰当前页
+}
+$('#project').textContent=(data.project||'项目')+' · 整套审阅';
+
+function setMode(mode){
+  if(mode==='mark'){
+    startRegion();
+    return;
+  }
+  marking=false;
+  $('#preview').classList.remove('marking');
+  $('#selection').hidden=true;
+  $('#modeSelect').classList.add('active');
+  $('#mark').classList.remove('active');
+  $('#stageModeHint').textContent='单击元素可改字、拖动位置或按 Delete 删除';
+}
+
+function railClass(i,p){
+  const s=state[p.key];
+  return s.decision+(i===index?' active':'')+(updatedPages.has(p.key)?' updated':'');
+}
+function railTagText(s){
+  return (s.annotations.length?s.annotations.length+'框 ':'')+(s.svg_edits.length?s.svg_edits.length+'改':'');
+}
+/* 按钮登记表：`page_key → {b, tag, i}`。有它才不用每次靠 `querySelector` 去找按钮。 */
+let railButtons=new Map();
+/* 整条轨道建一次。只在换页 / 换新快照（`render()`）时用。 */
+function drawRail(){
+  const rail=$('#rail');rail.replaceChildren();
+  railButtons=new Map();
+  data.pages.forEach((p,i)=>{
+    const b=document.createElement('button');
+    b.className=railClass(i,p);
+    b.dataset.key=p.key;
+    b.title=updatedPages.has(p.key)?'画面已更新，待复核':'';
+    const img=document.createElement('img');img.alt='第 '+(i+1)+' 页';
+    assetFor(p.png,p.version).then(url=>{if(url)img.src=url});
+    b.append(img);
+    const meta=document.createElement('div');meta.className='rail-meta';
+    const t=document.createElement('span');const d=document.createElement('span');d.className='dot';
+    t.append(d,document.createTextNode(String(i+1)));
+    meta.append(t);
+    // 标签常驻（空的时候用 `:empty` 收起来），这样状态变化能原地改，不必重建。
+    const tag=document.createElement('small');tag.className='rail-tag';tag.textContent=railTagText(state[p.key]);
+    meta.append(tag);
+    b.append(meta);
+    b.onclick=()=>{index=i;render()};
+    rail.append(b);
+    railButtons.set(p.key,{b:b,tag:tag,i:i});
+  });
+}
+/* 只改状态：不重建 DOM、不重取图、不动滚动位置。
+ *
+ * 原来每个状态变化都走 `drawRail()`，而写意见时**每敲一个字**都会走到这里
+ * （`#feedback` 的 oninput → autoState → drawRail）：28 个按钮连同 28 张缩略图被反复销毁重建、
+ * 重新取回。人在左边看到的就是缩略图一直在动，正在写的意见也被打断。变的其实只是
+ * 那一个圆点和那个「N框 N改」标签 —— 其余按钮连碰都不该碰。
+ *
+ * `keys` 给了就只更新这几页（打字只影响当前页）；不给就全部更新一遍（单击、拖拽这类一次性动作）。
+ */
+function updateRail(keys){
+  if(!railButtons.size){drawRail();return}
+  const targets=(keys&&keys.length)?keys:railButtons.keys();
+  for(const key of targets){
+    const at=railButtons.get(key);if(!at)continue;
+    const p=data.pages[at.i],s=state[key];
+    at.b.className=railClass(at.i,p);
+    at.b.title=updatedPages.has(p.key)?'画面已更新，待复核':'';
+    at.tag.textContent=railTagText(s);
+  }
+}
+
+/* ---- 内联 SVG 舞台与轻量微调（改字 / 改字号 / 拖拽移位） ---- */
+function currentSvgRoot(){
+  return $('#svgStageWrap svg');
+}
+function findSvgEl(reviewId){
+  if(!reviewId)return null;
+  const svg=currentSvgRoot();
+  return svg?svg.querySelector('[data-review-id="'+reviewId+'"]'):null;
+}
+function extractTextState(el){
+  const tspans=[...el.querySelectorAll(':scope > tspan')];
+  if(tspans.length){
+    return {isMulti:true,lines:tspans.map(t=>t.textContent||''),text:tspans.map(t=>t.textContent||'').join('\n')};
+  }
+  return {isMulti:false,lines:[el.textContent||''],text:el.textContent||''};
+}
+function applyTextToDom(el,newText,lines){
+  const tspans=[...el.querySelectorAll(':scope > tspan')];
+  if(tspans.length){
+    const arr=Array.isArray(lines)?lines:String(newText||'').split('\n');
+    if(arr.length===tspans.length){
+      tspans.forEach((t,i)=>{t.textContent=arr[i]});
+    }else{
+      tspans[0].textContent=String(newText||'').replace(/\n/g,' ');
+      for(let i=1;i<tspans.length;i++)tspans[i].textContent='';
+    }
+  }else{
+    el.textContent=String(newText||'');
+  }
+}
+function readFontSize(el){
+  const attr=el.getAttribute('font-size');
+  if(attr&&!isNaN(parseFloat(attr)))return Math.round(parseFloat(attr));
+  const style=el.getAttribute('style')||'';
+  const m=style.match(/font-size\s*:\s*([0-9.]+)/i);
+  if(m)return Math.round(parseFloat(m[1]));
+  try{
+    const comp=window.getComputedStyle(el).fontSize;
+    if(comp&&!isNaN(parseFloat(comp)))return Math.round(parseFloat(comp));
+  }catch(e){}
+  return 24;
+}
+function applyFontSizeToDom(el,fs){
+  const val=String(Math.round(fs));
+  el.setAttribute('font-size',val);
+  const st=el.getAttribute('style');
+  if(st&&/font-size/i.test(st)){
+    el.setAttribute('style',st.replace(/font-size\s*:\s*[^;]+/i,'font-size:'+val+'px'));
+  }
+  el.querySelectorAll(':scope > tspan[font-size]').forEach(t=>t.setAttribute('font-size',val));
+}
+function applyDeltaToDom(el,dx,dy){
+  if(!el.dataset.origTransformSaved){
+    el.dataset.origTransform=el.getAttribute('transform')||'';
+    el.dataset.origTransformSaved='1';
+  }
+  const base=el.dataset.origTransform||'';
+  if(Math.abs(dx)<0.05&&Math.abs(dy)<0.05){
+    if(base)el.setAttribute('transform',base);
+    else el.removeAttribute('transform');
+  }else{
+    const tr='translate('+Math.round(dx)+', '+Math.round(dy)+')';
+    el.setAttribute('transform',base?(tr+' '+base):tr);
+  }
+}
+function applyDeleteToDom(el,deleted){
+  if(deleted){
+    el.style.display='none';
+    el.dataset.deleted='1';
+  }else{
+    el.style.display='';
+    delete el.dataset.deleted;
+  }
+}
+function replaySvgEditsOnDom(){
+  const p=page(),s=state[p.key];
+  (s.svg_edits||[]).forEach(edit=>{
+    const el=findSvgEl(edit.review_id);
+    if(!el)return;
+    if(edit.deleted){
+      applyDeleteToDom(el,true);
+      return;
+    }
+    applyDeleteToDom(el,false);
+    if(edit.text!==undefined&&edit.text!==null)applyTextToDom(el,edit.text,edit.lines);
+    if(edit.font_size!==undefined&&edit.font_size!==null)applyFontSizeToDom(el,edit.font_size);
+    if(edit.dx||edit.dy)applyDeltaToDom(el,edit.dx||0,edit.dy||0);
+  });
+}
+function mountInlineSvg(p){
+  const wrap=$('#svgStageWrap');
+  wrap.replaceChildren();
+  selectedReviewId=null;
+  if(!p.svgMarkup||previous){
+    wrap.hidden=true;
+    $('#slide').style.opacity='1';
+    updateToolbarSelection();
+    return;
+  }
+  wrap.hidden=false;
+  wrap.innerHTML=p.svgMarkup;
+  const svg=wrap.querySelector('svg');
+  if(!svg){
+    wrap.hidden=true;
+    $('#slide').style.opacity='1';
+    updateToolbarSelection();
+    return;
+  }
+  // Resolve embedded project <image> assets via ReviewBridge
+  svg.querySelectorAll('image[data-project-rel]').forEach(imgEl=>{
+    const rel=imgEl.getAttribute('data-project-rel');
+    const ver=imgEl.getAttribute('data-project-ver');
+    if(rel){
+      assetFor(rel,ver).then(url=>{
+        if(url){
+          imgEl.setAttribute('href',url);
+          imgEl.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href',url);
+        }
+      });
+    }
+  });
+  // Keep #slide in layout for test assertions & fallback, while showing live interactive SVG on top
+  $('#slide').style.opacity='0.01';
+  replaySvgEditsOnDom();
+  updateToolbarSelection();
+}
+
+function getOrCreateEditRecord(el){
+  const p=page(),s=state[p.key];
+  const rid=el.getAttribute('data-review-id');
+  const tag=el.tagName.toLowerCase();
+  let rec=s.svg_edits.find(x=>x.review_id===rid);
+  if(!rec){
+    const tState=tag==='text'?extractTextState(el):{text:null,lines:null};
+    rec={
+      review_id:rid,
+      tag,
+      orig_text:tState.text,
+      orig_lines:tState.lines,
+      orig_font_size:tag==='text'?readFontSize(el):null,
+      dx:0,
+      dy:0
+    };
+    s.svg_edits.push(rec);
+  }
+  return rec;
+}
+function pruneNoopEditRecord(rid){
+  const s=state[page().key];
+  s.svg_edits=s.svg_edits.filter(rec=>{
+    if(rec.review_id!==rid)return true;
+    const isDeleted=!!rec.deleted;
+    const textChanged=rec.text!==undefined&&rec.text!==rec.orig_text;
+    const fsChanged=rec.font_size!==undefined&&rec.font_size!==rec.orig_font_size;
+    const posChanged=Math.abs(rec.dx||0)>=0.5||Math.abs(rec.dy||0)>=0.5;
+    return isDeleted||textChanged||fsChanged||posChanged;
+  });
+}
+function pushHistorySnapshot(){
+  const s=state[page().key];
+  s.edit_history.push(structuredClone(s.svg_edits));
+  if(s.edit_history.length>25)s.edit_history.shift();
+}
+
+function updateHighlightOverlay(){
+  const box=$('#elHighlightBox'),tagEl=$('#elHighlightTag');
+  const el=findSvgEl(selectedReviewId);
+  if(!el||previous||el.dataset.deleted==='1'){box.hidden=true;return}
+  const previewRect=$('#preview').getBoundingClientRect();
+  const elRect=el.getBoundingClientRect();
+  if(!previewRect.width||!elRect.width){box.hidden=true;return}
+  box.hidden=false;
+  const left=((elRect.left-previewRect.left)/previewRect.width)*100;
+  const top=((elRect.top-previewRect.top)/previewRect.height)*100;
+  const width=(elRect.width/previewRect.width)*100;
+  const height=(elRect.height/previewRect.height)*100;
+  Object.assign(box.style,{
+    left:Math.max(0,left)+'%',
+    top:Math.max(0,top)+'%',
+    width:Math.min(100,Math.max(0.8,width))+'%',
+    height:Math.min(100,Math.max(0.8,height))+'%'
+  });
+  const tagName=el.tagName.toLowerCase();
+  tagEl.textContent=tagLabel(tagName);
+}
+
+function updateToolbarSelection(){
+  const el=findSvgEl(selectedReviewId);
+  const s=state[page().key];
+  $('#undoEditBtn').disabled=!(s.edit_history&&s.edit_history.length);
+  $('#resetEditsBtn').hidden=!(s.svg_edits&&s.svg_edits.length);
+  drawSvgEditsPanel();
+  if(!el||previous||el.dataset.deleted==='1'){
+    $('#selectedBadge').textContent=previous?'修改前预览':'未选中';
+    $('#inlineTextInput').value='';
+    $('#inlineTextInput').disabled=true;
+    $('#fontDecBtn').disabled=true;
+    $('#fontIncBtn').disabled=true;
+    $('#fontSizeLabel').textContent='--px';
+    $('#posDeltaBadge').textContent='Δx: 0, Δy: 0';
+    $('#deleteElBtn').disabled=true;
+    $('#commentElBtn').disabled=true;
+    $('#elHighlightBox').hidden=true;
+    return;
+  }
+  const tag=el.tagName.toLowerCase();
+  const editRec=s.svg_edits.find(x=>x.review_id===selectedReviewId);
+  const dx=Math.round((editRec&&editRec.dx)||0);
+  const dy=Math.round((editRec&&editRec.dy)||0);
+  $('#posDeltaBadge').textContent=`Δx: ${dx>0?'+'+dx:dx}, Δy: ${dy>0?'+'+dy:dy}`;
+  $('#deleteElBtn').disabled=false;
+  $('#commentElBtn').disabled=false;
+  if(tag==='text'){
+    const tState=extractTextState(el);
+    const fs=(editRec&&editRec.font_size)||readFontSize(el);
+    const snippet=(tState.text||'').replace(/\s+/g,' ').trim().slice(0,12);
+    $('#selectedBadge').textContent=`已选文本「${snippet||'空'}」`;
+    $('#inlineTextInput').disabled=false;
+    $('#inlineTextInput').value=tState.isMulti?tState.lines.join(' / '):tState.text;
+    $('#inlineTextInput').title=tState.isMulti?'多行文字用 " / " 分隔':'直接输入修改文字';
+    $('#fontDecBtn').disabled=false;
+    $('#fontIncBtn').disabled=false;
+    $('#fontSizeLabel').textContent=fs+'px';
+  }else{
+    $('#selectedBadge').textContent=`已选${tagLabel(tag)}`;
+    $('#inlineTextInput').value='';
+    $('#inlineTextInput').disabled=true;
+    $('#fontDecBtn').disabled=true;
+    $('#fontIncBtn').disabled=true;
+    $('#fontSizeLabel').textContent='--px';
+  }
+  updateHighlightOverlay();
+}
+
+function drawSvgEditsPanel(){
+  const s=state[page().key];
+  const panel=$('#svgEditsPanel'),list=$('#svgEditsList');
+  list.replaceChildren();
+  if(!s.svg_edits||!s.svg_edits.length){
+    panel.hidden=true;
+    return;
+  }
+  panel.hidden=false;
+  s.svg_edits.forEach(rec=>{
+    const row=document.createElement('div');
+    row.className='svg-edit-item';
+    const parts=[];
+    if(rec.deleted){
+      const label=rec.orig_text?`文字「${(rec.orig_text||'').slice(0,10)}」`:tagLabel(rec.tag);
+      parts.push(`已删除${label}`);
+    }else{
+      if(rec.text!==undefined&&rec.text!==rec.orig_text){
+        parts.push(`改字「${(rec.orig_text||'').slice(0,8)}」→「${(rec.text||'').slice(0,10)}」`);
+      }
+      if(rec.font_size!==undefined&&rec.font_size!==rec.orig_font_size){
+        parts.push(`字号 ${rec.orig_font_size}→${rec.font_size}px`);
+      }
+      if(Math.abs(rec.dx||0)>=0.5||Math.abs(rec.dy||0)>=0.5){
+        parts.push('移动了位置');
+      }
+    }
+    const span=document.createElement('span');
+    span.textContent=parts.join(' · ');
+    row.append(span);
+    list.append(row);
+  });
+}
+
+$('#inlineTextInput').oninput=e=>{
+  const el=findSvgEl(selectedReviewId);
+  if(!el||el.tagName.toLowerCase()!=='text')return;
+  pushHistorySnapshot();
+  const rec=getOrCreateEditRecord(el);
+  const tspans=[...el.querySelectorAll(':scope > tspan')];
+  const rawVal=e.target.value;
+  if(tspans.length>1&&rawVal.includes(' / ')){
+    const parts=rawVal.split(' / ');
+    rec.lines=parts;
+    rec.text=parts.join('\n');
+  }else{
+    rec.text=rawVal;
+    delete rec.lines;
+  }
+  applyTextToDom(el,rec.text,rec.lines);
+  pruneNoopEditRecord(selectedReviewId);
+  updateToolbarSelection();
+  updateRail([page().key]);status();   // 逐字符路径：只碰当前页
+};
+
+function stepFontSize(delta){
+  const el=findSvgEl(selectedReviewId);
+  if(!el||el.tagName.toLowerCase()!=='text')return;
+  pushHistorySnapshot();
+  const rec=getOrCreateEditRecord(el);
+  const currentFs=rec.font_size||readFontSize(el);
+  const nextFs=Math.max(8,Math.min(240,currentFs+delta));
+  rec.font_size=nextFs;
+  applyFontSizeToDom(el,nextFs);
+  pruneNoopEditRecord(selectedReviewId);
+  updateToolbarSelection();
+  updateRail();status();
+}
+
+function deleteSelectedSvgElement(){
+  const el=findSvgEl(selectedReviewId);
+  if(!el||previous||el.dataset.deleted==='1')return;
+  pushHistorySnapshot();
+  const rec=getOrCreateEditRecord(el);
+  rec.deleted=true;
+  applyDeleteToDom(el,true);
+  selectedReviewId=null;
+  updateToolbarSelection();
+  updateRail();status();
+  note('已删除（可点「撤销」恢复）','ok');
+}
+
+function undoLastSvgEdit(){
+  const p=page(),s=state[p.key];
+  if(!s.edit_history||!s.edit_history.length)return;
+  s.svg_edits=s.edit_history.pop();
+  mountInlineSvg(p);
+  updateRail();status();
+}
+function resetPageSvgEdits(){
+  const p=page(),s=state[p.key];
+  if(!s.svg_edits||!s.svg_edits.length)return;
+  pushHistorySnapshot();
+  s.svg_edits=[];
+  mountInlineSvg(p);
+  updateRail();status();
+}
+
+function commentOnSelected(){
+  const el=findSvgEl(selectedReviewId);
+  if(!el)return;
+  const previewRect=$('#preview').getBoundingClientRect();
+  const elRect=el.getBoundingClientRect();
+  if(!previewRect.width)return;
+  const x=Math.max(0,Math.min(0.98,(elRect.left-previewRect.left)/previewRect.width));
+  const y=Math.max(0,Math.min(0.98,(elRect.top-previewRect.top)/previewRect.height));
+  const w=Math.max(0.02,Math.min(1-x,elRect.width/previewRect.width));
+  const h=Math.max(0.02,Math.min(1-y,elRect.height/previewRect.height));
+  rect={x:Number(x.toFixed(4)),y:Number(y.toFixed(4)),w:Number(w.toFixed(4)),h:Number(h.toFixed(4))};
+  const tag=el.tagName.toLowerCase();
+  const snippet=(el.textContent||'').replace(/\s+/g,' ').trim().slice(0,48);
+  pendingTargets=[{review_id:selectedReviewId,tag,text:snippet}];
+  pendingTargetSummary=snippet?`文本「${snippet}」`:tagLabel(tag);
+  showRegionDialogWithHits();
+}
+
+function pickSelectableSvgTarget(target){
+  const svg=currentSvgRoot();
+  if(!svg||!svg.contains(target))return null;
+  let curr=target;
+  while(curr&&curr!==svg){
+    if(curr.dataset&&curr.dataset.deleted==='1')return null;
+    if(curr.hasAttribute&&curr.hasAttribute('data-review-id')){
+      const tag=curr.tagName.toLowerCase();
+      if(tag==='defs'||tag==='style'||tag==='clippath'||tag==='lineargradient')return null;
+      // Skip full-bleed background rect (1920x1080) so clicks on empty background deselect cleanly
+      if(tag==='rect'&&curr.getAttribute('data-review-id')==='0.0'){
+        const w=parseFloat(curr.getAttribute('width')||'0');
+        const h=parseFloat(curr.getAttribute('height')||'0');
+        if(w>=1900&&h>=1060)return null;
+      }
+      if(tag==='tspan'&&curr.parentElement&&curr.parentElement.hasAttribute('data-review-id')){
+        return curr.parentElement;
+      }
+      return curr;
+    }
+    curr=curr.parentElement;
+  }
+  return null;
+}
+
+async function render(){
+  const seq=++slideSeq;
+  marking=false;previous=false;
+  $('#preview').classList.remove('marking');
+  $('#selection').hidden=true;
+  $('#modeSelect').classList.add('active');
+  $('#mark').classList.remove('active');
+  const p=page(),s=state[p.key];
+  $('#title').textContent=(index+1)+' / '+data.pages.length+' · '+p.title;
+  $('#feedback').value=s.feedback;
+  const updated=updatedPages.has(p.key);
+  $('#updatedNote').hidden=!updated;
+  $('#updatedNote').textContent=updated?'这一页的画面已更新，复核无误后可点「本页通过」。':'';
+  const prev=p.previousFeedback||'';
+  const prevRegions=(p.previousAnnotations||[]).map(a=>String(a&&a.text||'').trim()).filter(Boolean);
+  const prevAssets=(p.previousAssets||[]).length;
+  const prevLines=[];
+  if(prev)prevLines.push('「'+prev+'」');
+  if(prevRegions.length)prevLines.push('框选：'+prevRegions.map((text,i)=>(i+1)+'. '+text).join('；'));
+  if(prevAssets)prevLines.push('图片改动：'+prevAssets+' 处');
+  $('#previousNote').hidden=!prevLines.length;
+  $('#previousNote').textContent=prevLines.length
+    ?'上一轮你说的：'+prevLines.join('\n') :'';
+  $('#compare').disabled=!p.previous;$('#compare').textContent='查看修改前';
+  mountInlineSvg(p);
+  const url=await assetFor(p.png,p.version);
+  if(seq===slideSeq&&url)$('#slide').src=url;
+  drawRail();drawAssets();drawRegions();status();drawStale();
+}
+
+function go(d){index=Math.max(0,Math.min(data.pages.length-1,index+d));render()}
+function togglePrevious(){
+  previous=!previous;
+  $('#compare').textContent=previous?'查看当前版本':'查看修改前';
+  marking=false;$('#selection').hidden=true;
+  const p=page();
+  mountInlineSvg(p);
+  drawRegions();
+  assetFor(previous?p.previous:p.png,previous?undefined:p.version).then(url=>{if(url)$('#slide').src=url});
+}
+$('#feedback').oninput=e=>{state[page().key].feedback=e.target.value;autoState()};
+
+/* ---- 框选批注 + 画布常驻编号框 + 自动命中检测 ---- */
+function startRegion(){
+  if(previous)togglePrevious();
+  marking=true;
+  selectedReviewId=null;
+  updateToolbarSelection();
+  $('#preview').classList.add('marking');
+  $('#modeSelect').classList.remove('active');
+  $('#mark').classList.add('active');
+  $('#stageModeHint').textContent='在画布上按住鼠标拖出框选区域';
+  note('在页面上拖出需要修改的区域');
+}
+function point(e){
+  const r=$('#preview').getBoundingClientRect();
+  return {x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};
+}
+function hitTestSvgElements(normRect){
+  const svg=currentSvgRoot();
+  if(!svg)return {targets:[],summary:''};
+  const pr=$('#preview').getBoundingClientRect();
+  if(!pr.width||!pr.height)return {targets:[],summary:''};
+  const rx1=pr.left+normRect.x*pr.width,ry1=pr.top+normRect.y*pr.height;
+  const rx2=rx1+normRect.w*pr.width,ry2=ry1+normRect.h*pr.height;
+  const hits=[];
+  svg.querySelectorAll('[data-review-id]').forEach(el=>{
+    if(el.dataset&&el.dataset.deleted==='1')return;
+    if(el.closest&&el.closest('[data-deleted="1"]'))return;
+    const rid=el.getAttribute('data-review-id');
+    if(!rid||rid==='0'||rid==='0.0')return;
+    const tag=el.tagName.toLowerCase();
+    if(!['text','rect','image','path','polygon','circle','ellipse'].includes(tag))return;
+    const er=el.getBoundingClientRect();
+    if(er.width<=1||er.height<=1)return;
+    // Ignore huge container rects covering >65% of slide
+    if((er.width*er.height)/(pr.width*pr.height)>0.65)return;
+    const ix1=Math.max(rx1,er.left),iy1=Math.max(ry1,er.top);
+    const ix2=Math.min(rx2,er.right),iy2=Math.min(ry2,er.bottom);
+    if(ix2>ix1&&iy2>iy1){
+      const snippet=tag==='text'?(el.textContent||'').replace(/\s+/g,' ').trim().slice(0,32):'';
+      hits.push({review_id:rid,tag,text:snippet});
+    }
+  });
+  const textHits=hits.filter(h=>h.text).map(h=>`「${h.text}」`);
+  let summary='';
+  if(textHits.length){
+    summary='命中文本：'+textHits.slice(0,3).join('、')+(textHits.length>3?` 等 ${hits.length} 项`:'');
+  }else if(hits.length){
+    summary=`命中 ${hits.length} 处图形（${hits.slice(0,3).map(h=>tagLabel(h.tag)).join('、')}）`;
+  }
+  return {targets:hits.slice(0,8),summary};
+}
+function showRegionDialogWithHits(){
+  const info=$('#regionHitInfo');
+  info.hidden=false;
+  info.textContent=pendingTargetSummary?`已定位：${pendingTargetSummary}`:'已框选区域';
+  $('#regionNote').value='';
+  $('#regionDialog').showModal();
+}
+function cancelRegion(){
+  $('#regionDialog').close();
+  $('#selection').hidden=true;
+  rect=null;pendingTargets=[];pendingTargetSummary='';
+  setMode('select');
+}
+function clearRegions(){
+  state[page().key].annotations=[];
+  drawRegions();autoState();
+}
+function saveRegion(){
+  const text=$('#regionNote').value.trim();
+  if(!text)return;
+  const item={...rect,text};
+  if(pendingTargets&&pendingTargets.length)item.targets=pendingTargets;
+  if(pendingTargetSummary)item.target_summary=pendingTargetSummary;
+  state[page().key].annotations.push(item);
+  cancelRegion();
+  drawRegions();
+  autoState();
+}
+function highlightRegionPair(idx){
+  activeRegionIdx=idx;
+  document.querySelectorAll('#regionOverlay .canvas-region-box').forEach((el,i)=>{
+    el.classList.toggle('active-region',i===idx);
+  });
+  document.querySelectorAll('#regions .annotation').forEach((el,i)=>{
+    el.classList.toggle('active-region',i===idx);
+  });
+}
+function drawRegions(){
+  const container=$('#regions');container.replaceChildren();
+  const overlay=$('#regionOverlay');overlay.replaceChildren();
+  const list=state[page().key].annotations||[];
+  $('#regionCountHint').textContent=list.length?(list.length+' 处标注'):'';
+  overlay.hidden=previous;
+
+  list.forEach((a,i)=>{
+    // 1) 画布上的常驻带编号框（① ② ③）
+    const cbox=document.createElement('div');
+    cbox.className='canvas-region-box';
+    Object.assign(cbox.style,{
+      left:(a.x*100)+'%',
+      top:(a.y*100)+'%',
+      width:(a.w*100)+'%',
+      height:(a.h*100)+'%'
+    });
+    const badge=document.createElement('span');
+    badge.className='canvas-region-badge';
+    badge.textContent=numBadge(i);
+    const cap=document.createElement('span');
+    cap.className='canvas-region-caption';
+    cap.textContent=a.text+(a.target_summary?' · '+a.target_summary:'');
+    cbox.append(badge,cap);
+    cbox.onmouseenter=()=>highlightRegionPair(i);
+    cbox.onmouseleave=()=>highlightRegionPair(-1);
+    overlay.append(cbox);
+
+    // 2) 右侧批注栏条目（保持 .annotation 结构与删除按钮兼容测试断言）
+    const d=document.createElement('div');
+    d.className='annotation';
+    if(a.target_summary)d.title=a.target_summary;
+    d.textContent=(i+1)+'. '+a.text;
+    const b=document.createElement('button');
+    b.textContent='删除';
+    b.onclick=()=>{state[page().key].annotations.splice(i,1);drawRegions();autoState()};
+    d.onmouseenter=()=>highlightRegionPair(i);
+    d.onmouseleave=()=>highlightRegionPair(-1);
+    d.append(b);
+    container.append(d);
+  });
+}
+
+/* ---- 页内图片 ---- */
+function assetState(a){return state[page().key].assets.find(x=>x.asset_key===a.asset_key)||{...a,operation:'crop',ratio:'original',anchor:'center'}}
+function setAsset(a,item){const s=state[page().key];s.assets=s.assets.filter(x=>x.asset_key!==a.asset_key);const unchanged=item.operation==='crop'&&item.path===a.path&&item.fit===a.fit&&item.ratio==='original'&&item.anchor==='center';if(!unchanged)s.assets.push(item);autoState()}
+function drawAssets(){
+  const wrap=$('#assets');wrap.replaceChildren();const p=page();
+  const added=state[p.key].assets.filter(a=>a.operation==='add');
+  [...p.assets,...added].forEach(a=>{
+    let item=assetState(a);
+    const box=document.createElement('div');box.className='asset';
+    const name=document.createElement('b');name.textContent=a.asset_key;box.append(name);
+    const crop=document.createElement('div');crop.className='crop';
+    const img=document.createElement('img');
+    assetFor(item.path,assetVersion(item)).then(url=>{if(url)img.src=url});
+    crop.append(img);box.append(crop);
+    const fit=document.createElement('select');
+    for(const [v,t] of [['contain','完整显示'],['cover','填满并裁剪']])fit.add(new Option(t,v));
+    fit.value=item.fit;
+    const ratio=document.createElement('input');ratio.type='text';ratio.value=item.ratio||'original';ratio.placeholder='original 或 16:9';
+    const anchor=document.createElement('select');
+    for(const [v,t] of [['center','居中'],['top','靠上'],['bottom','靠下'],['left','靠左'],['right','靠右']])anchor.add(new Option(t,v));
+    anchor.value=item.anchor||'center';
+    function preview(){img.style.objectFit=fit.value;img.style.objectPosition=anchor.value;
+      const parts=ratio.value.split(':').map(Number);
+      crop.style.aspectRatio=parts.length===2&&parts.every(n=>n>0)?parts.join('/'):(a.width&&a.height?a.width+'/'+a.height:'16/9');
+      crop.style.height='auto'}
+    function change(){item={...item,fit:fit.value,ratio:ratio.value,anchor:anchor.value};setAsset(a,item);preview()}
+    fit.onchange=change;ratio.onchange=change;anchor.onchange=change;
+    box.append(fit,ratio,anchor);preview();
+    if(canUpload){
+      const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg,image/webp,image/gif';
+      input.onchange=()=>input.files[0]&&upload(input.files[0],a.asset_key,false);
+      box.append(input);
+      box.ondragover=e=>e.preventDefault();
+      box.ondrop=e=>{e.preventDefault();if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0],a.asset_key,false)};
+      box.tabIndex=0;
+      box.onpaste=e=>{const file=[...e.clipboardData.items].find(x=>x.kind==='file')?.getAsFile();if(file){e.preventDefault();upload(file,a.asset_key,false)}};
+    }
+    const reset=document.createElement('button');
+    reset.textContent=a.operation==='add'?'移除新增图片':'重置修改';
+    reset.onclick=()=>{state[p.key].assets=state[p.key].assets.filter(x=>x.asset_key!==a.asset_key);drawAssets();autoState()};
+    box.append(reset);wrap.append(box);
+  });
+}
+function applyUploadCapability(){
+  const can=Array.isArray(review&&review.capabilities)&&review.capabilities.indexOf('asset-upload')>=0;
+  canUpload=can;
+  $('#addDrop').hidden=!can;
+  if(!can)note('这个宿主没有声明上传能力：本页只能写意见与框选','');
+  return can;
+}
+function extOf(name){const match=String(name||'').match(/\.[A-Za-z0-9]+$/);return match?match[0].toLowerCase():'.png'}
+function safeStem(name){return String(name||'image').replace(/\.[^.]+$/,'').replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,80)||'image'}
+async function upload(file,key,isNew){
+  if(!canUpload){note('这个宿主没有声明上传能力，传不进去','error');return}
+  if(!file||!String(file.type||'').startsWith('image/')){note('只收 PNG / JPEG / WEBP / GIF','error');return}
+  if(file.size>12*1024*1024){note('图片要小于 12MB','error');return}
+  const targetKey=page().key,existing=state[targetKey].assets.find(x=>x.asset_key===key);
+  uploads++;note('上传中…');
+  try{
+    const rel='_internal/05_review/uploads/'+targetKey+'/'+safeStem(file.name)+'-'+uid().slice(0,10)+extOf(file.name);
+    const result=await review.upload(file,rel);
+    const sha=String((result&&result.sha256)||'');
+    state[targetKey].assets=state[targetKey].assets.filter(x=>x.asset_key!==key);
+    state[targetKey].assets.push({asset_key:key,operation:(isNew||existing?.operation==='add')?'add':'replace',
+      path:rel,sha256:sha,fit:'contain',ratio:'original',anchor:'center'});
+    state[targetKey].decision='revise';
+    note('图片已上传（版本 '+(sha?sha.slice(0,12):'未给 hash')+'）；提交后更新页面','ok');
+    if(page().key===targetKey)drawAssets();
+    updateRail();status();
+  }catch(error){
+    note('上传失败：'+error.message+(/asset-upload/.test(error.message)?'（这个宿主没有声明上传能力）':''),'error');
+  }finally{uploads--}
+}
+const drop=$('#addDrop');
+drop.onclick=e=>{if(e.target!==$('#newFile'))$('#newFile').click()};
+drop.ondragover=e=>e.preventDefault();
+drop.ondrop=e=>{e.preventDefault();if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0],'new_'+uid(),true)};
+drop.onpaste=e=>{const f=[...e.clipboardData.items].find(x=>x.kind==='file')?.getAsFile();if(f){e.preventDefault();upload(f,'new_'+uid(),true)}};
+$('#newFile').onchange=e=>{if(e.target.files[0])upload(e.target.files[0],'new_'+uid(),true);e.target.value=''};
+
+/* ---- 提交 ---- */
+function drawStale(){
+  const box=$('#staleNote');box.hidden=!stale;
+  if(stale)box.textContent='这一页已更新，先复核：'+(staleKeys.length?staleKeys.join('、'):'整套审阅页已重出')
+    +'。点「重新加载」看新图，再提交（模型只重出提交的那一页）。';
+}
+async function readSnapshot(){
+  if(!review)return null;
+  try{
+    const snapshot=JSON.parse(await review.readText(data.snapshot));
+    return (snapshot&&snapshot.versions&&snapshot.review_id)?snapshot:null;
+  }catch(error){return null}
+}
+async function refreshStale(){
+  if(!review)return;
+  const snapshot=await readSnapshot();
+  if(!snapshot)return;
+  const known=data.pages.filter(p=>snapshot.versions[p.key]);
+  stale=String(snapshot.review_id||'')!==String(data.review_id||'')
+    || known.length!==data.pages.length;
+  staleKeys=known.filter(p=>snapshot.versions[p.key]!==p.version).map(p=>p.key);
+  drawStale();
+}
+async function onHostChanged(){
+  pulseCount++;lastPulseAt=new Date().toLocaleTimeString('zh-CN',{hour12:false});drawPulse();
+  const snapshot=await readSnapshot();
+  if(!snapshot)return;
+  const known=data.pages.filter(p=>snapshot.versions[p.key]);
+  if(known.length!==data.pages.length){await refreshStale();return}
+  const changedPages=data.pages.filter(p=>snapshot.versions[p.key]!==p.version);
+  data.review_id=snapshot.review_id;
+  if(!changedPages.length){stale=false;staleKeys=[];drawStale();return}
+  for(const p of changedPages){
+    const before=p.version;
+    p.version=snapshot.versions[p.key];
+    if(snapshot.png_hashes&&snapshot.png_hashes[p.key])p.png_sha256=snapshot.png_hashes[p.key];
+    p.previous='_internal/05_review/versions/'+p.key+'-'+before+'.png';
+    // When host updates a slide, switch stage view to its fresh PNG so updated image is shown immediately
+    p.svgMarkup='';
+    state[p.key].svg_edits=[];
+    state[p.key].edit_history=[];
+    updatedPages.add(p.key);
+    if(state[p.key].decision==='approved')state[p.key].decision='pending';
+  }
+  stale=false;staleKeys=[];drawStale();
+  await swapImages(changedPages);
+  updateRail(changedPages.map(p=>p.key));
+  status();
+  if(updatedPages.has(page().key))render();
+}
+async function swapImages(pages_){
+  for(const p of pages_){
+    const url=await assetFor(p.png,p.version);
+    if(!url)continue;
+    const button=document.querySelector('#rail button[data-key="'+p.key+'"] img');
+    if(button)button.src=url;
+    if(page().key===p.key&&$('#slide'))$('#slide').src=url;
+  }
+}
+function cleanSvgEditsForExport(edits){
+  return (edits||[]).map(rec=>{
+    const out={review_id:rec.review_id,tag:rec.tag||'text',dx:Math.round((rec.dx||0)*10)/10,dy:Math.round((rec.dy||0)*10)/10};
+    if(rec.deleted)out.deleted=true;
+    if(rec.text!==undefined&&rec.text!==rec.orig_text)out.text=rec.text;
+    if(Array.isArray(rec.lines))out.lines=rec.lines;
+    if(rec.font_size!==undefined&&rec.font_size!==rec.orig_font_size)out.font_size=rec.font_size;
+    return out;
+  });
+}
+function collect(){
+  const pages={};
+  data.pages.forEach(p=>{
+    const s=state[p.key];const feedback=s.feedback.trim();
+    const has=!!(feedback||s.annotations.length||s.assets.length);
+    const svgEdits=cleanSvgEditsForExport(s.svg_edits);
+    const entry={
+      decision:has?'revise':s.decision,
+      feedback,
+      annotations:s.annotations,
+      assets:s.assets.map(a=>({...a})),
+      version:p.version,
+      png_sha256:p.png_sha256
+    };
+    if(svgEdits.length)entry.svg_edits=svgEdits;
+    pages[p.key]=entry;
+  });
+  const overall=$('#overall').value.trim();
+  const items=Object.entries(pages).filter(([,entry])=>entry.decision==='revise')
+    .map(([key,entry])=>{
+      const it={id:uid(),pages:[key],feedback:entry.feedback,annotations:entry.annotations,assets:entry.assets};
+      if(entry.svg_edits)it.svg_edits=entry.svg_edits;
+      return it;
+    });
+  if(overall)items.push({id:uid(),pages:Object.keys(pages),feedback:overall});
+  return {review_id:data.review_id,pages,overall_feedback:overall,items,
+    provenance:{source:'review_page',transport:(review&&review.transport)||'',
+      surface:'planners-ppt-hell/visual',submitted_at:new Date().toISOString()}};
+}
+function wakeNote(verified){
+  return verified
+    ? '宿主已在会话日志里核对进入队列'
+    : '宿主未核对 —— 若模型迟迟没反应，请回对话说一声';
+}
+async function push(wake){
+  if(!review){note('本页只读：没有连上审阅宿主，反馈存不进去（请让宿主打开这一页）','warn');return {ok:false}}
+  if(uploads){note('请等待图片上传完成','error');return {ok:false}}
+  await refreshStale();
+  if(stale){drawStale();note('这一页已更新，先复核（或点「重新加载」）','error');return {ok:false}}
+  const document=collect();
+  try{
+    await review.write(document);
+    let verified=null, duplicate=false, notice='';
+    if(wake){
+      const result=await review.wake(wake);
+      verified=(result&&result.verified)||null;
+      duplicate=!!(result&&result.duplicate);
+      notice=(result&&result.notice)||'';
+      try{
+        await review.write({...document,provenance:{...document.provenance,
+          wake:{requested:true,verified,at:new Date().toISOString()}}});
+      }catch(error){}
+    }
+    return {ok:true,verified,duplicate,notice};
+  }catch(error){note('保存失败：'+error.message,'error');return {ok:false}}
+}
+async function decideCurrent(value){
+  const p=page(),s=state[p.key];
+  if(value==='approved'&&changed(p)){note('本页还有意见、框选或图片改动：清空（图片点「重置修改」）后才能通过','error');return}
+  if(value==='revise'&&!changed(p)){note('先写一句要改什么，或框选一处问题，再点「本页要求修改」','error');return}
+  s.decision=value;updateRail();status();
+  const gist=(s.feedback.trim()||((s.annotations[0]||{}).text||'').trim()).slice(0,40);
+  const wake=value==='approved'
+    ?{unit:p.key,text:p.key+' 已通过。'}
+    :{unit:p.key,text:p.key+' 要求修改'+(gist?'：'+gist:'')+' —— 只重出这一页，其余页不要动。'};
+  const sent=await push(wake);
+  if(!sent.ok)return;
+  if(sent.duplicate){
+    note(sent.notice||'已写入；本次没有新增通知（同一次提交之前已送达）','ok');
+    return;
+  }
+  note('已写入 '+p.key+' 的决定，并已通知模型'+(value==='approved'?'「已通过」':'「只重出这一页」')
+    +'（'+wakeNote(sent.verified)+'）',sent.verified?'ok':'warn');
+}
+function showSubmit(){
+  const values=Object.values(state);
+  $('#stats').textContent=['approved','revise','pending'].map(s=>labels[s]+' '+values.filter(x=>x.decision===s).length+' 页').join(' / ');
+  $('#submitDialog').showModal();
+}
+async function submitBatch(approvePending){
+  if(approvePending)for(const s of Object.values(state))if(s.decision==='pending')s.decision='approved';
+  const sent=await push({unit:'整套',text:'整套已定，可以进入下一步。'});
+  if(sent.ok){
+    if(sent.duplicate){
+      const said=sent.notice||'已写入；本次没有新增通知（同一次提交之前已送达）';
+      $('#submitMessage').textContent=said;
+      note(said,'ok');
+    }else{
+      const how=wakeNote(sent.verified);
+      $('#submitMessage').textContent='已写入审阅反馈，并已通知模型整套已定（'+how+'）。';
+      note('整套反馈已写入，并已通知模型整套已定（'+how+'）',sent.verified?'ok':'warn');
+    }
+    $('#submitDialog').close();
+  } else $('#submitMessage').textContent=$('#message').textContent;
+}
+function sizePreview(){
+  const stage=$('.stage'),box=$('#preview');
+  box.style.width=Math.max(80,Math.min(stage.clientWidth-16,(stage.clientHeight-56)*16/9))+'px';
+  updateHighlightOverlay();
+}
+
+/* ---- 指针事件：支持「框选问题」与「选择与拖拽微调 SVG 元素」双模式 ---- */
+$('#preview').onpointerdown=e=>{
+  if(marking){
+    start=point(e);
+    $('#preview').setPointerCapture(e.pointerId);
+    return;
+  }
+  if(previous)return;
+  const picked=pickSelectableSvgTarget(e.target);
+  if(!picked){
+    selectedReviewId=null;
+    updateToolbarSelection();
+    return;
+  }
+  selectedReviewId=picked.getAttribute('data-review-id');
+  updateToolbarSelection();
+  const s=state[page().key];
+  const existing=s.svg_edits.find(x=>x.review_id===selectedReviewId);
+  dragState={
+    pointerId:e.pointerId,
+    el:picked,
+    startX:e.clientX,
+    startY:e.clientY,
+    origDx:(existing&&existing.dx)||0,
+    origDy:(existing&&existing.dy)||0,
+    moved:false
+  };
+  $('#preview').setPointerCapture(e.pointerId);
+};
+$('#preview').onpointermove=e=>{
+  if(marking){
+    if(!start)return;
+    const end=point(e);
+    rect={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),w:Math.abs(end.x-start.x),h:Math.abs(end.y-start.y)};
+    const b=$('#selection');b.hidden=false;
+    Object.assign(b.style,{left:rect.x*100+'%',top:rect.y*100+'%',width:rect.w*100+'%',height:rect.h*100+'%'});
+    return;
+  }
+  if(!dragState)return;
+  const dist=Math.hypot(e.clientX-dragState.startX,e.clientY-dragState.startY);
+  if(!dragState.moved&&dist<3)return;
+  if(!dragState.moved){
+    dragState.moved=true;
+    pushHistorySnapshot();
+  }
+  const pr=$('#preview').getBoundingClientRect();
+  if(!pr.width||!pr.height)return;
+  const scaleX=1920/pr.width,scaleY=1080/pr.height;
+  const newDx=dragState.origDx+(e.clientX-dragState.startX)*scaleX;
+  const newDy=dragState.origDy+(e.clientY-dragState.startY)*scaleY;
+  const rec=getOrCreateEditRecord(dragState.el);
+  rec.dx=Math.round(newDx);
+  rec.dy=Math.round(newDy);
+  applyDeltaToDom(dragState.el,rec.dx,rec.dy);
+  updateToolbarSelection();
+};
+$('#preview').onpointerup=()=>{
+  if(marking){
+    if(!start)return;
+    start=null;
+    if(rect&&rect.w>.005&&rect.h>.005){
+      const hit=hitTestSvgElements(rect);
+      pendingTargets=hit.targets;
+      pendingTargetSummary=hit.summary;
+      showRegionDialogWithHits();
+    }else{
+      $('#selection').hidden=true;
+      setMode('select');
+    }
+    return;
+  }
+  if(dragState){
+    if(dragState.moved){
+      pruneNoopEditRecord(selectedReviewId);
+      updateToolbarSelection();
+      updateRail();status();
+    }
+    dragState=null;
+  }
+};
+$('#preview').ondblclick=e=>{
+  if(marking||previous)return;
+  const picked=pickSelectableSvgTarget(e.target);
+  if(picked&&picked.tagName.toLowerCase()==='text'){
+    selectedReviewId=picked.getAttribute('data-review-id');
+    updateToolbarSelection();
+    const inp=$('#inlineTextInput');
+    if(!inp.disabled){inp.focus();inp.select()}
+  }
+};
+
+window.addEventListener('keydown',e=>{
+  if(e.key!=='Delete'&&e.key!=='Backspace')return;
+  if(marking||previous||!selectedReviewId)return;
+  const active=document.activeElement;
+  if(active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT'||active.isContentEditable))return;
+  if(document.querySelector('dialog[open]'))return;
+  e.preventDefault();
+  deleteSelectedSvgElement();
+});
+
+window.addEventListener('resize',sizePreview);
+$('#slide').onload=sizePreview;
+window.addEventListener('beforeunload',e=>{if(Object.values(state).some(x=>x.feedback||x.assets.length||x.annotations.length||x.svg_edits.length)){e.preventDefault();e.returnValue=''}});
+
+const BRIDGE_TIMEOUT_MS=2500;
+function connectWithTimeout(ms){
+  return new Promise(resolve=>{
+    let done=false;
+    const finish=value=>{if(!done){done=true;resolve(value)}};
+    setTimeout(()=>finish(null),ms);
+    try{ ReviewBridge.connect().then(finish,()=>finish(null)); }catch(error){finish(null)}
+  });
+}
+function sayReadOnly(why){
+  $('#bridgeState').textContent=why;
+  $('#bridgeState').classList.add('readonly-warn');
+  note(why,'warn');
+  $('#addDrop').hidden=true;
+}
+(async function boot(){
+  render();sizePreview();drawPulse();
+  try{
+    if(window.ReviewBridge)review=await connectWithTimeout(BRIDGE_TIMEOUT_MS);
+  }catch(error){review=null}
+  if(!review){
+    sayReadOnly(window.ReviewBridge
+      ? '连不上审阅宿主（握手未落地）：本页只读 —— 内容可以看，反馈存不进去。'
+      : '没有加载到审阅桥：本页只读 —— 内容可以看，反馈存不进去（请让宿主打开这一页）。');
+    return;
+  }
+  const can=applyUploadCapability();
+  $('#bridgeState').textContent='已连接审阅宿主（'+review.transport+'）· 逐页提交会写反馈并通知模型'
+    +(can?' · 可上传图片':' · 这个宿主不支持上传');
+  review.on('changed',()=>onHostChanged());
+  refreshStale();
+})();
+</script></html>

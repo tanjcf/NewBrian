@@ -32,6 +32,28 @@ test("defaults a fresh Brain profile to the scene learning workspace", () => {
   assert.deepEqual(restored.selection.catalogs, {});
 });
 
+test("prefers durable desktop preference over localStorage for the last scene", () => {
+  const serialized = JSON.stringify({
+    version: 2,
+    selectedWorkspaceKey: "explore",
+    catalogs: { quant: { projectId: "q1", conversationId: "c1" } }
+  });
+  const restored = restoreBrainWorkspaceSelection({
+    serialized,
+    preferredWorkspaceKey: "quant"
+  });
+  assert.equal(restored.selection.selectedWorkspaceKey, "quant");
+  assert.deepEqual(restored.selection.catalogs.quant, { projectId: "q1", conversationId: "c1" });
+});
+
+test("ignores invalid preferred workspace keys", () => {
+  const restored = restoreBrainWorkspaceSelection({
+    preferredWorkspaceKey: "not-a-scene",
+    legacyWorkspaceKey: "music"
+  });
+  assert.equal(restored.selection.selectedWorkspaceKey, "music");
+});
+
 test("switchBrainWorkspace restores sidebar selection from target scene catalog", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /setSelectedSidebarRow\(`brain-conversation:\$\{nextCatalog\.conversationId\}`\)/);
@@ -107,9 +129,12 @@ test("never activates a conversation thread that belongs to the outgoing project
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /mappedThreadBelongsToWorkspace/);
   assert.match(source, /selectedWorkspace\?\.threads\?\.some/);
-  assert.match(source, /delete next\[selectedBrainConversationId\]/);
   const guard = source.indexOf("if (!mappedThreadBelongsToWorkspace)");
   const activation = source.indexOf("void api.activateWorkspaceThread", guard);
+  const guardSource = source.slice(guard, activation);
+  assert.match(guardSource, /delete next\[selectedBrainConversationId\]/);
+  assert.match(guardSource, /setSelectedBrainConversationId\(""\)/);
+  assert.match(guardSource, /setIsComposingNewThread\(true\)/);
   assert.ok(guard >= 0 && activation > guard);
 });
 
@@ -194,7 +219,8 @@ test("uses the Claude Code projects-section as the scene-bound left catalog", ()
   assert.match(source, /setNewThreadScope\("project"\)/);
   assert.match(source, /brainWorkspaceKey:\s*selectedBrainWorkspaceKey/);
   assert.match(source, /新建空白项目/);
-  assert.match(source, /暂无聊天/);
+  assert.doesNotMatch(source, /暂无聊天/);
+  assert.match(source, /visibleSidebarTaskEntries\.map\(renderSidebarTaskEntry\)/);
   assert.match(source, /project-hover-actions/);
   assert.match(source, /project-list/);
 });
@@ -231,7 +257,8 @@ test("expanding the right Tools panel hides the left sidebar like open-file arti
   const resourcePanel = source.slice(source.indexOf("function renderBrainResourcePanel"), source.indexOf("function renderChatModule"));
 
   // Shared expand toggle for every scene (center ↔ side).
-  assert.match(resourcePanel, /current === "center"[\s\S]*?return "side"/);
+  assert.match(resourcePanel, /nextBrainToolsPlacement\(isCenter \? "center" : "side"\)/);
+  assert.match(resourcePanel, /setBrainResourcePlacement\(next\)/);
   assert.match(resourcePanel, /title=\{isCenter \? "还原布局" : "展开预览"\}/);
   assert.match(resourcePanel, /aria-pressed=\{isCenter\}/);
   assert.match(resourcePanel, /expand-sidebar/);
@@ -271,6 +298,14 @@ test("startup hydrates persisted sidebar thread rows before brain conversation s
   assert.match(source, /shouldPreferSidebarRowThreadRestore/);
   assert.match(source, /resolveSidebarRowThreadTarget/);
   assert.match(source, /parseLegacyConversationThreadId\(selectedBrainConversationId\)/);
+});
+
+test("remembers the last scene via desktop preferences and does not wipe restore when workspace list is empty", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /preferredWorkspaceKey:\s*desktopPreferences\?\.brain\?\.selectedWorkspaceKey/);
+  assert.match(source, /saveDesktopPreferences\(\{[\s\S]*selectedWorkspaceKey:\s*key/);
+  assert.match(source, /if \(!enabled\.length\) return;/);
+  assert.match(source, /selectedBrainWorkspaceKeyRef/);
 });
 
 test("switching scenes restores the right-hand scene panel instead of the generic files side preview", () => {
@@ -322,6 +357,37 @@ test("opening files while BRAIN project panel is visible uses the right-hand pro
   // Search must not force Office docs back into the chat column after openLocalFilePreview.
   const selectSearch = source.slice(source.indexOf("function selectSearchTarget"), source.indexOf("function renderSearchDialogLegacy"));
   assert.doesNotMatch(selectSearch, /setPreviewPlacement\("center"\)/);
+});
+
+test("markdown files open as a scrollable rendered preview", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const markdownBlock = source.slice(source.indexOf("isMarkdownPreviewFile(searchFilePreview)"), source.indexOf("workspace-artifact-text-shell"));
+  assert.match(source, /function isMarkdownPreviewFile/);
+  assert.match(markdownBlock, /data-testid="workspace-markdown-preview"/);
+  assert.match(markdownBlock, /<MarkdownMessage/);
+  assert.doesNotMatch(markdownBlock, /preview-line/);
+  assert.match(styles, /\.workspace-artifact-markdown[\s\S]*overflow:\s*auto/);
+  assert.match(styles, /\.workspace-artifact-text-shell,\s*\n\.workspace-artifact-markdown[\s\S]*overflow:\s*auto/);
+});
+
+test("pptx board thumbnails render scaled slide content previews", () => {
+  const source = readFileSync(new URL("./artifact-viewer-registry.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(source, /function PptxSlideThumb/);
+  assert.match(source, /renderThumbnailToContainer/);
+  assert.match(source, /pptx-thumb-preview/);
+  assert.match(styles, /\.pptx-thumb-preview[\s\S]*pointer-events:\s*none/);
+});
+
+test("pptx artifact creation auto-opens Tools preview and force-reloads as slides grow", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const notify = source.slice(source.indexOf("onDataWorkspaceUpdated"), source.indexOf("setDocumentAnnotationCandidate(null)"));
+  assert.match(notify, /artifact\\.create\|document\\.create_/);
+  assert.match(notify, /forceReload:\s*true/);
+  assert.match(notify, /setBrainSceneTab\("preview"\)/);
+  assert.match(source, /location\?\.forceReload/);
+  assert.match(readFileSync(new URL("./document-annotation-policy.ts", import.meta.url), "utf8"), /isPptxEditableShapeAnchor/);
 });
 
 test("docx preview fills the side panel and scrolls instead of using a fixed-height iframe", () => {

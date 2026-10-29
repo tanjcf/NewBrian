@@ -1,58 +1,99 @@
 {
   "name": "ppt-creation-expert",
-  "version": "1.0.0",
-  "description": "从受众、目标和素材出发设计故事线、页面结构与视觉表达，并通过 BRAIN 演示文稿/文档场景产出可编辑成果。",
-  "expertType": "agent",
+  "version": "1.1.0",
+  "description": "把受众、故事线、版式、视觉、成片和复核收成一个演示文稿技能团队，默认交付可编辑 PPTX。",
+  "expertType": "team",
   "agentName": "ppt-creation-expert",
+  "teamInfo": {
+    "leadAgent": "ppt-creation-expert",
+    "memberAgents": [
+      "ppt-visual-designer",
+      "ppt-layout-designer",
+      "ppt-native-producer",
+      "ppt-deck-reviewer",
+      "ppt-web-producer"
+    ]
+  },
   "agents": [
-    "./agents/ppt-creation-expert.md"
+    "./agents/ppt-creation-expert.md",
+    "./agents/ppt-visual-designer.md",
+    "./agents/ppt-layout-designer.md",
+    "./agents/ppt-native-producer.md",
+    "./agents/ppt-deck-reviewer.md",
+    "./agents/ppt-web-producer.md"
   ],
   "skills": [
-    "./skills/presentation-production"
+    "./skills/presentation-production",
+    "./skills/ppt-visual",
+    "./skills/ppt-layout",
+    "./skills/ppt-native-production",
+    "./skills/ppt-deck-review",
+    "./skills/ppt-web-production"
   ],
   "displayName": {
-    "zh": "演示文稿创作专家",
-    "en": "Presentation Creation Expert"
+    "zh": "演示文稿技能团队",
+    "en": "Presentation Skill Team"
   },
   "profession": {
-    "zh": "商业演示与幻灯片叙事",
-    "en": "Business Presentation & Slide Storytelling"
+    "zh": "商业演示与可编辑幻灯片",
+    "en": "Business presentations and editable slide decks"
   },
   "displayDescription": {
-    "zh": "从受众、目标和素材出发设计故事线、页面结构与视觉表达，并通过 BRAIN 演示文稿/文档场景产出可编辑成果。",
-    "en": "Designs narrative, slide structure, and visuals from audience goals and source material, using BRAIN presentation/document scenes for editable deliverables."
+    "zh": "主理人确定故事线后，组织视觉、版式、成片和复核，默认交付与预览同源的可编辑 PPTX。网页翻页只在用户明确要求时出场。",
+    "en": "The lead sets the storyline, then coordinates visual, layout, production, and review. The default deliverable is an editable PPTX that shares geometry with the preview. HTML decks are produced only when requested."
   },
   "categoryId": "06-ContentCreative",
   "defaultInitPrompt": {
-    "zh": "请提供演示目标、受众、时长、素材、品牌规范和交付格式。",
-    "en": "Provide the presentation goal, audience, duration, source material, brand rules, and delivery format."
+    "zh": "请提供演示目标、受众、时长、素材和品牌要求。默认交付可编辑 PPTX；若要网页翻页请明确说明。",
+    "en": "Provide the goal, audience, duration, source material, and brand constraints. The default deliverable is an editable PPTX; ask explicitly for an HTML deck."
   },
   "tags": [
-    {
-      "zh": "演示文稿",
-      "en": "Presentations"
-    },
-    {
-      "zh": "商业叙事",
-      "en": "Business Storytelling"
-    },
-    {
-      "zh": "幻灯片设计",
-      "en": "Slide Design"
-    }
+    { "zh": "演示文稿", "en": "Presentations" },
+    { "zh": "技能团队", "en": "Skill Team" },
+    { "zh": "可编辑幻灯片", "en": "Editable Slides" }
   ],
   "quickPrompts": [
+    { "zh": "把这些材料整理成一份管理层汇报 PPT", "en": "Turn these materials into an executive presentation" },
+    { "zh": "为路演设计故事线并生成可编辑 PPTX", "en": "Design a pitch narrative and produce an editable PPTX" },
+    { "zh": "把这份演示做成网页翻页", "en": "Turn this presentation into an HTML deck" }
+  ],
+  "members": [
     {
-      "zh": "把这些材料整理成一份管理层汇报 PPT",
-      "en": "Turn these materials into an executive presentation"
+      "id": "ppt-creation-expert",
+      "name": { "zh": "演示文稿主理人", "en": "Presentation Lead" },
+      "profession": { "zh": "受众、故事线与交付说明", "en": "Audience, storyline, and delivery notes" },
+      "role": "lead"
     },
     {
-      "zh": "为路演设计故事线和逐页大纲",
-      "en": "Design a pitch narrative and slide-by-slide outline"
+      "id": "ppt-visual-designer",
+      "name": { "zh": "视觉成员", "en": "Visual Designer" },
+      "profession": { "zh": "杂志风或瑞士风的字体、锚点色和网格", "en": "Magazine or Swiss type, accent, and grid" },
+      "role": "member"
     },
     {
-      "zh": "重构这份 PPT 的逻辑和视觉层级",
-      "en": "Restructure this deck's logic and visual hierarchy"
+      "id": "ppt-layout-designer",
+      "name": { "zh": "版式成员", "en": "Layout Designer" },
+      "profession": { "zh": "选定一套主题并为每一页指定版式", "en": "One theme and a layout for every page" },
+      "role": "member"
+    },
+    {
+      "id": "ppt-native-producer",
+      "name": { "zh": "成片成员", "en": "Native Producer" },
+      "profession": { "zh": "导出与预览同源的可编辑 PPTX", "en": "Editable PPTX sharing geometry with the preview" },
+      "role": "member"
+    },
+    {
+      "id": "ppt-deck-reviewer",
+      "name": { "zh": "复核成员", "en": "Deck Reviewer" },
+      "profession": { "zh": "对照大纲检查溢出、遮挡和几何", "en": "Overflow, occlusion, and geometry against the outline" },
+      "role": "member"
+    },
+    {
+      "id": "ppt-web-producer",
+      "name": { "zh": "网页成员", "en": "Web Producer" },
+      "profession": { "zh": "按同一大纲和视觉规范做 HTML 翻页", "en": "HTML deck from the same outline and visual spec" },
+      "role": "member"
     }
-  ]
+  ],
+  "preferredWorkspaceKey": "document"
 }

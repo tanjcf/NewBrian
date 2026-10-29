@@ -24,10 +24,17 @@ function list(value: unknown, label: string, maxLength: number): unknown[] {
 
 function parseAttachment(value: unknown): ComposerAttachment {
   const input = record(value, "Model attachment");
+  const linkMode = input.linkMode === "local" || input.linkMode === "copied" ? input.linkMode : undefined;
+  const sizeBytes = typeof input.sizeBytes === "number" && Number.isFinite(input.sizeBytes)
+    ? Math.max(0, Math.trunc(input.sizeBytes))
+    : undefined;
   return {
     name: requiredText(input.name, "Attachment name", 512),
     path: requiredText(input.path, "Attachment path", 4_096),
-    url: requiredText(input.url, "Attachment URL", 8_192)
+    url: requiredText(input.url, "Attachment URL", 8_192),
+    sourcePath: text(input.sourcePath, "Attachment source path", 4_096, true),
+    linkMode,
+    sizeBytes
   };
 }
 

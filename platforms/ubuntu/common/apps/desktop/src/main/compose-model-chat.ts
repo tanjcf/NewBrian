@@ -50,7 +50,7 @@ import {
   extractPrivatePlanningNarration,
   sanitizeVisibleModelContent
 } from "./model-stream-visibility.js";
-import { selectModelRequestAuth } from "./model-request-auth-policy.js";
+import { resolveDevE2eBearerToken, selectModelRequestAuth } from "./model-request-auth-policy.js";
 import { configureModelChatRuntime, openWorkspaceMediaForAgent, type ModelChatRuntimeSetupDependencies } from "./model-chat-runtime-setup.js";
 import { registerAutoMediaAgentTools } from "./auto-media-agent-tools.js";
 import {
@@ -110,6 +110,7 @@ export interface MacModelChatCompositionDeps {
   activeThreadId: () => string;
   getCachedAuthorizedModels: () => AuthorizedModel[];
   readAuthorizedDesktopModelConfig: (candidate?: Partial<ModelConfig>) => Promise<ModelConfig>;
+  resolveCustomModelEndpoint?: (modelId: string) => Promise<import("../shared/custom-model-endpoint.js").CustomModelEndpointPublic | null>;
   readWorkspaceCatalog: () => Promise<{ workspaces: WorkspaceCatalogItem[] }>;
   readThreadState: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord) => Promise<ThreadStateFile>;
   writeThreadState: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord, state: ThreadStateFile) => Promise<void>;
@@ -222,6 +223,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
     },
     readCatalog: deps.readWorkspaceCatalog,
     readAuthorizedModelConfig: deps.readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: deps.resolveCustomModelEndpoint,
     resolveSkillRoutingHints: async ({ workspaceId, selectedSkillNames }) => {
       const hints: SkillRoutingHint[] = [];
       const catalog = await deps.readWorkspaceCatalog();
@@ -284,13 +286,18 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const authState = await deps.readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState as never, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (!bearerToken && deps.refreshDesktopAccessToken) {
         bearerToken = await deps.refreshDesktopAccessToken().catch(() => "");
       }
       if (!bearerToken) {
+        if (process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
+          throw new Error(
+            "E2E Auto 路由缺少凭证：请设置 NEWBRAIN_MODEL_BASE_URL，或启用 NEWBRAIN_E2E_REMOTE_DEBUG_PORT 远程调试会话。"
+          );
+        }
         throw new Error("Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。");
       }
       const gatewayBaseUrl = await deps.readGatewayBaseUrl();
@@ -459,8 +466,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
           const authState = await deps.readDesktopAuthState();
           const authSelection = selectModelRequestAuth(authState as never, "");
           let bearerToken = authSelection.bearerToken;
-          if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-            bearerToken = "newbrain-e2e";
+          if (!bearerToken) {
+            bearerToken = resolveDevE2eBearerToken();
           }
           if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
           return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
@@ -540,8 +547,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const authState = await deps.readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState as never, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
       if (!bearerToken) {

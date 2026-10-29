@@ -8,6 +8,7 @@ import { PolicyEngine } from "./policy-engine.js";
 import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
 import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { UserShadow } from "./user-shadow.js";
+import { updateCompanionMemoryFromExchange } from "./companion-memory.js";
 import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 import {
   emptyDeliveryPreferences,
@@ -76,8 +77,10 @@ export class LocalAgentRuntime {
     this.turnDeliveryPreferences = null;
     this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
     this.configuredSkillRoots = Array.isArray(input.skillRoots) ? input.skillRoots : null;
+    this.disabledSkillNames = new Set();
     this.skillRegistry = new SkillRegistry({
-      roots: this.configuredSkillRoots ?? defaultSkillRoots(this.workspacePath)
+      roots: this.configuredSkillRoots ?? defaultSkillRoots(this.workspacePath),
+      disabledNames: this.disabledSkillNames
     });
     this.agentLoop = null;
     this.orchestrator = new MultiAgentOrchestrator({
@@ -209,15 +212,22 @@ export class LocalAgentRuntime {
 
   async addSkillRoots(roots) {
     const nextRoots = [...new Set([...this.skillRegistry.roots, ...roots.map((root) => path.resolve(root))])];
-    this.skillRegistry = new SkillRegistry({ roots: nextRoots });
+    this.skillRegistry = new SkillRegistry({ roots: nextRoots, disabledNames: this.disabledSkillNames });
     return this.skillRegistry.discover();
   }
 
   async removeSkillRoots(roots) {
     const removing = new Set(roots.map((root) => path.resolve(root)));
     this.skillRegistry = new SkillRegistry({
-      roots: this.skillRegistry.roots.filter((root) => !removing.has(path.resolve(root)))
+      roots: this.skillRegistry.roots.filter((root) => !removing.has(path.resolve(root))),
+      disabledNames: this.disabledSkillNames
     });
+    return this.skillRegistry.discover();
+  }
+
+  async setDisabledSkills(names) {
+    this.disabledSkillNames = new Set((names ?? []).map((name) => String(name).toLowerCase()));
+    this.skillRegistry.setDisabledNames(this.disabledSkillNames);
     return this.skillRegistry.discover();
   }
 
@@ -292,8 +302,14 @@ export class LocalAgentRuntime {
     return decision;
   }
 
+  setAgentLoopPermissionMode(mode) {
+    if (mode === "full" || mode === "agent" || mode === "approval") {
+      this.agentLoopPermissionMode = mode;
+    }
+  }
+
   startAgentLoop(messages, options = {}) {
-    const permissionMode = options.permissionMode ?? "approval";
+    this.agentLoopPermissionMode = options.permissionMode ?? "approval";
     this.agentLoop = new AgentLoop({
       toolRegistry: this.toolRegistry,
       toolContext: {
@@ -306,7 +322,7 @@ export class LocalAgentRuntime {
         }
       },
       maxSteps: options.maxSteps,
-      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, permissionMode),
+      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, this.agentLoopPermissionMode),
       onEvent: (event) => {
         this.sessionMachine.events.push({
           id: makeId("agent-event"),
@@ -487,6 +503,7 @@ export class LocalAgentRuntime {
       this.projectDeliveryPreferences = await this.userShadow.readDeliveryPreferences().catch(() => emptyDeliveryPreferences());
     }
     this.turnDeliveryPreferences = null;
+    await updateCompanionMemoryFromExchange(this.skillRegistry.roots, input);
     await this.skillRegistry.discover();
     this.sessionMachine.events.push({
       id: makeId("shadow-event"),
@@ -540,7 +557,10 @@ export class LocalAgentRuntime {
     this.workspacePath = path.resolve(nextWorkspacePath);
     this.userShadow = new UserShadow({ workspacePath: this.workspacePath });
     if (!this.configuredSkillRoots) {
-      this.skillRegistry = new SkillRegistry({ roots: defaultSkillRoots(this.workspacePath) });
+      this.skillRegistry = new SkillRegistry({
+        roots: defaultSkillRoots(this.workspacePath),
+        disabledNames: this.disabledSkillNames
+      });
     }
     this.pendingApprovalAction = null;
     this.pendingPatchState = null;

@@ -87,7 +87,7 @@ export function createReadAuthorizedDesktopModelConfig(deps: ReadAuthorizedDeskt
     }
     const remoteCatalog = parseAuthorizedModelPayload(remoteModels);
     const availableModels = await loadAuthorizedModelCatalog({
-      fetchRemote: async () => remoteRequestSucceeded ? remoteCatalog : null,
+      fetchRemote: async () => (remoteRequestSucceeded && remoteCatalog.length > 0) ? remoteCatalog : null,
       writeCache: async (models) => {
         await deps.ensureDirectory(dirname(deps.authorizedModelsCachePath));
         await fs.writeFile(deps.authorizedModelsCachePath, `${JSON.stringify(models, null, 2)}\n`, "utf8");

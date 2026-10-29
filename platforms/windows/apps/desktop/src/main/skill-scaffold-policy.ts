@@ -11,7 +11,7 @@ export function normalizeCapabilityList(value: unknown) {
 }
 
 export function normalizeSkillName(rawName: string) {
-  return rawName
+  const ascii = rawName
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -19,6 +19,15 @@ export function normalizeSkillName(rawName: string) {
     .replace(/-{2,}/g, "-")
     .slice(0, 64)
     .replace(/-+$/g, "");
+  if (ascii) return ascii;
+  return rawName
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/^[.\-]+|[.\-]+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 64)
+    .replace(/[.\-]+$/g, "");
 }
 
 export function titleCaseSkillName(skillName: string) {

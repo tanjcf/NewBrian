@@ -4,13 +4,40 @@ const LOCAL_RUNTIME_STATE = /当前(?:持久化|目标|步骤|任务|线程|审�
  * Tool-side guidance only. Must never be written into the user-visible assistant
  * bubble — Auto Mode / search policy prompts live in spring-app, not BRAIN UI.
  */
-export function formatDesktopWebSearchUnavailable(reason: string): string {
+export function formatDesktopWebSearchUnavailable(reason: string, code?: string): string {
+  const { userHint } = describeDesktopWebSearchFailure(reason, code);
   return [
     "WEB_SEARCH_UNAVAILABLE",
     reason.trim() || "Search did not return usable sources.",
     "Do not invent current facts, prices, headlines, or timelines.",
-    "Tell the user that up-to-date web evidence is unavailable and avoid unsupported freshness claims."
+    userHint
+      ? `Tell the user in Chinese: ${userHint}`
+      : "Tell the user that up-to-date web evidence is unavailable and avoid unsupported freshness claims."
   ].join(" ");
+}
+
+const WEB_SEARCH_FAILURE_HINTS: Record<string, string> = {
+  WEB_SEARCH_PAYMENT_REQUIRED: "联网搜索余额不足，请充值后再试。",
+  WEB_SEARCH_BUDGET_EXCEEDED: "今日联网搜索额度已用完，请明天再试或联系管理员提高额度。",
+  WEB_SEARCH_USER_REQUIRED: "需要登录账号后才能使用联网搜索。",
+  WEB_SEARCH_AUTH_REQUIRED: "需要登录账号后才能使用联网搜索。",
+  WEB_SEARCH_CHARGE_CONFLICT: "联网搜索计费未能完成，请稍后重试。",
+  WEB_SEARCH_DISABLED: "管理员已关闭联网搜索。",
+  WEB_SEARCH_NOT_CONFIGURED: "已调用 Spring 搜索接口，服务端没有返回可用来源。不要编造新闻。",
+  WEB_SEARCH_PROVIDER_NOT_CONFIGURED: "已调用 Spring 搜索接口，服务端没有可用的搜索密钥。不要编造新闻。"
+};
+
+/**
+ * Spring reports orchestration failures as "WEB_SEARCH_XXX: detail" messages
+ * (or as the error code of a non-2xx response).
+ */
+export function describeDesktopWebSearchFailure(
+  reason: string,
+  fallbackCode = "WEB_SEARCH_UNAVAILABLE"
+): { code: string; userHint: string } {
+  const embedded = /^\s*(WEB_SEARCH_[A-Z_]+)\s*:/u.exec(String(reason || ""))?.[1];
+  const code = embedded || fallbackCode;
+  return { code, userHint: WEB_SEARCH_FAILURE_HINTS[code] ?? "" };
 }
 
 /** Kept for unit tests / tool contracts; BRAIN must not rewrite chat answers with this. */

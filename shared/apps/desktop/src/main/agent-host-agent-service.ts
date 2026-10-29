@@ -23,6 +23,7 @@ interface AgentRuntime {
     attachments?: Array<{ name?: string; path: string; url?: string }>;
   }): unknown;
   cancelAgentLoop(reason?: string): unknown;
+  setPermissionMode?(mode: "full" | "approval" | "agent"): unknown;
   shutdown?(): unknown | Promise<unknown>;
 }
 
@@ -138,6 +139,12 @@ export class AgentHostAgentService {
     const result = this.requireRuntime(runtimeId).cancelAgentLoop(reason);
     this.publishNewEvents(runtimeId);
     return result;
+  }
+
+  setPermissionMode(runtimeId: string, mode: "full" | "approval" | "agent") {
+    const runtime = this.requireRuntime(runtimeId);
+    runtime.setPermissionMode?.(mode);
+    return { permissionMode: mode };
   }
 
   resolveModel(

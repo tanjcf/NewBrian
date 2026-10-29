@@ -3,10 +3,44 @@ import { useEffect, useRef, useState } from "react";
 
 const FEATURE_UNDER_DEVELOPMENT_MESSAGE = "该接口处于开发中，暂时无法使用。";
 
-function formatFeatureAvailabilityError(error: unknown): string {
+function unwrapIpcErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   // Electron IPC wraps remote errors; prefer the trailing business message.
-  const message = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "").trim() || raw;
+  return raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "").trim() || raw;
+}
+
+function formatRedeemError(error: unknown): string {
+  const message = unwrapIpcErrorMessage(error);
+  if (!message.trim()) return "兑换失败，请稍后重试。";
+  if (/请先登录|login required|AUTH_UNAUTHORIZED|unauthorized/i.test(message)) {
+    return "请先登录后再兑换。";
+  }
+  if (/redeem code is invalid|code is required|invalid redeem/i.test(message)) {
+    return "兑换码无效，请检查后重试。";
+  }
+  if (/redeem code is not active|not active/i.test(message) && /redeem/i.test(message)) {
+    return "兑换码未启用或已停用。";
+  }
+  if (/redeem code expired|expired/i.test(message) && /redeem|兑换/i.test(message)) {
+    return "兑换码已过期。";
+  }
+  if (/usage limit reached|already used|update failed/i.test(message)) {
+    return "兑换码已使用或次数已用尽。";
+  }
+  if (/missing subscription plan/i.test(message)) {
+    return "兑换码缺少套餐配置，请联系发放方。";
+  }
+  if (/ECONNREFUSED|ENOTFOUND|Failed to fetch|fetch failed|无法连接/i.test(message)) {
+    return "无法连接 spring-app，请确认网关可用后重试。";
+  }
+  if (/处于开发中|尚未接入|not implemented|404|501/i.test(message)) {
+    return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
+  }
+  return message;
+}
+
+function formatFeatureAvailabilityError(error: unknown): string {
+  const message = unwrapIpcErrorMessage(error);
   if (!message.trim()) return FEATURE_UNDER_DEVELOPMENT_MESSAGE;
   if (
     /充值支付尚未开通|套餐购买尚未开通|支付通道尚未接通|暂不支持在线|spring-app 未返回|spring-app 未确认|超额扣款开关未接入|支付交接码|handoff|请先登录/i.test(
@@ -47,11 +81,14 @@ export function WalletSettingsPage(props: {
   const [busy, setBusy] = useState(false);
   const [walletMessage, setWalletMessage] = useState("");
   const [walletError, setWalletError] = useState("");
+  const [redeemMessage, setRedeemMessage] = useState("");
+  const [redeemError, setRedeemError] = useState("");
   const [wallet, setWallet] = useState<any>(null);
   const [overageEnabled, setOverageEnabled] = useState(false);
   const [overageBusy, setOverageBusy] = useState(false);
   const loadingRef = useRef(false);
   const settledRef = useRef(false);
+  const redeemInFlightRef = useRef(false);
 
   const applyWalletPayload = (next: any) => {
     const source =
@@ -81,18 +118,21 @@ export function WalletSettingsPage(props: {
     }
     loadingRef.current = true;
     try {
-      if (!settledRef.current) setWalletError("");
+      // Do not clear redeem feedback while a redeem attempt is in flight or just finished.
+      if (!settledRef.current && !redeemInFlightRef.current) setWalletError("");
       const next = await api.getBillingSubscription();
       applyWalletPayload(next);
       if (next?.under_development) {
-        setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
-      } else {
+        if (!redeemInFlightRef.current) setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      } else if (!redeemInFlightRef.current) {
         setWalletError("");
       }
       settledRef.current = true;
     } catch (error) {
       setWallet((current: any) => current || { summary: {}, subscriptions: [] });
-      setWalletError(formatFeatureAvailabilityError(error));
+      if (!redeemInFlightRef.current) {
+        setWalletError(formatFeatureAvailabilityError(error));
+      }
       settledRef.current = true;
     } finally {
       loadingRef.current = false;
@@ -158,24 +198,51 @@ export function WalletSettingsPage(props: {
   };
 
   const redeem = async () => {
-    if (!code.trim() || redeeming) return;
+    if (!code.trim() || redeeming || redeemInFlightRef.current) return;
     if (!api?.redeemCode) {
-      setWalletError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      setRedeemError(FEATURE_UNDER_DEVELOPMENT_MESSAGE);
+      setRedeemMessage("");
       return;
     }
+    redeemInFlightRef.current = true;
     setRedeeming(true);
-    setWalletError("");
-    setWalletMessage("");
+    setRedeemError("");
+    setRedeemMessage("");
     try {
-      await api.redeemCode({ code: code.trim() });
+      const result = await api.redeemCode({ code: code.trim() });
+      if (result && typeof result === "object" && result.ok === false) {
+        throw new Error(String(result.message || result.detail || "兑换失败，请稍后重试。"));
+      }
       setCode("");
-      setWalletMessage("兑换成功，钱包权益已更新。");
+      const summarySource =
+        result?.result && typeof result.result === "object"
+          ? result.result
+          : result && typeof result === "object"
+            ? result
+            : null;
+      if (summarySource) {
+        applyWalletPayload({ subscription: summarySource, summary: summarySource });
+      }
+      const planHint = String(
+        summarySource?.plan_name ||
+          summarySource?.summary?.plan_name ||
+          result?.result?.plan_name ||
+          result?.plan_name ||
+          ""
+      ).trim();
+      setRedeemMessage(planHint ? `兑换成功：已开通「${planHint}」。` : "兑换成功，钱包权益已更新。");
       settledRef.current = false;
-      await loadWallet(true);
+      try {
+        await loadWallet(true);
+      } catch {
+        /* redeem already succeeded; keep redeemMessage */
+      }
     } catch (error) {
-      setWalletError(formatFeatureAvailabilityError(error));
+      setRedeemMessage("");
+      setRedeemError(formatRedeemError(error));
     } finally {
       setRedeeming(false);
+      redeemInFlightRef.current = false;
     }
   };
 
@@ -361,17 +428,33 @@ export function WalletSettingsPage(props: {
           <input
             id="wallet-redeem-code"
             value={code}
-            onChange={(event) => setCode(event.target.value)}
+            onChange={(event) => {
+              setCode(event.target.value);
+              if (redeemError) setRedeemError("");
+              if (redeemMessage) setRedeemMessage("");
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter") void redeem();
             }}
             placeholder="请输入兑换码"
             disabled={redeeming}
+            aria-invalid={Boolean(redeemError)}
+            aria-describedby={redeemError ? "wallet-redeem-feedback" : redeemMessage ? "wallet-redeem-feedback" : undefined}
           />
           <button type="button" onClick={() => void redeem()} disabled={redeeming || !code.trim()}>
             {redeeming ? "处理中…" : "确认兑换"}
           </button>
         </div>
+        {redeemMessage ? (
+          <small id="wallet-redeem-feedback" className="wallet-success" role="status" aria-live="polite">
+            {redeemMessage}
+          </small>
+        ) : null}
+        {redeemError ? (
+          <small id="wallet-redeem-feedback" className="wallet-error" role="alert" aria-live="assertive">
+            {redeemError}
+          </small>
+        ) : null}
       </section>
 
       {walletMessage ? <small className="wallet-success">{walletMessage}</small> : null}

@@ -12,6 +12,12 @@ test("normalizes runtime control request identifiers", () => {
   assert.deepEqual(parseRespondApprovalInput({ approved: false, requestId: " request-1 ", approvalId: " approval-1 " }), {
     approved: false, requestId: "request-1", approvalId: "approval-1"
   });
+  assert.deepEqual(parseRespondApprovalInput({ approved: true, permissionMode: "full" }), {
+    approved: true, requestId: undefined, approvalId: undefined, permissionMode: "full"
+  });
+  assert.deepEqual(parseRespondApprovalInput({ approved: true, permissionMode: "agent" }), {
+    approved: true, requestId: undefined, approvalId: undefined
+  });
   assert.equal(parseShellCommand("  git status  "), "  git status  ");
 });
 
@@ -95,8 +101,9 @@ test("previews staged changes before commit and cancels the selected model task"
     "save:提交前钩子：已生成 staged diff 摘要", "run:git commit -m test:full",
     "save:已提交命令: git commit -m test", "events:1",
     "canceled:request", "agent:User requested cancellation.", "metadata:Cancelled",
-    "remove:request", "clear-canceled:request"
+    "remove:request"
   ]);
+  assert.ok(!fixture.events.includes("clear-canceled:request"), "canceled mark must survive until model-chat finish");
 });
 
 test("cancelModelRequest stops locally before spring turn.cancel", async () => {
@@ -144,9 +151,9 @@ test("cancelModelRequest stops locally before spring turn.cancel", async () => {
     "agent:User requested cancellation.",
     "metadata",
     "spring-cancel",
-    "remove:active",
-    "clear-canceled:active"
+    "remove:active"
   ]);
+  assert.ok(!events.includes("clear-canceled:active"), "canceled mark must survive until model-chat finish");
   assert.deepEqual(springCalls, ["thread:trn_1:user_stop"]);
 });
 
@@ -479,7 +486,7 @@ test("terminal no_progress failures clear the task and mark the thread failed", 
   const fixture = createApprovalFixture({ tasks: new Map([["request", task]]), runtime, catalog });
   await assert.rejects(
     () => fixture.service.respond(fixture.sender, { approved: true, requestId: "request" }),
-    /没有成功进展/
+    /no tool progress/
   );
   assert.equal(fixture.tasks.has("request"), false);
   assert.ok(fixture.events.includes("dispose-runtime"));
@@ -487,4 +494,26 @@ test("terminal no_progress failures clear the task and mark the thread failed", 
   assert.ok(fixture.events.includes("metadata:failed"));
   assert.ok(fixture.events.includes("activity:本轮已结束"));
   assert.equal(snapshot.approval, null);
+});
+
+test("full access selected during a run updates the loop before any later approval", async () => {
+  const order: string[] = [];
+  const tasks = new Map([["req", {
+    abortController: new AbortController(),
+    workspaceId: "workspace",
+    threadId: "thread",
+    scope: { workspaceId: "workspace", threadId: "thread", requestId: "req", turnId: "turn" },
+    runtime: {
+      sessionMachine: { events: [] },
+      setAgentLoopPermissionMode: async (mode: string) => {
+        order.push(`mode:${mode}`);
+      },
+      getAgentLoopSnapshot: () => ({ status: "running" }),
+      getSnapshot: () => ({ approval: null, runs: [], messages: [] })
+    }
+  }]]);
+  const fixture = createApprovalFixture({ tasks, runtime: tasks.get("req").runtime });
+  const applied = await fixture.service.applyLivePermissionMode({ requestId: "req", permissionMode: "full" });
+  assert.deepEqual(applied, { applied: true, permissionMode: "full" });
+  assert.deepEqual(order, ["mode:full"]);
 });

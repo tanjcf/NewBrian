@@ -12,6 +12,7 @@ import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
 import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { ToolHostClient } from "./tool-host-client.js";
 import { UserShadow } from "./user-shadow.js";
+import { updateCompanionMemoryFromExchange } from "./companion-memory.js";
 import { enrichShellEnvForTools } from "./shell-env.js";
 import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 import {
@@ -71,8 +72,10 @@ function buildPatchPreview(originalText, nextText) {
   };
 }
 
-function approvalMessageForTool(descriptor, call) {
+function approvalMessageForTool(descriptor, call, authorization) {
   const command = call.name === "shell.exec" ? String(call.arguments?.command ?? "").trim() : "";
+  const reason = String(authorization?.reason || "").trim();
+  if (reason) return reason;
   if (command) return `是否允许 NewBrain 执行这条命令？`;
   return `是否允许 NewBrain 使用工具：${descriptor.title || descriptor.name}？`;
 }
@@ -412,8 +415,14 @@ export class LocalAgentRuntime {
     return decision;
   }
 
+  setAgentLoopPermissionMode(mode) {
+    if (mode === "full" || mode === "agent" || mode === "approval") {
+      this.agentLoopPermissionMode = mode;
+    }
+  }
+
   startAgentLoop(messages, options = {}) {
-    const permissionMode = options.permissionMode ?? "approval";
+    this.agentLoopPermissionMode = options.permissionMode ?? "approval";
     const activeToolCalls = new Map();
     this.abortController = options.abortController ?? new AbortController();
     this.agentLoop = new AgentLoop({
@@ -422,7 +431,7 @@ export class LocalAgentRuntime {
       abortSignal: this.abortController.signal,
       maxSteps: options.maxSteps,
       allowedToolNames: options.allowedToolNames,
-      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, permissionMode),
+      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, this.agentLoopPermissionMode),
       onEvent: (event) => {
         const classification = classifyAgentEvent(event.type);
         this.sessionMachine.events.push(createAgentActivityEvent({
@@ -571,7 +580,7 @@ export class LocalAgentRuntime {
 
   syncAgentLoopState(snapshot) {
     if (snapshot.status === "awaiting-approval" && snapshot.pending) {
-      const { descriptor, call } = snapshot.pending;
+      const { descriptor, call, authorization } = snapshot.pending;
       const existingApproval = this.sessionMachine.snapshot.approval;
       const existingTool = this.sessionMachine.snapshot.pendingTool;
       // Keep a stable approval id when the same pending call is synced again
@@ -580,17 +589,22 @@ export class LocalAgentRuntime {
         this.sessionMachine.snapshot.session.status = "awaiting-approval";
         return;
       }
+      const policyReason = String(authorization?.reason || "").trim();
       this.sessionMachine.snapshot.pendingTool = {
         id: call.id,
+        name: call.name,
+        arguments: clone(call.arguments ?? {}),
         kind: descriptor.kind,
-        reason: descriptor.description,
+        reason: policyReason || descriptor.description,
         risk: descriptor.risk,
+        ruleId: authorization?.ruleId || "",
+        policySource: authorization?.source || "",
         command: call.name === "shell.exec" ? String(call.arguments.command ?? "") : undefined
       };
       this.sessionMachine.snapshot.approval = {
         id: makeId("approval"),
         toolRequestId: call.id,
-        message: approvalMessageForTool(descriptor, call),
+        message: approvalMessageForTool(descriptor, call, authorization),
         requiresConfirmation: true
       };
       this.sessionMachine.snapshot.session.status = "awaiting-approval";
@@ -667,11 +681,11 @@ export class LocalAgentRuntime {
   }
 
   async rememberExchangeWithShadow(input) {
-    const memory = this.rememberExchange(input);
     const shadow = await this.userShadow.absorbExchange({
       ...input,
       threadDeliveryPreferences: this.threadDeliveryPreferences
     });
+    const memory = shadow.knowledgeStatus === "active" ? this.rememberExchange(input) : null;
     if (shadow.threadDeliveryPreferences) {
       this.threadDeliveryPreferences = parseDeliveryPreferences(shadow.threadDeliveryPreferences);
       this.sessionMachine.snapshot.deliveryPreferences = clone(this.threadDeliveryPreferences);
@@ -683,6 +697,7 @@ export class LocalAgentRuntime {
     }
     // Turn overlay was for this turn's tools only; clear after absorb.
     this.turnDeliveryPreferences = null;
+    await updateCompanionMemoryFromExchange(this.skillRegistry.roots, input);
     await this.skillRegistry.discover();
     this.sessionMachine.events.push({
       id: makeId("shadow-event"),
@@ -861,14 +876,16 @@ export class LocalAgentRuntime {
       arguments: clone(input),
       permissionMode,
       kind: descriptor.kind,
-      reason: descriptor.description,
+      reason: policy.reason || descriptor.description,
       risk: descriptor.risk,
+      ruleId: policy.ruleId || "",
+      policySource: policy.source || "",
       command
     };
     this.sessionMachine.snapshot.approval = {
       id: makeId("approval"),
       toolRequestId: this.sessionMachine.snapshot.pendingTool.id,
-      message: approvalMessageForTool(descriptor, { name, arguments: input }),
+      message: approvalMessageForTool(descriptor, { name, arguments: input }, policy),
       requiresConfirmation: descriptor.requiresApproval !== false
     };
     this.sessionMachine.snapshot.session.status = "awaiting-approval";

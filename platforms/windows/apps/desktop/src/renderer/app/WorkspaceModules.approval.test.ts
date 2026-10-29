@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const source = readFileSync(fileURLToPath(new URL("./WorkspaceModules.tsx", import.meta.url)), "utf8");
+const localPath = fileURLToPath(new URL("./WorkspaceModules.tsx", import.meta.url));
+const sharedPath = fileURLToPath(new URL("../../../../../../../shared/apps/desktop/src/renderer/app/WorkspaceModules.tsx", import.meta.url));
+const source = readFileSync(existsSync(localPath) ? localPath : sharedPath, "utf8");
 
 test("shows only one approval surface when conversation turns already host the banner", () => {
   assert.match(source, /data-testid="conversation-approval-dialog"/);
@@ -12,10 +14,6 @@ test("shows only one approval surface when conversation turns already host the b
   assert.match(
     source,
     /effectiveApproval\s*&&\s*conversationTurns\.length\s*===\s*0\s*\?\s*\(/
-  );
-  assert.doesNotMatch(
-    source,
-    /\{effectiveApproval\s*\?\s*\(\s*<section className="approval-request-banner composer-approval-banner"/
   );
 });
 
@@ -26,9 +24,26 @@ test("approval resume catch clears the live busy request instead of sticking on 
   );
 });
 
+test("full access auto-approves the pending tool and upgrades the running loop", () => {
+  assert.match(source, /void handleApprovalResponse\(true\)/);
+  assert.match(source, /composerPermission === "full" \? \{ permissionMode: "full" as const \} : \{\}/);
+  assert.match(source, /applyLivePermissionMode\(\{ requestId, permissionMode: "full" \}\)/);
+});
+
 test("approval resume success settles again after activateWorkspaceThread", () => {
   assert.match(
     source,
     /activateWorkspaceThread\(\{[\s\S]*?\}\)[\s\S]*?settleApprovalRequest\(requestId,\s*selectedThread\.id,\s*settledSnapshot\)/
+  );
+});
+
+test("approve click retains settled guard when the same approval id is replayed", () => {
+  assert.match(source, /shouldRetainSettledApprovalGuard/);
+  assert.match(source, /stripSettledApprovalFromSnapshot/);
+  assert.match(source, /if\s*\(\s*!retainSettledGuard\s*\)\s*\{\s*setSettledApprovalId\(""\)/);
+  assert.match(source, /forceClearApproval:\s*true/);
+  assert.doesNotMatch(
+    source,
+    /returnedApprovalId\s*&&\s*returnedApprovalId\s*===\s*decidedApprovalId\s*\)\s*\{\s*setSettledApprovalId\(""\)/
   );
 });

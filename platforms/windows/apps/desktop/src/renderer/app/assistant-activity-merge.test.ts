@@ -4,8 +4,10 @@ import {
   findLivePendingApprovalActivity,
   markApprovalActivitiesSettling,
   mergeAssistantActivityItems,
-  resolveEffectiveApproval
-} from "./assistant-activity-merge.ts";
+  resolveEffectiveApproval,
+  shouldRetainSettledApprovalGuard,
+  stripSettledApprovalFromSnapshot
+} from "../../../../../../../shared/apps/desktop/src/renderer/app/assistant-activity-merge.ts";
 
 test("merge replaces 等待批准 with the same callId result", () => {
   const pending = {
@@ -118,6 +120,29 @@ test("resolveEffectiveApproval ignores catalog status when live activities alrea
   }), null);
 });
 
+test("resolveEffectiveApproval ignores a replay of the approval the user already decided", () => {
+  assert.equal(resolveEffectiveApproval({
+    snapshotApproval: { id: "approval-1", message: "Run a shell command" },
+    selectedThreadAwaitingApproval: true,
+    selectedThreadOwnsLiveApproval: true,
+    selectedThreadHasLiveRequest: true,
+    settledApprovalId: "approval-1",
+    liveActivities: [{
+      type: "run",
+      title: "等待批准",
+      status: "approval",
+      callId: "call-1",
+      command: "git pull"
+    }]
+  }), null);
+  const next = resolveEffectiveApproval({
+    snapshotApproval: { id: "approval-2", message: "Run another command" },
+    selectedThreadOwnsLiveApproval: true,
+    settledApprovalId: "approval-1"
+  });
+  assert.equal(next?.message, "Run another command");
+});
+
 test("resolveEffectiveApproval stays cleared while approve click is in flight", () => {
   assert.equal(resolveEffectiveApproval({
     snapshotApproval: null,
@@ -176,4 +201,18 @@ test("markApprovalActivitiesSettling replaces sticky 等待批准 after approve"
   assert.equal(settled[0]?.title, "正在执行命令");
   assert.equal(settled[0]?.status, "running");
   assert.equal(findLivePendingApprovalActivity(settled), undefined);
+});
+
+test("same approval id after approve retains guard and strips sticky snapshot", () => {
+  assert.equal(shouldRetainSettledApprovalGuard({
+    settledApprovalId: "apr-1",
+    returnedApprovalId: "apr-1"
+  }), true);
+  const stripped = stripSettledApprovalFromSnapshot({
+    approval: { id: "apr-1" },
+    pendingTool: { kind: "shell" },
+    session: { status: "awaiting-approval" }
+  }, "apr-1", { forceClearApproval: true });
+  assert.equal(stripped.approval, null);
+  assert.equal(stripped.session?.status, "running");
 });

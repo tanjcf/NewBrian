@@ -1,3 +1,5 @@
+import { ensureCompanionMemorySkill } from "../../../../../../shared/apps/agentd/src/companion-memory.js";
+
 type SkillPolicyRuntime = {
   addSkillRoots(roots: string[]): Promise<unknown>;
   setDisabledSkills(names: string[]): Promise<unknown>;
@@ -11,6 +13,7 @@ export async function applyApplicationSkillPolicy(
   readFeatureSkills: () => Promise<FeatureSkill[]>,
   projectSkillRoots: string[] = []
 ) {
+  await ensureCompanionMemorySkill(userSkillRoot);
   const roots = [...new Set([userSkillRoot, ...projectSkillRoots.map((root) => String(root || "").trim()).filter(Boolean)])];
   await runtime.addSkillRoots(roots);
   const skills = await readFeatureSkills();

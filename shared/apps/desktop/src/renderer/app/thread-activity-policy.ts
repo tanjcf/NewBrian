@@ -1,3 +1,5 @@
+import { isApprovalWaitNotice, stripApprovalWaitNotice } from "../../shared/approval-wait-notice.ts";
+
 export function isComposerThreadRunning(input: {
   isComposingNewThread: boolean;
   selectedThreadId?: string;
@@ -5,6 +7,18 @@ export function isComposerThreadRunning(input: {
 }): boolean {
   if (input.isComposingNewThread || !input.selectedThreadId) return false;
   return Boolean(input.activeThreadRequestIds[input.selectedThreadId]);
+}
+
+/**
+ * Like / dislike / branch / copy / TTS belong after the live turn settles.
+ * While streaming, keep the generating affordance (thinking panel + streaming
+ * markdown) and do not mount the action toolbar — CSS `display:flex` on
+ * `.message-actions` also overrides the HTML `hidden` attribute.
+ */
+export function shouldShowAssistantMessageActions(input: {
+  isLiveTurn: boolean;
+}): boolean {
+  return !input.isLiveTurn;
 }
 
 /**
@@ -53,6 +67,32 @@ export function resolvePendingApprovalThreadKey(input: {
   if (!workspaceId || !threadId) return "";
   if (!input.snapshotHasApproval || !input.selectedThreadOwnsLiveApproval) return "";
   return `${workspaceId}:${threadId}`;
+}
+
+/**
+ * Sidebar "等待批准" after the user already approved or rejected.
+ * Catalog status and a replayed snapshot of the same approval id stay sticky
+ * while the tool resume is still running; a different approval id may show.
+ */
+export function threadStillNeedsApproval(input: {
+  threadStatus?: string;
+  threadKey: string;
+  pendingApprovalThreadKey: string;
+  threadId?: string;
+  settledApprovalId?: string;
+  settledThreadId?: string;
+  snapshotApprovalId?: string;
+}): boolean {
+  const catalogPending = input.threadStatus === "awaiting-approval";
+  const livePending = Boolean(input.pendingApprovalThreadKey) && input.threadKey === input.pendingApprovalThreadKey;
+  if (!catalogPending && !livePending) return false;
+  const settledApprovalId = input.settledApprovalId?.trim() || "";
+  const settledThreadId = input.settledThreadId?.trim() || "";
+  if (settledApprovalId && settledThreadId && input.threadId === settledThreadId) {
+    const snapshotApprovalId = input.snapshotApprovalId?.trim() || "";
+    if (!snapshotApprovalId || snapshotApprovalId === settledApprovalId) return false;
+  }
+  return true;
 }
 
 type DisplayMessage = {
@@ -114,6 +154,19 @@ function preferLongerText(left: string | undefined, right: string | undefined) {
   const a = String(left ?? "");
   const b = String(right ?? "");
   return a.length >= b.length ? a : b;
+}
+
+/** A finished answer replaces the approval-wait notice even when the notice is longer. */
+function preferAnswerOverApprovalNotice(left: string | undefined, right: string | undefined) {
+  const a = String(left ?? "");
+  const b = String(right ?? "");
+  const aBody = stripApprovalWaitNotice(a);
+  const bBody = stripApprovalWaitNotice(b);
+  const aIsOnlyNotice = isApprovalWaitNotice(a) && !aBody;
+  const bIsOnlyNotice = isApprovalWaitNotice(b) && !bBody;
+  if (aIsOnlyNotice && bBody) return b;
+  if (bIsOnlyNotice && aBody) return a;
+  return preferLongerText(a, b);
 }
 
 /** Resolve the assistant row owned by one user turn — never scan by timestamp. */
@@ -179,7 +232,7 @@ export function mergeDisplayMessageProgress<T extends DisplayMessageWithProgress
   local: T,
   canonical: T
 ): T {
-  const content = preferLongerText(local.content, canonical.content);
+  const content = preferAnswerOverApprovalNotice(local.content, canonical.content);
   const reasoningSummary = preferLongerText(local.reasoningSummary, canonical.reasoningSummary);
   const excludeFromModelContext = Boolean(local.excludeFromModelContext || canonical.excludeFromModelContext);
   const next = { ...canonical, content };
@@ -261,7 +314,48 @@ export function reconcileThreadDisplayMessages<T extends DisplayMessageWithProgr
       return localHasRicherProgress ? mergeDisplayMessageProgress(local, message) : message;
     });
   }
-  return [...mergedCanonical, ...optimisticTail];
+  return keepNewInputBelowHistoricalOutput([...mergedCanonical, ...optimisticTail]);
+}
+
+/**
+ * A later user message must stay below the previous turn's assistant output.
+ * Snapshot merges can append an older local assistant after a newer user row;
+ * that paints the new input above the historical answer.
+ */
+export function keepNewInputBelowHistoricalOutput<T extends { role: string; createdAt?: string }>(
+  messages: T[]
+): T[] {
+  const next = [...messages];
+  let index = 0;
+  while (index < next.length) {
+    const message = next[index];
+    if (message.role !== "assistant") {
+      index += 1;
+      continue;
+    }
+    const assistantTime = Date.parse(message.createdAt ?? "");
+    if (!Number.isFinite(assistantTime)) {
+      index += 1;
+      continue;
+    }
+    let newerUserIndex = -1;
+    for (let cursor = 0; cursor < index; cursor += 1) {
+      if (next[cursor].role !== "user") continue;
+      const userTime = Date.parse(next[cursor].createdAt ?? "");
+      if (Number.isFinite(userTime) && userTime > assistantTime) {
+        newerUserIndex = cursor;
+        break;
+      }
+    }
+    if (newerUserIndex < 0) {
+      index += 1;
+      continue;
+    }
+    const [assistant] = next.splice(index, 1);
+    next.splice(newerUserIndex, 0, assistant);
+    index = newerUserIndex + 1;
+  }
+  return next;
 }
 
 type TurnEvent = {

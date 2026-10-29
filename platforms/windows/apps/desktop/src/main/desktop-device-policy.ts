@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
+import { resolveDesktopPackagePreference } from "./desktop-app-update-patch.ts";
+
+export { resolveDesktopPackagePreference } from "./desktop-app-update-patch.ts";
 
 export interface DesktopDeviceFingerprint {
   device_id: string;
@@ -140,11 +143,29 @@ export function sanitizeDesktopHeaderValue(value: string, fallback = "desktop") 
   return normalized || fallback;
 }
 
+/**
+ * Local gate before calling spring-app password login.
+ * `email_code_login_enabled` must not force a captcha here — the server skips OTP for
+ * previously seen MAC or IP, and only requires a code for brand-new environments.
+ */
+export function shouldRequireLoginCodeLocally(input: {
+  passwordLoginEnabled: boolean;
+  captcha: string;
+  e2eBypass?: boolean;
+}): boolean {
+  if (input.e2eBypass) return false;
+  if (input.captcha.trim()) return false;
+  return !input.passwordLoginEnabled;
+}
+
 export function createDesktopAuthHeaders(input: {
   accessToken?: string;
   device: DesktopDeviceFingerprint;
   createRequestId?: () => string;
   platform?: string;
+  /** Override; otherwise derived from executablePath / process.execPath. */
+  packagePreference?: "msi" | "nsis";
+  executablePath?: string;
 }) {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -162,5 +183,11 @@ export function createDesktopAuthHeaders(input: {
     "X-Desktop-Platform": mapDesktopReleasePlatform(input.platform ?? input.device.os_name)
   };
   if (input.accessToken?.trim()) headers.Authorization = `Bearer ${input.accessToken.trim()}`;
+  // Match Spring dual MSI+NSIS offers to the running install layout.
+  if (headers["X-Desktop-Platform"] === "windows") {
+    headers["X-Desktop-Package-Preference"] =
+      input.packagePreference
+      || resolveDesktopPackagePreference(input.executablePath || process.execPath);
+  }
   return headers;
 }

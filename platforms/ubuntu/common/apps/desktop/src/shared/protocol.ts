@@ -144,10 +144,17 @@ export interface AutomationSpec {
   title: string;
   status: "idle" | "scheduled" | "running" | "paused";
   trigger: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
   workspaceId?: string;
   threadId?: string;
   action?: "workspace_scan" | "git_status";
   intervalMinutes?: number;
+  dailyTime?: string;
   lastRunAt?: string;
   nextRunAt?: string;
   failureCount?: number;

@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const source = readFileSync(new URL("./SettingsWorkspace.tsx", import.meta.url), "utf8");
+const here = dirname(fileURLToPath(import.meta.url));
+const settingsWorkspacePath = [
+  join(here, "SettingsWorkspace.tsx"),
+  join(here, "../../../../../../../shared/apps/desktop/src/renderer/app/SettingsWorkspace.tsx")
+].find((candidate) => existsSync(candidate));
+if (!settingsWorkspacePath) {
+  throw new Error("SettingsWorkspace.tsx was not found beside the test or in shared/");
+}
+const source = readFileSync(settingsWorkspacePath, "utf8");
 const modelStart = source.indexOf('activeSettingsSection === "model"');
 const modelEnd = source.indexOf(') : activeSettingsSection === "mcp"', modelStart);
 const generalSettingsSource = source.slice(modelStart, modelEnd);
@@ -18,9 +28,7 @@ test("general settings controls are wired to persisted desktop preferences", () 
   const requiredSnippets = [
     'workMode: "coding"',
     'workMode: "everyday"',
-    "configuration: { ...current.configuration, requireApprovalForShell: true }",
     "configuration: { ...current.configuration, requireApprovalForShell: false }",
-    "requireApprovalForShell: !fullAccess",
     "reviewFindingsFirst: !current.personalization.reviewFindingsFirst",
     "const fullAccess = !desktopPreferences.permissions?.fullAccess",
     "fullAccess }",
@@ -43,12 +51,18 @@ test("general settings controls are wired to persisted desktop preferences", () 
     "writeClipboard(String(entry.phrase || \"\"))",
     "turnComplete: event.target.value",
     "permission: !current.notifications?.permission",
-    "question: !current.notifications?.question"
+    "question: !current.notifications?.question",
+    "launchAtLogin: current.launchAtLogin === false",
+    "开机自启动"
   ];
 
   for (const snippet of requiredSnippets) {
     assert.ok(generalSettingsSource.includes(snippet), `missing persisted setting snippet: ${snippet}`);
   }
+  assert.ok(
+    source.includes("requireApprovalForShell: !current.configuration.requireApprovalForShell"),
+    "shell approval toggle must stay wired on the configuration page"
+  );
 });
 
 test("general settings source remains UTF-8 clean", () => {

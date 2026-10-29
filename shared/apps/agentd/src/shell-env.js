@@ -288,6 +288,7 @@ export function guardUnboundedRecursiveSearch(command = "") {
   if (hasDepthLimit(text)) return null;
   if (/\b(rg|ripgrep)\b/i.test(text) && /--max-depth\b/i.test(text)) return null;
   if (/Get-ChildItem[\s\S]*-Recurse/i.test(text) && isScopedFilteredRecurse(text)) return null;
+  if (/Select-String[\s\S]*-Recurse/i.test(text) && !isUnboundedSelectStringRecurse(text)) return null;
   return {
     ok: false,
     exitCode: 1,

@@ -190,7 +190,8 @@
                     });
                 }
 
-                mainFrame.contentWindow.location.href = getInitialUrl();
+                var initialUrl = getInitialUrl();
+                mainFrame.contentWindow.location.href = initialUrl === "about:blank" || /^[A-Za-z0-9._\-\u4e00-\u9fff]+\.html$/.test(initialUrl) ? initialUrl : "about:blank";
             }
 
             function initializeLogo() {
@@ -273,11 +274,22 @@
         
         function getInitialUrl() {
             var pageName = getHashStringVar("p");
-            if(pageName.length > 0) return pageName + ".html";
-            else {
-                var url = getFirstPageUrl($axure.document.sitemap.rootNodes);
-                return (url ? url : "about:blank");
+            var nodes = ($axure.document.sitemap && $axure.document.sitemap.rootNodes) || [];
+            if (pageName.length > 0) {
+                var known = [];
+                var collect = function(list) {
+                    for (var i = 0; i < list.length; i++) {
+                        if (list[i].url) known.push(list[i].url);
+                        if (list[i].children && list[i].children.length) collect(list[i].children);
+                    }
+                };
+                collect(nodes);
+                var candidate = pageName + ".html";
+                var knownIndex = known.indexOf(candidate);
+                if (knownIndex !== -1) return known[knownIndex];
             }
+            var url = getFirstPageUrl(nodes);
+            return (url ? url : "about:blank");
         }
 
         function getFirstPageUrl(nodes) {

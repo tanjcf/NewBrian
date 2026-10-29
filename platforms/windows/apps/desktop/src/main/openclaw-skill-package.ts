@@ -44,7 +44,7 @@ export function parseOpenClawSkillFrontmatter(source: string, fallbackName: stri
 
 /** Normalize a skill directory / slug name for NewBrain managed roots. */
 export function normalizeOpenClawSkillName(rawName: string) {
-  return rawName
+  const ascii = rawName
     .trim()
     .toLowerCase()
     .replace(/^@[^/]+\//, "")
@@ -53,6 +53,16 @@ export function normalizeOpenClawSkillName(rawName: string) {
     .replace(/-{2,}/g, "-")
     .slice(0, 64)
     .replace(/-+$/g, "");
+  if (ascii) return ascii;
+  return rawName
+    .trim()
+    .replace(/^@[^/]+[/\\]/, "")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/^[.\-]+|[.\-]+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 64)
+    .replace(/[.\-]+$/g, "");
 }
 
 async function pathExists(target: string) {

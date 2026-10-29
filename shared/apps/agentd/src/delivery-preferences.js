@@ -272,7 +272,7 @@ export function buildDeliveryPreferenceUiState(input = {}) {
   const styleGapQuestion = openQuestions.find((line) => /待确认交付版式|字体和行距/.test(line)) || "";
   const scope = threadHas ? "thread" : projectHas ? "project" : null;
   return {
-    visible: Boolean(Object.keys(resolved.values).length) || Boolean(styleGapQuestion),
+    visible: Boolean(Object.keys(resolved.values).length),
     hasStyle: Boolean(Object.keys(resolved.values).length),
     scope,
     scopeLabel: scope === "thread" ? "本对话" : scope === "project" ? "项目默认" : "",

@@ -62,6 +62,7 @@ export class HostedAgentLoopRuntime {
   readonly sessionMachine = { events: [] as unknown[] };
   private readonly options: HostedAgentLoopRuntimeOptions;
   private loop: InstanceType<typeof AgentLoop> | null = null;
+  private permissionMode: "full" | "approval" | "agent" = "agent";
 
   constructor(options: HostedAgentLoopRuntimeOptions) {
     this.options = options;
@@ -106,8 +107,14 @@ export class HostedAgentLoopRuntime {
     return this.requireLoop().cancel(reason);
   }
 
+  setPermissionMode(mode: "full" | "approval" | "agent") {
+    this.permissionMode = mode === "full" ? "full" : mode === "approval" ? "approval" : "agent";
+  }
+
   private createLoop(options: HostedLoopOptions) {
-    const permissionMode = options.permissionMode === "full" ? "full" : "agent";
+    this.setPermissionMode(
+      options.permissionMode === "full" ? "full" : options.permissionMode === "approval" ? "approval" : "agent"
+    );
     const toolRegistry = createToolRegistry(
       this.options.runtimeId,
       options.toolDescriptors ?? [],
@@ -125,7 +132,7 @@ export class HostedAgentLoopRuntime {
         runtimeId: this.options.runtimeId,
         descriptor,
         call,
-        permissionMode
+        permissionMode: this.permissionMode
       }),
       onEvent: (event: unknown) => {
         this.sessionMachine.events.push(event);

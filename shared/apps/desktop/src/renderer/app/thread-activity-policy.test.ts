@@ -8,10 +8,20 @@ const {
   reconcileThreadDisplayMessages,
   resolveActiveReasoningRequestId,
   resolvePendingApprovalThreadKey,
-  resolveSelectedThreadOwnsLiveApproval
+  resolveSelectedThreadOwnsLiveApproval,
+  shouldShowAssistantMessageActions,
+  threadStillNeedsApproval
 } = await import(
   new URL("./thread-activity-policy.ts", import.meta.url).href
 ) as typeof import("./thread-activity-policy.js");
+
+test("assistant message actions stay hidden while the live turn is generating", () => {
+  assert.equal(shouldShowAssistantMessageActions({ isLiveTurn: true }), false);
+});
+
+test("assistant message actions appear after the live turn settles", () => {
+  assert.equal(shouldShowAssistantMessageActions({ isLiveTurn: false }), true);
+});
 
 test("a running selected thread does not make the new-thread composer busy", () => {
   assert.equal(isComposerThreadRunning({
@@ -339,4 +349,44 @@ test("groups persisted commands under the user message from the same turn", () =
   const grouped = groupActivitiesByUserMessage(events, activities);
   assert.deepEqual(grouped.get("user-1")?.map((item) => item.callId), ["call-1"]);
   assert.deepEqual(grouped.get("user-2")?.map((item) => item.callId), ["call-2"]);
+});
+
+test("an already decided approval does not keep the sidebar waiting badge", () => {
+  assert.equal(threadStillNeedsApproval({
+    threadStatus: "awaiting-approval",
+    threadKey: "workspace:thread",
+    pendingApprovalThreadKey: "workspace:thread",
+    threadId: "thread",
+    settledApprovalId: "approval-1",
+    settledThreadId: "thread",
+    snapshotApprovalId: "approval-1"
+  }), false);
+  assert.equal(threadStillNeedsApproval({
+    threadStatus: "awaiting-approval",
+    threadKey: "workspace:thread",
+    pendingApprovalThreadKey: "",
+    threadId: "thread",
+    settledApprovalId: "approval-1",
+    settledThreadId: "thread",
+    snapshotApprovalId: "approval-2"
+  }), true);
+});
+
+test("a finished answer replaces the longer approval-wait notice", () => {
+  const notice = [
+    "已请求执行工具，等待你批准后继续。",
+    "待确认工具：shell.exec",
+    "批准后会继续生成可见结果；拒绝则本轮停止。"
+  ].join("\n\n");
+  const reconciled = reconcileThreadDisplayMessages(
+    [
+      { id: "user-1", role: "user", content: "检索进展", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "assistant-turn-1", role: "assistant", content: notice, createdAt: "2026-01-01T00:00:05.000Z" }
+    ],
+    [
+      { id: "user-1", role: "user", content: "检索进展", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "assistant-turn-1", role: "assistant", content: "命令已执行。", createdAt: "2026-01-01T00:00:05.000Z" }
+    ]
+  );
+  assert.equal(reconciled.find((message) => message.id === "assistant-turn-1")?.content, "命令已执行。");
 });

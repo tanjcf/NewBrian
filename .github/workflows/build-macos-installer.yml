@@ -1,0 +1,73 @@
+name: Build macOS Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "shared/**"
+      - "platforms/macos/**"
+      - "rust/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "rust-core-release.json"
+      - "newbrain.bootstrap.json"
+      - "newbrain.config.json"
+      - "newbrain.features.json"
+      - "newbrain.workspaces.json"
+      - ".github/workflows/build-macos-installer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            script: package:mac:arm64:production
+            artifact: newbrian-macos-arm64
+            cross: false
+          - target: macos-x64
+            script: package:mac:intel:production
+            artifact: newbrian-macos-x64
+            cross: true
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      NEWBRAIN_ALLOW_UNSIGNED: "true"
+      NEWBRAIN_SOURCE_ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: platforms/macos/common/pnpm-lock.yaml
+      - name: Install Rust
+        if: hashFiles('rust/brain-core/Cargo.toml') != '' && matrix.cross == false
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust with the Intel macOS target
+        if: hashFiles('rust/brain-core/Cargo.toml') != '' && matrix.cross == true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+      - name: Materialize macOS workspace
+        run: node scripts/materialize.mjs ${{ matrix.target }}
+      - name: Install dependencies
+        working-directory: .materialized/${{ matrix.target }}
+        run: pnpm install --frozen-lockfile
+      - name: Package unsigned installer
+        working-directory: .materialized/${{ matrix.target }}
+        run: pnpm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            .materialized/${{ matrix.target }}/apps/desktop/release/production/*.dmg
+            .materialized/${{ matrix.target }}/apps/desktop/release/production/*.zip

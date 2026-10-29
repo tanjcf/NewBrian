@@ -31,6 +31,7 @@ const modelChatFailureServiceSource = await readFile(new URL("./model-chat-failu
 const modelChatSuccessServiceSource = await readFile(new URL("./model-chat-success-service.ts", import.meta.url), "utf8");
 const modelChatGoalServiceSource = await readFile(new URL("./model-chat-goal-service.ts", import.meta.url), "utf8");
 const modelChatAgentLoopServiceSource = await readFile(new URL("./model-chat-agent-loop-service.ts", import.meta.url), "utf8");
+const automationLoopPolicySource = await readFile(new URL("./automation-creation-loop-policy.ts", import.meta.url), "utf8");
 const modelChatServiceSource = await readFile(new URL("./model-chat-service.ts", import.meta.url), "utf8");
 const skillPolicySource = await readFile(new URL("./application-skill-policy.ts", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
@@ -43,7 +44,7 @@ const windowsWorkflow = await readFile(
 test("keeps Chromium sandbox enabled and external navigation approved", () => {
   assert.doesNotMatch(source, /appendSwitch\(["']no-sandbox["']\)/);
   assert.doesNotMatch(source, /sandbox:\s*false/);
-  assert.match(source, /partition:\s*["']newbrain-browser-preview["']/);
+  assert.match(source, /["']persist:newbrain-browser["']/);
   assert.match(source, /name:\s*["']browser\.open["'][\s\S]{0,300}requiresApproval:\s*true/);
   assert.match(source, /!app\.isPackaged && e2eRemoteDebugPort && process\.env\.NEWBRAIN_E2E_AUTH_BYPASS === "1"/);
   assert.doesNotMatch(source, /if \(process\.env\.NEWBRAIN_E2E_AUTH_BYPASS === "1"\) \{/);
@@ -167,10 +168,96 @@ test("builds release configuration from a credential-free allowlist", () => {
   assert.match(packageScript, /apiKey\s*=\s*["']["']/);
   assert.match(packageScript, /extraEnv\s*=\s*@\{\}/);
   assert.match(packageScript, /NEWBRAIN_REQUIRE_SIGNATURE/);
-  assert.match(packageScript, /-unsigned\.msi/);
-  assert.match(windowsWorkflow, /NEWBRAIN_REQUIRE_SIGNATURE:\s*["']true["']/);
-  assert.match(windowsWorkflow, /secrets\.WINDOWS_CSC_LINK/);
-  assert.match(windowsWorkflow, /secrets\.WINDOWS_CSC_KEY_PASSWORD/);
+  assert.match(packageScript, /\$unsignedSuffix = if \(\$isProduction\) \{ "production-unsigned" \} else \{ "test-unsigned" \}/);
+  assert.match(windowsWorkflow, /permissions:\s*\r?\n\s*contents:\s*read/);
+  assert.match(windowsWorkflow, /NEWBRAIN_ALLOW_UNSIGNED:\s*["']true["']/);
+  assert.doesNotMatch(windowsWorkflow, /WINDOWS_CSC_KEY_PASSWORD:\s*["'][^"']+["']/);
+});
+
+test("requires pre-package smoke cases before MSI packaging", () => {
+  assert.match(packageScript, /SPRING-WEB-SEARCH-SMOKE-001/);
+  assert.match(packageScript, /spring-web-search-smoke\.test\.ts/);
+  assert.match(packageScript, /PPT-CONTENT-THEME-SMOKE-001/);
+  assert.match(packageScript, /ppt-content-theme-smoke\.test\.js/);
+  assert.match(packageScript, /PPT-MARK-SEND-SMOKE-001/);
+  assert.match(packageScript, /ppt-mark-send-smoke\.test\.ts/);
+  assert.match(packageScript, /PPT-SMART-READ-SMOKE-001/);
+  assert.match(packageScript, /ppt-smart-read-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-OPEN-FOLDER-SMOKE-001/);
+  assert.match(packageScript, /preview-open-folder-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-FILE-MENU-SMOKE-001/);
+  assert.match(packageScript, /preview-file-menu-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-EXPAND-SMOKE-001/);
+  assert.match(packageScript, /preview-expand-smoke\.test\.ts/);
+  assert.match(packageScript, /PREVIEW-STALE-RELOAD-SMOKE-001/);
+  assert.match(packageScript, /preview-stale-reload-smoke\.test\.ts/);
+  assert.match(packageScript, /SOFTWARE-LINK-SMOKE-001/);
+  assert.match(packageScript, /software-link-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-RUN-SMOKE-001/);
+  assert.match(packageScript, /automation-run-smoke\.test\.ts/);
+  assert.match(packageScript, /EXPERT-USE-SMOKE-001/);
+  assert.match(packageScript, /expert-use-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-MISSING-THREAD-SMOKE-001/);
+  assert.match(packageScript, /automation-missing-thread-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-VISIBLE-THREAD-SMOKE-001/);
+  assert.match(packageScript, /automation-visible-thread-smoke\.test\.ts/);
+  assert.match(packageScript, /GIT-CURRENT-BRANCH-SMOKE-001/);
+  assert.match(packageScript, /git-current-branch-smoke\.test\.ts/);
+  assert.match(packageScript, /THREAD-MOVE-PROJECT-SMOKE-001/);
+  assert.match(packageScript, /PROJECT-REORDER-SMOKE-001/);
+  assert.match(packageScript, /THREAD-PIN-SMOKE-001/);
+  assert.match(packageScript, /sidebar-layout-smoke\.test\.ts/);
+  assert.match(packageScript, /CHAT-TEXT-JITTER-SMOKE-001/);
+  assert.match(packageScript, /chat-text-jitter-smoke\.test\.ts/);
+  assert.match(packageScript, /CHAT-INPUT-HISTORY-ORDER-SMOKE-001/);
+  assert.match(packageScript, /chat-input-history-order-smoke\.test\.ts/);
+  assert.match(packageScript, /CHAT-NEW-INPUT-REPEAT-SMOKE-001/);
+  assert.match(packageScript, /chat-new-input-repeat-smoke\.test\.ts/);
+  assert.match(packageScript, /OUTPUT-PROJECT-ENCODING-SMOKE-001/);
+  assert.match(packageScript, /output-project-encoding-smoke\.test\.js/);
+  assert.match(packageScript, /MODEL-STABILITY-FALLBACK-SMOKE-001/);
+  assert.match(packageScript, /model-stability-fallback-smoke\.test\.ts/);
+  assert.match(packageScript, /SCENE-SWITCH-GENERATION-SMOKE-001/);
+  assert.match(packageScript, /scene-switch-generation-smoke\.test\.ts/);
+  assert.match(packageScript, /XLSX-CHINESE-PREVIEW-SMOKE-001/);
+  assert.match(packageScript, /xlsx-chinese-preview-smoke\.test\.ts/);
+  assert.match(packageScript, /SUBAGENT-THREAD-SIDEBAR-SMOKE-001/);
+  assert.match(packageScript, /subagent-thread-sidebar-smoke\.test\.ts/);
+  assert.match(packageScript, /INSPECTION-DELEGATE-GUARD-SMOKE-001/);
+  assert.match(packageScript, /inspection-delegate-guard-smoke\.test\.ts/);
+  assert.match(packageScript, /MANUAL-CANCEL-NO-FAILURE-SMOKE-001/);
+  assert.match(packageScript, /manual-cancel-no-failure-smoke\.test\.ts/);
+  assert.match(packageScript, /UI-CHINESE-NO-MOJIBAKE-SMOKE-001/);
+  assert.match(packageScript, /ui-chinese-no-mojibake-smoke\.test\.ts/);
+  assert.match(packageScript, /MERMAID-MD-PREVIEW-STABLE-SMOKE-001/);
+  assert.match(packageScript, /mermaid-md-preview-stable-smoke\.test\.ts/);
+  assert.match(packageScript, /SMS-LOGIN-CODE-SMOKE-001/);
+  assert.match(packageScript, /sms-login-code-smoke\.test\.ts/);
+  assert.match(packageScript, /AUTOMATION-HISTORY-RUN-SMOKE-001/);
+  assert.match(packageScript, /automation-history-run-smoke\.test\.ts/);
+  assert.match(packageScript, /GOAL-COMPLETED-CARD-ANCHOR-SMOKE-001/);
+  assert.match(packageScript, /LOGIN-FAILURE-PROMPT-SMOKE-001/);
+  assert.match(packageScript, /AUTOMATION-DEDICATED-THREAD-SMOKE-001/);
+  assert.match(packageScript, /NSIS-SILENT-UPGRADE-SMOKE-001/);
+  assert.match(packageScript, /installer-nsh-silent-upgrade\.test\.cjs/);
+  assert.match(packageScript, /APP-UPDATE-SILENT-UPGRADE-SMOKE-001/);
+  assert.match(packageScript, /app-update-silent-upgrade-smoke\.test\.ts/);
+  assert.match(packageScript, /APP-UPDATE-SKIP-CANCEL-SMOKE-001/);
+  assert.match(packageScript, /app-update-skip-cancel-smoke\.test\.ts/);
+  assert.match(packageScript, /APP-UPDATE-VERIFY-NOTICE-SMOKE-001/);
+  assert.match(packageScript, /app-update-verify-notice-smoke\.test\.ts/);
+  assert.match(packageScript, /APP-UPDATE-SKIP-PROMPT-SMOKE-001/);
+  assert.match(packageScript, /app-update-progress-copy\.test\.ts/);
+  assert.match(packageScript, /Pre-package smoke \$\(\$smoke\.Id\) failed\. Packaging stopped\./);
+});
+
+test("ubuntu and macOS installer workflows stay unsigned and credential-free", async () => {
+  for (const name of ["build-ubuntu-installer.yml", "build-macos-installer.yml"]) {
+    const workflow = await readFile(new URL(`../../../../../../.github/workflows/${name}`, import.meta.url), "utf8");
+    assert.match(workflow, /permissions:\s*\r?\n\s*contents:\s*read/);
+    assert.match(workflow, /NEWBRAIN_ALLOW_UNSIGNED:\s*["']true["']/);
+    assert.doesNotMatch(workflow, /CSC_LINK|APPLE_ID|CSC_KEY_PASSWORD|WINDOWS_CSC_KEY_PASSWORD/);
+  }
 });
 
 test("keeps isolated MSI build paths below the legacy WiX path limit", () => {
@@ -202,7 +289,8 @@ test("selects, discloses, and fully injects skills for every model turn", () => 
   assert.match(workspaceModulesSource, /GOVERNMENT_RESEARCH_WRITING_PRODUCT_ENABLED/);
   assert.match(modelChatAgentLoopServiceSource, /systemPrompt: input\.effectiveSystemPrompt/);
   assert.match(modelChatAgentLoopServiceSource, /permissionMode: input\.modelInput\.permissionMode === "full" \? "full" : "agent"/);
-  assert.match(modelChatAgentLoopServiceSource, /allowedToolNames: governmentRevisionPreview \? \[\] : remoteAllowedToolNames/);
+  assert.match(modelChatAgentLoopServiceSource, /allowedToolNames: agentLoopAllowedToolNames\(\{/);
+  assert.match(automationLoopPolicySource, /if \(input\.governmentRevisionPreview \|\| isAutomationCreationRequest\(input\.latestUserRequest\)\) return \[\];/);
   assert.doesNotMatch(source, /allowedToolNames: centralSkillNames\.includes\("government-research-writing"\)/);
   assert.doesNotMatch(source, /goalRuntimeEnabled \? \[\.\.\.GOAL_TOOL_NAMES,\s*"shell\.exec"/);
 });

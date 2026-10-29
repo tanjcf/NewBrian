@@ -1,3 +1,5 @@
+import { resolveDesktopPackagePreference } from "./desktop-app-update-patch.ts";
+
 export type DesktopControlPlaneEnvelope = {
   protocol_version?: string;
   minimum_client_version?: string;
@@ -43,6 +45,35 @@ export function isRetiredGatewayBaseUrl(value: unknown): boolean {
   }
 }
 
+/** The shared test gateway. Production packages must not file exception tickets here. */
+export function isTestEnvironmentGatewayBaseUrl(value: unknown): boolean {
+  const raw = String(value ?? "").trim();
+  if (!raw) return false;
+  try {
+    return new URL(raw).hostname.toLowerCase() === "120.48.151.202";
+  } catch {
+    return raw.includes("120.48.151.202");
+  }
+}
+
+function preferProductionGateway(
+  candidate: string,
+  input: { isPackaged: boolean; productionBaseUrl: string }
+): string {
+  const production = String(input.productionBaseUrl ?? "").trim();
+  if (
+    input.isPackaged
+    && production
+    && !isTestEnvironmentGatewayBaseUrl(production)
+    && !isLoopbackGatewayBaseUrl(production)
+    && !isRetiredGatewayBaseUrl(production)
+    && isTestEnvironmentGatewayBaseUrl(candidate)
+  ) {
+    return production;
+  }
+  return candidate;
+}
+
 export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledBaseUrl: unknown): string {
   const configured = String(configuredBaseUrl ?? "").trim();
   const bundled = String(bundledBaseUrl ?? "").trim();
@@ -63,8 +94,9 @@ export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledB
 
 /**
  * Resolve the gateway URL used for model/auth traffic.
- * Packaged installs never keep loopback or retired endpoints, including values
- * inherited from a developer environment. Development builds may still use them.
+ * Packaged installs never keep loopback, retired, or the shared test gateway
+ * when the compiled production endpoint is a different host. Development builds
+ * and test-channel packages may still use the test gateway.
  */
 export function resolveEffectiveGatewayBaseUrl(input: {
   configuredBaseUrl?: unknown;
@@ -75,7 +107,7 @@ export function resolveEffectiveGatewayBaseUrl(input: {
 }): string {
   const env = String(input.envBaseUrl ?? "").trim();
   if (env && (!input.isPackaged || (!isLoopbackGatewayBaseUrl(env) && !isRetiredGatewayBaseUrl(env)))) {
-    return env;
+    return preferProductionGateway(env, input);
   }
   const configured = String(input.configuredBaseUrl ?? "").trim();
   if (!input.isPackaged && configured) return configured;
@@ -87,7 +119,10 @@ export function resolveEffectiveGatewayBaseUrl(input: {
   if (input.isPackaged && (isLoopbackGatewayBaseUrl(migrated) || isRetiredGatewayBaseUrl(migrated))) {
     return input.productionBaseUrl;
   }
-  return migrated || (input.isPackaged ? input.productionBaseUrl : migrationTarget);
+  return preferProductionGateway(
+    migrated || (input.isPackaged ? input.productionBaseUrl : migrationTarget),
+    input
+  );
 }
 
 function versionParts(value: string) {
@@ -117,7 +152,12 @@ async function fetchEnvelope(
   url: string,
   headers: Record<string, string>
 ): Promise<DesktopControlPlaneEnvelope> {
-  const response = await fetchImpl(url, { method: "GET", headers });
+  const response = await fetchImpl(url, {
+    method: "GET",
+    headers,
+    // Bound control-plane calls so a stuck Spring SHA / OOM path cannot freeze Settings.
+    signal: AbortSignal.timeout(15_000)
+  });
   const raw = await response.text();
   let payload: unknown = null;
   try {
@@ -142,6 +182,9 @@ export async function syncDesktopControlPlane(input: {
   clientVersion: string;
   deviceId?: string;
   platform?: string;
+  /** Match Spring dual-pack offers to the running installer layout. */
+  packagePreference?: "msi" | "nsis";
+  executablePath?: string;
   headers?: Record<string, string>;
   fetchImpl?: FetchLike;
   now?: () => string;
@@ -160,12 +203,22 @@ export async function syncDesktopControlPlane(input: {
     "X-Desktop-App-Version": input.clientVersion,
     "X-Desktop-Platform": releasePlatform
   };
+  if (releasePlatform === "windows") {
+    headers["X-Desktop-Package-Preference"] =
+      input.packagePreference
+      || resolveDesktopPackagePreference(input.executablePath || process.execPath);
+  }
   if (input.deviceId?.trim()) {
     headers["X-Device-ID"] = input.deviceId.trim();
   }
   Object.assign(headers, input.headers ?? {});
   if (!headers["X-Desktop-Platform"]?.trim()) {
     headers["X-Desktop-Platform"] = releasePlatform;
+  }
+  if (headers["X-Desktop-Platform"] === "windows" && !headers["X-Desktop-Package-Preference"]?.trim()) {
+    headers["X-Desktop-Package-Preference"] = resolveDesktopPackagePreference(
+      input.executablePath || process.execPath
+    );
   }
 
   const fetchImpl = input.fetchImpl ?? fetch;
@@ -189,6 +242,9 @@ export async function syncDesktopControlPlane(input: {
         // Keep package_kind so clients can distinguish ulit.msi / ulit.zip / full MSI.
         package_kind: appUpdate.package_kind ?? appUpdate.packageKind
       };
+    } else {
+      // Clear stale offers when the server reports no update (draft-only / same version).
+      delete bootstrap.app_release;
     }
   } catch {
     // Keep bootstrap.app_release fallback when the dedicated update endpoint is unavailable.

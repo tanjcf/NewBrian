@@ -1,6 +1,7 @@
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
+  DesktopAppUpdateAppliedInfo,
   DesktopAppUpdateProgress,
   DesktopAppUpdateStartResult,
   DesktopAppUpdateStatus,
@@ -14,9 +15,10 @@ import {
 import {
   buildDeferredProcessExitWaitPowerShell,
   normalizeDesktopUpdateVersionLabel,
+  resolveDesktopPackagePreference,
   resolveDesktopUpdatePackageKind,
   safeDesktopUpdateFileName
-  // @ts-ignore Node strip-types tests load the TypeScript patch helper directly.
+  // @ts-ignore Node strip-types tests load the TypeScript download helper directly.
 } from "./desktop-app-update-patch.ts";
 
 /** Resolve whether the running binary is a per-user or per-machine install. */
@@ -37,17 +39,18 @@ export function resolveDesktopMsiInstallScope(executablePath: string): DesktopMs
 }
 
 /**
- * Build silent msiexec upgrade args matching the existing install scope.
+ * Build Cockpit-style msiexec upgrade args (passive progress bar, no wizard).
  * Packaged installs default to LocalAppData/.newbrain (per-user).
  * Dual-purpose MSIs (WixUI Install Scope) need MSIINSTALLPERUSER=1 + ALLUSERS=
- * so /qn never surfaces the Installation Scope wizard.
+ * so Installation Scope is not prompted under /passive.
  */
 export function buildSilentDesktopMsiUpgradeArgs(
   msiPath: string,
   scope: DesktopMsiInstallScope = "per-user",
   options?: { applicationFolder?: string }
 ): string[] {
-  const args = ["/i", msiPath, "/qn", "/norestart", "REBOOT=ReallySuppress"];
+  // /passive = progress UI like Cockpit/Tauri; /qn would hide all feedback.
+  const args = ["/i", msiPath, "/passive", "/norestart", "REBOOT=ReallySuppress"];
   if (scope === "per-machine") {
     args.push("ALLUSERS=1");
   } else {
@@ -64,7 +67,7 @@ export function buildSilentDesktopMsiUpgradeArgs(
     args.push(`APPLICATIONFOLDER=${applicationFolder}`);
   }
   if (scope === "per-user") {
-    // Empty ALLUSERS forces per-user for dual-purpose packages under /qn.
+    // Empty ALLUSERS forces per-user for dual-purpose packages under /passive.
     // Keep this LAST so it cannot steal APPLICATIONFOLDER.
     args.push("ALLUSERS=");
   }
@@ -82,7 +85,7 @@ export function quoteCmdArgument(value: string): string {
 
 /**
  * Build a deferred silent-upgrade .cmd that waits for NewBrain.exe to exit,
- * then runs msiexec /qn. On msiexec failure it opens the MSI as a last resort.
+ * then runs msiexec /passive. On failure it opens the MSI as a last resort.
  * Quitting the app before msiexec avoids locked-file races with StopRunningNewbrain.
  * Never uses `tasklist | find /I` (blank console titled find /I).
  */
@@ -113,6 +116,197 @@ export function buildDeferredSilentMsiexecScript(input: {
     "exit /B 0",
     ""
   ].join("\r\n");
+}
+
+/**
+ * Cockpit-style deferred NSIS install (hidden waiter + visible installer progress).
+ * Flow: wait for app exit → setup.exe --updated /D=<root> (no /S) → verify exe → relaunch.
+ *
+ * `--updated` is required (same as electron-updater): without it the oneClick
+ * uninstaller treats the replace as a real uninstall (RMDir + shortcut removal).
+ * No `/S` so electron-builder oneClick shows its install progress bar (Cockpit passive).
+ * `/D=` stays last/unquoted.
+ */
+export function buildDeferredSilentNsisScript(input: {
+  setupPath: string;
+  executablePath: string;
+  processImageName?: string;
+  processId?: number;
+  maxWaitSeconds?: number;
+  resultPath?: string;
+}): string {
+  const installRoot = dirnameOfExecutable(input.executablePath);
+  const image = String(input.processImageName || "NewBrain.exe").replace(/['"`]/g, "");
+  const processName = image.replace(/\.exe$/i, "") || "NewBrain";
+  const maxWait = Math.max(15, Math.min(300, Number(input.maxWaitSeconds) || 90));
+  const pid = Number(input.processId);
+  const hasPid = Number.isFinite(pid) && pid > 0;
+  const setupPath = escapePsSingle(input.setupPath);
+  const installRootPs = escapePsSingle(installRoot);
+  const preferred = escapePsSingle(input.executablePath);
+  const resultPath = escapePsSingle(String(input.resultPath || "").trim());
+  const waitBlock = hasPid
+    ? `$proc = Get-Process -Id ${pid} -ErrorAction SilentlyContinue
+if ($proc) {
+  if (-not $proc.WaitForExit(${maxWait * 1000})) {
+    Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+  }
+}
+Get-Process -Name '${processName}' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+`
+    : `$name = '${processName}'
+$deadline = (Get-Date).AddSeconds(${maxWait})
+while ((Get-Date) -lt $deadline) {
+  if (-not (Get-Process -Name $name -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep -Seconds 1
+}
+Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+`;
+  return `$ErrorActionPreference = 'SilentlyContinue'
+${waitBlock}
+$setupPath = '${setupPath}'
+$installRoot = '${installRootPs}'
+$preferred = '${preferred}'
+$resultPath = '${resultPath}'
+$exitCode = 1
+$detail = ''
+function Stop-NewBrainOldInstallProcesses {
+  # Kill any NewBrain still running from Temp\\ns[nms]*\\old-install so --updated can finish.
+  Get-Process -Name '${processName}' -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      $path = $_.Path
+      if ($path -and ($path -match '(?i)\\Temp\\ns[nms][^\\]*\\[^\\]*\\old-install\\|\\old-install\\')) {
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+}
+Stop-NewBrainOldInstallProcesses
+try {
+  # --updated keeps upgrade semantics; no /S so oneClick shows progress (Cockpit-like).
+  # /D= must be last and must not gain quotes (NSIS rule).
+  # UseShellExecute=$true so the installer UI is visible (CreateNoWindow would hide it).
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $setupPath
+  $psi.Arguments = '--updated /D=' + $installRoot
+  $psi.UseShellExecute = $true
+  $installer = [Diagnostics.Process]::Start($psi)
+  if (-not $installer) { throw 'failed to start NSIS setup' }
+  $installer.WaitForExit()
+  $exitCode = $installer.ExitCode
+} catch {
+  $exitCode = 1
+  $detail = [string]$_.Exception.Message
+}
+function Test-NewBrainInstallExe([string]$path) {
+  if (-not $path) { return $false }
+  if ($path -match '(?i)\\Temp\\ns[nms][^\\]*\\[^\\]*\\old-install\\|\\old-install\\') { return $false }
+  return (Test-Path -LiteralPath $path)
+}
+function Find-NewBrainInstallExe {
+  $roots = @(
+    $installRoot,
+    (Join-Path $env:LOCALAPPDATA '.newbrain'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\\@codex-forgedesktop')
+  )
+  $candidates = @()
+  foreach ($root in $roots) {
+    if (-not $root) { continue }
+    foreach ($name in @('NewBrain.exe', 'newbrain.exe')) {
+      $p = Join-Path $root $name
+      if (Test-NewBrainInstallExe $p) { $candidates += Get-Item -LiteralPath $p }
+    }
+  }
+  if (Test-NewBrainInstallExe $preferred) { $candidates += Get-Item -LiteralPath $preferred }
+  return ($candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+}
+function Restore-NewBrainFromTempOldInstall {
+  # --updated rename can leave the only surviving tree under %TEMP%\\ns[nms]*\\old-install.
+  if (-not $installRoot) { return $null }
+  if (-not (Test-Path -LiteralPath $env:TEMP)) { return $null }
+  $orphan = Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '(?i)^ns[nms].*\\.tmp$' -or $_.Name -match '(?i)^ns[nms]' } |
+    ForEach-Object {
+      foreach ($name in @('NewBrain.exe', 'newbrain.exe')) {
+        $p = Join-Path $_.FullName (Join-Path 'old-install' $name)
+        if (Test-Path -LiteralPath $p) { Get-Item -LiteralPath $p }
+      }
+    } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if (-not $orphan) { return $null }
+  $srcRoot = $orphan.DirectoryName
+  try {
+    New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+    Copy-Item -LiteralPath (Join-Path $srcRoot '*') -Destination $installRoot -Recurse -Force -ErrorAction Stop
+  } catch {
+    return $null
+  }
+  return (Find-NewBrainInstallExe)
+}
+function Repair-NewBrainShortcuts([string]$exePath) {
+  if (-not (Test-NewBrainInstallExe $exePath)) { return }
+  $folder = Split-Path -Parent $exePath
+  $w = New-Object -ComObject WScript.Shell
+  $desk = [Environment]::GetFolderPath('Desktop')
+  $menu = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'
+  foreach ($p in @((Join-Path $desk 'NewBrain.lnk'), (Join-Path $menu 'NewBrain.lnk'))) {
+    try {
+      $dir = Split-Path -Parent $p
+      if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+      $s = $w.CreateShortcut($p)
+      $s.TargetPath = $exePath
+      $s.WorkingDirectory = $folder
+      $s.Description = 'NewBrain'
+      $s.IconLocation = $exePath + ',0'
+      $s.Save()
+    } catch {}
+  }
+}
+$target = $null
+$findDeadline = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $findDeadline) {
+  $target = Find-NewBrainInstallExe
+  if ($target) { break }
+  Start-Sleep -Seconds 1
+}
+if (-not $target) {
+  $target = Restore-NewBrainFromTempOldInstall
+  if ($target) {
+    $detail = 'restored install from Temp nsn old-install after incomplete upgrade'
+    $exitCode = 0
+  }
+}
+# Installer exit 0 is not enough: a failed reinstall can leave only a tracked temp shortcut.
+if (-not $target) {
+  $exitCode = 1
+  if (-not $detail) { $detail = 'NewBrain.exe missing after silent setup; install did not complete' }
+}
+$status = if ($exitCode -eq 0 -and $target) { 'installed' } else { 'error' }
+if ($target) { Repair-NewBrainShortcuts $target.FullName }
+if ($resultPath) {
+  $payload = [ordered]@{
+    status = $status
+    exitCode = $exitCode
+    installRoot = $installRoot
+    preferred = $preferred
+    relaunchPath = $(if ($target) { $target.FullName } else { $null })
+    detail = $detail
+    at = (Get-Date).ToString('o')
+  }
+  [IO.File]::WriteAllText($resultPath, ($payload | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+}
+if ($exitCode -eq 0 -and $target) {
+  Start-Process -FilePath $target.FullName -WorkingDirectory $target.DirectoryName
+}
+exit $exitCode
+`;
+}
+
+function escapePsSingle(value: string): string {
+  return String(value ?? "").replace(/'/g, "''");
 }
 
 /** Treat success and reboot-required as successful silent upgrades. */
@@ -245,6 +439,30 @@ export function resolveDesktopAppUpdateStatus(input: {
   };
 }
 
+/**
+ * Persist "跳过此版本": do not prompt again until latestVersion moves past the skip.
+ * Mandatory releases still prompt.
+ */
+export function applySkippedVersionToUpdateStatus(
+  status: DesktopAppUpdateStatus,
+  skippedVersion: string | null | undefined
+): DesktopAppUpdateStatus {
+  const skipped = String(skippedVersion || "").trim();
+  if (!skipped) return status;
+  status.skippedVersion = skipped;
+  if (
+    status.available
+    && status.latestVersion
+    && !status.mandatory
+    && normalizeDesktopUpdateVersionLabel(skipped)
+      === normalizeDesktopUpdateVersionLabel(status.latestVersion)
+  ) {
+    status.available = false;
+    status.detail = `已跳过版本 ${status.latestVersion}。有更新版本时再提醒。`;
+  }
+  return status;
+}
+
 function safeReleaseFileName(version: string, release?: ResolvedDesktopAppRelease | null) {
   return safeDesktopUpdateFileName({
     version,
@@ -275,6 +493,17 @@ export interface DesktopAppUpdateSilentInstallResult {
   error?: string;
 }
 
+export interface DesktopAppUpdateStagedState {
+  latestVersion: string;
+  fromVersion: string;
+  path: string;
+  notes: string;
+  releaseId: string;
+  packageKind: string;
+  sha256: string;
+  stagedAt: string;
+}
+
 export interface DesktopAppUpdateServiceDependencies {
   getCurrentVersion: () => string;
   readCachedRelease: () => Promise<unknown>;
@@ -288,6 +517,11 @@ export interface DesktopAppUpdateServiceDependencies {
     msiPath: string;
     args: string[];
     scope: DesktopMsiInstallScope;
+  }) => Promise<DesktopAppUpdateSilentInstallResult>;
+  /** Silent NSIS setup.exe /S after the app exits. */
+  runSilentNsisInstall?: (input: {
+    setupPath: string;
+    executablePath: string;
   }) => Promise<DesktopAppUpdateSilentInstallResult>;
   /** Apply a downloaded ulit.zip patch after the app exits. */
   runUlitZipApply?: (input: {
@@ -305,6 +539,8 @@ export interface DesktopAppUpdateServiceDependencies {
     ok: boolean;
     appVersion: string;
   }) => Promise<Record<string, unknown>>;
+  readSkippedVersion?: () => Promise<string | null>;
+  writeSkippedVersion?: (version: string | null) => Promise<void>;
 }
 
 function emitProgress(
@@ -317,33 +553,95 @@ function emitProgress(
 function dirnameOfExecutable(executablePath: string): string {
   const normalized = String(executablePath || "").replace(/\//g, "\\").replace(/\\+$/, "");
   const index = normalized.lastIndexOf("\\");
-  if (index <= 0) return "";
-  return normalized.slice(0, index + 1);
+  if (index <= 0) return normalized;
+  // No trailing slash — NSIS /D= forbids quotes and is picky about separators.
+  return normalized.slice(0, index);
 }
 
-/** Downloads the published MSI and runs a silent upgrade, with manual installer fallback. */
+/** Identifies the process run that scheduled a deferred apply. */
+const updateApplySessionId = `${process.pid}-${Date.now()}`;
+
+function stagedStatePath(downloadDir: string) {
+  return join(downloadDir, "staged-update.json");
+}
+
+function pendingApplyPath(downloadDir: string) {
+  return join(downloadDir, "pending-apply.json");
+}
+
+function appliedUpdatePath(downloadDir: string) {
+  return join(downloadDir, "applied-update.json");
+}
+
+function lastNsisUpdatePath(downloadDir: string) {
+  return join(downloadDir, "last-nsis-update.json");
+}
+
+async function readJsonFile<T>(path: string): Promise<T | null> {
+  try {
+    const raw = await readFile(path, "utf8");
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Downloads the published package, stages it, and applies on explicit restart. */
 export class DesktopAppUpdateService {
   private readonly dependencies: DesktopAppUpdateServiceDependencies;
   private activeDownload: Promise<DesktopAppUpdateStartResult> | null = null;
   private lastStatus: DesktopAppUpdateStatus | null = null;
+  private staged: DesktopAppUpdateStagedState | null = null;
 
   constructor(dependencies: DesktopAppUpdateServiceDependencies) {
     this.dependencies = dependencies;
   }
 
   async getStatus(options?: { refresh?: boolean }): Promise<DesktopAppUpdateStatus> {
+    // Never block the Settings "软件版本" row on a hung gateway / control-plane sync.
+    // Disk cache is local; network refresh is best-effort with a hard timeout.
     let release = await this.dependencies.readCachedRelease();
     if (options?.refresh !== false && this.dependencies.refreshRelease) {
       try {
-        release = await this.dependencies.refreshRelease();
+        release = await Promise.race([
+          this.dependencies.refreshRelease(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("app-update refresh timed out")), 8_000);
+          })
+        ]);
       } catch {
-        // Keep cached release so offline users can still install a previously advertised package.
+        // Keep cached release so offline / slow-gateway users still see currentVersion.
       }
     }
     const status = resolveDesktopAppUpdateStatus({
       currentVersion: this.dependencies.getCurrentVersion(),
       release
     });
+    const skippedVersion = (await this.dependencies.readSkippedVersion?.()) || null;
+    const failedApplyDetail = await this.clearFailedPendingApply(status.currentVersion);
+    if (failedApplyDetail) {
+      status.staged = false;
+      status.stagedPath = undefined;
+      status.detail = failedApplyDetail;
+    }
+    const staged = await this.loadStagedState();
+    if (
+      staged
+      && compareVersions(status.currentVersion, staged.latestVersion) >= 0
+    ) {
+      // Drop obsolete staged packages (e.g. 1.4.34 left behind after 1.4.43).
+      await rm(staged.path, { force: true }).catch(() => undefined);
+      await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+      this.staged = null;
+    } else if (!failedApplyDetail && staged && status.available && staged.latestVersion === status.latestVersion) {
+      // A downloaded package is never discarded here: applyPackage installs either
+      // kind into the running install root, and deleting between "已就绪" and
+      // "立即重启" left the restart click with nothing to apply.
+      status.staged = true;
+      status.stagedPath = staged.path;
+      status.detail = `v${staged.latestVersion} 已就绪，重启后生效。`;
+    }
+    applySkippedVersionToUpdateStatus(status, skippedVersion);
     this.lastStatus = status;
     return status;
   }
@@ -356,6 +654,60 @@ export class DesktopAppUpdateService {
     return this.activeDownload;
   }
 
+  /** Apply a previously staged package (Cockpit-style restart). */
+  async applyStagedUpdate(): Promise<DesktopAppUpdateStartResult> {
+    let staged = await this.loadStagedState();
+    if (!staged) {
+      // Restart was clicked but the package is gone (failed earlier apply, manual
+      // cleanup, older build). Re-download instead of dead-ending on "没有已下载的更新包".
+      const redownload = await this.startUpdate();
+      staged = await this.loadStagedState();
+      if (!staged) {
+        const detail = redownload.detail
+          || "没有已下载的更新包。请先点击「立即更新」完成下载。";
+        emitProgress(this.dependencies.onProgress, { phase: "error", percent: 0, detail });
+        return { ok: false, detail };
+      }
+    }
+    return this.applyPackage(staged);
+  }
+
+  async skipVersion(version?: string): Promise<{ ok: boolean; detail: string }> {
+    const target = String(version || this.lastStatus?.latestVersion || "").trim();
+    if (!target) return { ok: false, detail: "没有可跳过的版本。" };
+    await this.dependencies.writeSkippedVersion?.(target);
+    return { ok: true, detail: `已跳过版本 ${target}。` };
+  }
+
+  async getAppliedUpdate(): Promise<DesktopAppUpdateAppliedInfo | null> {
+    const current = this.dependencies.getCurrentVersion();
+    const pending = await readJsonFile<DesktopAppUpdateStagedState & { appliedHint?: boolean }>(
+      pendingApplyPath(this.dependencies.downloadDir())
+    );
+    const applied = await readJsonFile<DesktopAppUpdateAppliedInfo>(
+      appliedUpdatePath(this.dependencies.downloadDir())
+    );
+    if (applied && applied.toVersion === current) return applied;
+    if (pending && normalizeDesktopUpdateVersionLabel(pending.latestVersion) === normalizeDesktopUpdateVersionLabel(current)) {
+      const info: DesktopAppUpdateAppliedInfo = {
+        fromVersion: pending.fromVersion || "",
+        toVersion: pending.latestVersion,
+        notes: pending.notes || "",
+        appliedAt: new Date().toISOString()
+      };
+      await writeFile(appliedUpdatePath(this.dependencies.downloadDir()), JSON.stringify(info, null, 2), "utf8");
+      await rm(pendingApplyPath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+      await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+      this.staged = null;
+      return info;
+    }
+    return null;
+  }
+
+  async dismissAppliedUpdate(): Promise<void> {
+    await rm(appliedUpdatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+  }
+
   async verifyUpdate(input?: { releaseId?: string; ok?: boolean }): Promise<DesktopAppUpdateVerifyResult> {
     if (!this.dependencies.verifyUpdate) {
       return { ok: false, detail: "当前环境未接入更新验证回传。" };
@@ -365,21 +717,36 @@ export class DesktopAppUpdateService {
       return { ok: false, detail: "缺少 release_id，无法回传验证结果。" };
     }
     const appVersion = this.dependencies.getCurrentVersion();
-    const payload = await this.dependencies.verifyUpdate({
-      releaseId,
-      ok: input?.ok !== false,
-      appVersion
-    });
-    return {
-      ok: payload.ok !== false,
-      releaseId: String(payload.release_id ?? releaseId),
-      verificationCount: Number(payload.verification_count ?? 0) || undefined,
-      threshold: Number(payload.threshold ?? 0) || undefined,
-      promotedToStable: payload.promoted_to_stable === true,
-      detail: payload.promoted_to_stable === true
-        ? "验证已提交，服务端已放行全员更新。"
-        : "验证已提交，感谢反馈。"
-    };
+    try {
+      const payload = await this.dependencies.verifyUpdate({
+        releaseId,
+        ok: input?.ok !== false,
+        appVersion
+      });
+      return {
+        ok: payload.ok !== false,
+        releaseId: String(payload.release_id ?? releaseId),
+        verificationCount: Number(payload.verification_count ?? 0) || undefined,
+        threshold: Number(payload.threshold ?? 0) || undefined,
+        promotedToStable: payload.promoted_to_stable === true,
+        detail: payload.promoted_to_stable === true
+          ? "验证已提交，服务端已放行全员更新。"
+          : "验证已提交，感谢反馈。"
+      };
+    } catch (error) {
+      // Never throw across IPC: Settings was concatenating the raw English error
+      // with the data-preservation sentence and showing it as "更新说明".
+      const raw = error instanceof Error ? error.message : String(error || "");
+      let detail = "提交更新验证失败，请稍后重试。";
+      if (/desktop app release was not found/i.test(raw)) {
+        detail = "服务端未找到对应更新记录，无法提交验证。若软件已升级成功，可忽略此提示。";
+      } else if (/desktop session required|unauthorized|401/i.test(raw)) {
+        detail = "登录状态已失效，请重新登录后再提交验证。";
+      } else if (raw.trim()) {
+        detail = raw.replace(/^Error invoking remote method ['"][^'"]+['"]:\s*(?:Error:\s*)*/i, "").trim() || detail;
+      }
+      return { ok: false, releaseId, detail };
+    }
   }
 
   private resolveScope(): DesktopMsiInstallScope {
@@ -388,6 +755,71 @@ export class DesktopAppUpdateService {
     }
     const exePath = this.dependencies.getExecutablePath?.() || "";
     return resolveDesktopMsiInstallScope(exePath);
+  }
+
+  private resolvePackagePreference(): "msi" | "nsis" {
+    return resolveDesktopPackagePreference(this.dependencies.getExecutablePath?.() || process.execPath);
+  }
+
+  /**
+   * Whether the staged installer kind differs from the layout preference.
+   * Informational only: both kinds install into the running install root
+   * (NSIS via `/D=<dirname(exe)>`, MSI via `APPLICATIONFOLDER=`), so a staged
+   * package is never discarded — Spring may only publish one kind per release.
+   */
+  private stagedInstallKindMismatch(staged: DesktopAppUpdateStagedState): boolean {
+    const preference = this.resolvePackagePreference();
+    const kind = resolveDesktopUpdatePackageKind({
+      packageKind: staged.packageKind,
+      localPath: staged.path,
+      version: staged.latestVersion
+    });
+    return (preference === "msi" && kind === "full-nsis")
+      || (preference === "nsis" && kind === "full-msi");
+  }
+
+  /**
+   * If restart-apply ran but the binary is still on fromVersion, clear the infinite
+   * "已就绪，重启后生效" loop and surface a failure detail once.
+   */
+  private async clearFailedPendingApply(currentVersion: string): Promise<string | null> {
+    const pending = await readJsonFile<DesktopAppUpdateStagedState & { applySessionId?: string }>(
+      pendingApplyPath(this.dependencies.downloadDir())
+    );
+    if (!pending?.latestVersion) return null;
+    // Only a relaunch can prove an apply failed. A status poll inside the very
+    // session that scheduled the installer must not delete the staged package.
+    if (pending.applySessionId && pending.applySessionId === updateApplySessionId) return null;
+    const current = normalizeDesktopUpdateVersionLabel(currentVersion);
+    const target = normalizeDesktopUpdateVersionLabel(pending.latestVersion);
+    const from = normalizeDesktopUpdateVersionLabel(pending.fromVersion || "");
+    if (current === target) return null;
+    if (from && current !== from) return null;
+    const nsisResult = await readJsonFile<{ status?: string }>(
+      lastNsisUpdatePath(this.dependencies.downloadDir())
+    );
+    await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+    await rm(pendingApplyPath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+    this.staged = null;
+    return nsisResult?.status === "error"
+      ? `上次更新未生效（安装失败）。请重新下载或手动运行安装包。`
+      : `上次更新未生效（仍为 v${currentVersion}）。请重新下载或手动运行安装包。`;
+  }
+
+  private async loadStagedState(): Promise<DesktopAppUpdateStagedState | null> {
+    if (this.staged) return this.staged;
+    const loaded = await readJsonFile<DesktopAppUpdateStagedState>(
+      stagedStatePath(this.dependencies.downloadDir())
+    );
+    this.staged = loaded;
+    return loaded;
+  }
+
+  private async writeStagedState(state: DesktopAppUpdateStagedState): Promise<void> {
+    const dir = this.dependencies.downloadDir();
+    await mkdir(dir, { recursive: true });
+    await writeFile(stagedStatePath(dir), JSON.stringify(state, null, 2), "utf8");
+    this.staged = state;
   }
 
   private async runUpdate(): Promise<DesktopAppUpdateStartResult> {
@@ -414,10 +846,18 @@ export class DesktopAppUpdateService {
       phase: DesktopAppUpdateProgress["phase"],
       percent: number,
       detail: string,
-      latestVersion?: string
+      latestVersion?: string,
+      extra?: Partial<DesktopAppUpdateProgress>
     ) => {
       try {
-        emitProgress(this.dependencies.onProgress, { phase, percent, detail, latestVersion });
+        emitProgress(this.dependencies.onProgress, {
+          phase,
+          percent,
+          detail,
+          latestVersion,
+          currentVersion: this.dependencies.getCurrentVersion(),
+          ...extra
+        });
       } catch {
         // Progress callbacks must not abort download/install.
       }
@@ -438,7 +878,16 @@ export class DesktopAppUpdateService {
     this.lastStatus = status;
     const fresh = parseDesktopAppRelease(releasePayload);
     if (!status.available || !fresh) {
-      report("error", 0, status.detail || "没有可安装的更新。");
+      const obsolete = await this.loadStagedState();
+      if (obsolete && compareVersions(status.currentVersion, obsolete.latestVersion) >= 0) {
+        await rm(obsolete.path, { force: true }).catch(() => undefined);
+        await rm(stagedStatePath(this.dependencies.downloadDir()), { force: true }).catch(() => undefined);
+        this.staged = null;
+      }
+      report("error", 0, status.detail || "没有可安装的更新。", undefined, {
+        latestVersion: undefined,
+        notes: undefined
+      });
       return { ok: false, detail: status.detail || "没有可安装的更新。" };
     }
     if (!fresh.sha256) {
@@ -447,27 +896,37 @@ export class DesktopAppUpdateService {
       return { ok: false, detail };
     }
 
+    const existing = await this.loadStagedState();
+    if (existing && existing.latestVersion === fresh.latestVersion && existing.sha256 === fresh.sha256) {
+      const detail = `v${fresh.latestVersion} 已就绪，重启后生效。`;
+      report("ready", 100, detail, fresh.latestVersion, {
+        notes: fresh.notes,
+        installMode: resolveReleasePackageKind(fresh, existing.path) === "full-nsis" ? "nsis" : "silent"
+      });
+      return { ok: true, path: existing.path, detail, staged: true };
+    }
+
     report(
       "preparing",
       2,
       "正在准备更新。聊天记录、项目与本地历史保存在用户数据目录，不会随安装包删除。",
-      fresh.latestVersion
+      fresh.latestVersion,
+      { notes: fresh.notes }
     );
 
     const targetDir = this.dependencies.downloadDir();
     await mkdir(targetDir, { recursive: true });
     const targetPath = join(targetDir, safeReleaseFileName(fresh.latestVersion, fresh));
     const tempPath = `${targetPath}.partial`;
-    // Keep `.partial` across retries/crashes so Range resume can continue.
 
-    // Leave「正在准备」immediately so a slow/hung HTTP connect is not mistaken for a freeze.
-    report("downloading", 5, "正在连接更新服务器并开始下载…", fresh.latestVersion);
+    report("downloading", 5, "正在连接更新服务器并开始下载…", fresh.latestVersion, { notes: fresh.notes });
 
     let lastReportedPercent = 5;
     const download = await downloadResumableToFile({
       url: fresh.downloadUrl,
       partialPath: tempPath,
       fetchImpl: this.dependencies.fetchImpl,
+      packagePreference: this.resolvePackagePreference(),
       onProgress: ({ receivedBytes, totalBytes, resumedFrom }) => {
         const percent = totalBytes > 0
           ? Math.min(90, Math.max(5, Math.round((receivedBytes / totalBytes) * 85) + 5))
@@ -481,7 +940,8 @@ export class DesktopAppUpdateService {
           totalBytes > 0
             ? `正在下载更新包${resumeHint} ${Math.round(receivedBytes / (1024 * 1024))} / ${Math.round(totalBytes / (1024 * 1024))} MB`
             : `正在下载更新包${resumeHint} ${Math.round(receivedBytes / (1024 * 1024))} MB`,
-          fresh.latestVersion
+          fresh.latestVersion,
+          { notes: fresh.notes }
         );
       }
     });
@@ -490,11 +950,12 @@ export class DesktopAppUpdateService {
         "downloading",
         lastReportedPercent > 0 ? lastReportedPercent : 5,
         `已从 ${Math.round(download.resumedFrom / (1024 * 1024))} MB 断点续传完成下载。`,
-        fresh.latestVersion
+        fresh.latestVersion,
+        { notes: fresh.notes }
       );
     }
 
-    report("verifying", 92, "正在校验更新包完整性…", fresh.latestVersion);
+    report("verifying", 92, "正在校验更新包完整性…", fresh.latestVersion, { notes: fresh.notes });
     if (fresh.sha256) {
       const actual = await sha256FileStreaming(tempPath);
       if (actual !== fresh.sha256) {
@@ -507,8 +968,35 @@ export class DesktopAppUpdateService {
     await rename(tempPath, targetPath);
 
     const packageKind = resolveReleasePackageKind(fresh, targetPath);
+    const staged: DesktopAppUpdateStagedState = {
+      latestVersion: fresh.latestVersion,
+      fromVersion: this.dependencies.getCurrentVersion(),
+      path: targetPath,
+      notes: fresh.notes,
+      releaseId: fresh.releaseId,
+      packageKind,
+      sha256: fresh.sha256,
+      stagedAt: new Date().toISOString()
+    };
+    await this.writeStagedState(staged);
+
+    const detail = `v${fresh.latestVersion} 已就绪，重启后生效。`;
+    report("ready", 100, detail, fresh.latestVersion, {
+      notes: fresh.notes,
+      installMode: packageKind === "full-nsis" ? "nsis" : packageKind === "ulit-zip" ? "patch" : "silent"
+    });
+    return { ok: true, path: targetPath, detail, staged: true };
+  }
+
+  private async applyPackage(staged: DesktopAppUpdateStagedState): Promise<DesktopAppUpdateStartResult> {
+    const packageKind = resolveDesktopUpdatePackageKind({
+      packageKind: staged.packageKind,
+      localPath: staged.path,
+      version: staged.latestVersion
+    });
     const scope = this.resolveScope();
     const applicationFolder = dirnameOfExecutable(this.dependencies.getExecutablePath?.() || "");
+    const executablePath = this.dependencies.getExecutablePath?.() || "";
     const reportWithMode = (
       phase: DesktopAppUpdateProgress["phase"],
       percent: number,
@@ -520,7 +1008,9 @@ export class DesktopAppUpdateService {
           phase,
           percent,
           detail,
-          latestVersion: fresh.latestVersion,
+          latestVersion: staged.latestVersion,
+          currentVersion: staged.fromVersion,
+          notes: staged.notes,
           installMode
         });
       } catch {
@@ -528,12 +1018,28 @@ export class DesktopAppUpdateService {
       }
     };
 
+    if (this.stagedInstallKindMismatch(staged)) {
+      // Not fatal: NSIS gets /D=<install root> and MSI gets APPLICATIONFOLDER=,
+      // so the package still upgrades the running tree.
+      console.warn(
+        `[app-update] staged ${packageKind} package on a ${this.resolvePackagePreference()} install; `
+        + `installing into ${applicationFolder || "the current install root"}.`
+      );
+    }
+
+    await mkdir(this.dependencies.downloadDir(), { recursive: true });
+    await writeFile(
+      pendingApplyPath(this.dependencies.downloadDir()),
+      JSON.stringify({ ...staged, applySessionId: updateApplySessionId }, null, 2),
+      "utf8"
+    );
+
     if (packageKind === "ulit-zip") {
       if (!this.dependencies.runUlitZipApply) {
         const detail =
           "当前客户端尚未接入 ulit.zip 补丁应用；请改用 ulit.msi 补丁安装器，或手动运行包内 apply.cmd。";
         reportWithMode("error", 0, detail, "patch");
-        return { ok: false, path: targetPath, detail };
+        return { ok: false, path: staged.path, detail };
       }
       const installRoot = applicationFolder.replace(/[\\/]+$/, "");
       reportWithMode(
@@ -543,57 +1049,97 @@ export class DesktopAppUpdateService {
         "patch"
       );
       const patchResult = await this.dependencies.runUlitZipApply({
-        zipPath: targetPath,
+        zipPath: staged.path,
         installRoot
       });
       if (isSilentDesktopMsiSuccess(patchResult.exitCode) && !patchResult.error) {
-        const detail = `补丁已就绪，即将退出并应用更新（${fresh.latestVersion}）。`;
+        const detail = `补丁已就绪，即将退出并应用更新（${staged.latestVersion}）。`;
         reportWithMode("done", 100, detail, "patch");
         try {
           this.dependencies.afterSilentSuccess?.();
         } catch {
           // ignore
         }
-        return { ok: true, path: targetPath, detail };
+        return { ok: true, path: staged.path, detail };
       }
       const detail = `补丁应用失败：${patchResult.error || `exit ${patchResult.exitCode}`}。可手动解压后运行 apply.cmd。`;
       reportWithMode("error", 0, detail, "patch");
-      return { ok: false, path: targetPath, detail };
+      return { ok: false, path: staged.path, detail };
     }
 
-    const silentArgs = buildSilentDesktopMsiUpgradeArgs(targetPath, scope, {
+    if (packageKind === "full-nsis" && this.dependencies.runSilentNsisInstall) {
+      reportWithMode(
+        "installing",
+        96,
+        "即将退出应用；安装程序将显示进度条，完成后自动启动。聊天、项目与历史数据会保留。",
+        "nsis"
+      );
+      const nsisResult = await this.dependencies.runSilentNsisInstall({
+        setupPath: staged.path,
+        executablePath
+      });
+      if (isSilentDesktopMsiSuccess(nsisResult.exitCode) && !nsisResult.error) {
+        const detail = `即将退出；请在安装进度窗口完成后等待自动启动（${staged.latestVersion}）。`;
+        reportWithMode("done", 100, detail, "nsis");
+        try {
+          this.dependencies.afterSilentSuccess?.();
+        } catch {
+          // ignore
+        }
+        return { ok: true, path: staged.path, detail };
+      }
+      const detail = `安装启动失败：${nsisResult.error || `exit ${nsisResult.exitCode}`}。将打开安装程序作为后备。`;
+      reportWithMode("opening", 97, detail, "wizard");
+      const openError = await this.dependencies.openInstallerFallback(staged.path);
+      if (openError) {
+        reportWithMode("error", 0, `${detail}打开失败：${openError}`, "wizard");
+        return { ok: false, path: staged.path, detail: `${detail}打开失败：${openError}` };
+      }
+      reportWithMode("done", 100, "已打开安装程序，请完成升级后重启 NewBrain。", "wizard");
+      return { ok: true, path: staged.path, detail: "已打开安装程序。" };
+    }
+
+    if (packageKind === "full-nsis") {
+      // No deferred NSIS runner wired in this build: msiexec cannot consume a
+      // setup.exe, so open the downloaded installer instead of failing.
+      reportWithMode("opening", 97, "正在打开已下载的安装程序…", "wizard");
+      const openError = await this.dependencies.openInstallerFallback(staged.path);
+      if (openError) {
+        const detail = `更新包已下载，但打开安装程序失败：${openError}`;
+        reportWithMode("error", 0, detail, "wizard");
+        return { ok: false, path: staged.path, detail };
+      }
+      reportWithMode("done", 100, "已打开安装程序，请完成升级后重启 NewBrain。", "wizard");
+      return { ok: true, path: staged.path, detail: "已打开安装程序。" };
+    }
+
+    const silentArgs = buildSilentDesktopMsiUpgradeArgs(staged.path, scope, {
       applicationFolder: applicationFolder || undefined
     });
 
     reportWithMode(
       "installing",
       96,
-      packageKind === "ulit-msi"
-        ? "正在安装升级补丁。安装完成后将自动重启；聊天、项目与历史数据会保留。"
-        : "正在安装更新。安装完成后将自动重启；聊天、项目与历史数据会保留。",
+      "即将退出应用；安装程序将显示进度条，完成后自动启动。聊天、项目与历史数据会保留。",
       "silent"
     );
 
     const silentResult = await this.dependencies.runSilentInstall({
-      expectedVersion: normalizeDesktopUpdateVersionLabel(fresh.latestVersion),
+      expectedVersion: normalizeDesktopUpdateVersionLabel(staged.latestVersion),
       fullMsi: packageKind === "full-msi",
-      msiPath: targetPath,
+      msiPath: staged.path,
       args: silentArgs,
       scope
     });
     if (isSilentDesktopMsiSuccess(silentResult.exitCode) && !silentResult.error) {
-      const detail = `更新包已就绪，即将退出并安装（${fresh.latestVersion}）。安装前会备份用户数据。`;
+      const detail = `即将退出；请在安装进度窗口完成后等待自动启动（${staged.latestVersion}）。`;
       reportWithMode("done", 100, detail, "silent");
       try {
         this.dependencies.afterSilentSuccess?.();
       } catch {
-        // Quit/relaunch is best-effort; MSI LaunchNewbrainAfterInstall may restart the app.
+        // Quit/relaunch is best-effort.
       }
-      return {
-        ok: true,
-        path: targetPath,
-        detail
-      };
+      return { ok: true, path: staged.path, detail };
     }
 
     const silentFailure = describeSilentDesktopMsiFailure({
@@ -607,23 +1153,15 @@ export class DesktopAppUpdateService {
       `${silentFailure}正在打开安装程序作为后备…`,
       "wizard"
     );
-    const openError = await this.dependencies.openInstallerFallback(targetPath);
+    const openError = await this.dependencies.openInstallerFallback(staged.path);
     if (openError) {
       const detail = `${silentFailure}更新包已下载，但打开安装程序失败：${openError}`;
       reportWithMode("error", 0, detail, "wizard");
-      return {
-        ok: false,
-        path: targetPath,
-        detail
-      };
+      return { ok: false, path: staged.path, detail };
     }
 
-    const detail = `${silentFailure}已打开 ${fresh.latestVersion} 安装程序。请选择与现有安装相同的范围完成升级；不会删除聊天记录、项目与本地历史。`;
+    const detail = `${silentFailure}已打开 ${staged.latestVersion} 安装程序。请完成升级；不会删除聊天记录、项目与本地历史。`;
     reportWithMode("done", 100, detail, "wizard");
-    return {
-      ok: true,
-      path: targetPath,
-      detail
-    };
+    return { ok: true, path: staged.path, detail };
   }
 }

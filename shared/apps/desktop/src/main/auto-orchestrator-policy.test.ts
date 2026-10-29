@@ -61,3 +61,16 @@ test("buildAutoDelegateTurnConstraint appends only for heavy Auto tasks", () => 
   );
   assert.equal(buildAutoDelegateTurnConstraint({ taskClass: "chat", latestUserText: "你好" }), "");
 });
+
+test("research Auto turns use research_plan Search→Fetch constraint", () => {
+  const constraint = buildAutoDelegateTurnConstraint({
+    taskClass: "research",
+    latestUserText: "调研贵州茅台最新公告"
+  });
+  assert.match(constraint, /Research 编排约束/);
+  assert.match(constraint, /web\.fetch_page|Search→Fetch/);
+  assert.match(
+    buildAutoModeOrchestratorInstruction({ taskClass: "research", latestUserText: "对比三家酒企公告" }),
+    /Research plan|Search→Fetch|web\.fetch_page/
+  );
+});

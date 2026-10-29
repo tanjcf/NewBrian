@@ -12,12 +12,16 @@ import {
   type ComposerDraftHistoryState
 } from "./composer-draft-history.ts";
 import { insertNewlineIntoDraft } from "./composer-newline.ts";
+import { detectComposerMentionQuery } from "./conversation-refs.ts";
 
 export type ComposerTextareaHandle = {
   getValue: () => string;
-  setValue: (value: string) => void;
+  setValue: (value: string, cursor?: number) => void;
   focus: () => void;
   insertNewlineAtCursor: () => void;
+  /** Insert plain text at the current caret (or replace the active selection). */
+  insertTextAtCursor: (text: string) => { next: string; cursor: number };
+  getSelectionStart: () => number;
   undo: () => boolean;
   redo: () => boolean;
   canUndo: () => boolean;
@@ -35,6 +39,8 @@ type ComposerTextareaProps = {
   onAltEnter?: () => void;
   onContextMenu?: (event: React.MouseEvent<HTMLTextAreaElement>) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+  onMentionQueryChange?: (query: { start: number; query: string; cursor: number } | null) => void;
+  onMentionNavigate?: (direction: "up" | "down" | "enter" | "escape") => boolean;
 };
 
 export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, ComposerTextareaProps>(
@@ -48,17 +54,23 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
     onHistoryChange,
     onAltEnter,
     onContextMenu,
-    onPaste
+    onPaste,
+    onMentionQueryChange,
+    onMentionNavigate
   }, ref) {
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const [draft, setDraft] = useState(initialValue);
+    const draftRef = useRef(draft);
+    draftRef.current = draft;
     const historyRef = useRef<ComposerDraftHistoryState>(createComposerDraftHistory(initialValue));
     const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const applyingHistoryRef = useRef(false);
     const onDraftChangeRef = useRef(onDraftChange);
     const onHistoryChangeRef = useRef(onHistoryChange);
+    const onMentionQueryChangeRef = useRef(onMentionQueryChange);
     onDraftChangeRef.current = onDraftChange;
     onHistoryChangeRef.current = onHistoryChange;
+    onMentionQueryChangeRef.current = onMentionQueryChange;
 
     const emitHistoryCaps = () => {
       onHistoryChangeRef.current?.(composerDraftHistoryCaps(historyRef.current));
@@ -73,10 +85,18 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
 
     const readCursor = () => {
       const input = inputRef.current;
-      return input?.selectionStart ?? draft.length;
+      return input?.selectionStart ?? draftRef.current.length;
+    };
+
+    const emitMentionQuery = (text: string, cursor: number) => {
+      const mention = detectComposerMentionQuery(text, cursor);
+      onMentionQueryChangeRef.current?.(mention
+        ? { start: mention.start, query: mention.query, cursor }
+        : null);
     };
 
     const applyDraft = (next: string, cursor?: number) => {
+      draftRef.current = next;
       setDraft(next);
       onDraftChangeRef.current?.(next);
       if (typeof cursor === "number") {
@@ -85,7 +105,10 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
           const clamped = Math.max(0, Math.min(cursor, next.length));
           inputRef.current.selectionStart = clamped;
           inputRef.current.selectionEnd = clamped;
+          emitMentionQuery(next, clamped);
         });
+      } else {
+        emitMentionQuery(next, next.length);
       }
     };
 
@@ -119,7 +142,7 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
     const undo = () => {
       if (readOnly) return false;
       clearIdleCommit();
-      const current = { text: draft, cursor: readCursor() };
+      const current = { text: draftRef.current, cursor: readCursor() };
       // Flush pending typing into committed baseline before undo so the latest
       // coalesced edit is restorable via redo.
       if (current.text !== historyRef.current.committed.text) {
@@ -138,7 +161,7 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
     const redo = () => {
       if (readOnly) return false;
       clearIdleCommit();
-      const current = { text: draft, cursor: readCursor() };
+      const current = { text: draftRef.current, cursor: readCursor() };
       const result = redoComposerDraftHistory(historyRef.current, current);
       if (!result) return false;
       historyRef.current = result.state;
@@ -159,32 +182,53 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
     const insertNewlineAtCursor = () => {
       if (readOnly) return;
       const input = inputRef.current;
-      const start = input?.selectionStart ?? draft.length;
-      const end = input?.selectionEnd ?? draft.length;
+      const currentDraft = draftRef.current;
+      const start = input?.selectionStart ?? currentDraft.length;
+      const end = input?.selectionEnd ?? currentDraft.length;
       clearIdleCommit();
-      commitCheckpoint(draft, start, true);
-      const { next, cursor } = insertNewlineIntoDraft(draft, start, end);
+      commitCheckpoint(currentDraft, start, true);
+      const { next, cursor } = insertNewlineIntoDraft(currentDraft, start, end);
       applyDraft(next, cursor);
       commitCheckpoint(next, cursor, true);
     };
 
+    const insertTextAtCursor = (text: string) => {
+      const insertion = String(text || "");
+      const input = inputRef.current;
+      const currentDraft = draftRef.current;
+      const start = input?.selectionStart ?? currentDraft.length;
+      const end = input?.selectionEnd ?? currentDraft.length;
+      if (readOnly) {
+        return { next: currentDraft, cursor: start };
+      }
+      clearIdleCommit();
+      commitCheckpoint(currentDraft, start, true);
+      const next = `${currentDraft.slice(0, start)}${insertion}${currentDraft.slice(end)}`;
+      const cursor = start + insertion.length;
+      applyDraft(next, cursor);
+      commitCheckpoint(next, cursor, true);
+      return { next, cursor };
+    };
+
     useImperativeHandle(ref, () => ({
-      getValue: () => draft,
-      setValue: (value: string) => {
+      getValue: () => draftRef.current,
+      setValue: (value: string, cursor?: number) => {
         clearIdleCommit();
-        applyDraft(value);
-        historyRef.current = resetComposerDraftHistory(value);
+        applyDraft(value, cursor);
+        historyRef.current = resetComposerDraftHistory(value, typeof cursor === "number" ? cursor : value.length);
         emitHistoryCaps();
       },
       focus: () => {
         inputRef.current?.focus();
       },
       insertNewlineAtCursor,
+      insertTextAtCursor,
+      getSelectionStart: () => inputRef.current?.selectionStart ?? draftRef.current.length,
       undo,
       redo,
       canUndo: () => composerDraftHistoryCaps(historyRef.current).canUndo,
       canRedo: () => composerDraftHistoryCaps(historyRef.current).canRedo
-    }), [draft, readOnly]);
+    }), [readOnly]);
 
     return (
       <textarea
@@ -199,7 +243,7 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
           const next = event.target.value;
           const cursor = event.target.selectionStart ?? next.length;
           const inputType = (event.nativeEvent as InputEvent | undefined)?.inputType;
-          applyDraft(next);
+          applyDraft(next, cursor);
           if (shouldForceComposerDraftCheckpoint(inputType)) {
             clearIdleCommit();
             commitCheckpoint(next, cursor, true);
@@ -207,9 +251,23 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
           }
           scheduleIdleCommit(next, cursor);
         }}
+        onSelect={(event) => {
+          const cursor = event.currentTarget.selectionStart ?? draft.length;
+          emitMentionQuery(draft, cursor);
+        }}
         onKeyDown={(event) => {
           event.stopPropagation();
           if (event.nativeEvent.isComposing) return;
+
+          if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Escape") {
+            const handled = onMentionNavigate?.(
+              event.key === "ArrowUp" ? "up" : event.key === "ArrowDown" ? "down" : "escape"
+            );
+            if (handled) {
+              event.preventDefault();
+              return;
+            }
+          }
 
           const mod = event.ctrlKey || event.metaKey;
           if (mod && event.key.toLowerCase() === "z" && !event.shiftKey && !event.altKey) {
@@ -234,6 +292,11 @@ export const ComposerTextarea = memo(forwardRef<ComposerTextareaHandle, Composer
           if (event.altKey) {
             event.preventDefault();
             onAltEnter?.();
+            return;
+          }
+          const mentionHandled = onMentionNavigate?.("enter");
+          if (mentionHandled) {
+            event.preventDefault();
             return;
           }
           // Electron/IME builds often fail to keep Shift+Enter newlines in a

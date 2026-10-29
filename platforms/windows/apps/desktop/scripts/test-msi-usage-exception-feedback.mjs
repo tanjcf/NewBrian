@@ -7,6 +7,18 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function embedJsValue(value) {
+  return JSON.stringify(value).replace(/[<>/\u2028\u2029]/g, (char) => {
+    switch (char) {
+      case "<": return "\\u003C";
+      case ">": return "\\u003E";
+      case "/": return "\\u002F";
+      case "\u2028": return "\\u2028";
+      case "\u2029": return "\\u2029";
+      default: return char;
+    }
+  });
+}
 const evidenceDir = fileURLToPath(new URL("../../../../integration-artifacts/usage-exception-feedback/", import.meta.url));
 const desktopRoot = fileURLToPath(new URL("..", import.meta.url));
 const releaseRoot = join(desktopRoot, "release");
@@ -67,10 +79,10 @@ try {
   await mkdir(projectPath, { recursive: true });
   await cdp.evaluate(`(async () => {
     let catalog = await window.newbrain.listWorkspaces();
-    if (!catalog.some((item) => item.path === ${JSON.stringify(projectPath)})) {
-      catalog = await window.newbrain.addWorkspace({ name: "MSI Usage Feedback", path: ${JSON.stringify(projectPath)} });
+    if (!catalog.some((item) => item.path === ${embedJsValue(projectPath)})) {
+      catalog = await window.newbrain.addWorkspace({ name: "MSI Usage Feedback", path: ${embedJsValue(projectPath)} });
     }
-    let workspaceItem = catalog.find((item) => item.path === ${JSON.stringify(projectPath)});
+    let workspaceItem = catalog.find((item) => item.path === ${embedJsValue(projectPath)});
     if (!(workspaceItem?.threads || []).length) {
       catalog = await window.newbrain.addWorkspaceThread({ workspaceId: workspaceItem.id, title: "Usage Feedback", summary: "MSI", scope: "chat" });
       workspaceItem = catalog.find((item) => item.id === workspaceItem.id);
@@ -222,7 +234,7 @@ async function submitCommand(driver, text) {
   const scope = ".task-column:not(.new-chat-task)";
   await driver.evaluate(`(() => { const input = document.querySelector('${scope} [data-testid="composer-input"]'); input.focus(); input.select(); return true; })()`);
   await driver.typeText(text);
-  await driver.waitFor("draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${JSON.stringify(text)}`);
+  await driver.waitFor("draft", `document.querySelector('${scope} [data-testid="composer-input"]')?.value === ${embedJsValue(text)}`);
   const send = `document.querySelector('${scope} [data-testid="composer-input"]')?.closest('.composer-card')?.querySelector('[data-testid="composer-send-button"]')`;
   await driver.waitFor("send", `Boolean(${send}) && !(${send}).disabled && !(${send}).classList.contains('stop-btn')`);
   await driver.clickExpression(send);
@@ -257,7 +269,7 @@ async function connect(pages) {
       while (Date.now() < end) { if (await evaluate(expression)) return; await sleep(100); }
       throw new Error(`Timed out waiting for ${label}`);
     },
-    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${JSON.stringify(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
+    clickText: (text) => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === ${embedJsValue(text)}); if (!button) throw new Error('button not found'); button.click(); return true; })()`),
     typeText: async (text) => {
       for (const character of text) {
         socket.send(JSON.stringify({ id: ++id, method: "Input.dispatchKeyEvent", params: { type: "char", key: character, text: character, unmodifiedText: character } }));

@@ -106,6 +106,9 @@ export function buildDesktopAuthAccountFromApi(payloadAccount?: DesktopAuthApiAc
 export function extractDesktopAuthErrorMessage(payload: unknown, status: number) {
   const record = payload as Record<string, unknown> | null;
   const code = typeof record?.code === "string" ? record.code : "";
+  if (code === "AUTH_SESSION_REVOKED") {
+    return "账号已在其他设备登录，当前会话已失效，请重新登录";
+  }
   const message = typeof record?.message === "string" ? record.message : `认证失败 (${status})`;
   const detail = typeof record?.detail === "string" ? record.detail : typeof record?.error === "string" ? record.error : "";
   const requestId = typeof record?.request_id === "string" ? record.request_id : "";
@@ -130,7 +133,7 @@ export function isRetryableModelGatewayError(error: unknown) {
     : "";
   const causeMessage = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
   const haystack = `${message}\n${causeCode}\n${causeMessage}`;
-  return /HTTP\s+(?:429|500|502|503|504)\b|可重试|retry|timeout|timed out|aborted due to timeout|fetch failed|failed to fetch|econnreset|econnrefused|enotfound|eai_again|und_err_connect_timeout|und_err_headers_timeout|und_err_body_timeout|无法连接模型网关|连接模型网关超时|stream inactive|did not include assistant content or tool calls|stream ended before a terminal event/i.test(haystack);
+  return /HTTP\s+(?:429|500|502|503|504|524)\b|可重试|retry|timeout|timed out|aborted due to timeout|fetch failed|failed to fetch|econnreset|econnrefused|enotfound|eai_again|und_err_connect_timeout|und_err_headers_timeout|und_err_body_timeout|无法连接模型网关|连接模型网关超时|stream inactive|did not include assistant content or tool calls|stream ended before a terminal event/i.test(haystack);
 }
 
 export function createCookieHeaderFromSetCookie(setCookies: string[]) {

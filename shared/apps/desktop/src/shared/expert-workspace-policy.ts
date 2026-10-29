@@ -40,6 +40,14 @@ const BUILTIN_WORKSPACES: Record<string, string[]> = {
   "quant-backtest": ["quant", "data"]
 };
 
+const SCENE_KEYS = new Set(Object.keys(EXPERT_WORKSPACE_LABELS));
+
+/** Keep a scene key sent with a new chat thread. Drop anything else. */
+export function optionalBrainWorkspaceKey(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  return SCENE_KEYS.has(text) ? text : undefined;
+}
+
 export function expertWorkspaceKeys(expert: { id?: string; name?: string; workspaceKeys?: string[]; preferredWorkspaceKey?: string }): string[] {
   const declared = expert.workspaceKeys ?? BUILTIN_WORKSPACES[expert.id || expert.name || ""]
     ?? (expert.preferredWorkspaceKey ? [expert.preferredWorkspaceKey] : []);

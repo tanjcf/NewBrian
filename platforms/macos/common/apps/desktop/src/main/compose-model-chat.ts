@@ -50,7 +50,7 @@ import {
   extractPrivatePlanningNarration,
   sanitizeVisibleModelContent
 } from "./model-stream-visibility.js";
-import { selectModelRequestAuth } from "./model-request-auth-policy.js";
+import { resolveDevE2eBearerToken, selectModelRequestAuth } from "./model-request-auth-policy.js";
 import { configureModelChatRuntime, openWorkspaceMediaForAgent, type ModelChatRuntimeSetupDependencies } from "./model-chat-runtime-setup.js";
 import { registerAutoMediaAgentTools } from "./auto-media-agent-tools.js";
 import {
@@ -110,6 +110,7 @@ export interface MacModelChatCompositionDeps {
   activeThreadId: () => string;
   getCachedAuthorizedModels: () => AuthorizedModel[];
   readAuthorizedDesktopModelConfig: (candidate?: Partial<ModelConfig>) => Promise<ModelConfig>;
+  resolveCustomModelEndpoint?: (modelId: string) => Promise<import("../shared/custom-model-endpoint.js").CustomModelEndpointPublic | null>;
   readWorkspaceCatalog: () => Promise<{ workspaces: WorkspaceCatalogItem[] }>;
   readThreadState: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord) => Promise<ThreadStateFile>;
   writeThreadState: (workspace: WorkspaceCatalogItem, thread: WorkspaceThreadRecord, state: ThreadStateFile) => Promise<void>;
@@ -198,7 +199,10 @@ interface DesktopPolicyRule {
   [key: string]: unknown;
 }
 
-export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): { modelChatService: ModelChatService } {
+export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): {
+  modelChatService: ModelChatService;
+  modelChatTaskService: ModelChatTaskService<LocalRuntime, ThreadStateFile, DesktopPolicyRule>;
+} {
   const modelChatPreparationService = new ModelChatPreparationService({
     isRequestActive: (requestId) => deps.concurrentModelTasks.has(requestId),
     isThreadActive: (workspaceId, threadId) => [...deps.concurrentModelTasks.values()].some(
@@ -222,6 +226,7 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
     },
     readCatalog: deps.readWorkspaceCatalog,
     readAuthorizedModelConfig: deps.readAuthorizedDesktopModelConfig,
+    resolveCustomModelEndpoint: deps.resolveCustomModelEndpoint,
     resolveSkillRoutingHints: async ({ workspaceId, selectedSkillNames }) => {
       const hints: SkillRoutingHint[] = [];
       const catalog = await deps.readWorkspaceCatalog();
@@ -284,13 +289,18 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const authState = await deps.readDesktopAuthState().catch(() => null);
       const authSelection = selectModelRequestAuth(authState as never, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (!bearerToken && deps.refreshDesktopAccessToken) {
         bearerToken = await deps.refreshDesktopAccessToken().catch(() => "");
       }
       if (!bearerToken) {
+        if (process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1") {
+          throw new Error(
+            "E2E Auto 路由缺少凭证：请设置 NEWBRAIN_MODEL_BASE_URL，或启用 NEWBRAIN_E2E_REMOTE_DEBUG_PORT 远程调试会话。"
+          );
+        }
         throw new Error("Auto 路由需要已登录的桌面会话（spring-app Bearer），请先登录。");
       }
       const gatewayBaseUrl = await deps.readGatewayBaseUrl();
@@ -459,8 +469,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
           const authState = await deps.readDesktopAuthState();
           const authSelection = selectModelRequestAuth(authState as never, "");
           let bearerToken = authSelection.bearerToken;
-          if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-            bearerToken = "newbrain-e2e";
+          if (!bearerToken) {
+            bearerToken = resolveDevE2eBearerToken();
           }
           if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
           return { baseUrl: String(baseUrl || ""), bearerToken: String(bearerToken || "") };
@@ -540,8 +550,8 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
       const authState = await deps.readDesktopAuthState();
       const authSelection = selectModelRequestAuth(authState as never, "");
       let bearerToken = authSelection.bearerToken;
-      if (!bearerToken && process.env.NEWBRAIN_E2E_AUTH_BYPASS === "1" && deps.configuredGatewayBaseUrlEnv) {
-        bearerToken = "newbrain-e2e";
+      if (!bearerToken) {
+        bearerToken = resolveDevE2eBearerToken();
       }
       if (authSelection.useGatewayBaseUrl) baseUrl = await deps.readGatewayBaseUrl();
       if (!bearerToken) {
@@ -708,12 +718,20 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
             turnId: task.springTurnId
           }).catch(() => undefined);
         }
-        await deps.updateThreadMetadata({
+        // Do not await catalog persistence here. A blocked git/catalog write on macOS
+        // kept chatWithModel open and left the renderer stuck on “正在思考”.
+        void deps.updateThreadMetadata({
           workspaceId: task.workspaceId,
           threadId: task.threadId,
           status: "idle",
           statusLabel: "",
           lastEventSummary: "模型处理完成"
+        }).catch((error) => {
+          void deps.appendDesktopDebugLog(
+            `model task metadata update failed request=${requestId} error=${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
         });
       }
     },
@@ -722,8 +740,18 @@ export function composeAndRegisterModelChat(deps: MacModelChatCompositionDeps): 
   });
 
   registerModelChatIpcHandlers({
-    chat: (event, input) => modelChatService.chat(event.sender as WebContents, input)
+    chat: async (event, input) => {
+      try {
+        return await modelChatService.chat(event.sender as WebContents, input);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        void deps.appendDesktopDebugLog(
+          `model chat failed request=${input.requestId || "-"} workspace=${input.workspaceId || "-"} thread=${input.threadId || "-"} error=${message}`
+        );
+        throw error;
+      }
+    }
   });
 
-  return { modelChatService };
+  return { modelChatService, modelChatTaskService };
 }

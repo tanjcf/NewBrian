@@ -1,5 +1,7 @@
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/** Absolute ceiling for local-path references (no whole-file copy into managed storage). */
+export const MAX_LOCAL_LINK_BYTES = 512 * 1024 * 1024;
 export const MAX_EXTRACTOR_OUTPUT_BYTES = 1024 * 1024;
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"]);
@@ -35,12 +37,39 @@ export function isAttachmentSizeLimitError(error: unknown) {
   return error instanceof Error && ATTACHMENT_SIZE_LIMIT_RE.test(error.message);
 }
 
+/** True when a user-picked non-image file should be referenced in place instead of copied. */
+export function shouldLocalLinkAttachment(extension: string, size: number) {
+  if (isImageAttachmentExtension(extension)) return false;
+  if (!Number.isSafeInteger(size) || size < 0) return false;
+  return size > MAX_ATTACHMENT_BYTES && size <= MAX_LOCAL_LINK_BYTES;
+}
+
+/** True when the file is too large even for a local-path reference. */
+export function isAttachmentTooLargeForLocalLink(extension: string, size: number) {
+  if (isImageAttachmentExtension(extension)) {
+    return !Number.isSafeInteger(size) || size < 0 || size > MAX_IMAGE_BYTES;
+  }
+  return !Number.isSafeInteger(size) || size < 0 || size > MAX_LOCAL_LINK_BYTES;
+}
+
 /** User-facing Chinese notice when a single attachment is over the size limit. */
 export function formatAttachmentOversizeMessage(fileName: string, extension: string) {
   const limitMb = Math.round(getAttachmentByteLimit(extension) / (1024 * 1024));
   const kind = isImageAttachmentExtension(extension) ? "图片" : "文件";
   const safeName = String(fileName || "未命名").trim() || "未命名";
   return `${kind}「${safeName}」超过 ${limitMb} MB 限制`;
+}
+
+export function formatAttachmentLocalLinkMessage(fileName: string, sizeBytes: number) {
+  const safeName = String(fileName || "未命名").trim() || "未命名";
+  const sizeLabel = formatAttachmentSize(sizeBytes);
+  return `文件「${safeName}」（${sizeLabel}）已按本地路径引用，不整文件复制；发送时将按需读取`;
+}
+
+export function formatAttachmentTooLargeForLocalLinkMessage(fileName: string) {
+  const safeName = String(fileName || "未命名").trim() || "未命名";
+  const limitMb = Math.round(MAX_LOCAL_LINK_BYTES / (1024 * 1024));
+  return `文件「${safeName}」超过 ${limitMb} MB 本地引用上限，请挂载工作区、拆分文件或改用数据场景`;
 }
 
 /** Summarize skipped oversized files for composer selection / paste flows. */
@@ -53,7 +82,7 @@ export function formatAttachmentSelectionNotice(
   if (acceptedCount > 0) {
     return `已添加 ${acceptedCount} 个附件；${details}，已跳过。`;
   }
-  return `${details}，已跳过。图片不超过 ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))} MB，其他文件不超过 ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB。`;
+  return `${details}，已跳过。图片不超过 ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))} MB，其他文件复制不超过 ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB（更大文档可本地路径引用，上限 ${Math.round(MAX_LOCAL_LINK_BYTES / (1024 * 1024))} MB）。`;
 }
 
 /** Map IPC / main-process size-limit errors into a stable Chinese message. */
@@ -63,15 +92,16 @@ export function formatAttachmentSizeLimitError(error: unknown) {
   if (!match) return "";
   const limit = Number(match[1]);
   const limitMb = Number.isFinite(limit) ? Math.round(limit / (1024 * 1024)) : 0;
+  // Prefer the document-copy limit: clipboard/drag-drop of non-images can hit 20 MB.
+  if (limit === MAX_ATTACHMENT_BYTES) {
+    return `整文件复制不能超过 ${limitMb || 20} MB。更大的文档请用「选择文件」添加，将自动改为本地路径引用。`;
+  }
   if (limit === MAX_IMAGE_BYTES || /clipboard/i.test(message)) {
     return `图片或剪贴板附件不能超过 ${limitMb || 10} MB，请压缩或更换较小的文件后再试。`;
   }
-  if (limit === MAX_ATTACHMENT_BYTES) {
-    return `附件不能超过 ${limitMb || 20} MB，请压缩或更换较小的文件后再试。`;
-  }
   return limitMb > 0
-    ? `附件超过 ${limitMb} MB 限制，请压缩或更换较小的文件后再试。`
-    : "附件超过大小限制，请压缩或更换较小的文件后再试。";
+    ? `附件超过 ${limitMb} MB 限制，请压缩、拆分或挂载工作区后再试。`
+    : "附件超过大小限制，请压缩、拆分或挂载工作区后再试。";
 }
 
 export function getImageMimeType(extension: string) {

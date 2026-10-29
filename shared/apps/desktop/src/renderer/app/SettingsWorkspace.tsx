@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { initialDesktopPreferences } from "./desktop-model";
 import { projectWorkspaces } from "./workspace-visibility";
 import { WalletSettingsPage } from "./WalletSettingsPage";
+import {
+  formatAccountAppUpdateNotice,
+  mapAppUpdateVerifyError
+} from "./app-update-progress-copy";
 
 const FEATURE_UNDER_DEVELOPMENT_MESSAGE = "该接口处于开发中，暂时无法使用。";
 
@@ -36,7 +40,8 @@ export function SettingsWorkspace(ctx: any) {
     shortcuts: { ...initialDesktopPreferences.shortcuts, ...(ctx.desktopPreferences?.shortcuts || {}) },
     worktree: { ...initialDesktopPreferences.worktree, ...(ctx.desktopPreferences?.worktree || {}) },
     browser: { ...initialDesktopPreferences.browser, ...(ctx.desktopPreferences?.browser || {}) },
-    market: { ...initialDesktopPreferences.market, ...(ctx.desktopPreferences?.market || {}) }
+    market: { ...initialDesktopPreferences.market, ...(ctx.desktopPreferences?.market || {}) },
+    brain: { ...initialDesktopPreferences.brain, ...(ctx.desktopPreferences?.brain || {}) }
   };
   const visibleProjectWorkspaces = projectWorkspaces(workspaceCatalog ?? []);
   const authorizedModelOptions = [
@@ -66,6 +71,12 @@ export function SettingsWorkspace(ctx: any) {
   const [knowledgeSyncBusy, setKnowledgeSyncBusy] = useState(false);
   const [knowledgeSyncNotice, setKnowledgeSyncNotice] = useState("");
   const [recordingShortcut, setRecordingShortcut] = useState("");
+  const [browserManagePanel, setBrowserManagePanel] = useState<"history" | "passwords" | "contacts" | null>(null);
+  const [browserHistoryRows, setBrowserHistoryRows] = useState<Array<{ id: string; url: string; title: string; visitedAt: string }>>([]);
+  const [browserCredentialRows, setBrowserCredentialRows] = useState<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>([]);
+  const [browserContactRows, setBrowserContactRows] = useState<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>([]);
+  const [browserCredentialDraft, setBrowserCredentialDraft] = useState({ origin: "", username: "", password: "" });
+  const [browserContactDraft, setBrowserContactDraft] = useState({ name: "", email: "", phone: "" });
   const compareSemver = (left, right) => {
     const parts = (value) => String(value || "0")
       .replace(/^v/i, "")
@@ -118,10 +129,14 @@ export function SettingsWorkspace(ctx: any) {
         releaseId: appUpdateStatus?.releaseId,
         ok: true
       });
-      setAppUpdateMessage(result.detail || "验证已提交");
-      setChatStatus?.(result.detail || "验证已提交");
+      const detail = String(result?.detail || "").trim() || (result?.ok === false ? "提交更新验证失败" : "验证已提交");
+      setAppUpdateMessage(detail);
+      setChatStatus?.(detail);
+      if (result?.ok === false) {
+        setErrorMessage?.(detail);
+      }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = mapAppUpdateVerifyError(error);
       setAppUpdateMessage(detail);
       setErrorMessage?.(detail);
     } finally {
@@ -223,12 +238,20 @@ export function SettingsWorkspace(ctx: any) {
     }
   }
 
+  function isFigmaDesktopMcpServer(server: any) {
+    const name = String(server?.name || "").toLowerCase();
+    if (name.includes("figma")) return true;
+    try {
+      const parsed = new URL(String(server?.url || ""));
+      const host = parsed.hostname.toLowerCase();
+      return (host === "127.0.0.1" && parsed.port === "3845") || host === "mcp.figma.com";
+    } catch {
+      return false;
+    }
+  }
+
   function openFigmaDesktopMcpPreset() {
-    const existing = mcpServers.find((server: any) => {
-      const name = String(server.name || "").toLowerCase();
-      const url = String(server.url || "");
-      return name.includes("figma") || url.includes("127.0.0.1:3845") || url.includes("mcp.figma.com");
-    });
+    const existing = mcpServers.find((server: any) => isFigmaDesktopMcpServer(server));
     if (existing) {
       openMcpSettingsEditor(existing);
       setChatStatus?.("已打开现有 Figma MCP 配置。");
@@ -292,18 +315,9 @@ export function SettingsWorkspace(ctx: any) {
   }
 
 function PrototypeBillingSettingsPage() {
-    const billingCacheKey = "newbrain.billingSnapshot.v1";
     const [billing, setBilling] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState("");
-    useEffect(() => {
-      try {
-        const saved = JSON.parse(localStorage.getItem(billingCacheKey) || "null");
-        if (saved && typeof saved === "object") setBilling(saved);
-      } catch {
-        // Ignore invalid cache.
-      }
-    }, []);
 
     const loadBilling = async () => {
       setLoading(true);
@@ -313,7 +327,6 @@ function PrototypeBillingSettingsPage() {
         const subscriptions = Array.isArray(data?.subscriptions) ? data.subscriptions : [];
         if (data && (subscriptions.length > 0 || Array.isArray(data.billing_history))) {
           setBilling(data);
-          localStorage.setItem(billingCacheKey, JSON.stringify(data));
         } else {
           setBilling((current: any) => current || data || { summary: {}, subscriptions: [] });
         }
@@ -679,7 +692,7 @@ function renderSettingsWorkspace() {
                     <label>软件版本</label>
                     <div className="account-settings-value">
                       <span>
-                        {appUpdateStatus?.currentVersion || "读取中…"}
+                        {appUpdateStatus?.currentVersion || "—"}
                         {appUpdateStatus?.available && appUpdateStatus.latestVersion
                           ? ` → ${appUpdateStatus.latestVersion}`
                           : ""}
@@ -698,11 +711,11 @@ function renderSettingsWorkspace() {
                   </div>
                   {appUpdateStatus ? (
                     <p className="account-password-notice">
-                      {appUpdateMessage || appUpdateStatus.detail}
-                      {appUpdateStatus.channel ? `（${appUpdateStatus.channel}）` : ""}
-                      {!String(appUpdateMessage || appUpdateStatus.detail || "").includes("不会删除")
-                        ? " 更新仅替换程序文件，不会删除聊天记录、项目与本地历史。"
-                        : ""}
+                      {formatAccountAppUpdateNotice({
+                        message: appUpdateMessage,
+                        detail: appUpdateStatus.detail,
+                        channel: appUpdateStatus.channel
+                      })}
                     </p>
                   ) : null}
                   {appUpdateStatus?.releaseId
@@ -1015,6 +1028,10 @@ function renderSettingsWorkspace() {
                 <section className="codex-settings-section">
                   <h4>常规</h4>
                   <div className="codex-setting-list">
+                    <button type="button" className="codex-setting-row" onClick={() => updateDesktopPreferences((current) => ({ ...current, launchAtLogin: current.launchAtLogin === false }))}>
+                      <span><strong>开机自启动</strong><em>登录系统后自动打开 newbrain</em></span>
+                      <SettingsSwitch enabled={desktopPreferences.launchAtLogin !== false} />
+                    </button>
                     <div className="codex-setting-row">
                       <span><strong>默认文件打开目标</strong><em>默认打开文件和文件夹的位置</em></span>
                       <select
@@ -1341,58 +1358,104 @@ function renderSettingsWorkspace() {
               </div>
             ) : activeSettingsSection === "mcp" ? (
               <>
-                {mcpSettingsView === "list" ? (
-                  <div className="codex-mcp-settings">
-                    <div className="settings-page-head"><div><h3>MCP 服务器</h3><p>连接外部工具和数据源。写 Figma 云端稿优先接 Figma Desktop MCP。</p></div></div>
-                    <section className="codex-mcp-group">
-                      <div className="codex-mcp-group-head">
-                        <strong>服务器</strong>
-                        <div className="inline-actions">
-                          <button type="button" onClick={() => openFigmaDesktopMcpPreset()}>＋ Figma Desktop MCP</button>
-                          <button type="button" onClick={() => openMcpSettingsEditor()}>＋ 添加服务器</button>
-                        </div>
-                      </div>
-                      <div className="codex-mcp-list">
-                        {mcpServers.map((server: any) => (
-                          <div className="codex-mcp-row" key={server.id}>
-                            <strong>{server.name}</strong>
-                            <button type="button" className="codex-mcp-gear" aria-label={`编辑 ${server.name}`} onClick={() => openMcpSettingsEditor(server)}>⚙</button>
-                            <button type="button" className={`codex-mcp-toggle${server.enabled ? " enabled" : ""}`} aria-label={server.enabled ? `停用 ${server.name}` : `启用 ${server.name}`} onClick={() => void handleToggleMcpServer(server.id)}><span /></button>
+                <div className="mcp-proto-page">
+                  <div className="page-heading-row" style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 18 }}>
+                    <div>
+                      <h3 style={{ margin: "0 0 6px" }}>MCP 服务器</h3>
+                      <p style={{ margin: 0, color: "#6f7680" }}>连接外部工具和数据源。写 Figma 云端稿优先接 Figma Desktop MCP。</p>
+                    </div>
+                    <div className="inline-actions" style={{ display: "flex", gap: 8 }}>
+                      <button type="button" onClick={() => openFigmaDesktopMcpPreset()}>＋ Figma Desktop MCP</button>
+                      <button type="button" className="catalog-create" style={{ minHeight: 36 }} onClick={() => openMcpSettingsEditor()}>＋ 添加服务器</button>
+                    </div>
+                  </div>
+                  <div className="mcp-proto-list">
+                    {mcpServers.map((server: any) => {
+                      const health = mcpHealth?.[server.id];
+                      const endpoint = server.transport === "sse" || server.transport === "http" ? server.url : server.command || "local";
+                      const tags = [
+                        String(server.transport || "stdio").toUpperCase(),
+                        health?.ok ? "已连接" : server.enabled ? "已启用" : "已停用",
+                        endpoint ? String(endpoint).slice(0, 48) : ""
+                      ].filter(Boolean);
+                      return (
+                        <article className="mcp-proto-card" key={server.id}>
+                          <div className="mcp-proto-card-head">
+                            <div>
+                              <h3>{server.name}</h3>
+                              <p>{endpoint || "未配置连接信息"}</p>
+                              <div className="mcp-proto-chips">{tags.map((tag: string) => <span key={tag}>{tag}</span>)}</div>
+                            </div>
+                            <div className="mcp-proto-actions">
+                              <button
+                                type="button"
+                                className={`settings-toggle${server.enabled ? " on" : ""}`}
+                                aria-label={server.enabled ? `停用 ${server.name}` : `启用 ${server.name}`}
+                                onClick={() => void handleToggleMcpServer(server.id)}
+                              ><span /></button>
+                              {server.enabled ? (
+                                <button type="button" onClick={() => void handleStopMcpServer?.(server)}>停止</button>
+                              ) : (
+                                <button type="button" onClick={() => void handleStartMcpServer?.(server)}>启动</button>
+                              )}
+                              <button type="button" onClick={() => openMcpSettingsEditor(server)} aria-label={`配置 ${server.name}`}>⚙</button>
+                              <button type="button" className="danger" onClick={() => void handleDeleteMcpServer(server.id)}>删除</button>
+                            </div>
                           </div>
-                        ))}
-                        {!mcpServers.length ? <div className="environment-project-empty">尚未添加 MCP 服务器。</div> : null}
+                        </article>
+                      );
+                    })}
+                    {!mcpServers.length ? <div className="environment-project-empty">尚未添加 MCP 服务器。</div> : null}
+                  </div>
+                  <section className="codex-mcp-group" style={{ marginTop: 18 }}>
+                    <strong>来自插件</strong>
+                    <div className="codex-mcp-plugin-source">{Array.from(new Set(mcpServers.filter((server: any) => String(server.id).includes(":")).map((server: any) => String(server.id).split(":")[0]))).join("、") || "暂无插件提供的 MCP 服务器"}</div>
+                  </section>
+                </div>
+
+                {mcpSettingsView !== "list" ? (
+                  <div className="catalog-modal-backdrop" role="presentation" onClick={() => setMcpSettingsView("list")}>
+                    <section className="catalog-modal wide mcp-proto-dialog-panel" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+                      <header className="catalog-modal-head">
+                        <h2>{mcpSettingsView === "new" ? "连接至自定义 MCP" : `更新 ${mcpDraft.name || "MCP"}`}</h2>
+                        <button type="button" className="icon-btn" aria-label="关闭" onClick={() => setMcpSettingsView("list")}>×</button>
+                      </header>
+                      <div className="catalog-modal-body codex-mcp-editor">
+                        {mcpSettingsView === "edit" ? (
+                          <div className="inline-actions" style={{ marginBottom: 12 }}>
+                            <button type="button" className="danger" onClick={async () => { await handleDeleteMcpServer(editingMcpId); setMcpSettingsView("list"); }}>🗑 卸载</button>
+                            <button type="button" disabled={testingMcpId === editingMcpId} onClick={() => {
+                              const server = mcpServers.find((item: any) => item.id === editingMcpId);
+                              if (server) void handleTestMcpServer(server);
+                            }}>{testingMcpId === editingMcpId ? "测试中" : "测试连接"}</button>
+                          </div>
+                        ) : null}
+                        {mcpSettingsView === "new" ? <label className="codex-mcp-field"><span>名称</span><input value={mcpDraft.name} onChange={(event) => setMcpDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="MCP server name" /></label> : null}
+                        {mcpSettingsView === "new" ? <div className="codex-mcp-transport"><button type="button" className={mcpDraft.transport === "stdio" ? "active" : ""} onClick={() => setMcpDraft((current: any) => ({ ...current, transport: "stdio" }))}>STDIO</button><button type="button" className={mcpDraft.transport === "sse" ? "active" : ""} onClick={() => setMcpDraft((current: any) => ({ ...current, transport: "sse" }))}>流式 HTTP</button></div> : null}
+                        {mcpDraft.transport === "stdio" ? (
+                          <>
+                            <label className="codex-mcp-field"><span>启动命令</span><input value={mcpDraft.command} onChange={(event) => setMcpDraft((current: any) => ({ ...current, command: event.target.value }))} placeholder="openai-dev-mcp serve-sqlite" /></label>
+                            <div className="codex-mcp-field"><span>参数</span>{String(mcpDraft.args || "").split("\n").map((arg: string, index: number, rows: string[]) => <div className="codex-mcp-pair single" key={`arg-${index}`}><input value={arg} onChange={(event) => { const next=[...rows]; next[index]=event.target.value; setMcpDraft((current:any)=>({...current,args:next.join("\n")})); }} /><button type="button" onClick={() => setMcpDraft((current:any)=>({...current,args:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={() => setMcpDraft((current:any)=>({...current,args:current.args ? `${current.args}\n` : "\n"}))}>＋ 添加参数</button></div>
+                            <div className="codex-mcp-field"><span>环境变量</span>{String(mcpDraft.env || "").split("\n").filter((line:string)=>line && !line.startsWith("NEWBRAIN_MCP_")).map((line:string,index:number,rows:string[])=>{const at=line.indexOf("=");const key=at<0?line:line.slice(0,at);const value=at<0?"":line.slice(at+1);return <div className="codex-mcp-pair" key={`env-${index}`}><input placeholder="键" value={key} onChange={(event)=>{const next=[...rows];next[index]=`${event.target.value}=${value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><input placeholder="值" value={value} onChange={(event)=>{const next=[...rows];next[index]=`${key}=${event.target.value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><button type="button" onClick={()=>setMcpDraft((current:any)=>({...current,env:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>})}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpDraft((current:any)=>({...current,env:current.env?`${current.env}\nNEW_KEY=`:"NEW_KEY="}))}>＋ 添加环境变量</button></div>
+                            <div className="codex-mcp-field"><span>环境变量传递</span>{mcpEnvPassthrough.map((value,index)=><div className="codex-mcp-pair single" key={`pass-${index}`}><input value={value} onChange={(event)=>setMcpEnvPassthrough((rows)=>rows.map((row,i)=>i===index?event.target.value:row))}/><button type="button" onClick={()=>setMcpEnvPassthrough((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpEnvPassthrough((rows)=>[...rows,""])}>＋ 添加变量</button></div>
+                            <label className="codex-mcp-field"><span>工作目录</span><input value={mcpWorkingDirectory} onChange={(event)=>setMcpWorkingDirectory(event.target.value)} placeholder="~/code" /></label>
+                          </>
+                        ) : (
+                          <>
+                            <label className="codex-mcp-field"><span>URL</span><input value={mcpDraft.url} onChange={(event)=>setMcpDraft((current:any)=>({...current,url:event.target.value}))} placeholder="http://127.0.0.1:1080" /></label>
+                            <label className="codex-mcp-field"><span>Bearer 令牌环境变量</span><input value={mcpBearerTokenEnv} onChange={(event)=>setMcpBearerTokenEnv(event.target.value)} /></label>
+                            <div className="codex-mcp-field"><span>标头</span>{mcpHeaders.map((row,index)=><div className="codex-mcp-pair" key={`header-${index}`}><input value={row.key} onChange={(event)=>setMcpHeaders((rows)=>rows.map((item,i)=>i===index?{...item,key:event.target.value}:item))}/><input value={row.value} onChange={(event)=>setMcpHeaders((rows)=>rows.map((item,i)=>i===index?{...item,value:event.target.value}:item))}/><button type="button" onClick={()=>setMcpHeaders((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpHeaders((rows)=>[...rows,{key:"",value:""}])}>＋ 添加标头</button></div>
+                            <div className="codex-mcp-field"><span>来自环境变量的标头</span>{mcpHeaderEnv.map((row,index)=><div className="codex-mcp-pair" key={`header-env-${index}`}><input placeholder="键" value={row.key} onChange={(event)=>setMcpHeaderEnv((rows)=>rows.map((item,i)=>i===index?{...item,key:event.target.value}:item))}/><input placeholder="值" value={row.value} onChange={(event)=>setMcpHeaderEnv((rows)=>rows.map((item,i)=>i===index?{...item,value:event.target.value}:item))}/><button type="button" onClick={()=>setMcpHeaderEnv((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpHeaderEnv((rows)=>[...rows,{key:"",value:""}])}>＋ 添加变量</button></div>
+                          </>
+                        )}
                       </div>
-                    </section>
-                    <section className="codex-mcp-group">
-                      <strong>来自插件</strong>
-                      <div className="codex-mcp-plugin-source">{Array.from(new Set(mcpServers.filter((server: any) => String(server.id).includes(":")).map((server: any) => String(server.id).split(":")[0]))).join("、") || "暂无插件提供的 MCP 服务器"}</div>
+                      <footer className="catalog-modal-foot">
+                        <button type="button" onClick={() => setMcpSettingsView("list")}>取消</button>
+                        <button type="button" className="catalog-create" onClick={() => void saveMcpSettingsEditor()}>保存</button>
+                      </footer>
                     </section>
                   </div>
-                ) : (
-                  <div className="codex-mcp-editor">
-                    <button type="button" className="codex-mcp-back" onClick={() => setMcpSettingsView("list")}>← 返回</button>
-                    <div className="codex-mcp-editor-head"><div><h3>{mcpSettingsView === "new" ? "连接至自定义 MCP" : `更新 ${mcpDraft.name || "MCP"}`}</h3>{mcpSettingsView === "new" ? <p>文档 ↗</p> : <p>如需切换 MCP 服务器类型，请先卸载当前配置。</p>}</div>{mcpSettingsView === "edit" ? <button type="button" className="danger" onClick={async () => { await handleDeleteMcpServer(editingMcpId); setMcpSettingsView("list"); }}>🗑 卸载</button> : null}</div>
-                    {mcpSettingsView === "new" ? <label className="codex-mcp-field"><span>名称</span><input value={mcpDraft.name} onChange={(event) => setMcpDraft((current: any) => ({ ...current, name: event.target.value }))} placeholder="MCP server name" /></label> : null}
-                    {mcpSettingsView === "new" ? <div className="codex-mcp-transport"><button type="button" className={mcpDraft.transport === "stdio" ? "active" : ""} onClick={() => setMcpDraft((current: any) => ({ ...current, transport: "stdio" }))}>STDIO</button><button type="button" className={mcpDraft.transport === "sse" ? "active" : ""} onClick={() => setMcpDraft((current: any) => ({ ...current, transport: "sse" }))}>流式 HTTP</button></div> : null}
-                    {mcpDraft.transport === "stdio" ? (
-                      <>
-                        <label className="codex-mcp-field"><span>启动命令</span><input value={mcpDraft.command} onChange={(event) => setMcpDraft((current: any) => ({ ...current, command: event.target.value }))} placeholder="openai-dev-mcp serve-sqlite" /></label>
-                        <div className="codex-mcp-field"><span>参数</span>{String(mcpDraft.args || "").split("\n").map((arg: string, index: number, rows: string[]) => <div className="codex-mcp-pair single" key={`arg-${index}`}><input value={arg} onChange={(event) => { const next=[...rows]; next[index]=event.target.value; setMcpDraft((current:any)=>({...current,args:next.join("\n")})); }} /><button type="button" onClick={() => setMcpDraft((current:any)=>({...current,args:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={() => setMcpDraft((current:any)=>({...current,args:current.args ? `${current.args}\n` : "\n"}))}>＋ 添加参数</button></div>
-                        <div className="codex-mcp-field"><span>环境变量</span>{String(mcpDraft.env || "").split("\n").filter((line:string)=>line && !line.startsWith("NEWBRAIN_MCP_")).map((line:string,index:number,rows:string[])=>{const at=line.indexOf("=");const key=at<0?line:line.slice(0,at);const value=at<0?"":line.slice(at+1);return <div className="codex-mcp-pair" key={`env-${index}`}><input placeholder="键" value={key} onChange={(event)=>{const next=[...rows];next[index]=`${event.target.value}=${value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><input placeholder="值" value={value} onChange={(event)=>{const next=[...rows];next[index]=`${key}=${event.target.value}`;setMcpDraft((current:any)=>({...current,env:next.join("\n")}));}}/><button type="button" onClick={()=>setMcpDraft((current:any)=>({...current,env:rows.filter((_:string,i:number)=>i!==index).join("\n")}))}>⌫</button></div>})}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpDraft((current:any)=>({...current,env:current.env?`${current.env}\nNEW_KEY=`:"NEW_KEY="}))}>＋ 添加环境变量</button></div>
-                        <div className="codex-mcp-field"><span>环境变量传递</span>{mcpEnvPassthrough.map((value,index)=><div className="codex-mcp-pair single" key={`pass-${index}`}><input value={value} onChange={(event)=>setMcpEnvPassthrough((rows)=>rows.map((row,i)=>i===index?event.target.value:row))}/><button type="button" onClick={()=>setMcpEnvPassthrough((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpEnvPassthrough((rows)=>[...rows,""])}>＋ 添加变量</button></div>
-                        <label className="codex-mcp-field"><span>工作目录</span><input value={mcpWorkingDirectory} onChange={(event)=>setMcpWorkingDirectory(event.target.value)} placeholder="~/code" /></label>
-                      </>
-                    ) : (
-                      <>
-                        <label className="codex-mcp-field"><span>URL</span><input value={mcpDraft.url} onChange={(event)=>setMcpDraft((current:any)=>({...current,url:event.target.value}))} placeholder="http://127.0.0.1:1080" /></label>
-                        <label className="codex-mcp-field"><span>Bearer 令牌环境变量</span><input value={mcpBearerTokenEnv} onChange={(event)=>setMcpBearerTokenEnv(event.target.value)} /></label>
-                        <div className="codex-mcp-field"><span>标头</span>{mcpHeaders.map((row,index)=><div className="codex-mcp-pair" key={`header-${index}`}><input value={row.key} onChange={(event)=>setMcpHeaders((rows)=>rows.map((item,i)=>i===index?{...item,key:event.target.value}:item))}/><input value={row.value} onChange={(event)=>setMcpHeaders((rows)=>rows.map((item,i)=>i===index?{...item,value:event.target.value}:item))}/><button type="button" onClick={()=>setMcpHeaders((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpHeaders((rows)=>[...rows,{key:"",value:""}])}>＋ 添加标头</button></div>
-                        <div className="codex-mcp-field"><span>来自环境变量的标头</span>{mcpHeaderEnv.map((row,index)=><div className="codex-mcp-pair" key={`header-env-${index}`}><input placeholder="键" value={row.key} onChange={(event)=>setMcpHeaderEnv((rows)=>rows.map((item,i)=>i===index?{...item,key:event.target.value}:item))}/><input placeholder="值" value={row.value} onChange={(event)=>setMcpHeaderEnv((rows)=>rows.map((item,i)=>i===index?{...item,value:event.target.value}:item))}/><button type="button" onClick={()=>setMcpHeaderEnv((rows)=>rows.filter((_,i)=>i!==index))}>⌫</button></div>)}<button type="button" className="codex-mcp-add-row" onClick={()=>setMcpHeaderEnv((rows)=>[...rows,{key:"",value:""}])}>＋ 添加变量</button></div>
-                      </>
-                    )}
-                    <div className="codex-mcp-save-row"><button type="button" onClick={() => void saveMcpSettingsEditor()}>保存</button></div>
-                  </div>
-                )}
+                ) : null}
               </>            ) : activeSettingsSection === "appearance" ? (
               <div className="appearance-reference-page">
                 <h3>{"\u5916\u89c2"}</h3>
@@ -1665,17 +1728,587 @@ function renderSettingsWorkspace() {
               </>
             ) : activeSettingsSection === "browser" ? (
               <>
-                <div className="settings-page-head"><div><h3>浏览器</h3><p>预览 URL 会保存，打开按钮会调用系统浏览器。</p></div><button type="button" onClick={() => void runSettingsSave("浏览器", saveDesktopPreferences)}>保存浏览器</button></div>
-                <section className="settings-card">
-                  <label className="settings-field"><span>预览 URL</span><input value={desktopPreferences.browser.previewUrl} onChange={(event) => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, previewUrl: event.target.value } }))} /></label>
-                  <div className="settings-preference-list">
-                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, autoOpenPreview: !current.browser.autoOpenPreview } }))}><span>前端改动后自动打开本地预览</span><SettingsSwitch enabled={desktopPreferences.browser.autoOpenPreview} /></button>
-                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, preserveTabs: !current.browser.preserveTabs } }))}><span>保留上次浏览器标签</span><SettingsSwitch enabled={desktopPreferences.browser.preserveTabs} /></button>
-                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, highResScreenshots: !current.browser.highResScreenshots } }))}><span>截图验证使用高分辨率</span><SettingsSwitch enabled={desktopPreferences.browser.highResScreenshots} /></button>
+                <div className="settings-page-head">
+                  <div>
+                    <h3>浏览器</h3>
+                    <p>管理 Browser Use 偏好与网站访问权限（对齐 Codex 桌面浏览器设置）。</p>
                   </div>
+                  <button type="button" onClick={() => void runSettingsSave("浏览器", saveDesktopPreferences)}>保存浏览器</button>
+                </div>
+                <section className="settings-card">
+                  <div className="settings-preference-list">
+                    <button
+                      type="button"
+                      onClick={() => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: { ...current.browser, enabled: !current.browser.enabled }
+                      }))}
+                    >
+                      <span>Browser：允许智能体操控内置浏览器</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.enabled !== false} />
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>常规</h4>
+                  <label className="settings-field">
+                    <span>预览 URL</span>
+                    <input
+                      value={desktopPreferences.browser.previewUrl}
+                      onChange={(event) => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: { ...current.browser, previewUrl: event.target.value }
+                      }))}
+                    />
+                  </label>
+                  <label className="settings-field">
+                    <span>网页 URL 和链接打开位置</span>
+                    <select
+                      value={desktopPreferences.browser.openWebLinksIn || "in-app-browser"}
+                      onChange={(event) => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: {
+                          ...current.browser,
+                          openWebLinksIn: event.target.value === "system" ? "system" : "in-app-browser"
+                        }
+                      }))}
+                    >
+                      <option value="in-app-browser">NewBrain 内置浏览器</option>
+                      <option value="system">系统浏览器</option>
+                    </select>
+                  </label>
+                  <label className="settings-field">
+                    <span>本地 URL 打开位置</span>
+                    <select
+                      value={desktopPreferences.browser.openLocalLinksIn || "in-app-browser"}
+                      onChange={(event) => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: {
+                          ...current.browser,
+                          openLocalLinksIn: event.target.value === "system" ? "system" : "in-app-browser"
+                        }
+                      }))}
+                    >
+                      <option value="in-app-browser">NewBrain 内置浏览器</option>
+                      <option value="system">系统浏览器</option>
+                    </select>
+                  </label>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, showFullUrl: !current.browser.showFullUrl } }))}>
+                      <span>显示完整网址</span>
+                      <SettingsSwitch enabled={Boolean(desktopPreferences.browser.showFullUrl)} />
+                    </button>
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, autoOpenPreview: !current.browser.autoOpenPreview } }))}>
+                      <span>前端改动后自动打开本地预览</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.autoOpenPreview} />
+                    </button>
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, preserveTabs: !current.browser.preserveTabs } }))}>
+                      <span>保留上次浏览器标签</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.preserveTabs} />
+                    </button>
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, highResScreenshots: !current.browser.highResScreenshots } }))}>
+                      <span>截图验证使用高分辨率</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.highResScreenshots} />
+                    </button>
+                  </div>
+                  <label className="settings-field">
+                    <span>批注截图</span>
+                    <select
+                      value={desktopPreferences.browser.annotatedScreenshots || "always"}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setDesktopPreferences((current) => ({
+                          ...current,
+                          browser: {
+                            ...current.browser,
+                            annotatedScreenshots: value === "ask" || value === "never" ? value : "always"
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="always">始终包含</option>
+                      <option value="ask">询问</option>
+                      <option value="never">从不</option>
+                    </select>
+                  </label>
+                  <p className="subtle">截图有助于理解批注，但会增加用量。</p>
                   <div className="inline-actions">
                     <button type="button" disabled={!api} onClick={() => void api?.openBrowserPreview(desktopPreferences.browser.previewUrl)}>打开预览</button>
                     <button type="button" disabled={!api} onClick={async () => { const result = await api?.captureBrowserPreview(); if (result) setChatStatus(`截图已保存: ${result.path}`); }}>截取预览</button>
+                    <button
+                      type="button"
+                      disabled={!api?.clearBrowserBrowsingData}
+                      onClick={async () => {
+                        const result = await api?.clearBrowserBrowsingData?.();
+                        setChatStatus(result?.detail || "已清除浏览数据");
+                      }}
+                    >
+                      清除浏览数据
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!api?.listBrowserHistory}
+                      onClick={async () => {
+                        try {
+                          const rows = await api?.listBrowserHistory?.();
+                          setBrowserHistoryRows(rows || []);
+                          setBrowserManagePanel("history");
+                          setChatStatus(`浏览历史 ${rows?.length ?? 0} 条`);
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
+                        }
+                      }}
+                    >
+                      管理浏览历史
+                    </button>
+                  </div>
+                  {browserManagePanel === "history" ? (
+                    <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                      {browserHistoryRows.length === 0 ? <p className="subtle">暂无历史记录。</p> : null}
+                      {browserHistoryRows.map((row) => (
+                        <article key={row.id} className="mcp-server-item enabled">
+                          <div className="mcp-server-main">
+                            <strong>{row.title || row.url}</strong>
+                            <p className="subtle">{row.url}</p>
+                            <p className="subtle">{row.visitedAt}</p>
+                          </div>
+                          <div className="mcp-server-actions">
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={!api?.removeBrowserHistoryEntry}
+                              onClick={async () => {
+                                try {
+                                  const rows = await api?.removeBrowserHistoryEntry?.(row.id);
+                                  setBrowserHistoryRows(rows || []);
+                                } catch (error) {
+                                  setErrorMessage(error instanceof Error ? error.message : String(error));
+                                }
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          className="danger"
+                          disabled={!api?.clearBrowserHistory}
+                          onClick={async () => {
+                            try {
+                              await api?.clearBrowserHistory?.();
+                              setBrowserHistoryRows([]);
+                              setChatStatus("已清空浏览历史");
+                            } catch (error) {
+                              setErrorMessage(error instanceof Error ? error.message : String(error));
+                            }
+                          }}
+                        >
+                          清空历史
+                        </button>
+                        <button type="button" onClick={() => setBrowserManagePanel(null)}>关闭</button>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+                <section className="settings-card">
+                  <h4>自动填充和密码</h4>
+                  <p className="subtle">密码与联系人保存在本地，不会进入模型上下文。</p>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      disabled={!api?.listBrowserCredentials}
+                      onClick={async () => {
+                        try {
+                          const rows = await api?.listBrowserCredentials?.();
+                          setBrowserCredentialRows(rows || []);
+                          setBrowserManagePanel("passwords");
+                          setChatStatus(rows?.length ? `已保存 ${rows.length} 条登录凭据（仅元数据）` : "暂无保存的密码");
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
+                        }
+                      }}
+                    >
+                      管理密码
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!api?.listBrowserContacts}
+                      onClick={async () => {
+                        try {
+                          const rows = await api?.listBrowserContacts?.();
+                          setBrowserContactRows(rows || []);
+                          setBrowserManagePanel("contacts");
+                          setChatStatus(rows?.length ? `已保存 ${rows.length} 条联系人` : "暂无联系人");
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : String(error));
+                        }
+                      }}
+                    >
+                      管理联系信息
+                    </button>
+                  </div>
+                  {browserManagePanel === "passwords" ? (
+                    <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                      <label className="settings-field"><span>Origin</span><input value={browserCredentialDraft.origin} onChange={(event) => setBrowserCredentialDraft((current) => ({ ...current, origin: event.target.value }))} /></label>
+                      <label className="settings-field"><span>用户名</span><input value={browserCredentialDraft.username} onChange={(event) => setBrowserCredentialDraft((current) => ({ ...current, username: event.target.value }))} /></label>
+                      <label className="settings-field"><span>密码</span><input type="password" autoComplete="new-password" value={browserCredentialDraft.password} onChange={(event) => setBrowserCredentialDraft((current) => ({ ...current, password: event.target.value }))} /></label>
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          disabled={!api?.upsertBrowserCredential}
+                          onClick={async () => {
+                            try {
+                              const rows = await api?.upsertBrowserCredential?.(browserCredentialDraft);
+                              setBrowserCredentialRows(rows || []);
+                              setBrowserCredentialDraft({ origin: "", username: "", password: "" });
+                              setChatStatus("已保存凭据（本地加密）");
+                            } catch (error) {
+                              setErrorMessage(error instanceof Error ? error.message : String(error));
+                            }
+                          }}
+                        >
+                          保存凭据
+                        </button>
+                        <button type="button" onClick={() => setBrowserManagePanel(null)}>关闭</button>
+                      </div>
+                      {browserCredentialRows.map((row) => (
+                        <article key={row.id} className="mcp-server-item enabled">
+                          <div className="mcp-server-main">
+                            <strong>{row.username}</strong>
+                            <p className="subtle">{row.origin}{row.hasPassword ? " · 已加密密码" : ""}</p>
+                          </div>
+                          <div className="mcp-server-actions">
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={!api?.removeBrowserCredential}
+                              onClick={async () => {
+                                try {
+                                  const rows = await api?.removeBrowserCredential?.(row.id);
+                                  setBrowserCredentialRows(rows || []);
+                                } catch (error) {
+                                  setErrorMessage(error instanceof Error ? error.message : String(error));
+                                }
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                  {browserManagePanel === "contacts" ? (
+                    <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                      <label className="settings-field"><span>姓名</span><input value={browserContactDraft.name} onChange={(event) => setBrowserContactDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+                      <label className="settings-field"><span>邮箱</span><input value={browserContactDraft.email} onChange={(event) => setBrowserContactDraft((current) => ({ ...current, email: event.target.value }))} /></label>
+                      <label className="settings-field"><span>电话</span><input value={browserContactDraft.phone} onChange={(event) => setBrowserContactDraft((current) => ({ ...current, phone: event.target.value }))} /></label>
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          disabled={!api?.upsertBrowserContact}
+                          onClick={async () => {
+                            try {
+                              const rows = await api?.upsertBrowserContact?.(browserContactDraft);
+                              setBrowserContactRows(rows || []);
+                              setBrowserContactDraft({ name: "", email: "", phone: "" });
+                              setChatStatus("已保存联系人");
+                            } catch (error) {
+                              setErrorMessage(error instanceof Error ? error.message : String(error));
+                            }
+                          }}
+                        >
+                          保存联系人
+                        </button>
+                        <button type="button" onClick={() => setBrowserManagePanel(null)}>关闭</button>
+                      </div>
+                      {browserContactRows.map((row) => (
+                        <article key={row.id} className="mcp-server-item enabled">
+                          <div className="mcp-server-main">
+                            <strong>{row.name}</strong>
+                            <p className="subtle">{[row.email, row.phone].filter(Boolean).join(" · ") || "无联系方式"}</p>
+                          </div>
+                          <div className="mcp-server-actions">
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={!api?.removeBrowserContact}
+                              onClick={async () => {
+                                try {
+                                  const rows = await api?.removeBrowserContact?.(row.id);
+                                  setBrowserContactRows(rows || []);
+                                } catch (error) {
+                                  setErrorMessage(error instanceof Error ? error.message : String(error));
+                                }
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+                <section className="settings-card">
+                  <h4>扩展程序</h4>
+                  <p className="subtle">内置浏览器扩展管理取决于 Electron 扩展加载能力；桌面端暂不支持。</p>
+                  <div className="inline-actions">
+                    <button type="button" disabled title="桌面端暂不支持">管理扩展</button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>下载</h4>
+                  <label className="settings-field">
+                    <span>位置</span>
+                    <div className="inline-actions" style={{ marginTop: 0 }}>
+                      <input
+                        readOnly
+                        value={desktopPreferences.browser.downloadDir || "系统下载文件夹"}
+                      />
+                      <button
+                        type="button"
+                        disabled={!api?.selectBrowserDownloadDir}
+                        onClick={async () => {
+                          const result = await api?.selectBrowserDownloadDir?.();
+                          if (result?.path) {
+                            setDesktopPreferences((current) => ({
+                              ...current,
+                              browser: { ...current.browser, downloadDir: result.path }
+                            }));
+                          }
+                        }}
+                      >
+                        更改
+                      </button>
+                    </div>
+                  </label>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, askDownloadPath: !current.browser.askDownloadPath } }))}>
+                      <span>下载前询问保存位置</span>
+                      <SettingsSwitch enabled={Boolean(desktopPreferences.browser.askDownloadPath)} />
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>浏览器权限</h4>
+                  <label className="settings-field">
+                    <span>历史记录访问</span>
+                    <select
+                      value={desktopPreferences.browser.historyAccess || "always_ask"}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setDesktopPreferences((current) => ({
+                          ...current,
+                          browser: {
+                            ...current.browser,
+                            historyAccess: value === "allow" || value === "deny" ? value : "always_ask"
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="always_ask">始终询问</option>
+                      <option value="allow">允许</option>
+                      <option value="deny">拒绝</option>
+                    </select>
+                  </label>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, siteToolsEnabled: !current.browser.siteToolsEnabled } }))}>
+                      <span>启用站点工具（含 WebMCP 探测）</span>
+                      <SettingsSwitch enabled={desktopPreferences.browser.siteToolsEnabled !== false} />
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>智能体权限</h4>
+                  <p className="subtle">设置默认策略，并为站点添加例外。</p>
+                  {(["browse", "download", "upload"] as const).map((action) => (
+                    <label key={action} className="settings-field">
+                      <span>默认 · {action === "browse" ? "浏览" : action === "download" ? "下载" : "上传"}</span>
+                      <select
+                        value={desktopPreferences.browser.agentPermissions?.defaults?.[action] || "require_approval"}
+                        onChange={(event) => {
+                          const value = event.target.value === "always_allow" || event.target.value === "deny"
+                            ? event.target.value
+                            : "require_approval";
+                          setDesktopPreferences((current) => ({
+                            ...current,
+                            browser: {
+                              ...current.browser,
+                              agentPermissions: {
+                                defaults: {
+                                  browse: current.browser.agentPermissions?.defaults?.browse || "require_approval",
+                                  download: current.browser.agentPermissions?.defaults?.download || "require_approval",
+                                  upload: current.browser.agentPermissions?.defaults?.upload || "require_approval",
+                                  [action]: value
+                                },
+                                exceptions: current.browser.agentPermissions?.exceptions || []
+                              }
+                            }
+                          }));
+                        }}
+                      >
+                        <option value="require_approval">需要批准</option>
+                        <option value="always_allow">始终允许</option>
+                        <option value="deny">拒绝</option>
+                      </select>
+                    </label>
+                  ))}
+                  <div className="mcp-server-list" style={{ marginTop: 12 }}>
+                    {(desktopPreferences.browser.agentPermissions?.exceptions || []).map((row, index) => (
+                      <article key={`${row.origin}-${index}`} className="mcp-server-item enabled">
+                        <div className="mcp-server-main">
+                          <label className="settings-field">
+                            <span>Origin</span>
+                            <input
+                              value={row.origin}
+                              onChange={(event) => {
+                                const origin = event.target.value;
+                                setDesktopPreferences((current) => {
+                                  const exceptions = [...(current.browser.agentPermissions?.exceptions || [])];
+                                  exceptions[index] = { ...exceptions[index], origin };
+                                  return {
+                                    ...current,
+                                    browser: {
+                                      ...current.browser,
+                                      agentPermissions: {
+                                        defaults: current.browser.agentPermissions?.defaults || {
+                                          browse: "require_approval",
+                                          download: "require_approval",
+                                          upload: "require_approval"
+                                        },
+                                        exceptions
+                                      }
+                                    }
+                                  };
+                                });
+                              }}
+                            />
+                          </label>
+                          {(["browse", "download", "upload"] as const).map((action) => (
+                            <label key={action} className="settings-field">
+                              <span>{action === "browse" ? "浏览" : action === "download" ? "下载" : "上传"}</span>
+                              <select
+                                value={row[action]}
+                                onChange={(event) => {
+                                  const value = event.target.value === "always_allow" || event.target.value === "deny"
+                                    ? event.target.value
+                                    : "require_approval";
+                                  setDesktopPreferences((current) => {
+                                    const exceptions = [...(current.browser.agentPermissions?.exceptions || [])];
+                                    exceptions[index] = { ...exceptions[index], [action]: value };
+                                    return {
+                                      ...current,
+                                      browser: {
+                                        ...current.browser,
+                                        agentPermissions: {
+                                          defaults: current.browser.agentPermissions?.defaults || {
+                                            browse: "require_approval",
+                                            download: "require_approval",
+                                            upload: "require_approval"
+                                          },
+                                          exceptions
+                                        }
+                                      }
+                                    };
+                                  });
+                                }}
+                              >
+                                <option value="require_approval">需要批准</option>
+                                <option value="always_allow">始终允许</option>
+                                <option value="deny">拒绝</option>
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mcp-server-actions">
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => setDesktopPreferences((current) => ({
+                              ...current,
+                              browser: {
+                                ...current.browser,
+                                agentPermissions: {
+                                  defaults: current.browser.agentPermissions?.defaults || {
+                                    browse: "require_approval",
+                                    download: "require_approval",
+                                    upload: "require_approval"
+                                  },
+                                  exceptions: (current.browser.agentPermissions?.exceptions || []).filter((_, i) => i !== index)
+                                }
+                              }
+                            }))}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      onClick={() => setDesktopPreferences((current) => ({
+                        ...current,
+                        browser: {
+                          ...current.browser,
+                          agentPermissions: {
+                            defaults: current.browser.agentPermissions?.defaults || {
+                              browse: "require_approval",
+                              download: "require_approval",
+                              upload: "require_approval"
+                            },
+                            exceptions: [
+                              ...(current.browser.agentPermissions?.exceptions || []),
+                              {
+                                origin: "http://127.0.0.1:3000",
+                                browse: "always_allow",
+                                download: "require_approval",
+                                upload: "require_approval"
+                              }
+                            ]
+                          }
+                        }
+                      }))}
+                    >
+                      + 添加例外
+                    </button>
+                  </div>
+                </section>
+                <section className="settings-card">
+                  <h4>开发者模式</h4>
+                  <div className="settings-preference-list">
+                    <button type="button" onClick={() => setDesktopPreferences((current) => ({ ...current, browser: { ...current.browser, fullCdpAccess: !current.browser.fullCdpAccess } }))}>
+                      <span>启用完整 CDP 访问权限（风险升高）</span>
+                      <SettingsSwitch enabled={Boolean(desktopPreferences.browser.fullCdpAccess)} />
+                    </button>
+                  </div>
+                  <p className="subtle">完整 Chrome DevTools Protocol 可检查敏感浏览器内部状态；默认关闭。</p>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      disabled={!api?.getBrowserCdpAccess}
+                      onClick={async () => {
+                        const status = await api?.getBrowserCdpAccess?.();
+                        setChatStatus(status?.detail || "CDP 状态未知");
+                      }}
+                    >
+                      查看 CDP 状态
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!api?.probeBrowserSiteTools}
+                      onClick={async () => {
+                        const result = await api?.probeBrowserSiteTools?.();
+                        setChatStatus(result?.detail || "站点工具探测完成");
+                      }}
+                    >
+                      探测站点工具
+                    </button>
                   </div>
                 </section>
               </>

@@ -245,6 +245,12 @@ export interface AutomationSpec {
   title: string;
   status: "idle" | "scheduled" | "running" | "paused";
   trigger: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
   workspaceId?: string;
   threadId?: string;
   action?: "workspace_scan" | "git_status" | "error_remediation";
@@ -312,6 +318,11 @@ export interface ComposerAttachment {
   name: string;
   path: string;
   url: string;
+  /** Original user-selected path when known (copied or local-linked). */
+  sourcePath?: string;
+  /** copied = managed app storage; local = referenced in place without whole-file copy. */
+  linkMode?: "copied" | "local";
+  sizeBytes?: number;
 }
 
 export interface OpenComposerAttachmentInput {
@@ -358,6 +369,7 @@ export type RespondApprovalInput = boolean | {
   approved: boolean;
   requestId?: string;
   approvalId?: string;
+  permissionMode?: "full";
 };
 
 export interface ModelChatMessageInput {
@@ -632,10 +644,33 @@ export interface DesktopPreferences {
   shortcuts: Record<string, string>;
   worktree: { defaultIsolated: boolean; keepArchived: boolean; rootDir: string };
   browser: {
+    enabled: boolean;
     autoOpenPreview: boolean;
     preserveTabs: boolean;
     highResScreenshots: boolean;
     previewUrl: string;
+    openWebLinksIn: "in-app-browser" | "system";
+    openLocalLinksIn: "in-app-browser" | "system";
+    showFullUrl: boolean;
+    annotatedScreenshots: "always" | "ask" | "never";
+    downloadDir: string;
+    askDownloadPath: boolean;
+    historyAccess: "always_ask" | "allow" | "deny";
+    siteToolsEnabled: boolean;
+    agentPermissions: {
+      defaults: {
+        browse: "require_approval" | "always_allow" | "deny";
+        download: "require_approval" | "always_allow" | "deny";
+        upload: "require_approval" | "always_allow" | "deny";
+      };
+      exceptions: Array<{
+        origin: string;
+        browse: "require_approval" | "always_allow" | "deny";
+        download: "require_approval" | "always_allow" | "deny";
+        upload: "require_approval" | "always_allow" | "deny";
+      }>;
+    };
+    fullCdpAccess: boolean;
   };
   /**
    * Skill market install policy.
@@ -645,6 +680,18 @@ export interface DesktopPreferences {
   market: {
     directClawhubAllowed: boolean;
   };
+  /**
+   * Last opened BRAIN scene workspace.
+   * Empty string means unset — fall back to localStorage / default `explore`.
+   */
+  brain: {
+    selectedWorkspaceKey: string;
+  };
+  /**
+   * Start the desktop app when the OS user session starts.
+   * Missing saved values normalize to true.
+   */
+  launchAtLogin: boolean;
 }
 
 export interface McpServerConfig {
@@ -806,9 +853,19 @@ export const desktopIpcChannels = {
   auth: {
     getStatus: "phase1:get-auth-status",
     getBillingSubscription: "phase1:get-billing-subscription",
+    getSubscriptionCatalog: "phase1:get-subscription-catalog",
+    rechargeWallet: "phase1:recharge-wallet",
+    purchasePlan: "phase1:purchase-plan",
     openWalletPayment: "phase1:open-wallet-payment",
+    setWalletOverageEnabled: "phase1:set-wallet-overage-enabled",
+    redeemCode: "phase1:redeem-code",
+    claimNationalDayGift: "phase1:claim-national-day-gift",
     sendLoginCode: "phase1:send-login-code",
     login: "phase1:login-auth",
+    loadRememberedLogin: "phase1:load-remembered-login",
+    saveRememberedLogin: "phase1:save-remembered-login",
+    clearRememberedLogin: "phase1:clear-remembered-login",
+    loginWithAlipayQr: "phase1:login-with-alipay-qr",
     changePassword: "phase1:change-auth-password",
     changeEmail: "phase1:change-auth-email",
     logout: "phase1:logout-auth"
@@ -828,6 +885,11 @@ export const desktopIpcChannels = {
     approveCandidate: "phase1:learning-approve-candidate",
     rejectCandidate: "phase1:learning-reject-candidate",
     rollbackPrivateSkill: "phase1:learning-rollback-private-skill"
+  },
+  quantMarket: {
+    queryBars: "desktop:quant-market:bars-query",
+    queryOverview: "desktop:quant-market:overview-query",
+    queryScreener: "desktop:quant-market:screener-query"
   },
   plugins: {
     list: "plugins:list",
@@ -852,6 +914,7 @@ export const desktopIpcChannels = {
     installClawHub: "phase1:install-openclaw-skill-clawhub",
     installPath: "phase1:install-openclaw-skill-path",
     selectAndInstall: "phase1:select-install-openclaw-skill",
+    importZipToProject: "phase1:import-openclaw-skill-zip-to-project",
     inspectPath: "phase1:inspect-openclaw-skill-path",
     exportZip: "phase1:export-openclaw-skill-zip",
     uninstallWritingSkills: "phase1:uninstall-writing-skills"
@@ -928,7 +991,20 @@ export const desktopIpcChannels = {
   browser: {
     openPreview: "phase1:open-browser-preview",
     closePreview: "phase1:close-browser-preview",
-    capturePreview: "phase1:capture-browser-preview"
+    capturePreview: "phase1:capture-browser-preview",
+    clearBrowsingData: "phase1:clear-browser-browsing-data",
+    listHistory: "phase1:list-browser-history",
+    removeHistoryEntry: "phase1:remove-browser-history-entry",
+    clearHistory: "phase1:clear-browser-history",
+    selectDownloadDir: "phase1:select-browser-download-dir",
+    listCredentials: "phase1:list-browser-credentials",
+    upsertCredential: "phase1:upsert-browser-credential",
+    removeCredential: "phase1:remove-browser-credential",
+    listContacts: "phase1:list-browser-contacts",
+    upsertContact: "phase1:upsert-browser-contact",
+    removeContact: "phase1:remove-browser-contact",
+    getCdpAccess: "phase1:get-browser-cdp-access",
+    probeSiteTools: "phase1:probe-browser-site-tools"
   },
   mobile: {
     startPairing: "phase1:start-mobile-pairing",
@@ -940,6 +1016,10 @@ export const desktopIpcChannels = {
     assistantActivity: "phase1:assistant-activity",
     modelReasoningDelta: "phase1:model-reasoning-delta",
     snapshotUpdate: "phase1:snapshot-update",
+    quantMarketUpdated: "phase1:quant-market-updated",
+    quantScreenerUpdated: "phase1:quant-screener-updated",
+    quantPortfolioUpdated: "phase1:quant-portfolio-updated",
+    dataWorkspaceUpdated: "phase1:data-workspace-updated",
     openWorkspaceFilePreview: "phase1:open-workspace-file-preview"
   },
   system: {
@@ -960,6 +1040,10 @@ export const desktopIpcChannels = {
   appUpdate: {
     getStatus: "phase1:get-app-update-status",
     start: "phase1:start-app-update",
+    apply: "phase1:apply-app-update",
+    getApplied: "phase1:get-applied-app-update",
+    dismissApplied: "phase1:dismiss-applied-app-update",
+    skipVersion: "phase1:skip-app-update-version",
     verify: "phase1:verify-app-update",
     progress: "phase1:app-update-progress"
   },
@@ -997,6 +1081,12 @@ export const desktopIpcChannels = {
     cancelRequest: "phase1:cancel-model-request",
     guideRequest: "phase1:guide-model-request",
     streamDelta: "phase1:model-stream-delta"
+  },
+  customModels: {
+    list: "phase1:list-custom-model-endpoints",
+    save: "phase1:save-custom-model-endpoint",
+    delete: "phase1:delete-custom-model-endpoint",
+    select: "phase1:select-custom-model-endpoint"
   },
   features: {
     getConfig: "phase1:get-feature-config",
@@ -1084,6 +1174,11 @@ export interface DesktopAuthStatus {
   agreement?: DesktopAgreementConfig;
   last_error?: string;
   last_checked_at?: string;
+  email_code_login_enabled?: boolean;
+  password_login_enabled?: boolean;
+  server_time?: string | null;
+  server_date?: string | null;
+  login_ceremony_enabled?: boolean;
 }
 
 export interface DesktopAuthLoginInput {
@@ -1093,7 +1188,7 @@ export interface DesktopAuthLoginInput {
   captcha?: string;
 }
 
-export interface DesktopAuthSendCodeInput { email: string }
+export interface DesktopAuthSendCodeInput { email?: string; phone?: string }
 export interface DesktopAuthChangePasswordInput { currentPassword: string; newPassword: string }
 export interface DesktopAuthChangeEmailInput { email: string; code: string }
 
@@ -1435,6 +1530,10 @@ export interface DesktopAppUpdateStatus {
   notes?: string;
   mandatory?: boolean;
   downloadUrl?: string;
+  /** True when the package is downloaded and waiting for restart apply. */
+  staged?: boolean;
+  stagedPath?: string;
+  skippedVersion?: string;
   detail: string;
 }
 
@@ -1442,15 +1541,35 @@ export interface DesktopAppUpdateStartResult {
   ok: boolean;
   path?: string;
   detail: string;
+  /** Download finished and staged; user should restart to apply. */
+  staged?: boolean;
+}
+
+export interface DesktopAppUpdateAppliedInfo {
+  fromVersion: string;
+  toVersion: string;
+  notes: string;
+  appliedAt: string;
 }
 
 export interface DesktopAppUpdateProgress {
-  phase: "preparing" | "downloading" | "verifying" | "installing" | "opening" | "done" | "error";
+  phase:
+    | "preparing"
+    | "downloading"
+    | "verifying"
+    | "ready"
+    | "installing"
+    | "opening"
+    | "done"
+    | "success"
+    | "error";
   percent: number;
   detail: string;
   latestVersion?: string;
-  /** Silent in-app path, MSI wizard fallback, or ulit.zip patch apply. */
-  installMode?: "silent" | "wizard" | "patch";
+  currentVersion?: string;
+  notes?: string;
+  /** Silent in-app zip replace (Mac) or Windows installer modes. */
+  installMode?: "silent" | "wizard" | "patch" | "nsis";
   preservesUserData: true;
 }
 
@@ -1536,6 +1655,12 @@ export interface FeatureItemInput {
   action?: string;
   intervalMinutes?: string;
   dailyTime?: string;
+  prompt?: string;
+  schedule?: string;
+  runtime?: string;
+  model?: string;
+  reasoning?: string;
+  rrule?: string;
 }
 
 export interface FeatureConfigPayload {

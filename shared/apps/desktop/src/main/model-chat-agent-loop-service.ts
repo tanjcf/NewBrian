@@ -7,6 +7,7 @@ import {
 } from "./model-chat-step-service.ts";
 import type { PersistedGoalSnapshot } from "./codex-storage.js";
 import { requestedArtifactFormats, requestedArtifactSatisfied, requestedArtifactTargetPath } from "./artifact-request-policy.js";
+import { agentLoopAllowedToolNames } from "./automation-creation-loop-policy.ts";
 import { isGovernmentRevisionPreviewRequest } from "./government-skill-routing.js";
 import { isGovernmentResearchWritingSkill } from "./central-skills.ts";
 import { buildGovernmentRevisionPreview } from "./government-revision-preview.js";
@@ -20,6 +21,8 @@ import {
   hasSubstantiveGovernmentDraftBody,
   isGovernmentDraftClaimWithoutBody
 } from "./government-draft-body.js";
+import { prepareGovernmentPdfContent } from "./government-writing-finalization.ts";
+export { prepareGovernmentPdfContent };
 import {
   buildGovernmentMaxStepsProgressBrief,
   governmentMaxStepsFallbackContent,
@@ -114,25 +117,6 @@ export function buildInvalidRefusalRecoveryInstruction(input: {
   }
   actions.push("不得再次输出“不知道”“还没学习如何回答”“请问其他问题”或同义模板。不要先解释，直接调用所需工具或给出完整答案。");
   return actions.join("");
-}
-
-export function prepareGovernmentPdfContent(content: string, priorAssistantMessages: string[], _sourceText: string) {
-  const candidates = [content, ...priorAssistantMessages]
-    .map((candidate) => String(candidate ?? "").trim())
-    .filter(Boolean);
-  const salutations = ["同志们", "鍚屽織浠"];
-  const selected = candidates.find((candidate) => salutations.some((salutation) => candidate.includes(salutation)) && candidate.replace(/\s+/g, "").length >= 80)
-    ?? candidates[0]
-    ?? "";
-  const salutationOffsets = salutations.map((salutation) => selected.indexOf(salutation)).filter((offset) => offset >= 0);
-  const salutationOffset = salutationOffsets.length ? Math.min(...salutationOffsets) : -1;
-  return (salutationOffset >= 0 ? selected.slice(salutationOffset) : selected)
-    .split(/\n#{1,6}\s*终审结果/u)[0]
-    .replace(/\n*PDF (?:文件)?尚未生成并验证[\s\S]*$/u, "")
-    // Keep structure for the artifact generator, but drop fenced machine blocks and raw HTML.
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/<\/?[^>]+>/g, "")
-    .trim();
 }
 
 interface AgentMessage {
@@ -1071,7 +1055,11 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
       // exploratory material-reading loop bounded so a model cannot burn dozens of steps
       // updating the plan without ever presenting the required outline decision.
       maxSteps: agentLoopStepLimit({ governmentWorkflowEnabled, nativeArtifactRequested }),
-      allowedToolNames: governmentRevisionPreview ? [] : remoteAllowedToolNames,
+      allowedToolNames: agentLoopAllowedToolNames({
+        latestUserRequest: input.latestUserRequest,
+        governmentRevisionPreview,
+        remoteAllowedToolNames
+      }),
       abortController: input.abortController,
       onEvent: (event) => {
         this.dependencies.projectEvent({
@@ -1560,7 +1548,6 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
     if (
       nativeArtifactRequested
       && governmentDeliveryReady
-      && !requestedArtifactSatisfied(input.latestUserRequest, writtenArtifacts)
     ) {
       const title = governmentWorkflowEnabled
         ? "政务写作交付文档"
@@ -1572,64 +1559,73 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
             [input.latestUserRequest, input.modelInput.toolContext ?? ""].join("\n")
           )
         : generatedContent;
-      for (const format of requestedFormats) {
-        const targetPath = requestedArtifactTargetPath(input.latestUserRequest, format, { government: governmentWorkflowEnabled });
-        const createTool = format === "pdf"
-          ? "document.create_pdf"
-          : format === "docx"
-            ? "document.create_docx"
-            : "artifact.create";
-        const createArgs = format === "pdf" || format === "docx"
-          ? { targetPath, title, content: artifactContent }
-          : { targetPath, format, title, content: artifactContent };
-        const createResult = await input.runtime.invokeTool(createTool, createArgs, {
-          permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
-        });
-        const createEvent = { type: "tool_result", payload: { callId: `native-${format}-${Date.now()}`, name: createTool, result: createResult } };
-        input.runtime.sessionMachine.events.push(createEvent);
-        this.dependencies.projectEvent({
-          requestId: input.modelInput.requestId, workspacePath: input.workspacePath, writtenArtifacts,
-          getRuns: () => (input.runtime.getSnapshot() as { runs?: unknown }).runs,
-          emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
-        }, createEvent);
-        flushDurableBoundary();
-        if (!createResult.ok) {
-          const failEvent = {
-            type: "tool_result",
-            payload: {
-              callId: `native-${format}-skip-${Date.now()}`,
-              name: createTool,
-              result: {
-                ok: false,
-                output: `Native ${format.toUpperCase()} creation skipped after failure: ${createResult.output ?? "unknown error"}`
-              }
-            }
-          };
-          input.runtime.sessionMachine.events.push(failEvent);
+      // Government: never freeze an opening-only stub. At delivery time overwrite any
+      // earlier stub DOCX/PDF with the best substantive candidate (Codex-style iterate
+      // on disk; deliver when body is ready).
+      const alreadySatisfied = requestedArtifactSatisfied(input.latestUserRequest, writtenArtifacts);
+      const shouldWriteArtifacts = Boolean(String(artifactContent || "").trim()) && (
+        !alreadySatisfied || governmentWorkflowEnabled
+      );
+      if (shouldWriteArtifacts) {
+        for (const format of requestedFormats) {
+          const targetPath = requestedArtifactTargetPath(input.latestUserRequest, format, { government: governmentWorkflowEnabled });
+          const createTool = format === "pdf"
+            ? "document.create_pdf"
+            : format === "docx"
+              ? "document.create_docx"
+              : "artifact.create";
+          const createArgs = format === "pdf" || format === "docx"
+            ? { targetPath, title, content: artifactContent }
+            : { targetPath, format, title, content: artifactContent };
+          const createResult = await input.runtime.invokeTool(createTool, createArgs, {
+            permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
+          });
+          const createEvent = { type: "tool_result", payload: { callId: `native-${format}-${Date.now()}`, name: createTool, result: createResult } };
+          input.runtime.sessionMachine.events.push(createEvent);
           this.dependencies.projectEvent({
             requestId: input.modelInput.requestId, workspacePath: input.workspacePath, writtenArtifacts,
             getRuns: () => (input.runtime.getSnapshot() as { runs?: unknown }).runs,
             emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
-          }, failEvent);
+          }, createEvent);
           flushDurableBoundary();
-          continue;
-        }
-        const inspectResult = await input.runtime.invokeTool("artifact.inspect", { targetPath }, {
-          permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
-        });
-        const inspectEvent = { type: "tool_result", payload: { callId: `native-${format}-inspect-${Date.now()}`, name: "artifact.inspect", result: inspectResult } };
-        input.runtime.sessionMachine.events.push(inspectEvent);
-        this.dependencies.projectEvent({
-          requestId: input.modelInput.requestId, workspacePath: input.workspacePath, writtenArtifacts,
-          getRuns: () => (input.runtime.getSnapshot() as { runs?: unknown }).runs,
-          emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
-        }, inspectEvent);
-        flushDurableBoundary();
-        if (!inspectResult.ok || !inspectResult.artifact?.size) {
-          continue;
-        }
-        if (!writtenArtifacts.some((artifact) => artifact.path === inspectResult.artifact?.path)) {
-          writtenArtifacts.push({ path: inspectResult.artifact.path, size: inspectResult.artifact.size, changeType: createResult.artifact?.changeType ?? "created" });
+          if (!createResult.ok) {
+            const failEvent = {
+              type: "tool_result",
+              payload: {
+                callId: `native-${format}-skip-${Date.now()}`,
+                name: createTool,
+                result: {
+                  ok: false,
+                  output: `Native ${format.toUpperCase()} creation skipped after failure: ${createResult.output ?? "unknown error"}`
+                }
+              }
+            };
+            input.runtime.sessionMachine.events.push(failEvent);
+            this.dependencies.projectEvent({
+              requestId: input.modelInput.requestId, workspacePath: input.workspacePath, writtenArtifacts,
+              getRuns: () => (input.runtime.getSnapshot() as { runs?: unknown }).runs,
+              emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
+            }, failEvent);
+            flushDurableBoundary();
+            continue;
+          }
+          const inspectResult = await input.runtime.invokeTool("artifact.inspect", { targetPath }, {
+            permissionMode: input.modelInput.permissionMode === "full" ? "full" : "agent", approved: true
+          });
+          const inspectEvent = { type: "tool_result", payload: { callId: `native-${format}-inspect-${Date.now()}`, name: "artifact.inspect", result: inspectResult } };
+          input.runtime.sessionMachine.events.push(inspectEvent);
+          this.dependencies.projectEvent({
+            requestId: input.modelInput.requestId, workspacePath: input.workspacePath, writtenArtifacts,
+            getRuns: () => (input.runtime.getSnapshot() as { runs?: unknown }).runs,
+            emitReasoningSummary: input.emitReasoningSummary, publishActivity: input.publishActivity
+          }, inspectEvent);
+          flushDurableBoundary();
+          if (!inspectResult.ok || !inspectResult.artifact?.size) {
+            continue;
+          }
+          if (!writtenArtifacts.some((artifact) => artifact.path === inspectResult.artifact?.path)) {
+            writtenArtifacts.push({ path: inspectResult.artifact.path, size: inspectResult.artifact.size, changeType: createResult.artifact?.changeType ?? "created" });
+          }
         }
       }
       if (governmentWorkflowEnabled) {
@@ -1656,7 +1652,7 @@ export class ModelChatAgentLoopService<TRuntimeSnapshot, TResult> {
         .filter((event: { type?: string }) => event?.type === "tool_result")
         .map((event: { payload?: { result?: unknown; name?: string } }) => {
           const name = String(event.payload?.name || "");
-          if (!name.includes("search") && !name.includes("news_search")) return "";
+          if (!name.includes("search")) return "";
           const result = event.payload?.result as { content?: Array<{ text?: string }>; details?: unknown; output?: string } | undefined;
           if (result?.details) return JSON.stringify(result.details);
           if (Array.isArray(result?.content) && result.content[0]?.text) return String(result.content[0].text);

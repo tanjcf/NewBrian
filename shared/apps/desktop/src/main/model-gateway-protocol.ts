@@ -39,6 +39,10 @@ export function buildModelRequestPayload(input: {
   disableResponseStorage: boolean;
   reasoningEffort: "low" | "medium" | "high" | "xhigh";
   enableThinking?: boolean;
+  /** When false, omit OpenAI `store` so Tencent MaaS / Hunyuan do not reject the body. */
+  includeStore?: boolean;
+  /** When false, omit chat `thinking` so flash / non-thinking MaaS models do not 400. */
+  includeThinkingField?: boolean;
   tools: unknown[];
 }) {
   if (input.wireApi === "responses") {
@@ -46,7 +50,7 @@ export function buildModelRequestPayload(input: {
       model: input.model,
       stream: true,
       input: input.upstreamMessages,
-      store: !input.disableResponseStorage,
+      ...(input.includeStore === false ? {} : { store: !input.disableResponseStorage }),
       // Omit reasoning on tool continuations that cannot round-trip opaque traces.
       ...(input.enableThinking !== false
         ? { reasoning: { effort: input.reasoningEffort, summary: "auto" as const } }
@@ -54,18 +58,17 @@ export function buildModelRequestPayload(input: {
       ...(input.tools.length ? { tools: input.tools } : {})
     };
   }
+  const includeThinkingField = input.includeThinkingField !== false;
   return {
     model: input.model,
     stream: true,
     messages: input.upstreamMessages,
     ...(input.enableThinking
-      ? { reasoning_effort: input.reasoningEffort, thinking: { type: "enabled" as const } }
-      // If a prior tool-call trace is unavailable, explicitly disable provider
-      // thinking for this continuation. Leaving this implicit makes DeepSeek /
-      // Qwen gateways enter thinking mode and then reject the request because
-      // an opaque reasoning_content cannot be reconstructed from persisted UI
-      // summaries.
-      : { temperature: 0.7, thinking: { type: "disabled" as const } }),
+      ? { reasoning_effort: input.reasoningEffort, ...(includeThinkingField ? { thinking: { type: "enabled" as const } } : {}) }
+      : {
+          temperature: 0.7,
+          ...(includeThinkingField ? { thinking: { type: "disabled" as const } } : {})
+        }),
     ...(input.tools.length ? { tools: input.tools } : {})
   };
 }
@@ -86,11 +89,39 @@ export function requiresThinkingWireProtocol(input: {
   candidateModels?: Array<{ model?: string; provider?: string }>;
 }) {
   const model = String(input.model ?? "").trim();
+  const routed = String(input.routedModel ?? "").trim();
   if (THINKING_MODEL_IDENTITY.test(`${input.provider ?? ""} ${model}`)) return true;
-  if (THINKING_MODEL_IDENTITY.test(String(input.routedModel ?? ""))) return true;
+  if (THINKING_MODEL_IDENTITY.test(routed)) return true;
   if (model.toLowerCase() !== "auto") return false;
+  // Auto keeps model=auto on the wire. If spring-app already named a concrete
+  // target (hunyuan / flash / DeepSeek), that name decides thinking — scanning
+  // the whole catalog would attach `reasoning` to MaaS models that reject it.
+  if (routed) return false;
   return (input.candidateModels ?? []).some((candidate) =>
     THINKING_MODEL_IDENTITY.test(`${candidate?.provider ?? ""} ${candidate?.model ?? ""}`));
+}
+
+function gatewayRejectionText(payload: unknown, rawText = "") {
+  let serialized = "";
+  try {
+    serialized = payload === null || payload === undefined ? "" : JSON.stringify(payload) ?? "";
+  } catch {
+    serialized = "";
+  }
+  return `${rawText} ${serialized}`;
+}
+
+/** Tencent MaaS / Hunyuan rejects unknown OpenAI-only fields such as `reasoning` or `store`. */
+export function isUnsupportedRequestShapeGatewayRejection(status: number, payload: unknown, rawText = "") {
+  if (status !== 400) return false;
+  return /rejected by an internal MaaS component|check the request body, required fields, and request format/i.test(
+    gatewayRejectionText(payload, rawText)
+  );
+}
+
+export function shouldRetryModelRequestWithoutThinking(status: number, payload: unknown, rawText = "") {
+  return isThinkingContextGatewayRejection(status, payload, rawText)
+    || isUnsupportedRequestShapeGatewayRejection(status, payload, rawText);
 }
 
 /**
@@ -100,13 +131,7 @@ export function requiresThinkingWireProtocol(input: {
  */
 export function isThinkingContextGatewayRejection(status: number, payload: unknown, rawText = "") {
   if (status !== 400) return false;
-  let serialized = "";
-  try {
-    serialized = payload === null || payload === undefined ? "" : JSON.stringify(payload) ?? "";
-  } catch {
-    serialized = "";
-  }
-  const text = `${rawText} ${serialized}`;
+  const text = gatewayRejectionText(payload, rawText);
   return /reasoning_content/i.test(text) && /passed back|thinking mode/i.test(text);
 }
 

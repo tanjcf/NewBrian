@@ -210,3 +210,19 @@ test("project local skills can auto-wake even when Skill 自动唤醒 is off", (
   assert.ok(selection.selectedLocalSkillNames.includes("market-brief"), selection.selectedLocalSkillNames.join(","));
   assert.equal(selection.governmentSkillEnabled, false);
 });
+
+test("a greeting still loads the global companion memory when that skill is installed", () => {
+  const selection = selectModelChatSkills({
+    requestedSkillNames: [],
+    persistedSkillNames: [],
+    localSkillDescriptors: [
+      ...localSkills,
+      { name: "companion-memory", description: "长期设定" }
+    ],
+    heuristicSkills: [],
+    hasActiveGoal: false,
+    autoSkillEnabled: false,
+    latestUserRequest: "你好"
+  });
+  assert.deepEqual(selection.selectedLocalSkillNames, ["companion-memory"]);
+});

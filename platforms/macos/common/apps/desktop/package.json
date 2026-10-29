@@ -13,8 +13,8 @@
     "prepare:package-resources": "node build/prepare-package-resources.cjs",
     "build:rust-core": "node ../../scripts/build-rust-core.mjs",
     "package:mac": "pnpm run package:mac:arm64",
-    "package:mac:arm64": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --arm64",
-    "package:mac:intel": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dmg zip --x64",
+    "package:mac:arm64": "node build/package-mac-channel.cjs --channel production --arch arm64",
+    "package:mac:intel": "node build/package-mac-channel.cjs --channel production --arch x64",
     "package:mac:dir": "pnpm run prepare:package-resources && pnpm run build:rust-core && pnpm run build && node node_modules/electron-builder/cli.js --mac dir",
     "package:mac:arm64:test": "node build/package-mac-channel.cjs --channel test --arch arm64",
     "package:mac:intel:test": "node build/package-mac-channel.cjs --channel test --arch x64",
@@ -45,14 +45,15 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
-    "saxes": "5.0.1"
+    "saxes": "5.0.1",
+    "yaml": "2.8.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "electron": "^35.0.0",
+    "electron": "41.10.7",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
     "typescript": "^5.8.0",
@@ -106,6 +107,10 @@
       {
         "from": "build/rust-core/brain-core",
         "to": "brain-core/brain-core"
+      },
+      {
+        "from": "build/rust-core/brain-core-release.json",
+        "to": "brain-core/brain-core-release.json"
       }
     ],
     "mac": {

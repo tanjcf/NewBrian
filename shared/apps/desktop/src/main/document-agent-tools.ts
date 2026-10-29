@@ -195,19 +195,27 @@ function wrapDocumentTool(runtime: ToolRuntime, name: string, deps: DocumentAgen
     inputSchema: meta?.inputSchema || { type: "object", additionalProperties: true }
   }, async (input, context) => {
     const prepared = prepareDocumentToolInput(name, input, prior.validate);
-    const result = await prior.execute!(prepared, { ...(context || {}), workspacePath: deps.projectRoot });
+    const notifyArtifactPath = async (artifactPath) => {
+      if (!artifactPath) return;
+      try {
+        await persistDocumentOutput(deps, artifactPath);
+        notify(deps, `${name}:${artifactPath}`);
+      } catch {
+        // Keep the original tool success; registration can be repaired by sync.
+      }
+    };
+    const result = await prior.execute!(prepared, {
+      ...(context || {}),
+      workspacePath: deps.projectRoot,
+      onArtifactProgress: async (progress) => {
+        await notifyArtifactPath(text(progress?.path));
+      }
+    });
     if (result?.ok === true) {
       const artifactPath = text((result as { artifact?: { path?: unknown } }).artifact?.path)
         || text(prepared.targetPath)
         || text(input.targetPath);
-      if (artifactPath) {
-        try {
-          await persistDocumentOutput(deps, artifactPath);
-          notify(deps, `${name}:${artifactPath}`);
-        } catch {
-          // Keep the original tool success; registration can be repaired by sync.
-        }
-      }
+      await notifyArtifactPath(artifactPath);
     }
     return result as { ok: boolean; output?: string; [key: string]: unknown };
   });

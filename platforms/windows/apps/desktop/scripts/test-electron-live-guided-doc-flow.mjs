@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const email = process.env.NEWBRAIN_E2E_LOGIN_EMAIL?.trim();
 const password = process.env.NEWBRAIN_E2E_LOGIN_PASSWORD?.trim();
@@ -124,10 +125,10 @@ async function screenshot(name) {
 
 function setInput(selector, value) {
   return evaluate(`(() => {
-    const input = document.querySelector(${JSON.stringify(selector)});
+    const input = document.querySelector(${embedJsValue(selector)});
     if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return false;
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${JSON.stringify(value)});
+    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${embedJsValue(value)});
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
@@ -192,13 +193,13 @@ try {
   await waitFor("project name dialog", `Boolean(document.querySelector(".project-name-dialog input"))`);
   assert.equal(await setInput(".project-name-dialog input", projectName), true);
   await evaluate(`document.querySelector(".project-name-dialog")?.requestSubmit()`);
-  await waitFor("created project", `[...document.querySelectorAll(".project-group")].some((item) => item.textContent?.includes(${JSON.stringify(projectName)}))`);
+  await waitFor("created project", `[...document.querySelectorAll(".project-group")].some((item) => item.textContent?.includes(${embedJsValue(projectName)}))`);
   evidence.screenshots.push(await screenshot("02-project-created"));
   evidence.steps.push("project-created");
   await visiblePause();
 
   await evaluate(`(() => {
-    const project = [...document.querySelectorAll(".project-group")].find((item) => item.textContent?.includes(${JSON.stringify(projectName)}));
+    const project = [...document.querySelectorAll(".project-group")].find((item) => item.textContent?.includes(${embedJsValue(projectName)}));
     project?.querySelector('[data-testid="project-new-thread-button"]')?.click();
     return Boolean(project);
   })()`);
@@ -253,14 +254,13 @@ try {
   evidence.steps.push("doc-request-running");
 
   await sendMessage("hello你好！");
-  await waitFor("queued quote", `Boolean(document.querySelector(".composer-queued-draft .queued-draft-guide"))`, 30_000);
-  assert.match(await evaluate(`document.querySelector(".queued-draft-text")?.textContent || ""`), /hello你好/);
-  assert.match(await evaluate(`document.querySelector(".queued-draft-guide")?.textContent || ""`), /引用/);
+  await waitFor("queued item", `Boolean(document.querySelector(".composer-queue-item"))`, 30_000);
+  assert.match(await evaluate(`document.querySelector(".composer-queue-item .composer-queue-text")?.textContent || ""`), /hello你好/);
   evidence.screenshots.push(await screenshot("05-guidance-queued"));
   await visiblePause();
-  await evaluate(`document.querySelector(".composer-queued-draft .queued-draft-guide")?.click()`);
-  await waitFor("guidance accepted", `!document.querySelector(".composer-queued-draft")`, 30_000);
-  evidence.steps.push("quote-clicked");
+  await evaluate(`document.querySelector('.composer-queue-item button[aria-label="立即发送"]')?.click()`);
+  await waitFor("guidance accepted", `!document.querySelector(".composer-queue")`, 30_000);
+  evidence.steps.push("send-now-clicked");
 
   await waitForTurnComplete(assistantCount, 240_000);
   evidence.steps.push("doc-and-guidance-completed");
@@ -276,7 +276,7 @@ try {
 
   const state = await evaluate(`(async () => {
     const catalog = await window.newbrain.listWorkspaces();
-    const workspace = catalog.find((item) => item.name === ${JSON.stringify(projectName)});
+    const workspace = catalog.find((item) => item.name === ${embedJsValue(projectName)});
     const snapshot = await window.newbrain.getSnapshot();
     return {
       workspacePath: workspace?.path || "",

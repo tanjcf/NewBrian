@@ -17,6 +17,7 @@ test("runner parses on Windows and backs up before installing without interpolat
     });
     assert.ok(script.indexOf("WaitForExit") < script.indexOf("robocopy.exe"));
     assert.ok(script.indexOf("robocopy.exe") < script.indexOf("& msiexec.exe"));
+    assert.match(script, /Stop-Process -Id \$config\.processId -Force/);
     assert.match(script, /\$LASTEXITCODE -ge 8/);
     assert.match(script, /\$LASTEXITCODE -notin @\(0, 3010\)/);
     assert.match(script, /NEWBRAIN_UPDATE_RUNNER=1/);

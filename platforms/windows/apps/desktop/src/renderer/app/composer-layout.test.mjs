@@ -76,9 +76,15 @@ test("delegated-agent collaboration uses a compact status strip and a separate d
 
 test("queued composer drafts stay scoped to their owning thread", () => {
   assert.match(appSource, /threadId:\s*currentThread\?\.id \|\| currentThreadId/);
-  assert.match(appSource, /queuedComposerDraftRef\.current\?\.threadId !== targetThreadId/);
-  assert.match(workspaceSource, /queuedComposerDraft\?\.threadId === selectedThread\?\.id/);
-  assert.match(workspaceSource, /\{visibleQueuedComposerDraft \? \(/);
+  assert.match(appSource, /enqueueComposerDraft\(queuedComposerDraftsRef\.current, nextDraft\)/);
+  assert.match(appSource, /selectedThreadIdRef\.current !== threadId\) return;[\s\S]*?takeNextComposerQueueItem\(queuedComposerDraftsRef\.current, threadId\)/);
+  assert.match(workspaceSource, /composerQueueForThread\(composerQueue, selectedThread\?\.id\)/);
+  assert.match(workspaceSource, /\{selectedThreadQueue\.length \? \(/);
+});
+
+test("a failed or stopped turn pauses the queue instead of auto-sending", () => {
+  assert.match(appSource, /if \(!awaitingApproval && !requestFailed\) \{\s*dispatchNextQueuedDraft\(targetThreadId\);/);
+  assert.match(workspaceSource, /data-testid="composer-queue-resume"[\s\S]*?onClick=\{resumeComposerQueue\}/);
 });
 
 test("an empty project starts in new-task mode and never activates an empty thread id", () => {
@@ -89,7 +95,7 @@ test("an empty project starts in new-task mode and never activates an empty thre
   assert.match(restoreSelection, /if \(restoredThread\)[\s\S]*?setSelectedThreadId\(restoredThread\.id\);[\s\S]*?else[\s\S]*?setSelectedThreadId\(""\);[\s\S]*?setIsComposingNewThread\(true\);/);
   const modelFinally = appSource.slice(
     appSource.indexOf("if (!awaitingApproval) {", appSource.indexOf("} finally {")),
-    appSource.indexOf("const queuedDraft", appSource.indexOf("} finally {"))
+    appSource.indexOf("dispatchNextQueuedDraft(targetThreadId)", appSource.indexOf("} finally {"))
   );
   assert.equal((modelFinally.match(/if \(targetThreadId && selectedThreadIdRef\.current === targetThreadId\)/g) ?? []).length, 2);
   const removeProjectFlow = workspaceSource.slice(
@@ -121,43 +127,34 @@ test("project and chat add buttons use the same dimensions", () => {
   );
 });
 
-test("a stale guide request continues as the next turn without restarting the app", () => {
-  assert.match(workspaceSource, /result\.code === "request_not_active"/);
-  assert.match(workspaceSource, /releaseInactiveModelRequest\?\.\(requestId, selectedThread\.id\)/);
-  assert.match(workspaceSource, /if \(!requestId\)[\s\S]*askModel\(\{[\s\S]*\.\.\.continuationDraft[\s\S]*question: combined/);
-  assert.match(workspaceSource, /askModel\(\{[\s\S]*\.\.\.continuationDraft[\s\S]*question: combined/);
+test("a stale send-now request continues as the next turn without restarting the app", () => {
+  const sendStart = workspaceSource.indexOf("const sendQueuedComposerItemNow = async");
+  const sendSource = workspaceSource.slice(sendStart, workspaceSource.indexOf("const resumeComposerQueue", sendStart));
+  assert.match(sendSource, /result\.code === "request_not_active"/);
+  assert.match(sendSource, /releaseInactiveModelRequest\?\.\(requestId, threadId\)/);
+  assert.match(sendSource, /if \(!requestId\)[\s\S]*?askModel\(item\)/);
+  assert.match(sendSource, /guideModelRequest\(\{ requestId, message, attachments, delivery: "steer" \}\)/);
 });
 
-test("the running-turn queued action is labeled as quote in the interface", () => {
-  assert.match(
-    workspaceSource,
-    /className="queued-draft-guide"[\s\S]*?>↪ 引用<\/button>/
-  );
-  assert.doesNotMatch(
-    workspaceSource,
-    /className="queued-draft-guide"[\s\S]*?>↪ 引导<\/button>/
-  );
-  assert.match(workspaceSource, /quoteQueuedComposerDraftIntoInput/);
-  assert.match(workspaceSource, /combineComposerQuote/);
-  assert.match(workspaceSource, /questionRef\?\.current/);
+test("queued items render as a list with send-now, edit and remove actions", () => {
+  assert.match(workspaceSource, /className="composer-queue-list"/);
+  assert.match(workspaceSource, /aria-label="立即发送"[\s\S]*?sendQueuedComposerItemNow\(item\)/);
+  assert.match(workspaceSource, /aria-label="编辑排队消息"[\s\S]*?editQueuedComposerItem\(item\)/);
+  assert.match(workspaceSource, /aria-label="删除排队消息"[\s\S]*?removeQueuedComposerItem\(item\)/);
+  assert.doesNotMatch(workspaceSource, /↪ 引用/);
   assert.match(workspaceSource, /Append onto whatever the user already typed/);
-  assert.match(workspaceSource, /guideModelRequest\(\{[\s\S]*requestId[\s\S]*message:[\s\S]*attachments:[\s\S]*delivery: "steer"/);
-  assert.match(workspaceSource, /guideQueuedComposerDraft\("steer"\)/);
-  assert.match(workspaceSource, /guideQueuedComposerDraft\("followup"\)/);
-  assert.match(workspaceSource, /guideQueuedComposerDraft\("interrupt"\)/);
+  assert.match(styles, /\.composer-queue\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*100%;/s);
+  assert.match(styles, /\.composer-queue-list\s*\{[^}]*max-height:\s*144px;[^}]*overflow-y:\s*auto;/s);
   assert.match(workspaceSource, /composer-card--expanded/);
   assert.match(styles, /\.composer-card\.composer-card--expanded/);
 });
 
-test("quote dispatches the queued message instead of dumping it back into the composer", () => {
-  const guideStart = workspaceSource.indexOf("const guideQueuedComposerDraft = async");
-  const guideEnd = workspaceSource.indexOf("const parseDiffPreviewRows", guideStart);
-  const guideSource = workspaceSource.slice(guideStart, guideEnd);
-  assert.match(guideSource, /clearComposerAfterDispatch/);
-  assert.match(guideSource, /restoreQueuedDraft/);
-  assert.match(guideSource, /已保持排队/);
-  assert.doesNotMatch(guideSource, /Keep the combined text visible after steering/);
-  assert.doesNotMatch(guideSource, /已将引用内容追加到输入框/);
+test("send-now leaves the queue only after a successful dispatch", () => {
+  const sendStart = workspaceSource.indexOf("const sendQueuedComposerItemNow = async");
+  const sendSource = workspaceSource.slice(sendStart, workspaceSource.indexOf("const resumeComposerQueue", sendStart));
+  assert.match(sendSource, /requeueComposerItemFirst\(readComposerQueue\(\), item\)/);
+  assert.match(sendSource, /已保持排队/);
+  assert.doesNotMatch(sendSource, /combineComposerQuote/);
 });
 
 test("document previews open beside the mounted conversation and close without navigation", () => {
@@ -209,7 +206,7 @@ test("file changes use Codex-style progressive disclosure and preserve per-threa
 test("execution details remain transient and collapse when a model turn completes", () => {
   assert.match(workspaceSource, /wasAskingModelRef\.current && !isAskingModel/);
   assert.match(workspaceSource, /setExpandedAssistantTurns\(new Set\(\)\)/);
-  assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);
+  assert.match(workspaceSource, /reasoning-summary-live/);
   assert.match(workspaceSource, /data-testid="reasoning-process-list"/);
   assert.match(workspaceSource, /sanitizeVisibleModelContent\(turn\.assistant\.content\)/);
 });
@@ -220,7 +217,7 @@ test("the active turn keeps the user prompt visible and expands live reasoning c
   assert.match(workspaceSource, /manuallyCollapsedActivityGroupsRef/);
   assert.match(workspaceSource, /setExpandedActivityGroups\(\(current\)[\s\S]*liveGroupKey/);
   assert.match(workspaceSource, /setExpandedCommandRuns\(\(current\)[\s\S]*runKeys/);
-  assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);
+  assert.match(workspaceSource, /reasoning-summary-live/);
   assert.match(styles, /\.answer-group\.streaming \.assistant-live-progress\s*\{[^}]*order:\s*1;/s);
   assert.match(styles, /\.answer-group\.streaming \.assistant-block\s*\{[^}]*order:\s*2;/s);
   assert.match(workspaceSource, /sanitizeVisibleModelContent\(activeStreamContent/);
@@ -292,15 +289,15 @@ test("new asks scope live activities to the active request without discarding hi
 
 test("composer model menu exposes Auto as a selectable route", () => {
   assert.match(workspaceSource, /\{ id: "auto", label: "Auto" \}/);
-  assert.match(workspaceSource, /modelConfig\.model\.toLowerCase\(\) === "auto"/);
+  assert.match(workspaceSource, /String\(modelConfig\.model \|\| ""\)\.toLowerCase\(\) === "auto"/);
 });
 
 test("BRAIN conversation composer never uses new-chat absolute dock", () => {
   assert.match(
     workspaceSource,
-    /composer-area\$\{isNewChatMode && !isBrainConversationSelection \? " new-chat-composer" : ""\}\$\{isBrainConversationSelection \? " brain-chat-composer" : ""\}/
+    /composer-area\$\{isNewChatMode \? " new-chat-composer" : ""\}\$\{!isNewChatMode && isBrainConversationSelection \? " brain-chat-composer" : ""\}/
   );
-  assert.match(workspaceSource, /setIsComposingNewThread\(false\);[\s\S]*selectedBrainConversationId, selectedBrainProjectId, brainConversations, setIsComposingNewThread/);
+  assert.match(workspaceSource, /setIsComposingNewThread\(false\);[\s\S]*selectedBrainConversationId, selectedBrainProjectId, selectedSidebarRow, brainConversations[\s\S]*setIsComposingNewThread/);
   assert.match(
     styles,
     /\.brain-chat-composer-slot \.composer-area\.new-chat-composer\s*\{[^}]*position:\s*static;[^}]*transform:\s*none;/s
@@ -309,7 +306,7 @@ test("BRAIN conversation composer never uses new-chat absolute dock", () => {
 
 test("live thinking panel prints Chinese process text in the marked reasoning area", () => {
   assert.match(workspaceSource, /function buildLiveReasoningProcess/);
-  assert.match(workspaceSource, /data-testid="reasoning-summary-live"/);
+  assert.match(workspaceSource, /reasoning-summary-live/);
   assert.match(workspaceSource, /Analyzing the request, goals, constraints, and current context/);
   assert.match(workspaceSource, /buildLiveReasoningProcess\(/);
 });
@@ -317,10 +314,10 @@ test("live thinking panel prints Chinese process text in the marked reasoning ar
 test("sidebar account footer keeps update and settings buttons visible", () => {
   assert.match(workspaceSource, /className="sidebar-account-actions"/);
   assert.match(workspaceSource, /className="sidebar-account-update"/);
-  assert.match(workspaceSource, /className="sidebar-account-settings"/);
+  assert.match(workspaceSource, /sidebar-account-settings/);
   assert.match(
     styles,
-    /\.codex-sidebar \.sidebar-account-card\s*\{[^}]*grid-template-columns:\s*36px minmax\(0,\s*1fr\) auto;/s
+    /\.codex-sidebar \.sidebar-account-card\s*\{[^}]*grid-template-columns:\s*36px minmax\(0,\s*1fr\) max-content;/s
   );
   assert.match(
     styles,

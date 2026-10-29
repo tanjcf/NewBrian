@@ -21,6 +21,9 @@ interface SkillEntry {
 interface DetachedProcessOptions {
   cwd?: string;
   windowsHide?: boolean;
+  shell?: boolean;
+  env?: NodeJS.ProcessEnv;
+  windowsVerbatimArguments?: boolean;
 }
 
 export async function spawnDetachedAndConfirm(
@@ -32,9 +35,12 @@ export async function spawnDetachedAndConfirm(
     let settled = false;
     const child = spawn(command, args, {
       cwd: options.cwd,
+      env: options.env,
       detached: true,
       stdio: "ignore",
-      windowsHide: options.windowsHide ?? true
+      windowsHide: options.windowsHide ?? true,
+      shell: options.shell === true,
+      windowsVerbatimArguments: options.windowsVerbatimArguments === true
     });
     const finish = (error?: Error) => {
       if (settled) return;

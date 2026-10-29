@@ -34,9 +34,12 @@ import {
   applyWorkspacePatch,
   editWorkspaceFile,
   readWorkspaceFile,
+  repairMojibakeTree,
+  repairOutputPath,
   resolveSafeWorkspacePath
 } from "./workspace-fs.js";
 import {
+  clampYieldTimeMs,
   handleShellProcessAction,
   startShellProcess
 } from "./shell-process-registry.js";
@@ -484,7 +487,8 @@ function requireCommand(input) {
   const yieldMs = input?.yieldMs === undefined || input?.yieldMs === null
     ? undefined
     : Number(input.yieldMs);
-  return { command, workdir, background, yieldMs };
+  const tty = input?.tty === true;
+  return { command, workdir, background, yieldMs, tty };
 }
 
 function requireReadInput(input) {
@@ -815,7 +819,7 @@ export function createBuiltinToolRegistry() {
     .register({
       name: "artifact.create",
       title: "Create office artifact",
-      description: "Create a real PDF, PowerPoint, HTML slides, Excel, or Word file inside the workspace. For government writing PDF/DOCX prefer document.create_pdf or document.create_docx with structured sections. Required: targetPath under outputs/. format must be pdf|pptx|html|xlsx|docx (never page size a4). For presentations include chart (统计图), timeline/process (阶段图), and image (展示图) slides—not text-only decks. chart uses categories+values; phases for stage diagrams; imagePath from image_generate or imagePlaceholder. Pass plain text/Markdown only—never HTML/XML document dumps.",
+      description: "Create a real PDF, PowerPoint, HTML slides, Excel, or Word file inside the workspace. For government writing PDF/DOCX prefer document.create_pdf or document.create_docx with structured sections. Required: targetPath under outputs/. format must be pdf|pptx|html|xlsx|docx (never page size a4). For pptx and html, design theme from this deck's subject and pass theme {name,mood,accent,ink,surface}; accent/ink/surface are hex colors. Do not reuse one fixed palette. When the presentation team has selected a shared theme, also pass theme.id as magazine, swiss, or workplace. For presentations include chart (统计图), timeline/process (阶段图), and image (展示图) slides—not text-only decks. chart uses categories+values; phases for stage diagrams; imagePath from image_generate or imagePlaceholder. Pass plain text/Markdown only—never HTML/XML document dumps.",
       kind: "write",
       risk: "medium",
       requiresApproval: false,
@@ -836,6 +840,20 @@ export function createBuiltinToolRegistry() {
           subtitle: { type: "string" },
           content: { type: "string" },
           sections: { type: "array", items: { type: "object", properties: { heading: { type: "string" }, body: { type: "string" }, bullets: { type: "array", items: { type: "string" } } }, additionalProperties: false } },
+          theme: {
+            type: "object",
+            description: "Visual theme designed from this deck's subject. Required for pptx and html.",
+            properties: {
+              id: { type: "string", enum: ["magazine", "swiss", "workplace"], description: "Shared presentation-team theme. Omit when designing a one-off palette from the subject." },
+              name: { type: "string", description: "Short theme name derived from the content" },
+              mood: { type: "string", description: "Mood of the palette, such as mineral, maritime, or ceremonial" },
+              accent: { type: "string", description: "Accent hex color chosen for this content, for example #8C4A2F" },
+              ink: { type: "string", description: "Dark ink hex color for title slides" },
+              surface: { type: "string", description: "Light surface hex color for content slides" }
+            },
+            required: ["name", "accent"],
+            additionalProperties: false
+          },
           slides: {
             type: "array",
             items: {
@@ -988,7 +1006,7 @@ export function createBuiltinToolRegistry() {
       name: "shell.exec",
       title: "Shell command",
       description:
-        "Run a shell command inside the attached workspace. Prefer workspace.read/edit/apply_patch/glob/grep for file IO and search; avoid unbounded Get-ChildItem -Recurse. Optional background/yieldMs moves long tasks into shell.process sessions. Alias: exec.",
+        "Run a shell command inside the attached workspace. Prefer workspace.read/edit/apply_patch/glob/grep for file IO and search; avoid unbounded Get-ChildItem -Recurse. A foreground command waits until it exits. Pass background or yieldMs to move a long command into a live shell.process session. stdin stays closed unless tty=true. Alias: exec.",
       kind: "shell",
       risk: "high",
       requiresApproval: true,
@@ -998,7 +1016,8 @@ export function createBuiltinToolRegistry() {
           command: { type: "string", minLength: 1 },
           workdir: { type: "string", minLength: 1 },
           background: { type: "boolean" },
-          yieldMs: { type: "number", minimum: 0 }
+          yieldMs: { type: "number", minimum: 0 },
+          tty: { type: "boolean" }
         },
         required: ["command"],
         additionalProperties: false
@@ -1006,9 +1025,9 @@ export function createBuiltinToolRegistry() {
       validate: requireCommand,
       async execute(input, context) {
         const shellCommand = process.platform === "win32" ? "powershell.exe" : "/bin/zsh";
-        const normalizedCommand = process.platform === "win32"
+        const normalizedCommand = repairOutputPath(process.platform === "win32"
           ? normalizeWindowsShellCommand(input.command)
-          : input.command;
+          : input.command);
         const blockedWrite = guardShellWholeFileWrite(normalizedCommand);
         if (blockedWrite) {
           return { ...blockedWrite, command: normalizedCommand, requestedCommand: input.command };
@@ -1026,8 +1045,8 @@ export function createBuiltinToolRegistry() {
           const resolved = await resolveSafeWorkspacePath(context.workspacePath, input.workdir, { fieldName: "workdir" });
           cwd = resolved.target;
         }
-        const useSession = Boolean(input.background) || input.yieldMs !== undefined;
-        if (useSession) {
+        const explicitSession = Boolean(input.background) || input.yieldMs !== undefined;
+        if (explicitSession) {
           const result = await startShellProcess({
             command: shellCommand,
             args: shellArgs,
@@ -1035,7 +1054,8 @@ export function createBuiltinToolRegistry() {
             env: shellEnv,
             displayCommand: normalizedCommand,
             background: Boolean(input.background),
-            yieldMs: input.yieldMs,
+            yieldMs: input.background ? 0 : clampYieldTimeMs(input.yieldMs),
+            tty: input.tty === true,
             signal: context.abortSignal
           });
           if (!result.ok) {
@@ -1056,6 +1076,13 @@ export function createBuiltinToolRegistry() {
           env: shellEnv,
           signal: context.abortSignal
         });
+        if (result.ok && cwd) {
+          try {
+            await repairMojibakeTree(cwd);
+          } catch {
+            // A name repair must not hide the command result.
+          }
+        }
         if (!result.ok) {
           const guidance = formatMissingHostToolGuidance(normalizedCommand, result.output || result.failureMessage || "");
           if (guidance) {
@@ -1262,7 +1289,19 @@ async function executeArtifactCreate(input, context) {
   const outputPath = projectArtifactPath(styledInput.targetPath);
   const resolved = await resolveSafeWorkspaceTarget(context.workspacePath, outputPath);
   const previousStat = await fs.stat(resolved.target).catch(() => null);
-  const metadata = await generateArtifact(styledInput, resolved.target, { workspacePath: context.workspacePath });
+  const metadata = await generateArtifact(styledInput, resolved.target, {
+    workspacePath: context.workspacePath,
+    onSlideWritten: typeof context?.onArtifactProgress === "function"
+      ? async (progress) => {
+        await context.onArtifactProgress({
+          path: resolved.relativePath,
+          format: styledInput.format,
+          slideCount: progress.slideCount,
+          total: progress.total
+        });
+      }
+      : undefined
+  });
   const companionNote = styledInput.format === "pptx"
     ? ` Companion web deck: ${resolved.relativePath.replace(/\.pptx$/i, ".slides.html")}.`
     : styledInput.format === "html"

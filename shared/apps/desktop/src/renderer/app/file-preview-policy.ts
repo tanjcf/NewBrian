@@ -360,3 +360,25 @@ export function isReusableArtifactPreview(tab: {
   if (String(tab.kind || "") === "spreadsheet" && Array.isArray((tab as { sheets?: unknown[] }).sheets) && (tab as { sheets: unknown[] }).sheets.length > 0) return true;
   return false;
 }
+
+/**
+ * Chat links / refresh must re-read disk. Only an explicit `reuseCached` path
+ * (for example switching already-loaded tabs) may keep the prior payload.
+ */
+export function shouldReuseOpenArtifactPreview(input: {
+  existing: Parameters<typeof isReusableArtifactPreview>[0];
+  forceReload?: boolean;
+  line?: number;
+  reuseCached?: boolean;
+}) {
+  if (!input.reuseCached || input.forceReload || input.line) return false;
+  return isReusableArtifactPreview(input.existing);
+}
+
+/** Bust stable custom-protocol preview URLs so SVG/image remounts after writes. */
+export function withArtifactPreviewCacheBust(previewUrl: string | undefined | null, revision: string | number) {
+  const base = String(previewUrl || "").trim();
+  if (!base) return "";
+  const bare = base.replace(/[?#].*$/, "");
+  return `${bare}?v=${encodeURIComponent(String(revision))}`;
+}

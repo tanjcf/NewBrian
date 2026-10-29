@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { embedJsValue } from "./embed-js-value.mjs";
 
 const email = process.env.NEWBRAIN_E2E_LOGIN_EMAIL?.trim();
 const password = process.env.NEWBRAIN_E2E_LOGIN_PASSWORD?.trim();
@@ -155,10 +156,10 @@ async function screenshot(name) {
 
 function setInput(selector, value) {
   return evaluate(`(() => {
-    const input = document.querySelector(${JSON.stringify(selector)});
+    const input = document.querySelector(${embedJsValue(selector)});
     if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return false;
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${JSON.stringify(value)});
+    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${embedJsValue(value)});
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
@@ -232,7 +233,7 @@ async function ensureRealAccountLogin() {
     await waitFor("login shell", `Boolean(document.querySelector('input[type="email"]') || document.body?.innerText?.includes('正在检查登录状态'))`, 120_000);
     let loginCaptcha = await readLoginCaptcha();
     if (!loginCaptcha && process.env.NEWBRAIN_E2E_SKIP_EMAIL_CAPTCHA === "1") {
-      await evaluate(`window.newbrain.sendLoginCode({ email: ${JSON.stringify(email)} })`);
+      await evaluate(`window.newbrain.sendLoginCode({ email: ${embedJsValue(email)} })`);
       evidence.steps.push("login-code-sent");
       process.stderr.write("[game-deliverable] 已发送邮箱验证码；可设置 NEWBRAIN_E2E_LOGIN_CAPTCHA 或 NEWBRAIN_E2E_LOGIN_CAPTCHA_FILE 后自动继续\\n");
       loginCaptcha = await waitForLoginCaptcha(120_000);
@@ -240,9 +241,9 @@ async function ensureRealAccountLogin() {
     evidence.screenshots.push(await screenshot("01-before-login"));
     await visiblePause();
     const loginResult = await evaluate(`window.newbrain.loginAuth({
-      email: ${JSON.stringify(email)},
-      password: ${JSON.stringify(password)},
-      captcha: ${JSON.stringify(loginCaptcha)},
+      email: ${embedJsValue(email)},
+      password: ${embedJsValue(password)},
+      captcha: ${embedJsValue(loginCaptcha)},
       agreement_accepted: true
     }).then((auth) => ({
       ok: Boolean(auth?.authenticated),
@@ -252,7 +253,7 @@ async function ensureRealAccountLogin() {
     evidence.steps.push(loginCaptcha ? "login-submitted-code" : "login-submitted-ipc");
     await waitFor("login success", `(async () => {
       const auth = await window.newbrain.getAuthStatus();
-      return auth.authenticated && String(auth.user?.email || auth.account?.email || "").toLowerCase() === ${JSON.stringify(email.toLowerCase())};
+      return auth.authenticated && String(auth.user?.email || auth.account?.email || "").toLowerCase() === ${embedJsValue(email.toLowerCase())};
     })()`, 120_000);
   }
   auth = await assertRealAccount("after-login");
@@ -264,7 +265,7 @@ async function ensureRealAccountLogin() {
 async function waitForProjectBinding(name) {
   return waitFor("project bound to legacy workspace", `(async () => {
     const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
-    const brain = projects.find((item) => item.name === ${JSON.stringify(name)});
+    const brain = projects.find((item) => item.name === ${embedJsValue(name)});
     if (!brain?.localWorkspaceId) return false;
     const catalog = await window.newbrain.listWorkspaces();
     const legacy = catalog.find((item) => item.id === brain.localWorkspaceId);
@@ -275,10 +276,10 @@ async function waitForProjectBinding(name) {
 async function ensureExecutionWorkspace(name) {
   const state = await evaluate(`(async () => {
     const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
-    const brain = projects.find((item) => item.name === ${JSON.stringify(name)});
+    const brain = projects.find((item) => item.name === ${embedJsValue(name)});
     const catalog = await window.newbrain.listWorkspaces();
-    const legacy = catalog.find((item) => item.id === brain?.localWorkspaceId) || catalog.find((item) => item.name === ${JSON.stringify(name)});
-    const header = [...document.querySelectorAll(".projects-section .project-header, .project-list .project-header")].find((el) => (el.textContent || "").includes(${JSON.stringify(name.slice(0, 8))}));
+    const legacy = catalog.find((item) => item.id === brain?.localWorkspaceId) || catalog.find((item) => item.name === ${embedJsValue(name)});
+    const header = [...document.querySelectorAll(".projects-section .project-header, .project-list .project-header")].find((el) => (el.textContent || "").includes(${embedJsValue(name.slice(0, 8))}));
     header?.click();
     return {
       brainProjectId: brain?.id || "",
@@ -323,7 +324,7 @@ try {
   await waitFor("name dialog", `Boolean(document.querySelector('.project-name-dialog input'))`);
   assert.equal(await setInput(".project-name-dialog input", projectName), true);
   await evaluate(`document.querySelector('.project-name-dialog')?.requestSubmit()`);
-  await waitFor("brain project visible", `[...document.querySelectorAll('.brain-project-list button span')].some((s) => (s.textContent || '').includes(${JSON.stringify(projectName.slice(0, 8))}))`, 60_000);
+  await waitFor("brain project visible", `[...document.querySelectorAll('.brain-project-list button span')].some((s) => (s.textContent || '').includes(${embedJsValue(projectName.slice(0, 8))}))`, 60_000);
   await waitForProjectBinding(projectName);
   evidence.steps.push("project-created");
   evidence.projectBinding = await ensureExecutionWorkspace(projectName);
@@ -399,9 +400,9 @@ try {
 
   const state = await evaluate(`(async () => {
     const catalog = await window.newbrain.listWorkspaces();
-    const local = catalog.find((item) => item.name === ${JSON.stringify(projectName)});
+    const local = catalog.find((item) => item.name === ${embedJsValue(projectName)});
     const projects = await window.newbrain.listBrainProjects({ workspaceKey: "game" });
-    const brain = projects.find((item) => item.name === ${JSON.stringify(projectName)});
+    const brain = projects.find((item) => item.name === ${embedJsValue(projectName)});
     let inspection = null;
     if (brain?.id && window.newbrain.inspectBrainGameProject) {
       try { inspection = await window.newbrain.inspectBrainGameProject({ projectId: brain.id }); } catch {}

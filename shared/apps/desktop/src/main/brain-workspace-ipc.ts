@@ -27,6 +27,7 @@ import {
 import type { BrainFlowDefinition } from "@codex-forge/protocol";
 import type { DocumentAnchor } from "@codex-forge/protocol/document-anchor";
 import type { BrainWorkspaceStorage } from "./brain-workspace-storage.js";
+import type { QuantStrategyRules } from "./quant-strategy-rules.js";
 import { BrainDocumentRevisionService } from "./brain-document-revision-service.js";
 import { createDocumentRevisionProposal, syncDocumentRevisionTask } from "./document-revision-task.js";
 import { inspectGameProject } from "./game-project-inspector.js";
@@ -46,6 +47,8 @@ import type { MusicRenderService } from "./music-render-service.ts";
 import { normalizeDataset } from "./data-dataset-policy.ts";
 import type { BrainDataset } from "@codex-forge/protocol/data-types";
 import { discoverSoftwareScripts } from "./software-script-discovery.ts";
+import { listProjectQuantSkills } from "./project-quant-skill-catalog.ts";
+import { QuantSkillPackageService } from "./quant-skill-package-service.ts";
 import { SoftwareTaskService, type SoftwareTaskRustClient } from "./software-task-service.ts";
 import type { DocumentWorkerResponse } from "@codex-forge/protocol/document-worker";
 import { validateDocumentOperation } from "@codex-forge/protocol/document-operation";
@@ -1748,18 +1751,49 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       const input = requireRecord(value, "Quant performance");
       return dependencies.quant!.performance(await authorizeQuantProject(input), requireString(input.skillId, "skillId"));
     });
+    ipcMain.handle(brainWorkspaceIpcChannels.quantSkillList, async (_event, value: unknown) => {
+      const input = requireRecord(value, "Quant skill list");
+      const projectId = await authorizeQuantProject(input);
+      const project = dependencies.storage.getProject(await ownerId(), projectId);
+      if (!project.localWorkspaceId) return [];
+      return listProjectQuantSkills(await dependencies.resolveWorkspaceRoot(project.localWorkspaceId));
+    });
     ipcMain.handle(brainWorkspaceIpcChannels.quantSkillRunSimulation, async (_event, value: unknown) => {
       const input = requireRecord(value, "Quant skill simulation");
       const projectId = await authorizeQuantProject(input);
       const quantity = Number(input.quantity);
       if (!Number.isInteger(quantity) || quantity <= 0) throw new TypeError("quantity must be a positive integer");
       const query = requireRecord(input.query, "Quant skill simulation query");
+      const skillId = requireString(input.skillId, "skillId");
+      const symbol = requireString(input.symbol, "symbol");
+      const requestedStrategy = typeof input.strategyId === "string" ? input.strategyId.trim() : "";
+      const strategyId = requestedStrategy || (skillId === "trend-following" || skillId === "mean-reversion" ? skillId : "");
+      const rules = input.rules as QuantStrategyRules | undefined;
+      const builtin = strategyId === "trend-following" || strategyId === "mean-reversion";
+      if (strategyId && !builtin && !rules) {
+        throw new TypeError("strategyId is invalid");
+      }
+      if (strategyId) {
+        const project = dependencies.storage.getProject(await ownerId(), projectId);
+        if (project.localWorkspaceId) {
+          const title = typeof input.title === "string" && input.title.trim() ? input.title.trim() : skillId;
+          await new QuantSkillPackageService(await dependencies.resolveWorkspaceRoot(project.localWorkspaceId)).create({
+            skillId,
+            title,
+            symbol,
+            strategyId,
+            ...(rules ? { rules } : {})
+          });
+        }
+      }
       return dependencies.quant!.runSkillSimulation(projectId, {
-        skillId: requireString(input.skillId, "skillId"),
-        symbol: requireString(input.symbol, "symbol"),
+        skillId,
+        symbol,
         quantity,
         query: query as any,
-        reset: input.reset !== false
+        reset: input.reset !== false,
+        ...(strategyId ? { strategyId } : {}),
+        ...(rules ? { rules } : {})
       });
     });
     ipcMain.handle(brainWorkspaceIpcChannels.quantSkillActivity, async (_event, value: unknown) => {
@@ -1782,7 +1816,9 @@ export function registerBrainWorkspaceIpcHandlers(dependencies: BrainWorkspaceIp
       if (!Number.isInteger(quantity) || quantity <= 0) throw new TypeError("quantity must be a positive integer");
       return dependencies.storage.createQuantStrategySchedule({
         ownerId: await ownerId(), projectId: requireString(input.projectId, "projectId"),
-        skillId: requireString(input.skillId, "skillId"), exchange, runAt: requireString(input.runAt, "runAt"),
+        skillId: requireString(input.skillId, "skillId"), strategyId: typeof input.strategyId === "string" ? input.strategyId : undefined,
+        rules: input.rules as import("./quant-strategy-rules.ts").QuantStrategyRules | undefined,
+        exchange, runAt: requireString(input.runAt, "runAt"),
         symbol: requireString(input.symbol, "symbol"), quantity
       });
     });

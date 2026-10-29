@@ -508,3 +508,31 @@ test("ignores late advance snapshots after cancel so approval cannot revive", as
     /Agent loop was cancelled/
   );
 });
+
+test("forwards a mid-run full-access switch to the host loop", async () => {
+  const requests: Array<{ method: string; payload: unknown }> = [];
+  const client = {
+    async request(method: string, payload: unknown) {
+      requests.push({ method, payload });
+      return { permissionMode: "full" };
+    }
+  };
+  const local = createLocalRuntime();
+  const modes: string[] = [];
+  (local.runtime as { setAgentLoopPermissionMode?: (mode: string) => void }).setAgentLoopPermissionMode = (mode) => {
+    modes.push(mode);
+  };
+  const bridge = new bridgeModule.AgentHostLoopBridge({ client });
+  const runtime = await bridge.createRuntime(local.runtime, {
+    runtimeId: "runtime_1",
+    workspacePath: "C:/workspace",
+    platformLabel: "Windows",
+    shellLabel: "PowerShell"
+  });
+  await runtime.setAgentLoopPermissionMode("full");
+  assert.deepEqual(modes, ["full"]);
+  assert.deepEqual(requests.at(-1), {
+    method: "agent.loop.set-permission-mode",
+    payload: { runtimeId: "runtime_1", permissionMode: "full" }
+  });
+});

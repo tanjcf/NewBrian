@@ -10,6 +10,7 @@ import { ModelConfigService } from "./model-config-service.js";
 import { registerBrowserIpcHandlers } from "./browser-ipc.js";
 import { BrowserPreviewService } from "./browser-preview-service.js";
 import { registerPolicyIpcHandlers } from "./policy-ipc.js";
+import { isInternalChatWorkspace } from "./internal-chat-workspace.js";
 
 interface DesktopIntegrationIpcCompositionDeps {
   getActiveWorkspaceId: () => string;
@@ -37,6 +38,8 @@ interface DesktopIntegrationIpcCompositionDeps {
     installFromClawHub: (input: any) => unknown;
     installFromPath: (input: any) => unknown;
     selectAndInstall: (input?: any) => unknown;
+    selectAndInstallIntoProject: (input: { workspacePath: string; force?: boolean; acknowledgeRisk?: boolean }) => Promise<{ skill: any; targetDir: string; origin: any } | null>;
+    installZipIntoProject: (input: { workspacePath: string; zipPath: string; force?: boolean; acknowledgeRisk?: boolean }) => Promise<{ skill: any; targetDir: string; origin: any }>;
     inspectLocal: (path: string) => unknown;
     exportAsZip: (input: any) => unknown;
     uninstallWritingSkills: (input?: any) => unknown;
@@ -53,6 +56,33 @@ interface DesktopIntegrationIpcCompositionDeps {
   ensurePreviewWindow: (url: string) => any;
   closePreviewWindow: () => void;
   capturePreviewWindow: () => Promise<any>;
+  clearBrowserBrowsingData: () => Promise<{ ok: boolean; detail: string }>;
+  listBrowserHistory: () => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+  removeBrowserHistoryEntry: (id: string) => Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>>;
+  clearBrowserHistory: () => Promise<{ ok: boolean }>;
+  selectBrowserDownloadDir: () => Promise<{ path: string } | null>;
+  listBrowserCredentials: () => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+  upsertBrowserCredential: (input: {
+    origin: string;
+    username: string;
+    password: string;
+    id?: string;
+  }) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+  removeBrowserCredential: (
+    id: string
+  ) => Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>>;
+  listBrowserContacts: () => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+  upsertBrowserContact: (input: {
+    name: string;
+    email?: string;
+    phone?: string;
+    id?: string;
+  }) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+  removeBrowserContact: (
+    id: string
+  ) => Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>>;
+  getBrowserCdpAccess: () => Promise<{ enabled: boolean; partition: string; detail: string }>;
+  probeBrowserSiteTools: () => Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }>;
   saveActiveThreadState: (summary?: string) => Promise<any>;
   appendDiagnosticsLog: (line: string) => Promise<any>;
   readPolicyRules: () => Promise<any>;
@@ -126,6 +156,33 @@ export function registerDesktopIntegrationIpcComposition(deps: DesktopIntegratio
           acknowledgedRisk: result.origin.acknowledgedRisk
         };
       },
+      importZipToProject: async (input) => {
+        const catalog = await deps.readWorkspaceCatalog();
+        const workspace = catalog.workspaces?.find((item: { id?: string }) => item.id === input.workspaceId);
+        if (!workspace?.path || isInternalChatWorkspace(workspace)) {
+          throw new Error("请先在左侧打开一个本地项目，再导入技能压缩包。");
+        }
+        const result = input.zipPath
+          ? await deps.openClawSkillService!.installZipIntoProject({
+            workspacePath: workspace.path,
+            zipPath: input.zipPath,
+            force: input.force,
+            acknowledgeRisk: input.acknowledgeRisk
+          })
+          : await deps.openClawSkillService!.selectAndInstallIntoProject({
+            workspacePath: workspace.path,
+            force: input.force,
+            acknowledgeRisk: input.acknowledgeRisk
+          });
+        if (!result) return null;
+        return {
+          skill: result.skill,
+          targetDir: result.targetDir,
+          warnings: result.origin.warnings,
+          source: result.origin.source,
+          acknowledgedRisk: result.origin.acknowledgedRisk
+        };
+      },
       inspectPath: (path) => deps.openClawSkillService!.inspectLocal(path),
       exportZip: (input) => deps.openClawSkillService!.exportAsZip(input),
       uninstallWritingSkills: (input) => deps.openClawSkillService!.uninstallWritingSkills(input || {})
@@ -151,12 +208,29 @@ export function registerDesktopIntegrationIpcComposition(deps: DesktopIntegratio
     closeWindow: deps.closePreviewWindow,
     captureWindow: deps.capturePreviewWindow,
     saveThreadState: deps.saveActiveThreadState,
-    appendDiagnostics: deps.appendDiagnosticsLog
+    appendDiagnostics: deps.appendDiagnosticsLog,
+    openExternal: async (url) => {
+      const { shell } = await import("electron");
+      await shell.openExternal(url);
+    }
   });
   registerBrowserIpcHandlers({
     openPreview: (url) => browserPreviewService.open(url),
     closePreview: () => browserPreviewService.close(),
-    capturePreview: () => browserPreviewService.capture()
+    capturePreview: () => browserPreviewService.capture(),
+    clearBrowsingData: () => deps.clearBrowserBrowsingData(),
+    listHistory: () => deps.listBrowserHistory(),
+    removeHistoryEntry: (id) => deps.removeBrowserHistoryEntry(id),
+    clearHistory: () => deps.clearBrowserHistory(),
+    selectDownloadDir: () => deps.selectBrowserDownloadDir(),
+    listCredentials: () => deps.listBrowserCredentials(),
+    upsertCredential: (input) => deps.upsertBrowserCredential(input),
+    removeCredential: (id) => deps.removeBrowserCredential(id),
+    listContacts: () => deps.listBrowserContacts(),
+    upsertContact: (input) => deps.upsertBrowserContact(input),
+    removeContact: (id) => deps.removeBrowserContact(id),
+    getCdpAccess: () => deps.getBrowserCdpAccess(),
+    probeSiteTools: () => deps.probeBrowserSiteTools()
   });
   registerPolicyIpcHandlers({
     getRules: deps.readPolicyRules,

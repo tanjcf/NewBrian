@@ -6,6 +6,11 @@ import {
   looksLikeVideoGenerationRequest
 } from "./model-auto-router.ts";
 import { isGreetingText } from "./agent-orchestrator-policy.ts";
+import {
+  buildResearchDelegateTurnConstraint,
+  buildResearchLeadInstruction,
+  buildResearchPlan
+} from "./research-plan-policy.ts";
 
 /** Auto parent should delegate multi-step / specialist work instead of executing it inline. */
 export function shouldAutoDelegateHeavyWork(input: {
@@ -34,12 +39,20 @@ export function buildAutoModeLightCompanionInstruction(): string {
   return [
     "Auto mode (companion): handle this turn directly in concise Chinese.",
     "Do not delegate to child agents, do not spawn tools, and do not run project learning writes for greetings or short casual chat.",
+    "Never call web.search or web.fetch_page for greetings or thanks.",
     "NewBrain knowledge learning runs separately via project-manager shadow on substantive tasks."
   ].join(" ");
 }
 
 /** Parent Auto orchestrator must schedule child agents for main delivery work. */
-export function buildAutoModeOrchestratorInstruction(): string {
+export function buildAutoModeOrchestratorInstruction(input?: {
+  taskClass?: AutoTaskClass | string;
+  latestUserText?: string;
+}): string {
+  const taskClass = String(input?.taskClass || "general");
+  const researchBlock = taskClass === "research"
+    ? buildResearchLeadInstruction(buildResearchPlan({ request: String(input?.latestUserText || "") }))
+    : "For research turns, prefer researcher with Search→Fetch (web.search once via Spring /api/desktop/v1/web-search, then web.fetch_page) and cite URLs.";
   return [
     "Auto mode (orchestrator): you are the lightweight parent coordinator, not the primary worker.",
     "Main tasks (coding, research, multi-step delivery, long-form writing, file changes) MUST be started with agent.delegate to a suitable child role (planner/researcher/editor/verifier) before you do the work yourself.",
@@ -47,7 +60,8 @@ export function buildAutoModeOrchestratorInstruction(): string {
     "Handle directly without delegation only when: greetings/thanks/short Q&A, capability questions, image_generate/video_generate/music_generate or scene music.song.generate/video.shot.generate tool calls, or a trivial one-step action under ~40 Chinese characters.",
     "Do not personally run long shell/file edit loops, deep research, or full document implementation when agent.delegate is available.",
     "Preference and project knowledge learning still happen via project-manager shadow; your job is to coordinate execution, not hoard every tool call.",
-    "Start independent children before agent.wait. If a child fails, merge evidence and finish; do not empty-loop re-delegate."
+    "Start independent children before agent.wait. If a child fails, merge evidence and finish; do not empty-loop re-delegate.",
+    researchBlock
   ].join(" ");
 }
 
@@ -64,7 +78,7 @@ export function buildAutoModeRoleInstruction(input: {
     ].join(" ");
   }
   return shouldAutoDelegateHeavyWork(input)
-    ? buildAutoModeOrchestratorInstruction()
+    ? buildAutoModeOrchestratorInstruction(input)
     : buildAutoModeLightCompanionInstruction();
 }
 
@@ -76,6 +90,10 @@ export function buildAutoDelegateTurnConstraint(input: {
 }): string {
   if (!shouldAutoDelegateHeavyWork(input)) return "";
   const request = String(input.latestUserText || "").trim();
+  const taskClass = String(input.taskClass || "general");
+  if (taskClass === "research") {
+    return buildResearchDelegateTurnConstraint(request);
+  }
   return [
     "【Auto 编排约束】本回合属于主任务交付。你必须先调用 agent.delegate 将下方完整用户请求委派给合适子 Agent（planner/researcher/editor/verifier），再用 agent.wait 收敛结果后统一答复。",
     "禁止由当前父会话直接执行长链路 shell、批量文件修改、深度调研或完整文稿实现。",
@@ -98,7 +116,7 @@ export function appendAutoDelegateTurnConstraint<T extends { role: string; conte
   }
   if (lastUserIndex < 0) return messages;
   const content = String(messages[lastUserIndex].content || "").trim();
-  if (content.includes("【Auto 编排约束】")) return messages;
+  if (content.includes("【Auto 编排约束】") || content.includes("【Research 编排约束】")) return messages;
   return messages.map((message, index) =>
     index === lastUserIndex ? { ...message, content: `${constraint}\n\n${content}` } : message
   );

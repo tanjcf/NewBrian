@@ -135,9 +135,10 @@ export class EnvironmentDiscoveryService {
 
   detectCommandPath(command: string) {
     if (!command.trim()) return "";
-    const executable = this.dependencies.platform === "win32" ? "cmd.exe" : "/bin/zsh";
+    // Use where.exe argv directly — never `cmd.exe /c "where …"` (CodeQL js/shell-command-injection-from-environment).
+    const executable = this.dependencies.platform === "win32" ? "where.exe" : "/bin/zsh";
     const args = this.dependencies.platform === "win32"
-      ? ["/d", "/s", "/c", `where ${command}`]
+      ? [command]
       : ["-lc", `command -v ${this.quoteShellArgument(command)}`];
     const lookup = this.dependencies.lookupCommand(executable, args);
     if (lookup.status !== 0) return "";

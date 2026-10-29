@@ -8,6 +8,7 @@ import { PolicyEngine } from "./policy-engine.js";
 import { SkillRegistry, defaultSkillRoots } from "./skill-registry.js";
 import { createBuiltinCapabilityCatalog, createBuiltinCapabilityRuntime, createBuiltinToolRegistry } from "./tool-registry.js";
 import { UserShadow } from "./user-shadow.js";
+import { updateCompanionMemoryFromExchange } from "./companion-memory.js";
 import { createCapabilitySystem, restoreCapabilitySystem } from "./capability-system.js";
 import {
   emptyDeliveryPreferences,
@@ -292,8 +293,14 @@ export class LocalAgentRuntime {
     return decision;
   }
 
+  setAgentLoopPermissionMode(mode) {
+    if (mode === "full" || mode === "agent" || mode === "approval") {
+      this.agentLoopPermissionMode = mode;
+    }
+  }
+
   startAgentLoop(messages, options = {}) {
-    const permissionMode = options.permissionMode ?? "approval";
+    this.agentLoopPermissionMode = options.permissionMode ?? "approval";
     this.agentLoop = new AgentLoop({
       toolRegistry: this.toolRegistry,
       toolContext: {
@@ -306,7 +313,7 @@ export class LocalAgentRuntime {
         }
       },
       maxSteps: options.maxSteps,
-      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, permissionMode),
+      authorize: (descriptor, call) => this.evaluateToolPolicy(descriptor, call.arguments, this.agentLoopPermissionMode),
       onEvent: (event) => {
         this.sessionMachine.events.push({
           id: makeId("agent-event"),
@@ -472,11 +479,11 @@ export class LocalAgentRuntime {
   }
 
   async rememberExchangeWithShadow(input) {
-    const memory = this.rememberExchange(input);
     const shadow = await this.userShadow.absorbExchange({
       ...input,
       threadDeliveryPreferences: this.threadDeliveryPreferences
     });
+    const memory = shadow.knowledgeStatus === "active" ? this.rememberExchange(input) : null;
     if (shadow.threadDeliveryPreferences) {
       this.threadDeliveryPreferences = parseDeliveryPreferences(shadow.threadDeliveryPreferences);
       this.sessionMachine.snapshot.deliveryPreferences = clone(this.threadDeliveryPreferences);
@@ -487,6 +494,7 @@ export class LocalAgentRuntime {
       this.projectDeliveryPreferences = await this.userShadow.readDeliveryPreferences().catch(() => emptyDeliveryPreferences());
     }
     this.turnDeliveryPreferences = null;
+    await updateCompanionMemoryFromExchange(this.skillRegistry.roots, input);
     await this.skillRegistry.discover();
     this.sessionMachine.events.push({
       id: makeId("shadow-event"),

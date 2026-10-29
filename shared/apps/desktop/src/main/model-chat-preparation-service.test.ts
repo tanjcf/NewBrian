@@ -304,8 +304,8 @@ test("Auto with image attachments prefers a vision-capable authorized model", as
       attachments: [{ name: "shot.png", path: "C:/tmp/shot.png", url: "data:image/png;base64,xx" }]
     }]
   } as never);
-  // Vision-required Auto pins the vision parent so responses cannot re-pick text flash.
-  assert.equal(prepared.input.model, "qwen3-vl-plus");
+  // The current message's image can inform Auto, but the outbound model stays auto.
+  assert.equal(prepared.input.model, "auto");
   assert.equal(prepared.autoDecision?.model.selected, "qwen3-vl-plus");
   assert.equal((prepared.input as { parentSelectedModel?: string }).parentSelectedModel, "qwen3-vl-plus");
   assert.equal(prepared.input.provider, "DashScope");
@@ -399,7 +399,7 @@ test("C6/C7 reject missing pin and empty Auto routing pool", async () => {
   } as never), /文生图|hy-image/);
 });
 
-test("vision guard rewrites non-vision Auto selection and filters fallback chain", async () => {
+test("vision guard does not replace the selected model when the turn has images", async () => {
   const { enforceVisionCapableAutoSelection } = await import(
     new URL("./model-chat-preparation-service.ts", import.meta.url).href
   );
@@ -442,13 +442,12 @@ test("vision guard rewrites non-vision Auto selection and filters fallback chain
       }
     }
   });
-  assert.equal(guarded.model.selected, "kimi-k2.6");
-  assert.deepEqual(guarded.model.fallback_chain, []);
-  assert.ok(guarded.model.reason_codes.includes("local_vision_model_guard"));
-  assert.equal(guarded.orchestrator?.primary_channel, "vision_qa");
+  assert.equal(guarded.model.selected, "deepseek-v4-flash");
+  assert.deepEqual(guarded.model.fallback_chain, ["deepseek-v4-flash-0731", "kimi-k2.6"]);
+  assert.equal(guarded.orchestrator?.primary_channel, "text_chat");
 });
 
-test("interrupt-resume after image turn asks spring Auto with hasImageAttachments", async () => {
+test("interrupt-resume after an image turn stays on the text model", async () => {
   let sawImageFlag = false;
   const service = createService({
     readAuthorizedModelConfig: async () => ({
@@ -492,10 +491,10 @@ test("interrupt-resume after image turn asks spring Auto with hasImageAttachment
       { role: "user", content: "从上次异常中断的位置继续执行，不要重复已完成的内容。" }
     ]
   } as never);
-  assert.equal(sawImageFlag, true);
-  assert.equal(prepared.autoDecision?.model.selected, "kimi-k2.6");
-  assert.equal(prepared.input.model, "kimi-k2.6");
-  assert.equal((prepared.input as { parentSelectedModel?: string }).parentSelectedModel, "kimi-k2.6");
+  assert.equal(sawImageFlag, false);
+  assert.equal(prepared.autoDecision?.model.selected, "deepseek-v4-flash");
+  assert.equal(prepared.input.model, "auto");
+  assert.equal((prepared.input as { parentSelectedModel?: string }).parentSelectedModel, "deepseek-v4-flash");
 });
 
 test("local media override is removed; vision attachments stay vision_qa via server", async () => {

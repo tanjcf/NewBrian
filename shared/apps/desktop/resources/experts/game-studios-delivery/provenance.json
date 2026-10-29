@@ -1,11 +1,13 @@
 {
   "schemaVersion": 1,
-  "localAdaptations": ["Preserved locally updated version 1.1.0 catalog and lead-agent instructions"],
+  "localAdaptations": [
+    "Preserved locally updated version 1.1.0 catalog and lead-agent instructions"
+  ],
   "repository": "Claude-Code-Game-Studios",
-  "commit": "984023ddac0d5e27624f2baacde6105e45de375f",
+  "commit": "b21fa0f7f289fc3e726cf36fb12b9bc1e7a51e4d",
   "source": ".claude/skills/quick-design/SKILL.md",
   "license": "MIT",
-  "upstreamSha256": "574f7d4e742e68d4e022618b2542fc94e91d729785529d1b2b37e9a26fc8788b",
+  "upstreamSha256": "90696274bde6e272da5eab3623e76a0b16958149971242113b5239689d736bf8",
   "files": {
     ".codex-plugin/plugin.json": "bf78b3ba6a17f6a1f182f5291853f979ae1e704432ba228779b65b9b798d3056",
     "agents/game-studios-delivery.md": "f0d02e5054dc8381991254c82f6397a70e1b7263ea5611f24465c80d760a9201",
@@ -74,8 +76,8 @@
     "skills/game-studios-delivery/docs/templates/vertical-slice-report.md": "07f653e14720ac2d255afd43addc2057494b36242088ff19b79ac5524fe6a978",
     "skills/game-studios-delivery/docs/workflow-catalog.yaml": "235c453db1f9b23adfce03900daf8cc7359d7eca6aa324041678260a78e96baf",
     "skills/game-studios-delivery/SKILL.md": "531e0672c4f7a6dc4a67de09c0f88b4fbedb209a6135551870c4261484a4782c",
-    "skills/game-studios-delivery/UPSTREAM-SKILL.md": "574f7d4e742e68d4e022618b2542fc94e91d729785529d1b2b37e9a26fc8788b",
-    "skills/game-studios-delivery/workflows/quick-design/SKILL.md": "574f7d4e742e68d4e022618b2542fc94e91d729785529d1b2b37e9a26fc8788b",
+    "skills/game-studios-delivery/UPSTREAM-SKILL.md": "90696274bde6e272da5eab3623e76a0b16958149971242113b5239689d736bf8",
+    "skills/game-studios-delivery/workflows/quick-design/SKILL.md": "90696274bde6e272da5eab3623e76a0b16958149971242113b5239689d736bf8",
     "skills/game-studios-delivery/workflows/story-done/SKILL.md": "c5b375f3502e60e6bb7cd25a84cb6008b58962163dc0bb36ab6e1b88c55aefdd"
   },
   "adaptations": [

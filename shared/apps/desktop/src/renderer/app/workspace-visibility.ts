@@ -5,6 +5,7 @@ import {
   type SearchResultSpec,
   type WorkspaceCatalogItem
 } from "@codex-forge/protocol";
+import { orderProjectsForSidebar } from "../../shared/sidebar-layout.ts";
 
 /** Coerce IPC/catalog payloads into WorkspaceCatalogItem[]. Rejects `{ workspaces: [] }` object shapes. */
 export function normalizeWorkspaceCatalog(value: unknown): WorkspaceCatalogItem[] {
@@ -63,16 +64,15 @@ export function catalogWorkspaceRecencyMs(workspace: Pick<WorkspaceCatalogItem, 
 }
 
 /**
- * NewBrain sidebar project order: newest catalog entries first, pinned above the rest.
- * Catalog persistence appends newly created workspaces, so reverse before a stable pin-sort.
+ * Sidebar project order. Without a drag order, newest catalog entries stay first.
+ * A saved order from project drag is applied as-is, then pinned projects stay on top.
  */
 export function orderSidebarProjects<T extends Pick<WorkspaceCatalogItem, "id">>(
   workspaces: readonly T[],
-  pinnedWorkspaceIds: ReadonlySet<string> = new Set()
+  pinnedWorkspaceIds: ReadonlySet<string> = new Set(),
+  manualOrderIds?: readonly string[]
 ): T[] {
-  return [...workspaces]
-    .reverse()
-    .sort((left, right) => Number(pinnedWorkspaceIds.has(right.id)) - Number(pinnedWorkspaceIds.has(left.id)));
+  return orderProjectsForSidebar(workspaces, pinnedWorkspaceIds, manualOrderIds);
 }
 
 export function crossSceneRecentProjects(
@@ -97,6 +97,24 @@ export function isUserVisibleThread(thread: { kind?: string | null }) {
 
 export function userVisibleThreads<T extends { kind?: string | null }>(threads: readonly T[]): T[] {
   return threads.filter(isUserVisibleThread);
+}
+
+/**
+ * A scene switch while a thread is generating intentionally clears the selection
+ * and marks a new draft. Repair must not put a visible thread back, or the
+ * conversation sync clears it again and React hits maximum update depth (#185).
+ */
+export function shouldRepairSelectedThread(input: {
+  isComposingNewThread: boolean;
+  visibleThreadCount: number;
+  selectedThreadId: string;
+  resolvedThreadId: string;
+}) {
+  if (input.isComposingNewThread) return false;
+  if (input.visibleThreadCount <= 0) return false;
+  const resolvedThreadId = String(input.resolvedThreadId || "").trim();
+  if (!resolvedThreadId) return false;
+  return resolvedThreadId !== String(input.selectedThreadId || "");
 }
 
 export function resolveUserVisibleThreadSelection<
@@ -172,6 +190,6 @@ export function projectSearchResults(
     if (!result.workspaceId) return true;
     const workspace = projectWorkspacesById.get(result.workspaceId);
     if (!workspace) return false;
-    return !result.threadId || workspace.threads.some((thread) => thread.id === result.threadId);
+    return !result.threadId || workspace.threads.some((thread) => thread.id === result.threadId && isUserVisibleThread(thread));
   });
 }

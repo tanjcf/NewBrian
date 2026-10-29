@@ -28,6 +28,30 @@ test("composer textarea exposes write-history undo and redo", () => {
   assert.match(source, /onHistoryChange/);
 });
 
+test("composer textarea can insert text at the caret", () => {
+  const source = readFileSync(new URL("./ComposerTextarea.tsx", import.meta.url), "utf8");
+  assert.match(source, /insertTextAtCursor/);
+  assert.match(source, /setValue: \(value: string, cursor\?: number\)/);
+});
+
+test("composer attaches files at the caret with Cursor-style @ tokens", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /attachComposerAttachmentsAtCursor/);
+  assert.match(source, /insertComposerAttachmentTokens/);
+  assert.match(source, /removeComposerAttachment/);
+  assert.match(source, /已在光标处添加/);
+});
+
+test("composer add menu exposes three-tier materials routing", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  assert.match(source, /COMPOSER_MATERIALS_MENU_ITEMS/);
+  assert.match(source, /data-testid="composer-materials-menu"/);
+  assert.match(source, /composer-materials-hint/);
+  assert.match(source, /switchBrainWorkspace\("data"\)/);
+  assert.match(source, /已挂载工作区文件夹/);
+  assert.match(source, /已打开数据场景/);
+});
+
 test("composer toolbar places undo and redo beside send", () => {
   const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
   assert.match(source, /data-testid="composer-undo-button"/);
@@ -37,6 +61,19 @@ test("composer toolbar places undo and redo beside send", () => {
   const redoAt = source.indexOf('data-testid="composer-redo-button"');
   const sendAt = source.indexOf('data-testid="composer-send-button"');
   assert.ok(undoAt > 0 && redoAt > undoAt && sendAt > redoAt);
+});
+
+test("composer send button uses the shared arrow icon instead of a text glyph", () => {
+  const source = readFileSync(new URL("./WorkspaceModules.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const sendButton = source.slice(
+    source.indexOf('data-testid="composer-send-button"'),
+    source.indexOf("</button>", source.indexOf('data-testid="composer-send-button"'))
+  );
+
+  assert.match(sendButton, /<SidebarIcon name="arrow-up" \/>/);
+  assert.doesNotMatch(sendButton, />\s*↑\s*$/);
+  assert.doesNotMatch(styles, /border-bottom:\s*8px solid #ffffff/);
 });
 
 test("submit composer does not auto-send after scene workspace alignment", () => {

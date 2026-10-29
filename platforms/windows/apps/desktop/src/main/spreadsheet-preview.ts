@@ -70,13 +70,24 @@ function parseDelimited(buffer: Buffer, delimiter: string, sheetName: string): S
   };
 }
 
+function decodeCodePoint(code: number, fallback: string) {
+  if (!Number.isInteger(code) || code < 0 || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) return fallback;
+  return String.fromCodePoint(code);
+}
+
 function decodeXml(value: string) {
-  return value
+  const decoded = value
+    .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => decodeCodePoint(Number.parseInt(hex, 16), match))
+    .replace(/&#(\d+);/g, (match, dec) => decodeCodePoint(Number.parseInt(dec, 10), match))
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, "&");
+  // Excel stores characters that cannot appear raw in XML as _xHHHH_.
+  // A literal "_xHHHH_" is stored as "_x005F_xHHHH_", so decoding left to right
+  // turns the underscore escape into "_" and leaves the rest as typed text.
+  return decoded.replace(/_x([0-9a-fA-F]{4})_/g, (match, hex) => decodeCodePoint(Number.parseInt(hex, 16), match));
 }
 
 function columnIndexFromRef(cellRef: string): number {

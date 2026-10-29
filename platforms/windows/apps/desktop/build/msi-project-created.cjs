@@ -65,6 +65,7 @@ $1`);
   xml = addNewbrainHomeEnvironmentActions(xml);
   xml = addUninstallCleanupAction(xml);
   xml = addLaunchAfterInstallAction(xml);
+  xml = addDesktopShortcutAction(xml);
   xml = stabilizeApplicationShortcuts(xml);
 
   assertApplicationFolder(xml, explicitInstallDir);
@@ -84,6 +85,14 @@ function escapeXmlAttr(value) {
     .replace(/>/g, "&gt;");
 }
 
+/** Insert XML before </Product> without interpreting $-patterns in the snippet (PowerShell uses $vars). */
+function appendBeforeProductClose(xml, snippet) {
+  const marker = "</Product>";
+  const index = xml.lastIndexOf(marker);
+  if (index < 0) throw new Error("MSI project is missing </Product>.");
+  return `${xml.slice(0, index)}${snippet}\n${xml.slice(index)}`;
+}
+
 function stabilizeApplicationShortcuts(xml) {
   return xml.replace(
     /(<Shortcut Id="(?:desktopShortcut|startMenuShortcut)")([^>]*?)\sAdvertise="yes"/g,
@@ -91,12 +100,69 @@ function stabilizeApplicationShortcuts(xml) {
   );
 }
 
+/**
+ * WiX advertised shortcuts often miss the Desktop after APPLICATIONFOLDER is
+ * rewritten under LocalAppData\\.newbrain, and leftover Program Files / NSIS
+ * links keep pointing at the old install. Always rewrite Desktop + Start Menu
+ * .lnk files after InstallFinalize.
+ *
+ * Executable may be newbrain.exe (executableName) or NewBrain.exe (productName);
+ * resolve either. Fall back to %LOCALAPPDATA%\\.newbrain when APPLICATIONFOLDER
+ * formatting fails so Return="ignore" does not silently skip the Desktop icon.
+ */
+function addDesktopShortcutAction(xml) {
+  if (xml.includes('Id="CreateNewbrainDesktopShortcut"')) return xml;
+  // Avoid regex end-anchor "$'" inside ExeCommand — String.replace would treat $' as a pattern.
+  const command = [
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command",
+    "\"$ErrorActionPreference='SilentlyContinue';",
+    "$folder=[Environment]::ExpandEnvironmentVariables('[APPLICATIONFOLDER]').Trim().TrimEnd('\\');",
+    "if(-not $folder -or $folder -like '*APPLICATIONFOLDER*'){$folder=Join-Path $env:LOCALAPPDATA '.newbrain'};",
+    "$exe=$null; foreach($n in @('NewBrain.exe','newbrain.exe')){$c=Join-Path $folder $n; if(Test-Path -LiteralPath $c){$exe=$c; break}};",
+    "if(-not $exe){$hit=Get-ChildItem -LiteralPath $folder -Filter '*.exe' -File -ErrorAction SilentlyContinue | Where-Object { $_.BaseName -ieq 'newbrain' } | Select-Object -First 1; if($hit){$exe=$hit.FullName}};",
+    "if(-not $exe -or -not (Test-Path -LiteralPath $exe)){exit 0};",
+    "$folder=Split-Path -Parent $exe;",
+    "$ico=Join-Path $folder 'resources\\newbrain.ico'; if(-not (Test-Path -LiteralPath $ico)){$ico=$exe};",
+    "$w=New-Object -ComObject WScript.Shell;",
+    "$desk=[Environment]::GetFolderPath('Desktop');",
+    "$menu=Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs';",
+    "foreach($p in @((Join-Path $desk 'NewBrain.lnk'),(Join-Path $menu 'NewBrain.lnk'))){",
+    "$dir=Split-Path -Parent $p; if(-not (Test-Path -LiteralPath $dir)){New-Item -ItemType Directory -Path $dir -Force|Out-Null};",
+    "$s=$w.CreateShortcut($p); $s.TargetPath=$exe; $s.WorkingDirectory=$folder; $s.Description='NewBrain'; $s.IconLocation=$ico+',0'; $s.Save()",
+    "}; exit 0\""
+  ].join(" ");
+  const action = `\n    <CustomAction Id="CreateNewbrainDesktopShortcut" Directory="APPLICATIONFOLDER" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Impersonate="yes" Return="ignore"/>`;
+  xml = appendBeforeProductClose(xml, action);
+  xml = insertInstallExecuteSequenceAction(
+    xml,
+    '<Custom Action="CreateNewbrainDesktopShortcut" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL OR UPGRADINGPRODUCTCODE)</Custom>'
+  );
+  return xml;
+}
+
 function addStopRunningApplicationAction(xml) {
   if (xml.includes('Id="StopRunningNewbrain"')) return xml;
-  const command = "cmd.exe /C taskkill /IM NewBrain.exe /T /F >NUL 2>NUL & exit /B 0";
-  const action = `\n    <CustomAction Id="StopRunningNewbrain" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
-  xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
-  xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="StopRunningNewbrain" Before="InstallInitialize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>');
+  // Force-kill any historical NewBrain still holding locks under .newbrain /
+  // Programs. Cover both casing variants plus the Rust sidecar; brief ping wait
+  // lets Windows release file handles before InstallFiles.
+  // Directory must be TARGETDIR (always present in electron-builder WiX); SystemFolder
+  // is not defined in this template and fails light.exe with LGHT0094.
+  const command = [
+    "cmd.exe /C",
+    "taskkill /F /IM NewBrain.exe /T >NUL 2>NUL &",
+    "taskkill /F /IM newbrain.exe /T >NUL 2>NUL &",
+    "taskkill /F /IM brain-core.exe /T >NUL 2>NUL &",
+    "ping -n 2 127.0.0.1 >NUL &",
+    "exit /B 0",
+  ].join(" ");
+  const action = `\n    <CustomAction Id="StopRunningNewbrain" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Impersonate="yes" Return="ignore"/>`;
+  xml = appendBeforeProductClose(xml, action);
+  // Run on every install/upgrade/repair (not pure uninstall). NOT Installed alone
+  // misses same-product REINSTALL; UPGRADINGPRODUCTCODE covers MajorUpgrade remove.
+  xml = insertInstallExecuteSequenceAction(
+    xml,
+    '<Custom Action="StopRunningNewbrain" Before="InstallInitialize">NOT REMOVE</Custom>'
+  );
   return xml;
 }
 
@@ -126,7 +192,7 @@ function addNewbrainHomeEnvironmentActions(xml) {
   ].join(" ");
   const setAction = `\n    <CustomAction Id="SetNewbrainHomeEnv" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(setCommand)}" Execute="immediate" Return="ignore"/>`;
   const clearAction = `\n    <CustomAction Id="ClearNewbrainHomeEnv" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(clearCommand)}" Execute="immediate" Return="ignore"/>`;
-  xml = xml.replace(/(<\/Product>)/, `${setAction}${clearAction}\n$1`);
+  xml = appendBeforeProductClose(xml, `${setAction}${clearAction}`);
   xml = insertInstallExecuteSequenceAction(
     xml,
     '<Custom Action="SetNewbrainHomeEnv" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL)</Custom>'
@@ -142,7 +208,7 @@ function addUninstallCleanupAction(xml) {
   if (xml.includes('Id="RemoveNewbrainUserDataOnUninstall"')) return xml;
   const command = "cmd.exe /C rmdir /S /Q [LocalAppDataFolder]..\\..\\.newbrain >NUL 2>NUL & rmdir /S /Q [APPLICATIONFOLDER] >NUL 2>NUL & exit /B 0";
   const action = `\n    <CustomAction Id="RemoveNewbrainUserDataOnUninstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="ignore"/>`;
-  xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
+  xml = appendBeforeProductClose(xml, action);
   xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="RemoveNewbrainUserDataOnUninstall" After="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>');
   return xml;
 }
@@ -151,7 +217,7 @@ function addLaunchAfterInstallAction(xml) {
   if (xml.includes('Id="LaunchNewbrainAfterInstall"')) return xml;
   const command = 'cmd.exe /C if exist "[APPLICATIONFOLDER]NewBrain.exe" start "" /D "[APPLICATIONFOLDER]" "[APPLICATIONFOLDER]NewBrain.exe" & exit /B 0';
   const action = `\n    <CustomAction Id="LaunchNewbrainAfterInstall" Directory="TARGETDIR" ExeCommand="${escapeXmlAttr(command)}" Execute="immediate" Return="asyncNoWait"/>`;
-  xml = xml.replace(/(<\/Product>)/, `${action}\n$1`);
+  xml = appendBeforeProductClose(xml, action);
   xml = insertInstallExecuteSequenceAction(xml, '<Custom Action="LaunchNewbrainAfterInstall" After="InstallFinalize">NOT REMOVE AND (NOT Installed OR REINSTALL) AND NOT NEWBRAIN_UPDATE_RUNNER</Custom>');
   return xml;
 }

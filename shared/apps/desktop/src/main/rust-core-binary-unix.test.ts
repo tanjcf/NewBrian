@@ -7,7 +7,8 @@ test("resolves only the bundled Unix Rust Core binary in packaged mode", () => {
     isPackaged: true,
     resourcesPath: "C:/opt/newbrain/resources",
     appDirectory: "C:/opt/newbrain/app.asar/out/main",
-    exists: (path) => path.replaceAll("\\", "/") === "C:/opt/newbrain/resources/brain-core/brain-core"
+    exists: (path) => path.replaceAll("\\", "/") === "C:/opt/newbrain/resources/brain-core/brain-core",
+    verifyRelease: () => undefined
   }).replaceAll("\\", "/"), "C:/opt/newbrain/resources/brain-core/brain-core");
   assert.throws(() => resolveUnixRustCoreBinary({
     isPackaged: true,

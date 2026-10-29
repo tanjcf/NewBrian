@@ -1,7 +1,26 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { AnnotationGeometry, AnnotationMarkingTool, BrainAnnotationDto } from "@codex-forge/protocol";
 import type { DocumentCoordinateTransform, DocumentRect, DocumentViewport } from "@codex-forge/protocol/document-anchor";
-import { projectDocumentRect } from "@codex-forge/protocol/document-anchor";
+import { placeDocumentMarkPrompt } from "./document-mark-prompt-placement";
+
+export type DocumentMarkPrompt = {
+  instruction: string;
+  busy: boolean;
+  page?: number;
+  onInstructionChange: (value: string) => void;
+  onSubmit: () => void;
+  onClear: () => void;
+};
+
+const DocumentMarkPromptContext = createContext<DocumentMarkPrompt | null>(null);
+
+export function DocumentMarkPromptProvider(props: { value: DocumentMarkPrompt | null; children: ReactNode }) {
+  return <DocumentMarkPromptContext.Provider value={props.value}>{props.children}</DocumentMarkPromptContext.Provider>;
+}
+
+function markPromptIcon(paths: string) {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths.split("|").map((d) => <path key={d} d={d} />)}</svg>;
+}
 
 export type DocumentMarkingLayerProps = {
   active: boolean;
@@ -29,11 +48,7 @@ function normalizeDragRect(drag: DragState): DocumentRect {
   return { x, y, width, height };
 }
 
-function projectable(annotation: BrainAnnotationDto) {
-  return Boolean(annotation.anchor.rect && annotation.anchor.transform);
-}
-
-/** Captures free-form drag marks and renders saved annotation overlays. */
+/** Captures a drag mark. The box stays only until the instruction is sent. */
 export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<DocumentViewport>({ width: 0, height: 0 });
@@ -53,13 +68,9 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
   }, []);
 
   const draftRect = drag ? normalizeDragRect(drag) : null;
-  const savedMarks = (props.savedAnnotations || []).filter((annotation) => {
-    if (!projectable(annotation)) return false;
-    if (props.pageFilter != null && "page" in annotation.anchor && typeof annotation.anchor.page === "number") {
-      return annotation.anchor.page === props.pageFilter;
-    }
-    return true;
-  });
+  const markPrompt = useContext(DocumentMarkPromptContext);
+  // Submitted annotations stay in the record. The preview box is only for the mark that has not been sent yet.
+  void props.savedAnnotations;
 
   return (
     <div
@@ -68,6 +79,10 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
       data-testid="document-marking-layer"
       aria-hidden={!props.active}
       onPointerDown={(event) => {
+        if (event.target instanceof Element && event.target.closest(".pptx-mark-prompt, button, input, textarea")) {
+          event.stopPropagation();
+          return;
+        }
         if (!props.active || event.button !== 0) return;
         const host = hostRef.current;
         if (!host) return;
@@ -107,31 +122,6 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
       }}
       onPointerCancel={() => setDrag(null)}
     >
-      {savedMarks.map((annotation) => {
-        const anchor = annotation.anchor;
-        if (!anchor.rect || !anchor.transform) return null;
-        let projected: DocumentRect;
-        try {
-          projected = projectDocumentRect(anchor.rect, anchor.transform, viewport);
-        } catch {
-          return null;
-        }
-        return (
-          <div
-            key={annotation.id}
-            className={`document-marking-saved${annotation.geometry.style.tool === "highlight" ? " highlight" : " select-rect"}`}
-            data-testid="document-marking-saved"
-            style={{
-              left: `${projected.x}px`,
-              top: `${projected.y}px`,
-              width: `${Math.max(4, projected.width)}px`,
-              height: `${Math.max(4, projected.height)}px`,
-              ["--mark-color" as string]: annotation.geometry.style.color
-            }}
-            title={annotation.instruction}
-          />
-        );
-      })}
       {draftRect && props.active ? (
         <div
           className={`document-marking-draft${props.tool === "highlight" ? " highlight" : " select-rect"}`}
@@ -156,7 +146,40 @@ export function DocumentMarkingLayer(props: DocumentMarkingLayerProps) {
             height: `${Math.max(4, props.pendingMark.rect.height)}px`,
             ["--mark-color" as string]: props.pendingMark.color
           }}
-        />
+        >
+          {props.pendingMark.tool === "select-rect" ? <span className="document-marking-region-label">标记区域</span> : null}
+        </div>
+      ) : null}
+      {!draftRect && props.pendingMark && markPrompt && (markPrompt.page == null || props.pageFilter == null || markPrompt.page === props.pageFilter) ? (
+        <form
+          className="pptx-mark-prompt"
+          data-testid="document-mark-prompt"
+          style={placeDocumentMarkPrompt(props.pendingMark.rect, viewport)}
+          onSubmit={(event) => { event.preventDefault(); markPrompt.onSubmit(); }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <input
+            placeholder="描述你想要的修改"
+            autoFocus
+            value={markPrompt.instruction}
+            onChange={(event) => markPrompt.onInstructionChange(event.target.value)}
+          />
+          <button
+            className="send"
+            type="button"
+            aria-label="发送修改"
+            title="发送到对话"
+            disabled={markPrompt.busy || !markPrompt.instruction.trim()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (markPrompt.busy || !markPrompt.instruction.trim()) return;
+              markPrompt.onSubmit();
+            }}
+          >{markPromptIcon("M12 19V6|m6 11 6-6 6 6")}</button>
+          <button type="button" aria-label="删除标记" title="删除标记" onClick={() => markPrompt.onClear()}>{markPromptIcon("M3 6h18|M8 6V4h8v2|M19 6l-1 14H6L5 6")}</button>
+        </form>
       ) : null}
     </div>
   );

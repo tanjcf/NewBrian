@@ -7,7 +7,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const {
   DesktopAppUpdateService,
+  applySkippedVersionToUpdateStatus,
   buildDeferredSilentMsiexecScript,
+  buildDeferredSilentNsisScript,
   buildSilentDesktopMsiUpgradeArgs,
   controlPlaneCacheRelease,
   describeSilentDesktopMsiFailure,
@@ -29,6 +31,24 @@ test("an update without a checksum never reaches download or installation", asyn
   const result = await service.startUpdate();
   assert.equal(result.ok, false);
   assert.match(result.detail, /缺少 SHA-256/);
+});
+
+test("getStatus still returns currentVersion when refreshRelease hangs", async () => {
+  const service = new DesktopAppUpdateService({
+    getCurrentVersion: () => "1.4.12",
+    readCachedRelease: async () => null,
+    refreshRelease: () => new Promise(() => {
+      // never resolves — simulates hung /api/desktop/v1/app-update
+    }),
+    downloadDir: () => tmpdir(),
+    runSilentInstall: async () => ({ exitCode: 0 }),
+    openInstallerFallback: async () => ""
+  });
+  const started = Date.now();
+  const status = await service.getStatus({ refresh: true });
+  assert.ok(Date.now() - started < 12_000);
+  assert.equal(status.currentVersion, "1.4.12");
+  assert.equal(status.available, false);
 });
 
 test("parses and compares app_release offers for click-to-upgrade", () => {
@@ -66,10 +86,44 @@ test("parses and compares app_release offers for click-to-upgrade", () => {
     currentVersion: "0.1.61",
     release: offer
   }).available, false);
+  const staleBehind = resolveDesktopAppUpdateStatus({
+    currentVersion: "1.4.43",
+    release: {
+      latest_version: "1.4.34",
+      download_url: "https://example.com/NewBrain-1.4.34-setup.exe",
+      sha256: "abc",
+      notes: "stale"
+    }
+  });
+  assert.equal(staleBehind.available, false);
+  assert.equal(staleBehind.latestVersion, undefined);
+  assert.match(staleBehind.detail, /已是最新/);
   assert.deepEqual(
     controlPlaneCacheRelease({ bootstrap: { app_release: offer } }),
     offer
   );
+});
+
+test("skipped version suppresses available until a newer release", () => {
+  const available = resolveDesktopAppUpdateStatus({
+    currentVersion: "1.4.41",
+    release: {
+      latest_version: "1.4.42",
+      download_url: "https://example.test/NewBrain-1.4.42-setup.exe",
+      sha256: "abc"
+    }
+  });
+  assert.equal(available.available, true);
+  const skipped = applySkippedVersionToUpdateStatus({ ...available }, "v1.4.42");
+  assert.equal(skipped.available, false);
+  assert.equal(skipped.skippedVersion, "v1.4.42");
+  assert.match(skipped.detail, /已跳过版本/);
+  const mandatory = applySkippedVersionToUpdateStatus({
+    ...available,
+    mandatory: true
+  }, "1.4.42");
+  assert.equal(mandatory.available, true);
+  assert.equal(mandatory.skippedVersion, "1.4.42");
 });
 
 test("builds silent per-user msiexec args matching LocalAppData installs", () => {
@@ -86,7 +140,7 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     [
       "/i",
       "C:\\updates\\NewBrain-1.2.1.msi",
-      "/qn",
+      "/passive",
       "/norestart",
       "REBOOT=ReallySuppress",
       "MSIINSTALLPERUSER=1",
@@ -100,7 +154,7 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     [
       "/i",
       "C:\\updates\\NewBrain-1.2.1.msi",
-      "/qn",
+      "/passive",
       "/norestart",
       "REBOOT=ReallySuppress",
       "ALLUSERS=1",
@@ -121,15 +175,92 @@ test("builds silent per-user msiexec args matching LocalAppData installs", () =>
     processImageName: "NewBrain.exe",
     maxWaitSeconds: 30
   });
-  assert.match(deferred, /msiexec\.exe \/i .* \/qn \/norestart REBOOT=ReallySuppress MSIINSTALLPERUSER=1 ALLUSERS=/);
-  assert.match(deferred, /Get-Process -Name \$name/);
+  assert.match(deferred, /msiexec\.exe \/i .* \/passive \/norestart REBOOT=ReallySuppress MSIINSTALLPERUSER=1 ALLUSERS=/);
+  assert.match(deferred, /Get-Process -Name/);
   assert.match(deferred, /WindowStyle Hidden/);
-  assert.match(deferred, /等待 NewBrain 退出超时/);
+  assert.match(deferred, /Stop-Process -Force/);
   assert.doesNotMatch(deferred, /find \/I/i);
   assert.doesNotMatch(deferred, /tasklist/i);
   assert.match(deferred, /if errorlevel 1 \(/);
   assert.match(deferred, /start ""/);
-  assert.doesNotMatch(deferred, /\/qb\b/);
+  assert.doesNotMatch(deferred, /\/qn\b/);
+});
+
+test("deferred NSIS script installs into the running executable directory", () => {
+  const script = buildDeferredSilentNsisScript({
+    setupPath: "C:\\updates\\NewBrain 1.4.17-setup.exe",
+    executablePath: "C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe",
+    processImageName: "NewBrain.exe",
+    processId: 1234,
+    maxWaitSeconds: 30,
+    resultPath: "C:\\updates\\last-nsis-update.json"
+  });
+  // Cockpit-like progress: --updated without /S, UseShellExecute so UI shows; /D= last
+  assert.match(script, /Arguments = '--updated \/D=' \+ \$installRoot/);
+  assert.doesNotMatch(script, /Arguments = '--updated \/S/);
+  assert.match(script, /UseShellExecute = \$true/);
+  assert.match(script, /WaitForExit\(30000\)/);
+  assert.match(script, /NewBrain\.exe missing after silent setup/);
+  assert.match(script, /Repair-NewBrainShortcuts/);
+  assert.match(script, /Restore-NewBrainFromTempOldInstall/);
+  assert.match(script, /old-install/);
+  assert.match(script, /Programs\\@codex-forgedesktop/);
+  assert.match(script, /last-nsis-update\.json/);
+  assert.match(script, /Start-Process -FilePath \$target\.FullName/);
+  assert.doesNotMatch(script, /@echo off/);
+  assert.doesNotMatch(script, /title NewBrain update/);
+  assert.doesNotMatch(script, /cmd\.exe/);
+});
+
+test("getStatus clears staged state when pending apply did not change version", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "newbrain-update-failed-"));
+  try {
+    await writeFile(
+      join(dir, "pending-apply.json"),
+      JSON.stringify({
+        latestVersion: "1.4.17",
+        fromVersion: "1.4.15",
+        path: join(dir, "setup.exe"),
+        packageKind: "full-nsis",
+        sha256: "abc",
+        stagedAt: new Date().toISOString()
+      }),
+      "utf8"
+    );
+    await writeFile(
+      join(dir, "staged-update.json"),
+      JSON.stringify({
+        latestVersion: "1.4.17",
+        fromVersion: "1.4.15",
+        path: join(dir, "setup.exe"),
+        packageKind: "full-nsis",
+        sha256: "abc",
+        stagedAt: new Date().toISOString()
+      }),
+      "utf8"
+    );
+    const service = new DesktopAppUpdateService({
+      getCurrentVersion: () => "1.4.15",
+      getExecutablePath: () => "C:\\Users\\Ada\\AppData\\Local\\.newbrain\\NewBrain.exe",
+      readCachedRelease: async () => ({
+        available: true,
+        latest_version: "1.4.17",
+        download_url: "https://example.com/NewBrain 1.4.17-setup.exe",
+        sha256: "abc",
+        package_kind: "nsis"
+      }),
+      downloadDir: () => dir,
+      runSilentInstall: async () => ({ exitCode: 0 }),
+      openInstallerFallback: async () => ""
+    });
+    const status = await service.getStatus({ refresh: false });
+    assert.equal(Boolean(status.staged), false);
+    assert.match(status.detail, /上次更新未生效/);
+    await assert.rejects(() => readFile(join(dir, "staged-update.json"), "utf8"));
+    await assert.rejects(() => readFile(join(dir, "pending-apply.json"), "utf8"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("getStatus refresh surfaces a newly published release without restart", async () => {
@@ -213,22 +344,29 @@ test("downloads MSI and runs silent install after the user clicks update", async
     assert.equal(status.releaseId, "rel_1");
     const result = await service.startUpdate();
     assert.equal(result.ok, true);
+    assert.equal(result.staged, true);
+    assert.equal(silentCalls.length, 0);
+    assert.match(result.detail, /已就绪，重启后生效/);
+    assert.ok(progress.some((item) => item.phase === "ready"));
+
+    const applied = await service.applyStagedUpdate();
+    assert.equal(applied.ok, true);
     assert.equal(silentCalls.length, 1);
     assert.equal(opened.length, 0);
     assert.deepEqual(silentCalls[0]?.args, [
       "/i",
       silentCalls[0]!.msiPath,
-      "/qn",
+      "/passive",
       "/norestart",
       "REBOOT=ReallySuppress",
       "MSIINSTALLPERUSER=1",
       "APPLICATIONFOLDER=C:\\Users\\Ada\\AppData\\Local\\.newbrain",
       "ALLUSERS="
     ]);
-    assert.match(result.detail, /即将退出并安装/);
+    assert.match(applied.detail, /安装进度窗口/);
     assert.equal(afterSilent, 1);
-    assert.ok(progress.some((item) => item.phase === "installing" && /正在安装/.test(item.detail)));
-    assert.ok(progress.some((item) => item.phase === "done" && /即将退出并安装/.test(item.detail)));
+    assert.ok(progress.some((item) => item.phase === "installing"));
+    assert.ok(progress.some((item) => item.phase === "done" && /安装进度窗口/.test(item.detail)));
     assert.deepEqual(await readFile(silentCalls[0]!.msiPath), payload);
     const verify = await service.verifyUpdate({ ok: true });
     assert.equal(verify.ok, true);
@@ -270,9 +408,14 @@ test("falls back to opening the MSI wizard when silent install fails", async () 
     });
     const result = await service.startUpdate();
     assert.equal(result.ok, true);
+    assert.equal(result.staged, true);
+    assert.equal(opened.length, 0);
+
+    const applied = await service.applyStagedUpdate();
+    assert.equal(applied.ok, true);
     assert.equal(opened.length, 1);
-    assert.match(result.detail, /管理员权限/);
-    assert.match(result.detail, /已打开/);
+    assert.match(applied.detail, /管理员权限|已打开/);
+    assert.match(applied.detail, /已打开|安装程序/);
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });
@@ -369,14 +512,16 @@ test("startUpdate leaves preparing immediately and handles 1.2.9.ulit patch MSI"
       onProgress: (item) => progress.push(`${item.phase}:${item.percent}`)
     });
     const result = await service.startUpdate();
-    assert.equal(result.ok, true);
-    assert.equal(silentCalls.length, 1);
-    assert.match(silentCalls[0]!.msiPath.replace(/\\/g, "/"), /1\.2\.9ulit\.msi$/);
+    assert.equal(result.ok, true, result.detail);
+    assert.equal(Boolean(result.staged), true, result.detail);
+    assert.equal(silentCalls.length, 0);
     assert.ok(progress.some((item) => item.startsWith("preparing:")));
-    assert.ok(progress.some((item) => item.startsWith("downloading:")));
-    const preparingIndex = progress.findIndex((item) => item.startsWith("preparing:"));
-    const downloadingIndex = progress.findIndex((item) => item.startsWith("downloading:"));
-    assert.ok(downloadingIndex > preparingIndex);
+    assert.ok(progress.some((item) => item.startsWith("downloading:") || item.startsWith("ready:")));
+
+    const applied = await service.applyStagedUpdate();
+    assert.equal(applied.ok, true, applied.detail);
+    assert.equal(silentCalls.length, 1, applied.detail);
+    assert.match(silentCalls[0]!.msiPath.replace(/\\/g, "/"), /1\.2\.9ulit\.msi$/);
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });

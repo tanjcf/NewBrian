@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { LoginScreen } from "./app/LoginScreen";
+import {
+  clearLoginCodeCooldowns,
+  initialLoginCodeCooldownByChannel,
+  loginCodeCooldownForChannel,
+  setChannelLoginCodeCooldown
+} from "./app/login-code-cooldown";
 import { WorkspaceModules } from "./app/WorkspaceModules";
 import { FeaturePanel } from "./app/FeaturePanel";
 import { coerceValueBySchema, createSchemaFieldRenderer, setValueAtPath } from "./app/schema-fields";
@@ -9,9 +15,10 @@ import { ThreadContextMenu } from "./app/ThreadContextMenu";
 import { AuthLoadingScreen, BootstrapBlockingScreen } from "./app/BootstrapScreens";
 import { createMcpServerActions } from "./app/mcp-server-actions";
 import { useDesktopCore } from "./app/useDesktopCore";
-import { reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
+import { keepNewInputBelowHistoricalOutput, reconcileThreadDisplayMessages } from "./app/thread-activity-policy";
 import { snapshotToDisplayMessages } from "./app/thread-hydration";
 import { SidebarIcon } from "./app/SidebarIcon";
+import { codexAutomationSendPlan } from "../shared/automation-run-history.ts";
 import type {
   AutomationSpec,
   PhaseOneSnapshot,
@@ -23,7 +30,15 @@ import type {
   WorkspaceTimelineEvent
 } from "@codex-forge/protocol";
 import { INTERNAL_CHAT_WORKSPACE_ID } from "@codex-forge/protocol";
-import { mapSubscriptionInactiveUserMessage } from "../shared/model-user-facing-error.ts";
+import {
+  isUserCancelledModelError,
+  mapModelGatewayTimeoutUserMessage,
+  mapSubscriptionInactiveUserMessage
+} from "../shared/model-user-facing-error.ts";
+import {
+  LOGIN_FAILURE_FALLBACK,
+  normalizeLoginErrorMessage
+} from "./app/login-error-message.ts";
 import {
   SettingsNavIcon,
   SettingsSwitch,
@@ -44,9 +59,12 @@ import {
   initialMcpServer,
   initialModelConfig,
   initialPatchForm,
+  isCnMobile,
   optionalLoad,
   parseEnvText,
+  resolveLoginIdentifier,
   settingsFeatureItem,
+  shouldUseLoginCode,
   withTimeout
 } from "./app/desktop-model";
 import type {
@@ -85,20 +103,12 @@ function normalizeModelErrorMessage(error: unknown) {
     .trim();
   const subscriptionMessage = mapSubscriptionInactiveUserMessage(message);
   if (subscriptionMessage) return subscriptionMessage;
+  const gatewayTimeoutMessage = mapModelGatewayTimeoutUserMessage(message);
+  if (gatewayTimeoutMessage) return gatewayTimeoutMessage;
   if (/this operation was aborted|aborterror|model request aborted|agent loop was cancelled/i.test(message)) {
     return "上一轮请求已被新消息取代或手动停止。请查看最新回复，或重试上一轮。";
   }
   return message;
-}
-
-function normalizeLoginErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(/^Error invoking remote method 'phase1:login-auth': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:login-auth": Error:\s*/i, "")
-    .replace(/^Error invoking remote method 'phase1:send-login-code': Error:\s*/i, "")
-    .replace(/^Error invoking remote method "phase1:send-login-code": Error:\s*/i, "")
-    .trim();
 }
 
 type ReviewChangeFile = {
@@ -333,7 +343,7 @@ export function App() {
   const [showOpenLocationMenu, setShowOpenLocationMenu] = useState(false);
   const [showWorkspaceStatusMenu, setShowWorkspaceStatusMenu] = useState(false);
   const [workspaceHeaderStatus, setWorkspaceHeaderStatus] = useState({
-    branch: "main",
+    branch: "",
     changes: 0,
     additions: 0,
     deletions: 0,
@@ -374,7 +384,9 @@ export function App() {
   const [loginForm, setLoginForm] = useState<LoginFormState>(initialLoginForm);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [isSendingLoginCode, setIsSendingLoginCode] = useState(false);
-  const [loginCodeCooldownSeconds, setLoginCodeCooldownSeconds] = useState(0);
+  const [loginCodeCooldownByChannel, setLoginCodeCooldownByChannel] = useState(initialLoginCodeCooldownByChannel);
+  const loginCodeChannel = loginForm.channel === "phone" ? "phone" : "email";
+  const loginCodeCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, loginCodeChannel);
   const [agreementDialog, setAgreementDialog] = useState<null | "tos" | "policy">(null);
   const [desktopBootstrapStatus, setDesktopBootstrapStatus] = useState<DesktopBootstrapStatusState>({
     overall: {
@@ -509,6 +521,7 @@ export function App() {
   useEffect(() => {
     if (!api || !selectedWorkspace?.id) return;
     let canceled = false;
+    setWorkspaceHeaderStatus((current) => ({ ...current, branch: "" }));
     api.getWorkspaceHeaderStatus(selectedWorkspace.id)
       .then((status) => {
         if (!canceled) setWorkspaceHeaderStatus(status);
@@ -702,8 +715,9 @@ export function App() {
     }
 
     const turns: ConversationTurn[] = [];
+    const orderedMessages = keepNewInputBelowHistoricalOutput(chatMessages);
 
-    for (const message of chatMessages) {
+    for (const message of orderedMessages) {
       if (message.role === "user") {
         turns.push({ id: message.id, user: message });
         continue;
@@ -746,7 +760,7 @@ export function App() {
     "继续推进当前项目窗口的对话任务流。";
   const title = selectedThread?.title ?? snapshot.session?.title ?? "默认线程";
   const isSettingsFeature = activeFeature === "settings";
-  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mobile", "mcp"].includes(activeFeature);
+  const isFullPageFeature = ["extensions", "skills", "plugins", "experts", "automation", "mcp"].includes(activeFeature);
   const showsFeaturePanel =
     activeFeature !== "new-chat" &&
     activeFeature !== "settings" &&
@@ -809,7 +823,7 @@ export function App() {
   } = useDesktopCore({
     api, modelConfig, desktopPreferences, workspaceCatalog, archivedThreadIds, pinnedThreadIds,
     selectedWorkspace, selectedThread, selectedWorkspaceId, selectedThreadId, threadContextMenu, showAccountMenu,
-    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownSeconds,
+    bootstrapState, desktopBootstrapStatus, isBootstrapBlocking, searchQuery, loginCodeCooldownByChannel,
     activeSettingsSection, mcpServers, expandedMcpLogId, newWorkspaceName, newWorkspacePath,
     newThreadTitle, newThreadSummary, forkThreadTitle, editingThreadTitle, editingThreadSummary,
     skillDraft, pluginDraft, automationDraft, editingFeatureId, environmentEnvText, authStatus, loginForm,
@@ -823,7 +837,7 @@ export function App() {
     setShowAccountMenu, setMcpHealth, setMcpLogs, setEditingThreadTitle, setEditingThreadSummary,
     setShowRenameThreadDialog,
     setForkThreadTitle, setNewWorkspaceName, setNewWorkspacePath, setNewThreadTitle, setNewThreadSummary,
-    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownSeconds, setIsSubmittingLogin,
+    setActiveFeature, setQuestion, setIsAskingModel, setLoginCodeCooldownByChannel, setIsSubmittingLogin,
     setIsSendingLoginCode, setActiveSettingsSection, setPreviewMode, setPreviewPlacement, initialDraft, initialMcpServer, initialDesktopAuthStatus,
     initialModelConfig, initialDesktopPreferences, initialFeatureConfig, emptySnapshot, withTimeout, optionalLoad,
     formatEnvText, parseEnvText, buildWorkspaceTree, collectDirectoryKeys, coerceValueBySchema, settingsFeatureItem
@@ -1017,14 +1031,43 @@ export function App() {
     }
   }
 
-  async function handleLoginSubmit(agreementChecked = loginForm.agreementAccepted) {
+  async function handleLoginSubmit(
+    agreementChecked = loginForm.agreementAccepted,
+    emailAuthMode: "password" | "code" = "password"
+  ) {
     if (!api || isSubmittingLogin) {
       return;
     }
 
-    if (!loginForm.password.trim() && !loginForm.captcha.trim()) {
-      setErrorMessage("请输入密码或验证码。");
-      return;
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const identifier = resolveLoginIdentifier(loginForm);
+    const password = loginForm.password.trim();
+    const captcha = loginForm.captcha.trim();
+    const passwordLoginEnabled = authStatus.password_login_enabled !== false;
+    const useCode = shouldUseLoginCode(loginForm, emailAuthMode, { passwordLoginEnabled });
+
+    if (channel === "phone") {
+      if (!isCnMobile(identifier)) {
+        setErrorMessage("请填写 11 位手机号。");
+        return;
+      }
+      if (!captcha) {
+        setErrorMessage("请填写短信验证码。");
+        return;
+      }
+    } else {
+      if (!identifier) {
+        setErrorMessage("请输入邮箱。");
+        return;
+      }
+      if (useCode && !captcha) {
+        setErrorMessage("请先获取并填写邮箱验证码后再登录。");
+        return;
+      }
+      if (!useCode && !password) {
+        setErrorMessage("请输入密码。");
+        return;
+      }
     }
 
     if (authStatus.agreement?.enabled && !agreementChecked) {
@@ -1037,36 +1080,50 @@ export function App() {
     setIsSubmittingLogin(true);
     try {
       const nextAuthStatus = await api.loginAuth({
-        email: loginForm.email,
-        password: loginForm.password.trim(),
-        captcha: loginForm.captcha,
+        email: identifier,
+        password: useCode ? "" : password,
+        captcha: useCode ? captcha : "",
         agreement_accepted: authStatus.agreement?.enabled ? agreementChecked : true
       });
       setAuthStatus(nextAuthStatus);
-      if (nextAuthStatus.authenticated) {
-        const nextBootstrapStatus = await api.startDesktopBootstrap();
-        setDesktopBootstrapStatus(nextBootstrapStatus);
+      if (!nextAuthStatus.authenticated) {
+        setErrorMessage(
+          String(nextAuthStatus.last_error || "").trim() || LOGIN_FAILURE_FALLBACK
+        );
+        return false;
       }
+      const nextBootstrapStatus = await api.startDesktopBootstrap();
+      setDesktopBootstrapStatus(nextBootstrapStatus);
       setLoginForm((current) => ({
         ...current,
         password: "",
         captcha: ""
       }));
+      setLoginCodeCooldownByChannel(clearLoginCodeCooldowns());
       setChatStatus("账号登录成功，已接入真实会话。");
       setErrorMessage("");
+      return true;
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
+      return false;
     } finally {
       setIsSubmittingLogin(false);
     }
   }
 
   async function handleSendLoginCode() {
-    if (!api || isSendingLoginCode || loginCodeCooldownSeconds > 0) {
+    const channel = loginForm.channel === "phone" ? "phone" : "email";
+    const channelCooldownSeconds = loginCodeCooldownForChannel(loginCodeCooldownByChannel, channel);
+    if (!api || isSendingLoginCode || channelCooldownSeconds > 0) {
       return;
     }
 
-    if (!loginForm.email.trim()) {
+    if (channel === "phone") {
+      if (!isCnMobile(loginForm.phone)) {
+        setErrorMessage("请先填写 11 位手机号。");
+        return;
+      }
+    } else if (!loginForm.email.trim()) {
       setErrorMessage("请先输入邮箱。");
       return;
     }
@@ -1074,13 +1131,23 @@ export function App() {
     setErrorMessage("");
     setIsSendingLoginCode(true);
     try {
-      const result = await api.sendLoginCode({ email: loginForm.email.trim() });
+      const result = await api.sendLoginCode(
+        channel === "phone"
+          ? { phone: loginForm.phone.trim() }
+          : { email: loginForm.email.trim() }
+      );
       const resendAfter =
         typeof (result.data as Record<string, unknown> | undefined)?.resend_after_seconds === "number"
           ? Number((result.data as Record<string, unknown>).resend_after_seconds)
           : 60;
-      setLoginCodeCooldownSeconds(Math.max(1, resendAfter));
-      setChatStatus("验证码已发送，请查收邮箱。");
+      setLoginCodeCooldownByChannel((current) =>
+        setChannelLoginCodeCooldown(current, channel, Math.max(1, resendAfter))
+      );
+      setChatStatus(
+        channel === "phone"
+          ? `验证码已发送至手机 ${loginForm.phone.trim().replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2")}，请查收短信。`
+          : `验证码已发送至邮箱 ${loginForm.email.trim()}，请查收邮件。`
+      );
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(normalizeLoginErrorMessage(error));
@@ -1097,6 +1164,9 @@ export function App() {
   async function askModel(draftOverride?: QueuedComposerDraft & {
     forceStandaloneChat?: boolean;
     forceProjectThread?: boolean;
+    targetWorkspaceId?: string;
+    targetThreadId?: string;
+    pinnedThreadEnsured?: boolean;
     brainWorkspaceKey?: import("@codex-forge/protocol").BrainWorkspaceKey;
   }) {
     const draftQuestion = draftOverride?.question ?? question;
@@ -1136,7 +1206,18 @@ export function App() {
       return;
     }
 
-    const composingNewThread = forceStandaloneChat || isComposingNewThread;
+    const pinnedWorkspaceId = String(draftOverride?.targetWorkspaceId || "").trim();
+    const pinnedThreadId = String(draftOverride?.targetThreadId || "").trim();
+    const snapshotHasThread = Boolean(workspaceCatalog
+      .find((workspace) => workspace.id === pinnedWorkspaceId)
+      ?.threads?.some((thread) => thread.id === pinnedThreadId));
+    const appendToBoundThread = codexAutomationSendPlan({
+      boundWorkspaceId: pinnedWorkspaceId,
+      boundThreadId: pinnedThreadId,
+      snapshotHasThread,
+      threadJustEnsured: Boolean(draftOverride?.pinnedThreadEnsured)
+    }).appendToBoundThread;
+    const composingNewThread = appendToBoundThread ? false : (forceStandaloneChat || isComposingNewThread);
     const composingThreadScope = forceStandaloneChat ? "chat" : (forceProjectThread ? "project" : newThreadScope);
     const effectiveChatUsesProject = forceStandaloneChat ? false : (forceProjectThread ? true : chatUsesProject);
     if (forceStandaloneChat) {
@@ -1157,19 +1238,29 @@ export function App() {
       : currentWorkspace;
     let targetThread = forceStandaloneChat ? undefined : currentThread;
     let targetThreadTitle = selectedThread?.title || "新对话";
+    if (appendToBoundThread && pinnedThreadId) {
+      targetWorkspaceId = pinnedWorkspaceId;
+      targetWorkspace = workspaceCatalog.find((workspace) => workspace.id === pinnedWorkspaceId) ?? targetWorkspace;
+      targetThread = targetWorkspace?.threads.find((thread) => thread.id === pinnedThreadId)
+        ?? ({ id: pinnedThreadId, title: "自动化任务", scope: "chat" } as NonNullable<typeof targetThread>);
+      targetThreadTitle = targetThread?.title || "自动化任务";
+      setSelectedWorkspaceId(pinnedWorkspaceId);
+      setSelectedThreadId(pinnedThreadId);
+      setIsComposingNewThread(false);
+    }
     if (composingNewThread) {
       if (!targetWorkspaceId) {
-        setErrorMessage("请先选择一个项目，再新建线程。");
+        setErrorMessage("请先选择一个项目，再新建对话。");
         return;
       }
 
-      const titleText = draftQuestion.trim().slice(0, 36) || "新线程";
+      const titleText = draftQuestion.trim().slice(0, 36) || "新对话";
       try {
-        setChatStatus("正在创建新线程...");
+        setChatStatus("正在创建新对话...");
         const nextCatalog = await api.addWorkspaceThread({
           workspaceId: targetWorkspaceId,
           title: titleText,
-          summary: effectiveThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新线程。",
+          summary: effectiveThreadScope === "chat" ? "从聊天输入框创建的新对话。" : "从项目输入框创建的新对话。",
           scope: effectiveThreadScope,
           ...(targetWorkspaceId === INTERNAL_CHAT_WORKSPACE_ID && draftOverride?.brainWorkspaceKey
             ? { brainWorkspaceKey: draftOverride.brainWorkspaceKey }
@@ -1178,7 +1269,7 @@ export function App() {
         const nextWorkspace = nextCatalog.find((workspace) => workspace.id === targetWorkspaceId);
         const newestThread = nextWorkspace?.threads[0];
         if (!newestThread || newestThread.scope !== effectiveThreadScope) {
-          throw new Error("新线程创建后未返回线程记录。");
+          throw new Error("新对话创建后未返回对话记录。");
         }
         targetWorkspaceId = nextWorkspace?.id ?? targetWorkspaceId;
         targetWorkspace = nextWorkspace ?? currentWorkspace;
@@ -1206,7 +1297,7 @@ export function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setErrorMessage(message);
-        setChatStatus("新线程创建失败。");
+        setChatStatus("新对话创建失败。");
         return;
       }
     }
@@ -1257,7 +1348,7 @@ export function App() {
       ].filter(Boolean).join("\n\n");
     }
     if (composerWorkspaceContext && composingNewThread) {
-      toolContext = [toolContext, `当前新线程：${contextThreadTitle}`].filter(Boolean).join("\n\n");
+      toolContext = [toolContext, `当前新对话：${contextThreadTitle}`].filter(Boolean).join("\n\n");
     }
 
     const userMessage: ModelChatMessage = {
@@ -1335,12 +1426,18 @@ export function App() {
       }
       await refreshCatalog();
     } catch (error) {
-      const message = normalizeModelErrorMessage(error);
-      setChatStatus("模型请求失败。");
-      setErrorMessage(message);
-      // The error panel owns request failures. Keeping a synthetic assistant
-      // message here would feed it back into the next request as conversation.
-      updateThreadMessages(targetThreadId, (current) => current.filter((item) => item.id !== streamRequestId));
+      if (isUserCancelledModelError(error)) {
+        setChatStatus("已停止生成。");
+        setErrorMessage("");
+        updateThreadMessages(targetThreadId, (current) => current.filter((item) => item.id !== streamRequestId));
+      } else {
+        const message = normalizeModelErrorMessage(error);
+        setChatStatus("模型请求失败。");
+        setErrorMessage(message);
+        // The error panel owns request failures. Keeping a synthetic assistant
+        // message here would feed it back into the next request as conversation.
+        updateThreadMessages(targetThreadId, (current) => current.filter((item) => item.id !== streamRequestId));
+      }
     } finally {
       setLastAssistantElapsedSeconds(Math.max(1, Math.round((Date.now() - requestStartedAt) / 1000)));
       setAssistantStartedAt(null);
@@ -1377,8 +1474,9 @@ export function App() {
       setChatStatus("当前没有可停止的任务。");
       return;
     }
+    setErrorMessage("");
     const result = await api.cancelModelRequest({ requestId });
-    setChatStatus(result.detail);
+    setChatStatus(result.ok ? "已停止生成。" : result.detail);
     if (result.ok) {
       streamingAssistantRef.current = { id: "", contentLength: 0 };
       setIsAskingModel(false);
@@ -2079,9 +2177,11 @@ export function App() {
                   <button type="button" className={workspaceStatusSubmenu === "local" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("local")}>
                     <SidebarIcon name="computer" /><span>本地</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
+                  {workspaceHeaderStatus.branch ? (
                   <button type="button" className={workspaceStatusSubmenu === "branch" ? "active" : ""} onClick={() => void openWorkspaceStatusSubmenu("branch")}>
                     <SidebarIcon name="branch" /><span>{workspaceHeaderStatus.branch}</span><strong><SidebarIcon name="chevron-down" /></strong>
                   </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={async () => {
@@ -2115,7 +2215,7 @@ export function App() {
                   {workspaceStatusSubmenu === "branch" ? (
                     <div className="workspace-status-submenu branch-status-submenu">
                       <label>⌕<input value={branchSearch} onChange={(event) => setBranchSearch(event.target.value)} placeholder="搜索分支" /></label>
-                      <span className="workspace-status-subtitle">分支</span>
+                      <span className="workspace-status-subtitle">{workspaceBranches.current ? `当前分支：${workspaceBranches.current}` : "当前分支：(detached HEAD)"}</span>
                       <div className="branch-status-list">
                         {workspaceBranches.branches.filter((branch) => branch.toLowerCase().includes(branchSearch.toLowerCase())).map((branch) => (
                           <button key={branch} type="button" onClick={async () => { if (!api || !selectedWorkspace || branch === workspaceBranches.current) return; try { const next = await api.switchWorkspaceBranch({ workspaceId: selectedWorkspace.id, branch }); setWorkspaceBranches(next); await refreshWorkspaceHeaderStatus(); setWorkspaceStatusSubmenu(null); } catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)); } }}><SidebarIcon name="branch" /><span><strong>{branch}</strong>{branch === workspaceBranches.current ? <small>未提交：{workspaceBranches.changedFiles} 个文件</small> : null}</span><em>{branch === workspaceBranches.current ? "✓" : ""}</em></button>
@@ -2422,6 +2522,7 @@ export function App() {
         chatUsesProject={chatUsesProject}
         setChatUsesProject={setChatUsesProject}
         desktopPreferences={desktopPreferences}
+        saveDesktopPreferences={saveDesktopPreferences}
         featureConfig={featureConfig}
         setFeatureConfig={setFeatureConfig}
         skillDraft={skillDraft}
@@ -2448,7 +2549,9 @@ export function App() {
         isSubmittingLogin={isSubmittingLogin}
         loginCodeCooldownSeconds={loginCodeCooldownSeconds}
         loginForm={loginForm}
-        onLoginSubmit={(agreementChecked) => void handleLoginSubmit(agreementChecked)}
+        onLoginSubmit={(agreementChecked, emailAuthMode) =>
+          handleLoginSubmit(agreementChecked, emailAuthMode)
+        }
         onSendLoginCode={() => void handleSendLoginCode()}
         setAgreementDialog={setAgreementDialog}
         setLoginForm={handleLoginFormChange}

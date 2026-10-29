@@ -16,7 +16,6 @@ type DocumentWorkspaceProps = {
   onSelectFile: (file: any, openPreview?: boolean) => void;
   onSelectAnchor: (anchor: any) => void;
   onToggleAnnotation: () => void;
-  onSendAnnotation: (annotation: any) => void;
   onPreviewChangeSet: (changeSet: any) => void;
   onReviewChangeSet: (changeSet: any, status: "ACCEPTED" | "REJECTED") => void;
   onExportChangeSet: (changeSet: any) => void;
@@ -69,7 +68,6 @@ export function DocumentWorkspace(props: DocumentWorkspaceProps) {
               <strong>{annotation.instruction}</strong>
               <small>{annotation.selectedText?.trim() || "标记区域"} · {annotation.status}</small>
             </div>
-            <button type="button" disabled={!annotation.instruction.trim()} title={annotation.instruction.trim() ? "将标记位置、截图与修改要求加入左侧对话" : "请先填写修改要求"} onClick={() => props.onSendAnnotation(annotation)}>加入对话</button>
           </article>
         );
       })}

@@ -10,11 +10,10 @@ type Props = {
 /** Compact composer banner for typed document.style preferences. */
 export function DeliveryPreferenceChip(props: Props) {
   const state = props.state ?? EMPTY_DELIVERY_PREFERENCE_CHIP;
-  if (!state.visible) return null;
+  if (!state.visible || !state.hasStyle) return null;
   return (
     <div className="delivery-preference-chip" data-testid="delivery-preference-chip" role="status">
-      {state.hasStyle ? (
-        <div className="delivery-preference-chip__row">
+      <div className="delivery-preference-chip__row">
           <span className="delivery-preference-chip__label">交付版式</span>
           {state.scopeLabel ? <em className="delivery-preference-chip__scope">{state.scopeLabel}</em> : null}
           <strong className="delivery-preference-chip__summary">{state.summary}</strong>
@@ -44,13 +43,7 @@ export function DeliveryPreferenceChip(props: Props) {
               </button>
             ) : null}
           </span>
-        </div>
-      ) : null}
-      {state.styleGapQuestion ? (
-        <p className="delivery-preference-chip__gap" data-testid="delivery-preference-gap">
-          {state.styleGapQuestion.replace(/^待确认交付版式:\s*/, "版式待确认：")}
-        </p>
-      ) : null}
+      </div>
     </div>
   );
 }

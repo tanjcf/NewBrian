@@ -5,8 +5,14 @@
 import { spawn } from "node:child_process";
 import { createBoundedStreamCollector, COMMAND_OUTPUT_LIMITS, truncateHeadTail } from "./command-output.js";
 import { decodeChildOutputBuffer } from "./windows-encoding.js";
+import { repairMojibakeTree } from "./workspace-fs.js";
 
 const DEFAULT_YIELD_MS = 10_000;
+/** Codex unified_exec: short commands return; longer ones yield a live session instead of being killed. */
+export const MIN_YIELD_TIME_MS = 250;
+export const WINDOWS_INITIAL_EXEC_YIELD_TIME_FLOOR_MS = 10_000;
+export const MAX_YIELD_TIME_MS = 30_000;
+export const STDIN_CLOSED_MESSAGE = "stdin is closed for this session; rerun shell.exec with tty=true to keep stdin open";
 const MAX_POLL_WAIT_MS = 30_000;
 const DEFAULT_LOG_TAIL_LINES = 200;
 const MAX_LOG_CHARS = COMMAND_OUTPUT_LIMITS.maxVisibleBytes ?? 256 * 1024;
@@ -14,6 +20,16 @@ const MAX_LOG_CHARS = COMMAND_OUTPUT_LIMITS.maxVisibleBytes ?? 256 * 1024;
 /** @type {Map<string, import('./shell-process-registry.js').ShellProcessSession>} */
 const sessions = new Map();
 let sessionSeq = 0;
+
+/** Match Codex clamp_yield_time: Windows initial exec waits at least 10s and at most 30s. */
+export function clampYieldTimeMs(yieldTimeMs) {
+  let value = Number(yieldTimeMs);
+  if (!Number.isFinite(value)) {
+    value = process.platform === "win32" ? WINDOWS_INITIAL_EXEC_YIELD_TIME_FLOOR_MS : MIN_YIELD_TIME_MS;
+  }
+  if (process.platform === "win32") value = Math.max(value, WINDOWS_INITIAL_EXEC_YIELD_TIME_FLOOR_MS);
+  return Math.min(MAX_YIELD_TIME_MS, Math.max(MIN_YIELD_TIME_MS, value));
+}
 
 function nextSessionId() {
   sessionSeq += 1;
@@ -111,12 +127,19 @@ function attachChildHandlers(session, child) {
     session.exitWaiters.clear();
   });
   child.on("close", (code, signal) => {
-    session.status = "exited";
     session.exitCode = typeof code === "number" ? code : (signal ? 1 : 0);
     session.endedAt = Date.now();
     if (signal) appendLog(session, `\n[killed by ${signal}]\n`);
-    session.exitWaiters.forEach((resolve) => resolve());
-    session.exitWaiters.clear();
+    const finish = () => {
+      session.status = "exited";
+      session.exitWaiters.forEach((resolve) => resolve());
+      session.exitWaiters.clear();
+    };
+    if (session.exitCode === 0 && session.cwd) {
+      repairMojibakeTree(session.cwd).then(finish, finish);
+      return;
+    }
+    finish();
   });
 }
 
@@ -187,8 +210,10 @@ export async function startShellProcess(options) {
     displayCommand,
     background = false,
     yieldMs = DEFAULT_YIELD_MS,
+    tty = false,
     signal
   } = options;
+  const stdinOpen = tty === true;
 
   const id = nextSessionId();
   const session = {
@@ -205,6 +230,7 @@ export async function startShellProcess(options) {
     lastOutputAt: Date.now(),
     child: null,
     stdin: null,
+    stdinOpen,
     exitWaiters: new Set(),
     stdoutCollector: createBoundedStreamCollector({ ...COMMAND_OUTPUT_LIMITS }),
     stderrCollector: createBoundedStreamCollector({ ...COMMAND_OUTPUT_LIMITS })
@@ -218,6 +244,11 @@ export async function startShellProcess(options) {
     stdio: ["pipe", "pipe", "pipe"]
   });
   attachChildHandlers(session, child);
+  if (!stdinOpen) {
+    try { child.stdin?.end(); } catch { /* already closed */ }
+    session.stdin = null;
+    session.stdinOpen = false;
+  }
 
   const onAbort = () => {
     killProcessTree(session.pid);
@@ -277,6 +308,7 @@ export async function startShellProcess(options) {
     pid: session.pid,
     output: [
       `Command still running after ${waitMs}ms; moved to background session ${id} (pid ${session.pid ?? "?"}).`,
+      session.stdinOpen ? "" : STDIN_CLOSED_MESSAGE,
       "Use shell.process action=poll|log|kill with this sessionId.",
       sliceLogLines(session.logText).text
     ].filter(Boolean).join("\n\n"),
@@ -346,8 +378,8 @@ export async function handleShellProcessAction(input = {}) {
   if (action === "write") {
     const data = String(input.data ?? "");
     if (session.status !== "running") throw new Error(`Session ${sessionId} is not running.`);
-    if (!session.stdin || session.stdin.destroyed || session.stdin.writableEnded) {
-      throw new Error(`Session ${sessionId} stdin is not writable.`);
+    if (!session.stdinOpen || !session.stdin || session.stdin.destroyed || session.stdin.writableEnded) {
+      throw new Error(STDIN_CLOSED_MESSAGE);
     }
     session.stdin.write(data);
     return {

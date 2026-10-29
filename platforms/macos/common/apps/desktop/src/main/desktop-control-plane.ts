@@ -43,6 +43,35 @@ export function isRetiredGatewayBaseUrl(value: unknown): boolean {
   }
 }
 
+/** The shared test gateway. Production packages must not file exception tickets here. */
+export function isTestEnvironmentGatewayBaseUrl(value: unknown): boolean {
+  const raw = String(value ?? "").trim();
+  if (!raw) return false;
+  try {
+    return new URL(raw).hostname.toLowerCase() === "203.0.113.10";
+  } catch {
+    return raw.includes("203.0.113.10");
+  }
+}
+
+function preferProductionGateway(
+  candidate: string,
+  input: { isPackaged: boolean; productionBaseUrl: string }
+): string {
+  const production = String(input.productionBaseUrl ?? "").trim();
+  if (
+    input.isPackaged
+    && production
+    && !isTestEnvironmentGatewayBaseUrl(production)
+    && !isLoopbackGatewayBaseUrl(production)
+    && !isRetiredGatewayBaseUrl(production)
+    && isTestEnvironmentGatewayBaseUrl(candidate)
+  ) {
+    return production;
+  }
+  return candidate;
+}
+
 export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledBaseUrl: unknown): string {
   const configured = String(configuredBaseUrl ?? "").trim();
   const bundled = String(bundledBaseUrl ?? "").trim();
@@ -63,8 +92,9 @@ export function migrateLegacyGatewayBaseUrl(configuredBaseUrl: unknown, bundledB
 
 /**
  * Resolve the gateway URL used for model/auth traffic.
- * Packaged installs never keep loopback unless NEWBRAIN_MODEL_BASE_URL explicitly
- * forces a local gateway for developers.
+ * Packaged installs never keep loopback or the shared test gateway when the
+ * compiled production endpoint is a different host. Development builds and
+ * test-channel packages may still use the test gateway.
  */
 export function resolveEffectiveGatewayBaseUrl(input: {
   configuredBaseUrl?: unknown;
@@ -74,7 +104,7 @@ export function resolveEffectiveGatewayBaseUrl(input: {
   productionBaseUrl: string;
 }): string {
   const env = String(input.envBaseUrl ?? "").trim();
-  if (env) return env;
+  if (env) return preferProductionGateway(env, input);
   const configured = String(input.configuredBaseUrl ?? "").trim();
   if (!input.isPackaged && configured) return configured;
   const bundled = String(input.bundledBaseUrl ?? "").trim();
@@ -85,7 +115,10 @@ export function resolveEffectiveGatewayBaseUrl(input: {
   if (input.isPackaged && (isLoopbackGatewayBaseUrl(migrated) || isRetiredGatewayBaseUrl(migrated))) {
     return input.productionBaseUrl;
   }
-  return migrated || (input.isPackaged ? input.productionBaseUrl : migrationTarget);
+  return preferProductionGateway(
+    migrated || (input.isPackaged ? input.productionBaseUrl : migrationTarget),
+    input
+  );
 }
 
 function versionParts(value: string) {

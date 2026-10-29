@@ -12,6 +12,7 @@ import {
 
 function registerCapture(workspaceRoot: string, extras?: Partial<{
   resolveGateway: () => Promise<{ baseUrl: string; bearerToken: string }>;
+  refreshAccessToken: () => Promise<string>;
   fetchImpl: typeof fetch;
   openLocalMedia: (input: { kind: "image" | "video"; relativePath: string }) => Promise<void> | void;
 }>) {
@@ -30,6 +31,7 @@ function registerCapture(workspaceRoot: string, extras?: Partial<{
     workspaceRoot,
     resolveGateway: extras?.resolveGateway
       ?? (async () => ({ baseUrl: "https://gateway.example/v1", bearerToken: "tok" })),
+    refreshAccessToken: extras?.refreshAccessToken,
     fetchImpl: extras?.fetchImpl,
     openLocalMedia: extras?.openLocalMedia
   });
@@ -110,7 +112,14 @@ test("image_generate downloads COS result and opens local preview", async () => 
             result_json: JSON.stringify({ urls: ["https://cos.ap-guangzhou.myqcloud.com/demo/a.png"] })
           }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
-        if (href.includes("myqcloud.com")) {
+        if ((() => {
+          try {
+            const hostname = new URL(href).hostname.toLowerCase();
+            return hostname === "myqcloud.com" || hostname.endsWith(".myqcloud.com");
+          } catch {
+            return false;
+          }
+        })()) {
           return new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
         }
         return new Response(String(init?.body || "{}"), { status: 404 });
@@ -134,6 +143,80 @@ test("image_generate rejects capability-style empty prompt", async () => {
     const result = await tools.get("image_generate")!.execute({});
     assert.equal(result.ok, false);
     assert.match(result.output, /prompt/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("image_generate refreshes once after media 401 then succeeds", async () => {
+  const root = await mkdtemp(join(tmpdir(), "auto-media-401-"));
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x04]);
+  const tokens: string[] = [];
+  let refreshes = 0;
+  try {
+    const tools = registerCapture(root, {
+      resolveGateway: async () => ({ baseUrl: "https://gateway.example/v1", bearerToken: "expired" }),
+      refreshAccessToken: async () => {
+        refreshes += 1;
+        return "fresh";
+      },
+      fetchImpl: async (url, init) => {
+        const href = String(url);
+        if (href.endsWith("/auto/tools/invoke")) {
+          const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization || "");
+          const token = auth.replace(/^Bearer\s+/i, "");
+          tokens.push(token);
+          if (token === "expired") {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+          return new Response(JSON.stringify({
+            job_id: "job-retry",
+            tool: "image_generate",
+            state: "SUCCEEDED",
+            reply: "图片已生成完成（任务 job-retry）。",
+            result_json: JSON.stringify({ urls: ["https://cos.ap-guangzhou.myqcloud.com/demo/retry.png"] })
+          }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        if (href.includes("myqcloud.com")) {
+          return new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
+        }
+        return new Response("{}", { status: 404 });
+      }
+    });
+    const result = await tools.get("image_generate")!.execute({ prompt: "测试身份证样例图（假数据）" });
+    assert.equal(result.ok, true);
+    assert.equal(refreshes, 1);
+    assert.deepEqual(tokens, ["expired", "fresh"]);
+    assert.match(result.output, /\.newbrain\/generated-media\/image\//);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("image_generate maps bare 401 Unauthorized to re-login guidance", async () => {
+  const root = await mkdtemp(join(tmpdir(), "auto-media-401-map-"));
+  try {
+    const tools = registerCapture(root, {
+      fetchImpl: async (url) => {
+        if (String(url).endsWith("/auto/tools/invoke")) {
+          return new Response(JSON.stringify({
+            timestamp: "2026-10-21T00:00:00Z",
+            status: 401,
+            error: "Unauthorized",
+            path: "/v1/auto/tools/invoke"
+          }), { status: 401, headers: { "Content-Type": "application/json" } });
+        }
+        return new Response("{}", { status: 404 });
+      }
+    });
+    const result = await tools.get("image_generate")!.execute({ prompt: "测试图" });
+    assert.equal(result.ok, false);
+    assert.match(result.output, /重新登录/);
+    assert.match(result.output, /不是缺模型|不要去.*模型配置/);
+    assert.doesNotMatch(result.output, /^Unauthorized$/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

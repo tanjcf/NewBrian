@@ -257,9 +257,12 @@ contextBridge.exposeInMainWorld("newbrain", {
   getQuantSnapshot: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSnapshot, input),
   getQuantActivity: (input: { projectId: string; prices: Record<string, number> }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantActivity, input),
   getQuantSkillPerformance: (input: { projectId: string; skillId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillPerformance, input),
+  listQuantProjectSkills: (input: { projectId: string }) => ipcRenderer.invoke(brainWorkspaceIpcChannels.quantSkillList, input),
   runQuantSkillSimulation: (input: {
     projectId: string;
     skillId: string;
+    title?: string;
+    strategyId?: string;
     symbol: string;
     quantity: number;
     query: unknown;
@@ -332,8 +335,42 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.governmentWritingSpecification.confirm, input),
   getAuthStatus: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.getStatus),
   getBillingSubscription: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.getBillingSubscription),
+  getSubscriptionCatalog: (): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.getSubscriptionCatalog),
+  rechargeWallet: (input: { amount: number; payment_method?: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.rechargeWallet, input),
+  purchasePlan: (input: { plan_id: number; payment_method?: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.purchasePlan, input),
+  openWalletPayment: (input: {
+    intent?: string;
+    amount?: number;
+    plan_id?: number;
+    payment_method?: string;
+  } = {}): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.openWalletPayment, input),
+  setWalletOverageEnabled: (input: { enabled: boolean }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.setWalletOverageEnabled, input),
+  redeemCode: (input: { code: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.redeemCode, input),
+  claimNationalDayGift: (): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.claimNationalDayGift),
+  loginWithAlipayQr: (input: { agreement_accepted: boolean }): Promise<DesktopAuthStatus> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.loginWithAlipayQr, input),
+  changeAuthPassword: (input: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),
+  changeAuthEmail: (input: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.auth.changeEmail, input),
   sendLoginCode: (input: DesktopAuthSendCodeInput): Promise<Record<string, unknown>> => ipcRenderer.invoke(desktopIpcChannels.auth.sendLoginCode, input),
   loginAuth: (input: DesktopAuthLoginInput): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.login, input),
+  loadRememberedLogin: () => ipcRenderer.invoke(desktopIpcChannels.auth.loadRememberedLogin),
+  saveRememberedLogin: (input: {
+    version: 1;
+    channel: "email" | "phone";
+    email: string;
+    phone: string;
+    password: string;
+  }) => ipcRenderer.invoke(desktopIpcChannels.auth.saveRememberedLogin, input),
+  clearRememberedLogin: () => ipcRenderer.invoke(desktopIpcChannels.auth.clearRememberedLogin),
   changeAuthPassword: (input: DesktopAuthChangePasswordInput): Promise<{ ok: boolean; detail: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changePassword, input),
   changeAuthEmail: (input: DesktopAuthChangeEmailInput): Promise<{ ok: boolean; detail: string; email: string }> => ipcRenderer.invoke(desktopIpcChannels.auth.changeEmail, input),
   logoutAuth: (): Promise<DesktopAuthStatus> => ipcRenderer.invoke(desktopIpcChannels.auth.logout),
@@ -367,6 +404,10 @@ contextBridge.exposeInMainWorld("newbrain", {
   exportResearchWriting: (input: ResearchWritingExportInput) =>
     ipcRenderer.invoke(desktopIpcChannels.researchWriting.export, input),
   getDesktopPreferences: (): Promise<DesktopPreferences> => ipcRenderer.invoke(desktopIpcChannels.preferences.get),
+  getDeliveryPreferences: () => ipcRenderer.invoke(desktopIpcChannels.deliveryPreferences.get),
+  clearDeliveryPreferences: (input?: { scope?: "thread" | "project" | "both" } | "thread" | "project" | "both") =>
+    ipcRenderer.invoke(desktopIpcChannels.deliveryPreferences.clear, input ?? "both"),
+  pinDeliveryPreferences: () => ipcRenderer.invoke(desktopIpcChannels.deliveryPreferences.pin),
   saveDesktopPreferences: (preferences: DesktopPreferences): Promise<DesktopPreferences> =>
     ipcRenderer.invoke(desktopIpcChannels.preferences.save, preferences),
   getDesktopBootstrapStatus: (): Promise<DesktopBootstrapStatus> => ipcRenderer.invoke(desktopIpcChannels.bootstrap.getStatus),
@@ -403,6 +444,28 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.exportZip, input),
   uninstallWritingSkills: (input: UninstallWritingSkillsInput = {}): Promise<UninstallWritingSkillsResult> =>
     ipcRenderer.invoke(desktopIpcChannels.openclawSkills.uninstallWritingSkills, input),
+  importSkillZipToProject: (input: {
+    workspaceId: string;
+    force?: boolean;
+    acknowledgeRisk?: boolean;
+  }): Promise<OpenClawSkillInstallResultPayload | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.openclawSkills.importZipToProject, input),
+  listExperts: (): Promise<Array<Record<string, unknown>>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.list),
+  installExpert: (input: { expertId: string }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.install, input),
+  setExpertEnabled: (input: { expertId: string; enabled: boolean }): Promise<Array<Record<string, unknown>>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.setEnabled, input),
+  summonExpert: (input: { threadId: string; expertId: string; userConfirmed?: boolean }): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.summon, input),
+  clearExpertSummon: (input: { threadId: string }): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.clearSummon, input),
+  getExpertSummon: (input: { threadId: string }): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.getSummon, input),
+  resolveExpertFromSkill: (input: { skillName: string; skillNames?: string[] }): Promise<{ expertId: string; skillName: string } | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.resolveFromSkill, input),
+  summonExpertFromSkill: (input: { threadId: string; skillName: string }): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.experts.summonFromSkill, input),
   searchWorkspaces: (query: string): Promise<SearchResultSpec[]> => ipcRenderer.invoke(desktopIpcChannels.search.workspaces, query),
   readWorkspaceFile: (input: WorkspaceFileInput): Promise<{
     path: string;
@@ -469,6 +532,14 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.appUpdate.getStatus),
   startAppUpdate: (): Promise<DesktopAppUpdateStartResult> =>
     ipcRenderer.invoke(desktopIpcChannels.appUpdate.start),
+  applyAppUpdate: (): Promise<DesktopAppUpdateStartResult> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.apply),
+  getAppliedAppUpdate: (): Promise<import("@codex-forge/protocol").DesktopAppUpdateAppliedInfo | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.getApplied),
+  dismissAppliedAppUpdate: (): Promise<void> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.dismissApplied),
+  skipAppUpdateVersion: (version?: string): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.appUpdate.skipVersion, version),
   verifyAppUpdate: (input?: DesktopAppUpdateVerifyInput): Promise<DesktopAppUpdateVerifyResult> =>
     ipcRenderer.invoke(desktopIpcChannels.appUpdate.verify, input),
   onAppUpdateProgress: (
@@ -507,6 +578,11 @@ contextBridge.exposeInMainWorld("newbrain", {
     ipcRenderer.invoke(desktopIpcChannels.workspace.exportThreadHtml, input),
   saveModelConfig: (config: ModelConfig): Promise<ModelConfig> =>
     ipcRenderer.invoke(desktopIpcChannels.model.saveConfig, config),
+  listCustomModelEndpoints: () => ipcRenderer.invoke(desktopIpcChannels.customModels.list),
+  saveCustomModelEndpoint: (input: { label: string; baseUrl: string; apiKey: string; model: string }) =>
+    ipcRenderer.invoke(desktopIpcChannels.customModels.save, input),
+  deleteCustomModelEndpoint: (input: { id: string }) => ipcRenderer.invoke(desktopIpcChannels.customModels.delete, input),
+  selectCustomModelEndpoint: (input: { id: string }) => ipcRenderer.invoke(desktopIpcChannels.customModels.select, input),
   saveMcpServers: (servers: McpServerConfig[]) => ipcRenderer.invoke(desktopIpcChannels.mcp.saveServers, servers),
   testMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.testServer, server),
   startMcpServer: (server: McpServerConfig): Promise<McpServerHealth> => ipcRenderer.invoke(desktopIpcChannels.mcp.startServer, server),
@@ -524,6 +600,45 @@ contextBridge.exposeInMainWorld("newbrain", {
   openBrowserPreview: (url?: string): Promise<{ ok: boolean; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.openPreview, url),
   closeBrowserPreview: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.closePreview),
   captureBrowserPreview: (): Promise<{ ok: boolean; path: string; url: string }> => ipcRenderer.invoke(desktopIpcChannels.browser.capturePreview),
+  clearBrowserBrowsingData: (): Promise<{ ok: boolean; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.clearBrowsingData),
+  listBrowserHistory: (): Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listHistory),
+  removeBrowserHistoryEntry: (id: string): Promise<Array<{ id: string; url: string; title: string; visitedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeHistoryEntry, id),
+  clearBrowserHistory: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(desktopIpcChannels.browser.clearHistory),
+  selectBrowserDownloadDir: (): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.selectDownloadDir),
+  listBrowserCredentials: (): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listCredentials),
+  upsertBrowserCredential: (input: {
+    origin: string;
+    username: string;
+    password: string;
+    id?: string;
+  }): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.upsertCredential, input),
+  removeBrowserCredential: (
+    id: string
+  ): Promise<Array<{ id: string; origin: string; username: string; hasPassword: boolean; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeCredential, id),
+  listBrowserContacts: (): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.listContacts),
+  upsertBrowserContact: (input: {
+    name: string;
+    email?: string;
+    phone?: string;
+    id?: string;
+  }): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.upsertContact, input),
+  removeBrowserContact: (
+    id: string
+  ): Promise<Array<{ id: string; name: string; email: string; phone: string; updatedAt: string }>> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.removeContact, id),
+  getBrowserCdpAccess: (): Promise<{ enabled: boolean; partition: string; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.getCdpAccess),
+  probeBrowserSiteTools: (): Promise<{ origin: string; enabled: boolean; endpoints: string[]; detail: string }> =>
+    ipcRenderer.invoke(desktopIpcChannels.browser.probeSiteTools),
   controlWindow: (action: WindowControlAction): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(desktopIpcChannels.window.control, action),
   showAppMenu: (input: ShowAppMenuInput): Promise<{ ok: boolean }> =>

@@ -4,8 +4,102 @@ import path from "node:path";
 /** Max chars injected from repo-root Project OS files into the system prompt. */
 export const PROJECT_OS_MAX_CHARS = 32_768;
 
-/** Tail size for session-digest / project-knowledge when still injected. */
+/** Tail size for session-digest when still injected. Project knowledge is filtered before this cap. */
 export const PROJECT_MANAGER_TAIL_CHARS = 4_096;
+
+const KNOWLEDGE_STATUS_FILES = new Set([
+  "user-output-rules.md",
+  "project-knowledge.md"
+]);
+
+const SECRET_PATTERN = /sk-[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:password|api[_-]?key|secret|token|私钥|密码)\s*[:=：为是]\s*(?!\[已省略\])\S+|bearer\s+[A-Za-z0-9._-]{12,}/i;
+
+function redactInjectedSecrets(value: string): string {
+  return String(value || "")
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[已省略私钥]")
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[已省略密钥]")
+    .replace(/(password|api[_-]?key|secret|token|私钥|密码)\s*[:=：为是]\s*(?!\[已省略\])\S+/gi, "$1: [已省略]")
+    .replace(/bearer\s+[A-Za-z0-9._-]{12,}/gi, "bearer [已省略]");
+}
+
+function knowledgeBullets(content: string): string[] {
+  return String(content || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter(Boolean);
+}
+
+function knowledgeStatus(line: string): "active" | "proposed" | "deprecated" | "legacy" {
+  const match = line.match(/^\[(active|proposed|deprecated)\]/i);
+  if (!match) return "legacy";
+  return match[1].toLowerCase() as "active" | "proposed" | "deprecated";
+}
+
+function knowledgeFact(line: string): string {
+  const match = line.match(/事实:\s*([^|]+)/);
+  return (match ? match[1] : line).replace(/\s+/g, " ").trim();
+}
+
+function durableKnowledgeCount(content: string): number {
+  return knowledgeBullets(content).filter((line) => {
+    if (SECRET_PATTERN.test(line)) return false;
+    const status = knowledgeStatus(line);
+    return status === "active" || status === "legacy";
+  }).length;
+}
+
+/**
+ * Inject active and legacy knowledge. Proposed lines become at most five titles.
+ * Deprecated lines stay on disk and out of the prompt. Same fact as active hides its proposed copy.
+ */
+export function filterDurableKnowledgeForPrompt(content: string): string {
+  const bullets = knowledgeBullets(content);
+  const activeFacts = new Set(
+    bullets
+      .filter((line) => !SECRET_PATTERN.test(line))
+      .filter((line) => {
+        const status = knowledgeStatus(line);
+        return status === "active" || status === "legacy";
+      })
+      .map((line) => knowledgeFact(line))
+  );
+  const kept: string[] = [];
+  const proposed: string[] = [];
+  for (const bullet of bullets) {
+    if (SECRET_PATTERN.test(bullet)) continue;
+    const status = knowledgeStatus(bullet);
+    if (status === "deprecated") continue;
+    if (status === "proposed") {
+      const fact = knowledgeFact(bullet);
+      if (activeFacts.has(fact) || proposed.length >= 5) continue;
+      proposed.push(fact.slice(0, 80));
+      continue;
+    }
+    kept.push(bullet);
+  }
+  const lines = kept.map((item) => `- ${item}`);
+  if (proposed.length) {
+    lines.push("", "只提到过一次（还没再次谈起，不能当作已经说定的事实）:");
+    for (const title of proposed) lines.push(`- ${title}`);
+  }
+  return lines.join("\n");
+}
+
+function injectKnowledgeReference(reference: ProjectOsReference): ProjectOsReference {
+  try {
+    const filtered = filterDurableKnowledgeForPrompt(reference.content);
+    const before = durableKnowledgeCount(reference.content);
+    const after = durableKnowledgeCount(filtered);
+    if (before > 0 && after === 0) {
+      return { name: reference.name, content: redactInjectedSecrets(reference.content) };
+    }
+    return { name: reference.name, content: filtered };
+  } catch {
+    return { name: reference.name, content: redactInjectedSecrets(reference.content) };
+  }
+}
 
 /**
  * Preference references always injected for project-manager.
@@ -134,6 +228,14 @@ export function selectProjectManagerReferences(
   const selected: ProjectOsReference[] = [];
   for (const reference of references) {
     const name = String(reference.name || "").toLowerCase();
+    if (KNOWLEDGE_STATUS_FILES.has(name)) {
+      const filtered = injectKnowledgeReference(reference);
+      const content = PROJECT_MANAGER_TAIL_INJECT.has(name)
+        ? truncateReferenceTail(filtered.content)
+        : filtered.content;
+      if (content.trim()) selected.push({ name: reference.name, content });
+      continue;
+    }
     if (PROJECT_MANAGER_ALWAYS_INJECT.has(name)) {
       selected.push(reference);
       continue;

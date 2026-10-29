@@ -22,6 +22,8 @@ import type { SkillDescriptor } from "./skill-selection.js";
 import type { ThreadStateFile } from "./thread-state-factory.js";
 import { isAutoModelFallbackEnabled, isModelAutoSelection, MODEL_AUTO_ID } from "./model-auto-router.ts";
 import { resolveAutoParentDisplayName } from "./auto-parent-display-policy.ts";
+// @ts-expect-error Node's native TypeScript test runner requires the source extension.
+import { isUserCancelledModelError } from "../shared/model-user-facing-error.ts";
 import {
   resolveMediaGenerationKind,
   shouldRunMediaGenerationTurn
@@ -588,7 +590,7 @@ export class ModelChatService {
           }, input.requestId);
           return result;
         } catch (error) {
-          if (this.dependencies.isCanceled(input.requestId)) {
+          if (this.dependencies.isCanceled(input.requestId) || isUserCancelledModelError(error)) {
             await this.dependencies.persistCancellation(workspace, thread, turnId);
             throw error;
           }
@@ -905,7 +907,7 @@ export class ModelChatService {
         markTiming("run-persisted");
       } catch (error) {
         if (goalSession?.accounting) goalSession.accounting.lastError = error instanceof Error ? error.message : String(error);
-        if (this.dependencies.isCanceled(input.requestId)) {
+        if (this.dependencies.isCanceled(input.requestId) || isUserCancelledModelError(error)) {
           await this.dependencies.persistCancellation(workspace, thread, turnId);
           await this.dependencies.repairOrphanToolCalls?.({
             workspace,
