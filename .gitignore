@@ -50,3 +50,6 @@ __pycache__/
 /verify_header_*.py
 /verify_softcode.py
 /命令.txt
+
+# Windows desktop local patch/build scratch (exceeds GitHub 100MB limit)
+platforms/windows/apps/desktop/tmp/
